@@ -1,0 +1,423 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Concurrency | Coder Coacher - Coaching Coders</title><meta content="Concurrency - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/MongoDB/">MongoDB</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Concurrency</b></h2><h5 class="post__date">2012-10-04</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/8VjAxQ529Nw" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so the aggregation stuff kind of reminds
+me of obviously of UNIX pipes right so
+which is kind of nice
+at least I think so okay concurrency so
+we're gonna talk about concurrency and
+provements into two for a little bit the
+I think this release has had far more
+work on concurrency than any previous
+release of Mongo and and so there's a
+lot of new things internally in this
+regard the I was it it's it's
+interesting too because it's it's it's
+not just this global lock it's it's a
+it's a few things so we're gonna go over
+this and and some of this different
+things that are in here and and you know
+what we're really trying to do here is
+get parallelism right so we need to we
+have you have multiple spindles or just
+drives you want to use them in parallel
+right multiple CPU cores we'll use them
+in parallel so that's what this is
+really all about and and pass releases
+of the manga D process are definitely
+suboptimal in that regard and I think
+there's a lot of progress has been made
+here it's a huge improvement the I think
+if you think about Mongo clusters like
+in sharded clusters with replication is
+large distributed clusters or
+distributed databases the concurrency I
+think or parallelism has always been
+pretty good between servers or between
+processes so what we're really talking
+about here there's been an issue
+historically is in a single Mongo D
+process having good concurrency so
+that's what we're going to talk about
+right here and that's what's improved in
+to - so there there's a couple new
+mechanisms in - - to help with
+concurrency one of them is this
+elimination of this global lock I II and
+having a lock for database but there's
+another thing that's equally important
+which is this yield on page fault
+mechanism or it's called page fault
+exception and source code so what's
+happening here is is if the database
+detects that a page fault is going to
+occur when it touched when it's
+about to touch something it will yield
+its locks fault in the page outside of
+locks and then go back and start up its
+work again and this can be very useful
+for getting good IO parallelism right so
+it this is a great mechanism for getting
+like a hold this subsystem to light up
+to full utilization right it doesn't
+help
+really with getting all your CPU cores
+lit up right so because we're unlocking
+to go do disk IO physical disk IO right
+we're not really when we're doing real
+CPU work were in some sort of lock which
+we'll talk about in a minute so this is
+really helps with the on the IO side I
+was talking to someone a day or two ago
+about - - and and he was saying well you
+know I have this problem because I'm
+doing lots of rights and I need to kind
+of get all the spindles you know - full
+utilization when I'm doing those so I
+can get high throughput and and I can't
+do that with Mongo right now and I said
+well try to - I think me solve it for
+you and you said well I won't because I
+only have one collection and but
+actually it probably does because this
+page file exception mechanism it's fully
+granular right it there's there's
+there's we're gonna unlock whatever we
+were doing if we can and so it's a
+little bit like record-low blocking it
+can be very grand ler so if you have
+only one collection even you know with
+lots of documents this mechanism is
+still very useful the DB locking which
+we'll talk about in a minute is useful
+if we have multiple not only multiple
+collections of multiple databases so so
+that this can help even if your whole
+database is one collection for i/o
+parallelism so I think this graph is
+from a blog post somebody in the
+community wrote and and this was a test
+that was written which like a benchmark
+and it does a lot of reads which are
+cached like in file system cache hits
+and then it does rights which are false
+right which are not in cache they
+constructed the test that kind of forced
+this behavior so our axe asset xx
+is a physical random rights per second
+and the y-axis is cached file system
+cache it reads for queries per second so
+our y-axis if this is a little hard to
+read is in the thousands of operations
+per second the x-axis is going up to 128
+on the right I think this was ran on the
+machine maybe with one drive one
+spinning disk drive so as you see this
+this boot this blue line is version 1.8
+of Mongo and what you see is is is once
+you get very busy doing writes with
+physical disk writes we're inside a lock
+we were inside this global reader/writer
+lock and then the readers couldn't
+operate right because in the the
+reader/writer lock was structured such
+as you can do any number concurrent
+reads or write and if you're doing a
+write that's exclusive to everything
+else so that's what was happening on
+one-eighth here and thus the problem in
+2.0 there was some work in this
+direction on this page file exception
+stuff in 2.0 however it was covering a
+very small percentage of sort of code
+paths or operations that you would do
+with the database it turns out this
+particular operation did get hit that
+code did kick in into 2.0 release so you
+see a pretty big improvement there in -
+oh and you see here in this test it was
+- - basically the reads are virtually
+unimpeded
+despite this physical disk i/o happening
+while we're doing write operations so
+and this is the with one collection in
+one database so and I think the URLs in
+there and make this available afterwards
+if you want to look at more the the in -
+- I think the code coverage the code
+which will do these page fault
+exceptions in yielding it's a high
+percentage of all code paths it's not a
+hundred percent but it's a very very
+very large majority so it is in practice
+should work very well and there are some
+metrics that can tell you if you hit a
+case where it actually did a fault
+inside a lock it'll report that to you
+and I'll show you that in a second
+the other thing in too - which is the
+thing people talk about more is the that
+the global lock is gone so now there is
+a lot per database so in Mongo database
+is kind of like a schema and a lot of
+the relational database products call
+them schemas so it's sort of a logical
+concept there is a separate set of data
+files for each database but other than
+that you know two collections in one
+database and two collections that are
+split between two databases basically
+perform the same so but what we did is
+we're going from sort of no lock
+granularity to some right so that's a
+lot of work so we've gone through this
+database level I think over time we'll
+go more granular but we started with
+this we did we wanted to get what we
+could out quickly and safely
+so butBut I think a lot of the work
+that's necessary to go more granular is
+in place now but but this is good
+because obviously if you have multiple
+databases is helpful in addition
+replication and Mongo uses this local
+database in the background to do
+replication so even if you have one
+database you'll get some improvement
+with because of this simply because the
+local database has its own lock which
+will be very helpful so if you've got a
+lot of stuff going on with your written
+your your database like secondary so
+we'll be able to pull from local and and
+be relatively unknown oh you could put a
+collection in a separate database right
+so it's it's an elegant perhaps but you
+can do it so they're sort of have that
+relief valve if you ever needed it I
+would recommend not doing that
+sort of too much up front but doing it
+like when you see a need right or if you
+just have if you have you know hundred
+collections and one of them is gigantic
+you know how many times bigger than the
+other ones you could maybe put that one
+a separate database but I would kind of
+do that kind of on a tuning basis kind
+of after the fact rather than up front
+and and I think you'll
+get good results that way so another
+thing into too is because it's it
+there's a lot of pieces to this so it's
+interesting is that you know so we've
+we've added a lot of parallelism on the
+primary for doing writes for example so
+the write throughput on the primary goes
+up then the question is okay now can
+your replication secondaries keep up
+with that right because traditionally
+the secondaries have been applying write
+operations sort of sequentially like
+just basically telling the primary's
+replication op log and just applying
+those operations one by one right so so
+now that the primary it may be a lot
+faster because of that parallelism of
+writes then we got to do something on
+the secondary so what do we do so a new
+facility has been built into the
+replication code to have good
+parallelism on the secondaries in terms
+of right application and also to query
+them to well and have availability for
+that too so the goal is that the
+secondaries can always write at least as
+fast as a primary could for a given
+workload the actual implementation is a
+little bit different because you know if
+you have a bunch of writes coming in and
+parallel to the primary and and from
+different clients let's say and so maybe
+it's sort of arbitrary what order they
+get applied in and you know and it's
+fine with the user well in the secondary
+you actually care about the order
+because well any order might have been
+fine you don't want it to be different
+than the primary right you might get a
+different result and then it just be
+weird that they're not the same
+so the mechanism then becomes a little
+different so what happens now is in this
+OP blog we show here this in this
+picture and we have these little boxes
+or individual operations sewing like IOD
+inserts or I und inserts updates and
+deletes for example there also can be
+commands in there so what we'll do now
+instead of d queuing a single operation
+at a time we'll pull off a batch and we
+will then use a thread pool of workers
+to work on those in parallel and that's
+done in two phases first there's a
+prefetch phase which is done inside a
+read lock where they'll be will try to
+go touch everything
+gonna need to touch or hit to do the
+writes in a read lock for all it for
+this entire block of operations and we
+use a thread pool for that so we can be
+touching multiple things simultaneously
+so but during that phase queries can be
+serviced simultaneously after that's
+done we didn't enter a new phase where
+it's it's the right phase we right lock
+on the secondary and then in parallel
+we'll do a bunch of these operations
+from that batch there than two and once
+the whole batch is done we'll unlock and
+then we'll go back and do another one
+when it's ready so so that's what's
+happening on the secondaries into two so
+so we have this parallel application of
+of rights and and also then that and
+most of the and then this prefetch phase
+so that so that these page faults are
+actually in the read lock in in addition
+to being parallel there too so a lot of
+work went in there too so so quite a bit
+of pieces there I want to show you a
+little bit on that sort of monitoring
+and instrumentation you know how do you
+see what's going on with the concurrency
+and the locking and so forth so let me
+give you a little bit on this so so
+there are some there there there's a
+couple of the old database commands
+current op and service status this is
+the shell syntax they have some new
+fields in them that give you some
+statistics around you know what's going
+on with locks how long their lock
+acquisition is taking for a given
+operation shown and kernof how long has
+it been locked what kind of lock Mongo
+stat and Mongo top which are existing
+command line utilities have been updated
+to include some lock statistics and
+there they use things like service
+status to do their reporting and then in
+addition MMS or the Mongo monitoring
+service has some a couple of graphs
+which are related to these new things so
+I'll show you a little bit more on this
+let me see if I can
+this work okay alright so I have a local
+Mongo D running here and I'll run mine
+goes stat and it's idle okay so now let
+me just go give it a little bit of a
+load here this is a kind of a light load
+it's gonna it's a really life you don't
+think off the comment the and okay so
+we're doing some updates 700 per second
+I guess and then we you'll see here over
+in the locked column what it will show
+you is it will show which database has
+the highest right lock percentage it'll
+show you the name and the percentage so
+the goal of Mongo stad is to give you
+sort of a one-line kind of state oh and
+then snapshot you know and over and over
+and over again so sort of what can you
+fit in one line so that was the kind of
+concept here is well just whichever one
+is the hottest will show you who it is
+and what the right lock percentage is so
+that's what Mongo stat will do so that's
+hitting this test to database obviously
+in addition the Mongo top utility which
+is an existing utility there's a - test
+locks option which will give you a
+little bit of a different view on the
+databases which it will show you did I
+type that wrong I think that's right but
+basically for each database it'll show
+you for the last second how much time
+that we spend in a read lock how much
+time you spend on a right lock for
+database the period there is sort of
+like the global lock which is used very
+little now but you you could see some
+numbers there and if you did you know
+that would be something to dive on and
+see why why it's why it's nonzero or an
+on near zero so so those are a couple
+new things
+and then in addition you can see the
+same sort of information in MMS so
+there's a couple graphs one is this
+record stats information we call it and
+this is showing you how many page fault
+exceptions per second are happening and
+also how many accesses not in memory
+were happening so those numbers should
+be similar right you if you if you see a
+lot of accesses not in memory and but
+not many page fault exceptions that
+means accesses that we're in a memory
+happened inside a lot and that would be
+bad right so we're actually going to
+change this graph a little bit to show
+you what you really want to see which is
+how many happen inside the lock right
+now it's sort of a subtraction exercise
+to see that but there is a graph so you
+can you can see what's happening there
+and then in addition this is a this is a
+write lock percentage for us given
+database so you can in mm/s you can
+select a specific database and see a
+graph of a write lock percentage for
+that one database so obviously that can
+be pretty useful so I think it's it's a
+pretty significant change and lots of
+lots of effort went into that and so I'm
+pretty excited about it the I think one
+way to think about it it's the kind of a
+kind of a rule of thumb would be like if
+your database fits and RAM and in
+particular if you're doing mostly reads
+the DB locks the DB level locking you
+may find very useful to help you max out
+your CPU cores on the box since you have
+an in-memory load if your database is
+much larger than Ram the page fault
+exception mechanism is likely the more
+important part because what you're
+really going to want to Dinn do is fully
+light up to 100% utilization and
+parallel your whole disk subsystem so so
+the one mechanism kind of important for
+in-memory and one mechanism important
+for much larger than memory loads and of
+course it's a that's a gradient there
+right you could have something a little
+bit bigger than everybody but I think
+that's a good kind of rule of thumb that
+it is kind of easy
+think about so okay so that's it for
+concurrency now we're going to talk
+about next topic Eliot Cohen affiliate
+is CTO of Tenjin helped write Mongo and
+day one so he's going to talk about data
+center awareness and tag aware sharding
+the tag tag aware sharding is a new
+feature and - - okay thanks</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

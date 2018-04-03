@@ -1,0 +1,628 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Android Internals (Big Android BBQ 2015) | Coder Coacher - Coaching Coders</title><meta content="Android Internals (Big Android BBQ 2015) - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Android-Developers/">Android Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Android Internals (Big Android BBQ 2015)</b></h2><h5 class="post__date">2015-10-22</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/IiAtqAWsPBY" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">all right welcome my name is Dan Galpin
+and we're gonna be talking about garbage
+today I hope everyone is really excited
+to hear about garbage a little bit about
+me I have spent the last over five years
+as a developer advocate on the Android
+team mostly working with game developers
+which is why I end up dealing with so
+many low-level things but also doing a
+couple of fun things you might have have
+seen I'm really proud of the work we've
+done with Udacity I worked on both the
+Android fundamentals class introduction
+to Android as well as the advanced
+Android class and I have had no sleep
+literally I have not slept at about two
+days so this should be exciting and yeah
+and I think I'm funny so um so I had a
+confession to make if you looked at the
+description of this talk when Ian me
+Lewis who noticed is not here and I
+started planning this talk we were
+thinking like ocean liner big and we
+wanted to cover all sorts of things we
+wanted to cover binder and art in the
+oat format you know services whose
+name's end in flinger you name it but a
+few weeks ago we realized two things
+first there was no way we had time for
+all that even though we could write a
+talk that would cover all of that we
+still couldn't deliver it in 40 minutes
+secondly there are ease a series of
+books and talks called Android internals
+that covered lots of what we were
+planning so we decided to focus the talk
+so instead I want to talk about one of
+the journeys that we've taken through
+the internals of Android I should also
+mention that I did not write large
+chunks of this talk Ian E Lewis my
+cohort did but he couldn't be here today
+I am however responsible for all of the
+slides
+he wrote a script that I'm going to read
+word for word because I will forever
+stand in utter awe of his technical
+brilliance and because I haven't slept
+in about a week so let's get started the
+great thing about spelunking through the
+bowels of Android is that pretty much
+anyone can do it it's the beauty of open
+source and you might think that since I
+worked for Google I have some kind of
+special advantage when it comes to
+understanding Android I mean anytime I
+want to I can walk over and talk
+directly it's one of the amazing people
+that actually wrote the system and it is
+pretty awesome but not only do I try to
+avoid doing that more than I have to the
+knowledge is actually pretty much spread
+out over lots of people these days so
+while the Android engineering team is
+amazing and I'm honestly really
+fortunate to be working with them what I
+really want to know how something works
+I'll at least first get into some code
+and try to find out for myself so today
+I'm going to tell you a story about a an
+and I journey deep into the Android
+runtime and found out something for
+ourselves specifically it's a story of
+how we found out why you have to be
+careful not to waste too much time when
+trying to avoid allocations especially
+when you're running on art and we're
+actually gonna show you how we did it
+this particular story begins with a deck
+of cards
+which is exceptionally appropriate since
+it also ends with cards now ian was
+writing a demo that true playing cards
+it was supposed to be an experiment
+about overdraw but that actually turned
+out to be the least interesting part of
+the demo now card games are a great test
+for overdraw because stacks of them have
+a lot of overlapping objects but none of
+them are transparent like these ones are
+so there's a huge difference between the
+number of pixels you draw in the worst
+case which is the number you draw in the
+best case but to get that best case
+performance you have to figure out
+exactly which parts of the card are
+visible now there's a general algorithm
+for doing that but requires a lot of
+bookkeeping because it involves
+splitting rectangles into some unknown
+number of smaller rectangles now the
+thing you need to understand about Ian
+who was doing this is that he is a C++
+programmer more than that he's a game
+programmer a game written in C++ this
+problem would be the perfect candidate
+for some kind of object pool so he
+decided to keep all of the rectangles in
+a simple pool now how many people out
+there have actually used simple pool in
+their coding it's part of the support
+library I don't think he expected the
+object pool to make a huge performance
+difference but he thought it might help
+a little what surprised us both was that
+it didn't help at all
+instead it totally tanked I mean the
+performance was absolutely abysmal and
+so we just
+look for answers we started where most
+people start when they have a
+performance problem with the sampling
+method profiler and traceview how many
+of you have used Tracy you out there
+come a show of hands oh that's good
+you're listening that's awesome
+the profiler isn't as good as this trace
+at catching intermittent performance
+spikes but it's really great at getting
+a big-picture view of what's expensive
+and what isn't and here we are the
+culprit is simple pool release now
+here's what that code looks like that is
+in pool line looks kind of suspicious
+sounds like it might be a linear search
+and of course we look back at our trace
+you output we also see that is in pool
+there's right at the top of our list so
+clearly it's costly and it actually does
+do a linear search it goes to check
+everything in the array to see if it's
+already in the pool so you have a really
+big pool it's actually really expensive
+especially since array access is not
+particularly cheap so we decided to make
+it even simpler pool well that was easy
+we'll just make our own pool with a
+Cabana waterfall a diving board I mean
+with unchecked releases very easy to get
+those mixed up we're living on the edge
+and of course traits you output looks
+like this it fixes our performance
+problems yes it turns out you should be
+really careful when using simple pool
+that linear search really makes large
+pools slow we could pack up and go home
+now but now we've got some code to play
+with so we decided to find out how big
+of a deal is allocation in our anyway I
+mean we did some crazy tests like
+allocating thousands and thousands of
+objects in ondraw and we found that in
+most cases unless the object was really
+expensive to create like a paint object
+it didn't really affect our frame rate
+and we're like I mean no we didn't just
+suddenly find out that allocations were
+free all that stuff Colt McAnlis told
+you is still true what this experience
+taught us was that we didn't understand
+how allocations affected performance
+quite as well as we thought we did and
+when you start seeing performance
+numbers that you don't expect that's a
+perfect time to start digging into the
+code so off to the debugger I know
+you're thinking I love reading through
+code as much as the next crazy person
+but sometimes you just got to step
+through it to understand it now there's
+a lot of ways to debug the Android
+runtime
+some are easy and some are hard and
+let's make things easy on
+ourselves first and this is gonna shock
+you we're actually gonna debug an
+emulator build okay now how many of you
+actually use the emulator when you're
+when you're writing Android software
+okay well so devices are kind of finicky
+so our network connections and USB
+cables we're actually gonna be doing a
+lot of native debugging and unless
+you're trying to you know debug an issue
+with hardware code generation there's
+really not a big difference these days
+between debugging against the emulator
+and a real device in addition when
+you're running on the emulator you get
+to run as root and our images also
+include a version of gdb server so
+you've got super super reliable
+debugging believe it or not if you need
+to do native debugging on Android second
+we get to avoid using ADB which is
+really cool why because ADB was designed
+to be cheap slow and reliable and if
+really manages to achieve two of those
+goals
+now ADB is okay if you're using the gdb
+command-line you know which I know some
+of you are totally into so if you're one
+of those people just go back to your
+Emacs or whatever for a minute or two
+while I talk to everyone else when I'm
+stepping through unknown code I really
+prefer to use some kind of GUI now the
+ian is a huge fan of QT creator because
+it's free and because it's not eclipse
+but adb can't handle the amount of gdb
+traffic that an idea like that generates
+it works for a while but at some point
+it just decides to quit but fortunately
+the emulator has its own IP port
+redirector that doesn't rely on adb and
+my experience with that is that it's
+really really solid third download the
+AOSP codebase and build your own
+emulator image now you don't have to do
+this but it's so totally worth it for
+one thing you don't have to worry about
+your sources symbols and binaries being
+in sync for another thing and this is
+really important for this particular
+quest you can actually disable
+optimizations on modules you want to
+debug which make make stepping through
+the code a lot easier now once you have
+a rock-solid debugger attached to the
+runtime it's kind of addictive I mean
+you're seeing Android from a completely
+new angle it's like you've been poking
+around a cave with
+candle and someone just gave you this
+high-powered flashlight and if you're
+running a Windows box building Android
+is a good excuse to install Linux VM
+alright let's start with my favorite
+piece of code the bytecode interpreter
+now there are actually two different
+implementations depending on how you
+compile it one is a go to table
+implementation which is one of those
+pieces of code that simultaneously
+proves why C macros are horrible and why
+they're never going to go away but
+fortunately if you set the right
+compiler options you get the
+implementation in interpreter switch
+imple dot c c which looks exactly like
+you always thought it would just one
+giant switch statement with a case for
+each opcode if you've been struggling to
+figure out what's going on in the
+interpreter just sing this enough is to
+make you cry it doesn't see as much
+traffic as it used to because of all the
+head ahead of time compiling but if you
+turn that off this piece of code becomes
+the leeks cafe a Mac kind of switch
+statements everybody comes here which
+makes it the perfect place to set some
+breakpoints and learn how the runtime
+works now since we're trying to minimize
+our allocation costs maybe we should
+start by looking at how object
+allocation actually happens now all
+object allocation starts at the same
+place in this interpreter which is this
+new instance dalvik opcode but as soon
+as we get into the implementation of
+that object so it turns out that the art
+memory system is massively polymorphic
+there are actually eight different kinds
+of allocators that might be returned
+from get current allocator
+now this is one of those points where
+it's really great to be stepping through
+in the debugger instead of just reading
+the code because we can see exactly what
+we're getting which is Ra's alack I mean
+not always but usually and Roz stands
+for run of slots which is basically a
+fancy-pants way of saying fixed sized
+block allocator the slot is a fixed size
+block the run is an array of those
+blocks and the allocator owns a set of
+runs now each rod has a different slot
+size to a connote hold
+objective that size or smaller and
+unlike my diagram the number of slots in
+each run is actually calculated to make
+the run and as close to a page boundary
+as possible now this is an awesome
+allocator it's not the most efficient as
+far as memory usage but it's got two
+really nice advantages one is that it's
+practically immune to fragmentation
+second bookkeeping is really easy you
+never need to split or coalesce blocks
+and you don't need to store the size of
+each allocation because the address of
+the allocation tells you everything you
+need to know so even though you waste a
+little space the end of any object
+that's not exactly the size of its slot
+its slot you get some of that back
+without by not having to store any extra
+cruft alongside it in the heap so not to
+mention that it avoids date alignment
+problems if you happen to have any of
+those there's one really interesting way
+that Roz alec is different from the
+alligators you see in things like game
+programming because game programmers
+tend to use a stack to keep track of
+free elements now you can implement that
+in a little array of bytes or shorts
+that has the same number of elements as
+there are slots in the run and it lets
+you do both allocations and
+deallocations in constant time Roz alec
+on the other hand treats tracks free
+slots in a bitmap to allocate you
+actually have to look through the bitmap
+TIFF until you find a zero now
+technically that's an O n operation and
+when I first look at this I thought it
+was kind of weird
+and I thought it was kind of interesting
+and then I realized it was freaking
+brilliant okay
+and here's why first off yes the
+allocation is order n but remember these
+are actually fairly small little groups
+you're allocating from so it's n times a
+very small constant furthermore most
+CPUs can find the first cleared bit in a
+word on a single instruction so the
+worst cake waste the first taste
+allocation cost is just the number of
+slots divided by the number of bits in a
+machine work on Android we actually
+negate the bitmap board and then use
+something called underscore built-in
+underscore ffs to find the index of the
+first non set bit so we actually use a
+compiler intrinsic for that and that's
+not even the brilliant part though
+because the brilliant part is what
+happens on D allocation because
+allocation in a multi-threaded
+environment is a huge pain
+the best way to make it fast is to
+remove the concurrency just give each
+thread its own separate allocator make
+that and make a rule that memory has to
+be freed on the same thread that
+allocated it but that really sucks for
+garbage collection because part of the
+appeal is that you can do a lot of the
+work on a background thread after all we
+all have multi-core systems we tend to
+have a core free that's not doing a lot
+and what you get with roz alec is almost
+the best of both worlds see there's
+actually multiple bitmaps for every run
+one tracks which slots are in use like I
+talked about earlier but another one
+tracks slots that have been freed by a
+different thread so instead of
+synchronizing the free list on every
+deallocation you can wait until it's
+convenient and apply all pending the
+allocations by just Nanding the two
+bitmaps
+by the way I'm showing a lot of source
+code here and it's a little small so I
+apologize in the middle of this once
+again though this is frakking brilliant
+because you can now have n yes you can
+have thread local runs and locks are
+started by slot size so that even shared
+runs have way lower contention there's a
+bunch of other cool stuff in rows Alec
+but we should probably move on before
+everyone too starts calling me the crazy
+rows Alec guy so the really sad thing is
+it's hard to implement well you really
+can't effluent anything that's elegant
+in Java you'd end up reinventing the
+entire reference system and if you get
+kind of a maintenance nightmare so yeah
+allocating from our object pool as a
+whole isn't a whole lot faster than
+allocating from the normal Java heap and
+it's way more work but we kind of
+expected that I mean no one ever
+explains about the cost of allocation in
+a garbage collected runtime it's always
+about the cost of collection so the
+question is why aren't we seeing these
+massive collection pauses when we
+allocated massive numbers of short-lived
+objects now rog Alec gave us a little
+bit of a clue they didn't spend all that
+effort on concurrency for nothing it's
+not that the garbage collector is doing
+nothing it's that a lot of its work is
+being done somewhere else other than the
+main thread and it still work and we'd
+like to minimize it but it's not call it
+causing the jank that it did on dalvik
+so there's one piece left in this puzzle
+and it has to do with how the Jie
+see manages to do so much of its work on
+a background thread now actually since
+we spent so much time talking about how
+great the allocator is at concurrency
+it's probably worth going over why this
+is even a problem now the GC has to
+figure out which objects are live and
+which are dead and it does this by
+starting with the object on the stack
+and following their references all the
+way down till there are no more
+references left to follow every object
+that cut visited during that procedure
+must be live because clearly there's a
+chain of references that your
+application could follow to access that
+object every object that get left out is
+dead or at least it's not live now the
+GC guys tell me that's a little bit of
+an oversimplification but it's a good
+first approximation thing is this
+process is not lightning-fast and if
+it's done concurrently then your
+application is busy connecting and
+disconnecting and reconnecting
+references while the GC is trying to
+trace them so let's say that object egg
+has a reference to object B an object C
+has a reference type that's currently
+null now for whatever reason the GC
+visits object C before it visits object
+a following me okay now let's say that
+after the GC has visited C but before it
+visits a you give object bead object C
+and no lattes reference for all the GC
+can tell a and C both have a null
+reference and it never even saw B so the
+question is how do you fix this and it
+turns out the answer to that question
+tells us a lot about how we can shoot
+ourselves in the foot by trying to
+outsmart the garbage collector and it
+takes us back to the subject of cards if
+you take another look at the glorious
+switch statement that is at the heart of
+the dalvik interpreter you'll notice
+that a lot of op codes have an extra
+call on them then this call to check
+suspend is a check point it's a place
+where the thread checks to see if the GC
+wants it to do anything among other
+things this check lets the GC tell the
+thread to stop completely which is what
+it has to do if it wants to get an
+accurate count of which objects are dead
+and which ones are alive this is called
+the GC pause now
+clearly one way to make sure the GC gets
+an accurate count is just to visit the
+objects all over again but that would be
+a colossal waste of time I mean that
+would be like a cupcake move so instead
+how about how we just revisit the
+objects that got changed while we were
+busy doing our first pass on the object
+graph now you're talking that's some
+gingerbread level thinking my friends so
+how do we tell what's changed let's go
+back to that switch statement one last
+time now you probably haven't notices
+but there's actually a specific set of
+op codes just removing references and
+you know that might strike you as being
+odd because references are just for byte
+binary values - same as integers you
+know why not just reuse the existing
+energy moving op codes and this one
+takes a little bit more digging because
+the answer is actual severally several
+layers down in the call stack underneath
+some templates and macros and some
+random craft but eventually you get at
+this thing called right barrier field
+now the word barrier is a little
+overloaded in computer science here it
+means something that the runtime has to
+do before writing to a reference field
+there's also the concept of a read
+barrier but it's really not that
+important to this particular discussion
+anyway
+take a look at what write barrier field
+does it calls mark card see I told you
+there'd be cards all right in this case
+a card is just an area of memory it's
+kind of like a page only it's not the
+same size and besides that word was
+taken so we call it a card now marking
+the card just says hey something in this
+memory has changed now why do we even
+have cards and it's really for the same
+reason we have pages so we can have
+metadata about memory that takes up less
+room than the memory we're describing so
+for pages we keep you know data like
+whether it's read-only or executable or
+any of that other and protect stuff for
+cards it's pretty much just dirty or
+clean it's just a right if you look at
+the source code it's not even an atomic
+which by the way we can get away with
+because there's no read-modify-write
+in a concurrent environment it's just a
+right and the Reed has done use during
+the GC pause where the value can't
+change
+so what's so important about the
+card-table even given the information in
+the karge the GC doesn't have to rescan
+every single object during the pause it
+can focus its attention on the objects
+that might be dirty and this idea
+extends far beyond just finding the
+objects a change in the last concurrent
+scan by the way there are plenty of
+objects that almost never changed for
+existence for instance class objects if
+we can we want to avoid scanning those
+objects ever and we can get away with
+that because if for some reason those
+objects ever do change their cards will
+be marked now the card ID isn't perfect
+for instance if a card happens to
+contain more than one object there's no
+way to tell which object is dirty all of
+them have to be rescanned even where
+it's an array of objects count as one
+object when it comes to card marking
+that's one object with a whole lot of
+references which means if you insert or
+remove an object from an array the
+entire array gets rescanned so now we
+come full circle because our pool of
+card rectangles might actually end up as
+a victim of card marking I know there's
+a country song in there somewhere but
+it's only one of several factors that
+make allocations cheaper on art and I
+wish I had actually more slides to talk
+through the rest of them but I'll talk
+to a talk about a few of them one of
+them is better collection past
+scheduling no art in general tends to do
+a better job of figuring out when to run
+collection passes which means that GC
+for alloc is a thing of the past
+and too it keeps a list of objects that
+have been allocated since the last GC so
+when you add that information to the
+card table art gets the ability to
+collect super short-lived objects
+without even triggering a GC pause and
+that's why allocating ludicrous numbers
+of simple object doesn't kill art the
+way did dalvik and - oh sorry that's
+this is I already said this so finally
+let me let me in conclusion because
+we're cuz it's gonna be really short
+guys so don't walk out of here and tell
+your friends the allocations don't
+matter anymore first of all we don't
+want to incur the wrath of colt and
+besides the point of this talk isn't
+necessarily just to add to your stock of
+pro tips but hopefully it's to give you
+a little bit of understanding of how
+things are working inside of android and
+how you can - and enjoy going through
+Android yourself so I hope I've given
+you
+some of the tools and encouragement you
+need to go on your own adventures to the
+Android code base I mean after all what
+else is open source for if we can't
+learn from it so we're looking forward
+to hearing your stories if you want to
+contact me that's where I can be found
+and thank you all and you all get 20
+minutes back or so so I enjoy the rest
+of your time here at the barbecue and if
+any questions you can I'm more more than
+happy to take them now</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

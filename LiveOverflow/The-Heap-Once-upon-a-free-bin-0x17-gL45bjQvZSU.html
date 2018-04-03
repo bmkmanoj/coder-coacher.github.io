@@ -1,0 +1,387 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>The Heap: Once upon a free() - bin 0x17 | Coder Coacher - Coaching Coders</title><meta content="The Heap: Once upon a free() - bin 0x17 - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/LiveOverflow/">LiveOverflow</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>The Heap: Once upon a free() - bin 0x17</b></h2><h5 class="post__date">2016-11-04</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/gL45bjQvZSU" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">previous heap exploitation videos were
+about abusing application logic
+basically because the program used
+faulty data from the heap but this time
+we exploit the heap algorithm itself in
+this video I want to explore heat level
+3 from exploit exercises purusa which is
+about the infamous unlink macro this
+video is based on the excellent frack
+article once upon a free as you can see
+this article from 2001 so we are still
+15 years behind the times and we have
+not yet caught up with the modern state
+of exploitation the heap implementation
+that we will exploit changed over the
+years to prevent this kind of attack but
+the current versions are still based on
+this old algorithm so it's important to
+understand this easy version here so
+let's start by looking at the code of
+this level this level introduces the do
+gleameil loc dl malloc and how heap data
+can be modified to change program
+execution the goal is obviously to call
+the function winner first we may look
+three objects with 32 byte a b and c and
+then we copy the program argument a b
+and c obviously s teraCopy is vulnerable
+because it doesn't stop us from copying
+more than 32 byte so that is our
+overflow and then we free again the
+objects in reverse order C B and a and
+we have the printf at the end so as you
+can see there is no obvious application
+logic we could exploit no use after free
+no vulnerable pointer on the heap but
+still it's possible to redirect code
+execution and as the description says
+this level is about corrupting heap
+metadata so there is an issue with the
+heap algorithm in this case in the free
+function that we can use to redirect the
+execution to winner let's start by
+looking at the heap in gdb to do this
+let's add a couple of breakpoints how
+about each library function so break at
+my log string copy free and the printf
+which is actually put at the end this
+quickly run it don't forget the three
+arguments and continue until you arrive
+at the first string
+copy then check the map memory for this
+process and look for the heap so this
+shows us that our heap area is from 8 0
+4 C 2 8 0 for D and we can define a hook
+stop to always print like 56 words of
+this area when we hit a breakpoint when
+we now rerun the program we can see how
+the heap develops let's do it before we
+execute the first Mel up we don't have a
+heap yet after the melech we can now see
+the first object on the heap so remember
+how a heap chunk looks like this is the
+size of the current chunk which is hex
+to 9 the last bit indicates if the
+previous chunk is in use and because
+it's the special first chunk there is no
+valid memory before that does it test a
+bit set indicating that this memory is
+not available not free this means the
+true size of the chunk is hex to 8 which
+is 40 bytes so malloc allocated a bit
+more than 32 bytes that doesn't matter
+to us after this chunk we have the
+wilderness which is like the first chunk
+a little bit special but you can just
+imagine it as a huge free block still
+available for allocation and that's its
+size and it is obviously has the last
+bit set because the previous chunk is in
+use
+we Mel up the second object same size
+last bit set because of previous chunk
+is in use and the wilderness was updated
+and has now less free space but still
+the previous chunk is in use and the
+last object another one with the same
+size last bit set because the previous
+is in use and less space available in
+the wilderness next we execute the
+string copies so we copy the first
+argument which was the a is to the first
+chunk the B's to the second chunk and
+the C's to the third junk obviously we
+could have written a lot more and
+completely overwrite everything
+including the chunk size which is the
+heap metadata next we're going to free
+them again so last chunk got freed the
+C's got all written with zero because
+these two words you have special meaning
+for free block so previously we had
+allocated blocks now we have a block
+that is available again free not much
+else change in fact those chunks are
+very small and are considered fast bins
+by malloc they behave a little bit
+different we will learn about that in a
+little bit later but let's go
+continue and free the next one so we
+have two free blocks this time our
+beasts got all written with an address
+and it points to the other free block
+that's a special meaning of the Overtoun
+word they are pointers pointing to the
+next free block a linked list okay
+continue and free the next one and we
+extend the linked list the first free
+block points to the second one and the
+second one point to the third one which
+is the last block before the wilderness
+you probably ask yourself by the last
+bit of the sizes which indicate that the
+previous blocks are in use didn't get
+set to zero it's a bit confusing but
+think like an algorithm for a second in
+this case they are small fast bins and
+we want to be super fast handing them
+and how we freed blocks in this reverse
+order it just doesn't matter it would be
+unnecessary waste of time to set that
+bit just imagine this point of somewhere
+which always points to the first free
+chunk when I now want to malloc
+something and look for free space I can
+simply follow the link list to find all
+the free chunks and that's the
+information that a previous chunk is
+free is just irrelevant right but it
+will also look a little bit different if
+the chunk sizes were bigger then malloc
+and free would clean up a little bit
+more and use more heat metadata for
+housekeeping but let's not get hung up
+on this we will walk through some of
+part of the algorithm later and clear up
+some ports so let's have a look in the
+code when we look for the dilma log
+algorithm for this case make sure you
+have version that is over 15 years old
+otherwise you look at a patched version
+now before we start reading the code
+think for a moment what we are looking
+for we look for a primitive that allows
+us to perform an arbitrary right that
+would allow us to overwrite an entry in
+the global offset table one possible way
+how such code that can be abused for
+that looks like is following pointers
+that we control right if there is some
+kind of code what performs a right based
+on pointers on the heap and can overflow
+we win let's keep that in mind when we
+look at the code the functions start
+with the parameter mem which is the
+address we want to free shortly
+afterwards
+mem to chunk is called which gets the
+address towards ahead of mem which is
+the true starting address of the chunk
+the first if
+we reach contains only a little bit of
+code and it refers to fast bins this is
+exactly what we witnessed when we freed
+our small 32 byte chunks it updated the
+first pointer the FD pointer which
+created the linked list but otherwise
+not much happens and thus it's not very
+interesting so this means we really want
+to make sure that our size is greater
+than the maximum fat span chunk size
+which is defined as ad our chunk sizes
+are 32 so we want to make sure that we
+overflow the size of this chunk we
+handle if we head into the elsif we
+arrive at an interesting comment
+consolidate other none and map chunks if
+we check what is necessary to pass this
+test we look at the chunk is M map macro
+which takes the size of P which is the
+size of the current chunk and check the
+is MF flag very similar to the pref in
+use bit which is the last one the is MF
+flag is a second last bit so when we
+want to reach the code here we have to
+make sure that the second last bit is
+not set then we get the address of the
+next chunk which we can calculate based
+on the size of our current chunk so with
+an overflow the size is already
+something we can control
+this means that here we have a first
+opportunity to fool free into thinking
+some other data is the next chunk after
+that we have a check of the previous
+changes in use if the previous chunk
+would not be in use which is defined by
+the lowest bit set to 0 we would follow
+the pref size which we haven't
+introduced yet but it's this word before
+our chunk size and thus calculates the
+address of the previous chunk again a
+value we possibly can control then we
+execute an unlink that's the magic word
+I mentioned at the beginning so let's
+see what that means the first parameter
+P is the block before our current block
+which you got following the pref size we
+take the forward and backward pointer of
+that chunk which is the first and second
+word after the size and remember it in
+FD and BK next two lines for simplicity
+ignore the arrow BK and arrow FD because
+net just references a small offset from
+the address here we add those offsets
+afterwards
+so now we write the address BK to the
+address where FD is pointing to and then
+we okay stop BK could be the address of
+the winner function and FD plus 12 could
+be our g OT table entry for puts this
+would all will write an entry in the
+global offset table with the winner
+function this sounds perfect
+but we forget the next part where we
+would take our g OT address and FD and
+attempt to ride it to the address of
+winner + 8 ah then what zeg fault we
+can't write into the code segment dammit
+but now you just have to get creative
+think about it if we have two memory
+segments segment a and segment B we can
+write an address from segment a into
+segment B and we write an address from
+segment B into segment a the global offs
+the table's rideable so that could be
+one of those segments just the code
+segment can't be the other one but the
+heap could be our second one we can
+write to the heap this would allow us to
+write an address from the heap to the
+global of the tailor and some
+unimportant address from the global
+offset table where we written into the
+heap this means we can redirect code
+execution we are the global off the
+table to shellcode that we place on the
+heap and then the shell code calls
+winner files that sounds like an awesome
+plan let's take the state of the heap as
+we know it and think about how we would
+want to construct the case we just
+explained so we could decide that we
+want to free the last block and make
+sure the pref and use bit is set to 0 so
+that it attempts to consolidate the
+previous block let's actually make those
+changes right here with gdb this way we
+can directly test it set the chunk size
+to more than 80 and have the pref and
+use bits set to 0 so why not 100 now we
+want to set the prefs eyes to point to
+the previous block we want to merge with
+let's make that a small block so maybe
+hex 10 this means at - hex 1 0 we have
+to create a fake chunk of that size so
+set the size to hex 1 1 because we want
+to indicate that the chunk before this
+fake junk would be in use great now we
+need the address from puts in the global
+offset table this will be the forward
+pointer where the second pointer will be
+written to at plus 12 that's why you
+have to do puts minus 12 because it will
+be written to the address plus 12 and
+the other pointer will be the address
+that we write to the global offset table
+so that one should point somewhere into
+the heap where we can place some shell
+code why not go here just one other
+thing to consider before we can test it
+the size is used to calculate the next
+chunk in the next size and after the
+unlink those values are used
+so if we use the size 100 we pointed to
+some unused memory and we have to make
+sure that the values there behave nicely
+otherwise we will crash there is an if
+check if the next chunk is the top or
+what we call the wilderness but our size
+is overshooting that address this means
+we land in this if case and now it
+calculates next block of that one and
+checks the Preferences but to figure out
+if the block before is free or not so if
+it is not in use we perform another
+unlink to also merge the unused block
+after the current one which copies
+around those pointers
+hey this life overflow from the future
+I'm just editing this part and I
+realized that I misread the code here I
+thought I had the choice between this
+short unlink if case or the whole else
+case below but I missed that there are
+no curly braces which means the else
+case is just this clear and use bidded
+offset function when I was developing
+this proof-of-concept
+I thought to myself I don't want to over
+complicate it with the code down here in
+fact I made it over complicated because
+we have to construct another fake chunk
+now to deal with the second unlink in
+here but whatever I think there was a
+great learning experience let's head
+back into the episode
+but at this point we should have already
+succeeded in writing our he Butler to
+the global offset tale with a previous
+ending so we can just pick two random
+heat valves to not crash here so those
+are two more fake chunks with the
+forward and backward pointer pointing
+into the heat which we don't care about
+this is like overflow from the future
+again I just realized I made another
+small mistake which negates my false
+assumption about the big L's case from
+earlier I actually did set the previous
+bit which means it does not consolidate
+this freak trunk not to mention that I
+said the FD nbk point of all the wrong
+track anyway should have been in the
+other junk before I'm sorry guys I'm
+just a noob so to summarize we change
+the size of the block we are going to
+free we create a free fake chunk before
+our current one to trigger an unlink and
+overwrite the global off the table and
+we create two fake chunks afterwards
+where the second one says about the
+previous one that it is in use that's
+not triggering another unlink and those
+two values you were unnecessary now if
+you continue and execute the first free
+we can check the entry for puts and we
+see the function address was
+successfully written and when we look at
+the heap we can see that at offset plus
+8 we have a G ot adverse written awesome
+and when we continue to the pods and
+single step forward we jump into the
+heap awesome this works now we just have
+to get these rows into the heap with a
+string copy oh no oh no no no no no no
+I'm stupid
+string copy can copy null bytes a string
+and C is too fine to end with now so we
+can't write sizes like hex 10 into
+memory at least not multiple times
+oh dammit the whole plan doesn't work in
+this case if it were read it will work
+but not with string copy I go sit in my
+corner now and think about all the
+failures in my life see you soon bye</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

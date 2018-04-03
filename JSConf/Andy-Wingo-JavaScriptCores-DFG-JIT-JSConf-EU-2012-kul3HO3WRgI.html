@@ -1,0 +1,715 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Andy Wingo: JavaScriptCore's DFG JIT -- JSConf EU 2012 | Coder Coacher - Coaching Coders</title><meta content="Andy Wingo: JavaScriptCore's DFG JIT -- JSConf EU 2012 - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/JSConf/">JSConf</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Andy Wingo: JavaScriptCore's DFG JIT -- JSConf EU 2012</b></h2><h5 class="post__date">2012-11-07</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/kul3HO3WRgI" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so my name is Andy Wingo I work for a
+company out of Spain called Eagle iya we
+do a lot of consulting around WebKit and
+as such I've gotten into javascriptcore
+a bit javascriptcore is the the
+javascript engine of the WebKit project
+itself in fact a bit on VA before on
+JavaScript core but in reality I'm a
+traveler in foreign lands here's my
+heart is from scheme language so it's
+interesting coming into these
+implications from the outside and seeing
+you know what's really going on and the
+tag for this talk had a bit of hubris
+associate with it I think claiming that
+JavaScript cores as fast as v8 on its
+own benchmark and as we'll see that that
+claim has a shape to it and some of that
+shape is true and some that shape is not
+quite true yet but let's take a look at
+the DFG at the optimizing compiler of
+the JavaScript core engine and see you
+know what is it that it actually does so
+it as I mention the the DFG is
+JavaScript course optimizing compiler
+you know the standard architecture of
+these JavaScript engines is you have
+something for dealing with cold code and
+something for dealing with hot code and
+for javascriptcore we have the low-level
+interpreter for very cold code there's
+an intermediate phase with what we call
+the baseline JIT which is a jit that
+doesn't do any global analysis or
+optimization and then we have the DFG
+jutt which is able to take a bit more
+time it has a bit more information and
+it take a bit more of a global view on
+your program so this much is fairly well
+known but I don't think it's very you
+know well understood you know what what
+it is that this engine does with your
+code and how it works and you know what
+does performance characteristics are so
+I would like to take a more empirical
+approach to it I would like to you know
+measure the dfgg it and see how it does
+on various representative test cases and
+see ya when it does this when when is it
+kick in what are its dynamic
+characteristics not simply you know
+performance as a number which is great
+for the marketing folks but performance
+as a shape and distribution which is
+much more interesting from a perspective
+understanding the software I'd also take
+like to take a look at the assembly code
+that is produced by this so I promise it
+won't be all assembly back I think it's
+kind of interesting to see how your
+javascript is translated into what
+machine code when you run on a browser
+with javascript poor so as my tool in
+this regard i'm going to use the the v8
+benchmarks v8 version 7 benchmarks and
+these benchmarks are really geared
+towards optimizing compilers right they
+don't test anything else in your system
+they test your optimizing the output of
+your optimizing compiler and and also
+your garbage collector as well and the
+reason you can know about these is they
+take quite a long time to run and they
+take a long time I run because they take
+a full second to warm up the code for
+each benchmark and then they measure
+over another second how they take a
+number of iterations until you get up to
+a second of iterations of these
+benchmarks and they they divide the time
+by the iterations and you get a time per
+iteration and that that time ends up
+going on the denominator of the results
+so that you know higher values on the v8
+benchmark as we all know actually
+correspond to higher performance and so
+it's very good for measuring you know
+the best that your compiler can do but
+it's it's not so good for you know
+investigating characteristics of the
+invitation I will take a look first
+though it you know what are these
+numbers I have a graph here i'm not sure
+if these numbers are terribly visible to
+y'all the green bars correspond to this
+baseline JIT which doesn't do any global
+analysis in the yellow bars correspond
+to the DFG jet which is the optimizing
+compiler and you can see on you know we
+get three and four times improvements
+except on the regular expression one
+which I'll talk a little bit later about
+now I want to also use this graph to
+introduce a idea I'm trying to work on
+this presentation it's probably not you
+know finish and can be much better but
+it's that you know performance is not
+simply a number it is a distribution
+that you can sample you need to take a
+number of samples and see you know what
+is the range of performance that I
+expect so at the top of all these
+bars I've got little histograms
+superimposed I don't know what I'm doing
+this quite right anyway but you can see
+like for example on this DFG jet
+histogram we see that they're all very
+tightly clustered whereas on this other
+dfgg histogram we have a bimodal
+distribution they're pretty tight you
+know but they're your performance tend
+to cluster those two values and that's
+something you really can't capture with
+the median and I'm going to use this
+sort of thing as we go forward to really
+pull apart some of these benchmarks and
+really I'm not going to use to the
+straight v8 benchmarks to as my tool I'm
+going to hack them a bit too to see what
+are the dynamic characteristics of the
+DFG I'm going to make the warm-up time
+variable starting from Nam warm-up at
+all all the way up to a second with more
+samples closer to zero so after zero
+milliseconds after five milliseconds
+after 10 milliseconds meaning after 10
+milliseconds you know what's the
+performance I can expect on my webpage
+with javascriptcore after 25
+milliseconds what's what's the kind of
+performance I can expect and then the
+thing I measure after the warm-up is
+going to be 5 milliseconds of a runtime
+and it it's a good measure of the code
+that the DFG can produce but it's a it's
+a very tricky measurement as well
+because it's sensitive let's say in
+those five milliseconds milliseconds
+where I'm measuring you know what if GC
+hits well you know I I'm going to get
+much worse results for that particular
+run for example or what if the optimizer
+decides to optimize a lot of code in
+that 5 millisecond window well you know
+also I can I can experience some
+slowdowns oh and as well we have some
+issues with timer precision in
+JavaScript for memory for measuring
+these things I'm using that more precise
+timer that's available in the JC runtime
+called precise time which gives me a bit
+more precision in this regard but all of
+these things you know these unexpected
+pauses these you know sources of
+variation in performance can also affect
+your real code so i think it's is not
+unfair to actually be measuring these
+things so in this experiment more than
+other ones we really need to take a look
+at this shape
+performance again and see you know
+what's going on went out of the way
+let's take a look at the first v8
+benchmark which is a Richards benchmark
+it's a scheduler and it uses some bit
+operations for maintaining the states of
+tasks in the scheduler and it uses a
+bunch of objects with properties and
+prototype resolution and such what we
+can see here is that you know here at
+zero milliseconds we're starting off
+with pretty poor performance which is
+natural you don't want to spend your
+time optimizing code that you don't know
+is going to run but after you know 5
+milliseconds 10 milliseconds certainly
+after 75 milliseconds we're up to our
+peak performance these vertical lines
+indicate runs of the optimizing compiler
+so you can see if they're all clustered
+before 75 but you probably can't even
+read that let's go to 0 5 10 15 25 4075
+one 2203 2,500 seven hundred a thousand
+milliseconds right so from zero to one
+second this is your the dynamic profile
+of the DFG performance and what we see
+graphed here is the distribution of
+performance results that I've taken so
+for I for example warmed up v 8 40
+milliseconds and then measured the next
+five milliseconds 50 times alright and
+those 50 values are applied here same
+for 5 milliseconds st. for 10 I don't
+know I tried to make it understandable
+but it's a it's a novel graph kind and
+that never goes over quite so well what
+we see though is performance is fairly
+tightly clustered the paint there's more
+paint that means that there's a higher
+variance in in the performance and here
+we see things are fairly tight it goes
+up drops down a bit for some reason I
+don't quite understand but then no
+optimizing compiler run happens after 75
+milliseconds so 75 milliseconds in this
+benchmark and the DFG is done all that
+it sees fit to do and so we get a three
+point seven times performance increase
+1.0 would be no no increase at all on
+this particular benchmark relative to
+the baseline JIT measured over a full
+second and now we get in a hardcore
+stuff
+one of the things that turned out we'll
+just take an example of one of the
+functions that that we went to optimize
+here I don't know how many of you have
+looked at the source code for the v8
+benchmarks few y'all the engine hackers
+I see right so the rest of y'all here's
+the JavaScript up here we add something
+to a task saying you know is suspended
+we do a bit and compare and we have
+another clause that their logical order
+together and we return it and the
+assembly that's below is what you can
+see on the screen right now corresponds
+to this this dot state bitwise and with
+state held first we get this which is a
+local variable and that's just a memory
+reference we checked that this has the
+prototype that we saw when it was
+initially compiled but it was optimized
+and if it does not have this prototype
+we're going to jump to this bailout
+which one we d optimize which might be a
+word you've heard from other discussions
+of optimizing compilers like crankshaft
+for example then we once we verified
+that the this object has the shape that
+we're expecting we directly reference a
+field in the object using you know what
+with the v8 folks called hidden classes
+we get the global variable corresponding
+to state held so unfortunately we didn't
+in line this to a constant but okay and
+then we go ahead and do the bitwise and
+the first four instructions correspond
+to type checks that the this state and
+the state held are both integers are 14
+this is a 64-bit assembly code and are
+14 holds the number tag so we compare
+the number tag on the on the value
+javascriptcore uses the nan boxing
+technique nan boxing folks heard of it
+yeah awesome you guys great if you
+haven't heard of it you know search nan
+boxing on the web also search for an
+unboxing and I don't think there's you
+know any pugilistic encounters but not I
+don't know finally after this we have
+some comparisons we compared the the
+value to 0 we invert it we actually
+store it to memory that's the set local
+and we do
+branch and and this is sub-optimal to be
+honest like many of these things could
+be joined together but you know this
+this these are the instructions that are
+produced for that in a very first part
+of this function there are some more and
+finally we return and then after the end
+of the main path all the bailouts all
+the points where we you know jump too if
+something wasn't expected I gotta check
+myself because I could talk about this
+forever that's just the first benchmark
+so the second is Delta blue it's a
+constraint solver and we get a fine
+speed up on this one we get a bit more
+more paint here as you can see there's
+more yellow there's more variance
+towards there and I'll talk a little bit
+more about what that means but on this
+one it's very it's very important to in
+line but we see some bit if I look at
+the logs and i'll i'll talk about how to
+get the logs a little bit later I think
+yeah we see some entries like delaying
+optimization for this thing and it's
+called in a loop because we have
+insufficient profiling and so this
+indicates that you know for this
+optimizing compiler as with all
+JavaScript optimizing compilers we need
+what they call profiling which is the
+the runtime type feedback the type
+information and there's actually a an
+option to tweak how much it weights or
+doesn't wait for some profiling
+information and in this case it hits the
+maximum of five attempts to profile so
+it starts first it up after twenty
+milliseconds and then eventually after
+trying again for more times that at 40
+milliseconds in it goes ahead and
+increase the optimized code it's like it
+would like more information so it's
+going to wait for it it waits doesn't
+find it so it produces a code that's a
+general flavor of things this is I look
+through the logs for you know what kinds
+of functions were actually compiled in
+this early phase and if I go back to the
+graph sorry for switching back and forth
+we see that you know it's really between
+15 and 25 and 40 milliseconds is where
+we start to jump up to our level and
+that's that's generally the time range
+that you're optimizing compiler will
+kick in and I saw this is one of the
+functions it doesn't look very hot to me
+I'm
+I haven't actually run the damn profiler
+and seen if this is hot but you know
+just looking to code it didn't look like
+it was going to be something that was
+particularly hot and what I what that
+indicates to me is that here we just
+have a lot of work to do and indeed if
+we go back apologize again going back we
+see a lot more vertical lines in this
+one compared to richards and they go a
+lot later you know they go after 75 it
+seems like oh there's some out all the
+way up at a thousand and I'm sure if it
+ran for more more would run so some code
+especially code with small functions it
+needs a bunch of inlining and such it's
+going to take some more work to be
+optimized Richard's the the previous
+example it was a bit simpler for the DFG
+to work with the next one is a crypto
+crypto is kind of interesting it deals a
+lot with integers and it deals a lot
+with arrays as well again we see a lot
+of lines the there you can see some
+notable clustering as well clustering is
+like when a line is bigger that's
+because two lines are drawn really close
+together the DFG optimizer will kick in
+based on a profile count so for example
+a loop executes a thousand times or
+something and that can lead to
+clustering because there are a lot of
+loops and functions whose execution
+counts are linked you know if you call
+this function a thousand times then this
+loop will run five thousand times and
+this other function will run a thousand
+times so they can all kick in about the
+same time so you can you can get this
+sort of clustering effect it usually
+doesn't affect performance I don't think
+maybe it can cause an affirmation
+optimization slow down but no no it's an
+interesting characteristic but I like
+this one because crypto is a great
+benchmark to optimize because there's
+lots of you know classical compiler
+optimizations that you know us compiler
+nerds really really dig on and this is a
+one of the functions that's in the
+benchmark because we can see you know we
+have a lot of integer operations trying
+to keep in the range of integers that
+are efficient in JavaScript and if I
+take a look at one of the particular
+lines which is fetching a value from an
+array and then doing a bitwise and with
+constant we can see that we get the
+array which which is this array we fetch
+that out from memory we get I which for
+some reason is in memory as well I don't
+think it's actually a good idea for it
+to be in memory but okay and we get this
+this is actually a relatively new thing
+just landed about a month ago this
+butterfly representation this is a way
+in the future to store out of line data
+like the elements in an array to
+potentially store them as unbox values
+it's not completely taken advantage of
+yet and I think it's one of the things
+that in JavaScript core in the DFG will
+start to see in the next couple months
+or so but this is a pointer to either a
+small amount of inline data so if your
+array only has two elements for example
+they're probably going to be allocated
+in the same block as your as your object
+or a pointer to out of line data
+containing the rest of the array the get
+byval checks that the integers and
+bounds up for the array and if not it
+bails out fetches the value and checks
+if the value is a hole and if not it
+bails out and then finally we do a
+bitwise and another thing that I wasn't
+mentioning before is that between these
+operations these operations are the part
+of the internal representation of the
+DFG compiler so they don't they
+correspond loosely the things that you
+need to do semantically in JavaScript
+but they don't correspond exactly the
+bytecode they don't correspond exactly
+to the the specification either but what
+we see is that for example we have we
+get this array and we put it in our 10
+and then down here we use our 10 and
+then later on we can use a we can use
+these values directly in those registers
+register allocation is you know
+obviously a huge optimization that all
+of the optimizing compilers do and so
+even if you don't have a lot of type
+information in running the optimizing
+compiler on a piece of code can still be
+quite advantageous right so raytrace
+here we have an interesting example is
+the first floating-point example and
+VA test suites it uses some
+floating-point math and it uses objects
+with floating point fields so like this
+X being a floating point number we see
+very tight performance here and then we
+as we warm up a bit more we start to see
+a bit more variance and whenever you see
+variance in a very small benchmark like
+this it means that something is slowing
+down the benchmark sometimes but not
+some other times so any guesses as to
+what this could be in this particular
+case yes yes exactly the reason we have
+so much variance and you probably can
+see this right now but it goes from here
+all the way to hear there's a histogram
+line drawn there is because sometimes we
+hit garbage collection and sometimes we
+don't in the right trace example we get
+a lot of short-lived objects with
+floating point fields so you can you can
+get very good performance as long as you
+don't have GE and if you do hit GC you
+get less performance and I'll talk about
+that a bit more when we get to the more
+strong tests of the garbage collector
+later as one example of code that the
+DFG works with for this one we have this
+normalized function and it takes a
+vector and it returns a new vector and
+at normal I normalized as it compiles
+dysfunction when the DFG gets to this
+top magnitude it's going to inline the
+code for this magnitude which is pretty
+awesome optimization I also done by
+other other systems but you know it's
+pretty key to do and I just want to
+focus a bit on what happens when we
+store the result for this x divided by M
+we ended up dividing by things they're
+placed in SSC registers so it's just one
+instruction after we've loaded up the
+values but then when we go to store it
+we re add a number tag on a value in the
+high beds to the value or I think it
+rotates the value around actually and
+and we store it as a sort of general
+JavaScript object which only occupies
+one word but in into this object which
+means that we don't have fields that are
+unboxed values in javascript core we
+have this decks can be like an in 32 for
+example or this that X can be a float
+and we always know it's a float
+otherwise we you know we would leave off
+this tagging step early Boyer again we
+see a lot of paint because we see a lot
+of short-term allocations these are two
+benchmarks that were translated from
+scheme actually by an automatic
+translator by same fellow that does the
+dart to JavaScript translator in cinelli
+and so what we see are a lot of calls to
+small functions and a lot of allocation
+of short-lived objects so this is
+something that a generational collector
+collector will do really awesome on but
+in JavaScript kors case when the garbage
+collector needs to run it actually stops
+everything and then it scans the entire
+space in parallel I mean you have maybe
+eight cores in your system or four cores
+and it will use all of them but it does
+have to scan the whole space to see
+what's live and what's dead and then it
+lets a program go on and that leads to
+this you know these huge variances here
+here here an ongoing I think the outside
+color corresponds to ninety percent of
+the samples and that red in the middle
+is the the middle ten percent you can
+think of the the reddest red is a kind
+of median line on these so it's just an
+indication of this this thing I you know
+if you take nothing else from this
+presentation is that you know numbers
+are really awesome what you're having
+you know shootouts and races and
+marketing and things like that but if
+you actually want to understand you know
+anything about your own performance then
+you need to treat performance as a
+distribution of values and not simply a
+number next we've got the regular
+expression benchmark and there's not
+really anything to say here because the
+regular expressions have their own
+compiler than in all the engines and
+it's not really subject to the
+optimizing compiler and so the DFG
+doesn't really do anything for us here
+and that's that's basically that it it
+seems to run but very few times maybe 15
+times or so giving us a
+I speed up in the loops around which the
+regular expressions run but but not on
+the regular expressions themselves which
+take the bulk of the time finally we're
+getting to the end here I think good we
+have the splay benchmark which tests
+allocations that are very long-lived so
+it's terrible for generational
+collectors JavaScript court actually
+does fairly well in this but what you
+can see again is is the huge amount of
+variance here we go from know all the
+way on the bottom here when we have to
+stop the world and you know Mark an
+enormous heap to you know something is
+quite good up there and and you don't
+see the this kind of variance if you
+just look at the numbers in the end like
+if you just look at the the raw
+performance numbers measured over a
+second because if you measure a second
+you're amortizing all these garbage
+collection costs you're not measuring
+you know what is your maximum pause time
+for example so in this case we're seeing
+a pretty poor maximum pause time because
+of this stop the world although it's
+parallel you know but stop the world
+marker and finally we have the newest
+addition to the v8 benchmarks I guess if
+they're still around and we don't all
+move to octane benchmarks or such which
+is a navier-stokes benchmark it has a
+ray large array of floating-point
+numbers but not using the type to raise
+so what this really measures is okay
+first of all are you doing good floating
+point wise does your optimizing compiler
+deal with floating point well and can
+you automatically turn arrays of
+floating point values into a raised of
+unbox floats you know and in the case of
+v8 they can do this and the case of
+javascriptcore you know we can so for
+example this get byval fetches a value
+at the index with the same range check
+and is it a hole and we get we get some
+local value I think and then we turned
+this value we got into a double which
+actually doesn't take very much code but
+it's more than if it was an unboxed
+array and we knew it was a double
+already so yeah no no automatic turning
+of arrays into double erase
+finally before I close I'd like to
+mention how I got this data if you want
+JSC and I think there's so many apple
+laptops right here you probably have
+JavaScript core installed if you can
+locate the JSC program if you run it
+with dash dash options it gives you a
+spit out of knobs you can turn the dash
+D will dump bike code which is useful in
+together with the app together with a
+disassembly if you say show DFG
+disassembly but in order to get the time
+stamps the information that I showed you
+you have to enable some verbose logging
+and the the graphs that I showed you I
+measured them without the verbose
+logging and then I superimposed the DFG
+vertical bars after enabling verbose
+logging so they were from separate runs
+and not entirely identical so you know
+don't try to correlate those two
+precisely right so back to the hubris I
+guess you know javascriptcore is fast as
+v8 on its own benchmark and stuff and
+and yeah it is and it's faster and it's
+slower also because you know we got a
+bunch of different tests like we're
+doing real great on Richards I say you
+know we is a JavaScript core hacker I
+don't actually have a dog in this race
+but you know do great on Richards not so
+great on Delta blue the same on Krypto
+really eating it on early boyer but
+we're you know picking up on splay yeah
+and it is you know a classic example of
+you know boy javascriptcore is you know
+really killing it on display right but
+the pause time it's not on this graph
+right you can't see it because those
+costs are more dives over the entire
+second of collection so yeah that's
+that's javascriptcore is optimizing
+compiler I'll take some questions now
+sure first of all awesome talk love the
+tub thank you for being you know BM geek
+obvious they do the question I have is
+for the butterfly um forgot what that
+was not view but something else or is
+that intended to be for arrays only is
+there a plan for making unboxed values
+for objects as well for property on I
+think it's for both I haven't talked
+with the fellow that it meant but as far
+as I understand it's for both sounds
+very cool hi hi are there plans to
+expose this information for developers
+like when are you know certain parts of
+the code hot when is your program
+actually doing something bad that's
+throwing off the digit and whatever
+because it does that's actually
+something that that we're missing right
+now that that kind of information that's
+a good question i think the general
+answer that is the profiler and the
+profiler i believe is hooked up to the
+inspector and if it's not that that's a
+problem I mean that doesn't really tell
+you that it's actually throwing it off I
+mean it just you see a decrease in
+performance but it doesn't really tell
+you you know which part of the code is
+it's causing it or you know why your
+your your kid is failing basically so is
+there I don't know like maybe like a
+heat map that would be awesome it's not
+even that yet okay so JavaScript co has
+three different compilers that seems
+like a fairly high number do they really
+need that many I don't think so uh I
+believe the plan is well the plan is
+driven by results right so does the
+slowdown something or not and i think
+the low-level interpreter has seemed to
+work for just munching a lot of code
+that doesn't run very often and the DFG
+works for hot code and i think the
+question is is this baseline JIT
+necessary
+and it seems it right now to remove it
+is not worth it's still in a performance
+improvement but I think that's probably
+due to inefficiencies or things that
+aren't complete in the me optimizing
+compiler more than any fundamental
+architectural advantage so I'm kind of
+talking about so
+just to double check as I understand the
+the JIT compiler runs in thread so you
+have to stop the world in order to
+compile so like the bunching of
+compilation could cause pauses in and of
+itself as well yeah okay I guess that's
+it um thank you very much Andy thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

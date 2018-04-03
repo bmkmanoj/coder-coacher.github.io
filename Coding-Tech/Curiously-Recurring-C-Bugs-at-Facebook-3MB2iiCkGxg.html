@@ -1,0 +1,1214 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Curiously Recurring C++ Bugs at Facebook | Coder Coacher - Coaching Coders</title><meta content="Curiously Recurring C++ Bugs at Facebook - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Coding-Tech/">Coding Tech</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Curiously Recurring C++ Bugs at Facebook</b></h2><h5 class="post__date">2018-02-18</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/3MB2iiCkGxg" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">I'm here today to talk about bugs my
+name is Luis Brandi I work at Facebook
+and I have brought to you a selection of
+bugs I want to give a tiny bit of
+context here before just to kind of give
+you a some background on why it is I
+sort of have opinions on recurring bug
+patterns so one of the questions I get a
+lot I've been getting since I've come to
+CBP hunt is does Facebook actually have
+a lot of sequels buffs like don't you
+guys just you know use PHP it turns out
+we have an enormous amount of C++ we've
+actually had enormous amounts from
+effectively the beginning Facebook infra
+has you know been built on C++
+effectively from the beginning it's the
+second most used language behind our PHP
+hack codebase and our PHP hack codebase
+runs on something called hvm which is a
+C++ process which sort of lives in our
+repository there's other languages and
+infrared Facebook Python notably is
+definitely second Java third and then
+everyone's favorite language etc is is
+there's actually quite a long tail of
+line of languages
+let's see clicker so our team is
+effectively the core C++ group at
+Facebook and there are two groups in
+this group two logical sections one is
+very tool focused one is very codebase
+focused so the tool part of our team
+works a lot on things like the compilers
+the sanitizers the build systems and so
+forth like that the code based part of
+our team deals a lot with the core
+libraries Folly we literally have a
+directory called common right and so
+because of these two things like the
+sanitizer is 1/2 the core libraries is
+another half we're often an escalation
+point of bugs me personally I'm involved
+often in our site event review meeting
+right so when something crashes the site
+especially if it involves a C++ bug I
+see it so I have a very rich data source
+right sometimes it says crash the site
+sometimes it's hey is this an address
+sanitizer or false positive it's like no
+no it's not you have a bug in your code
+and it's subtle and it's here right
+and so this is my data source for this
+talk so obviously my agenda is bugs I
+brought some bugs with me I had some
+criteria for the bugs I wanted to show
+you I want them to be scary so like a
+syntax error
+whatever is not interesting okay so
+these are things that are scary I want
+them to be common and recurring so these
+are things that keep happening over and
+over despite our best efforts they're
+also not like the list of the craziest
+thing I've ever seen okay that's a
+different talk and they're concrete so I
+have bugs that fit on slides like I'm
+gonna show you C++ that is broken so
+it's not gonna be like libraries that
+have bad ownership models cause lots of
+bugs which is true they do but that's
+like abstract and like not super
+interesting I'm going to talk about
+mitigation and like all the tools we
+have I didn't intend for this to become
+like a recruiting event for a SAN but it
+turns out that a SAN is actually highly
+impactful on almost every bug we're
+gonna talk about today almost every bug
+so we'll talk about these tenets fair
+bit but also all the other tools and
+just as fair warning especially since
+there's gonna be a lot of talk about
+sanitizers here
+GCC clang Linux bias for me especially
+in the tooling part those views that use
+other tool chains hopefully have
+equivalent technologies if not you
+should get some okay all right so when
+you give a talk about bugs it's actually
+kind of terrifying because there's two
+different groups of people you might be
+talking to one is audience number one I
+show you something you have never seen
+before
+okay I save you from a terrible day with
+any luck
+like if I'm interesting enough for you
+to be paying attention right so I'm
+gonna show I'm hoping I'd show at least
+everybody one thing that they've never
+seen before if you've seen it you forgot
+and I maybe will flesh it out of it for
+some of you like if you're a student or
+something maybe I'm gonna show you a
+bunch of stuff you've never seen before
+and you might actually I might save you
+like a week like the worst week of your
+career right audience number two I'm
+going to show you a bug you've seen a
+hundred times almost always you see
+other people making you're the one in
+the code reviewing oh whoa whoa there's
+something you don't understand here and
+of course if you're an audience number
+two and you're an expert you never make
+these mistakes yourself never never
+never it's never happened but you and I
+are having a slightly different
+conversation so our conversation is why
+do these keep happening what can we do
+about it can we fix language can we make
+the tools better can we do education
+better right but what can we do about it
+to make some of this stuff go away
+all right so enough jibberish enough
+philosophy it would be intellectually
+dishonest to not mention the single
+biggest cause of bugs at Facebook okay
+it is like the square bracket operator
+of a vector okay and I put a bunch of
+stuff in this bucket because like
+frankly see index operator is the same
+thing and frankly pointer dereferencing
+is roughly the same thing this is the
+single biggest cause of problems and
+probably every codebase right it's the
+most important bug most of us have but
+for today's purposes I'm going to
+declare this uninteresting only for
+today's purposes okay and the reason I
+declare it uninteresting is it's not
+really C++ like self-inflicted wound
+we computing has this problem in general
+every language is built or not built
+around it and so I think this is
+actually a hard inherent problem in what
+we do most of the rest of things I'm
+going to talk about are not really
+inherent they were self-inflicted so
+yeah if you want to crash the site like
+don't don't check the bounds of your
+vector start indexing into it you'll
+definitely crash the site eventually or
+better yet iterate through two vectors
+and assume they're the same length right
+so mitigation so let's a little practice
+now we'll practice mitigation I've
+declared this an interesting but let's
+talk about it static analysis has been
+studying this problem for a really
+really really long time it's sort of the
+queen-mother of hard static analysis
+problems they've made a lot of progress
+but the good static analysis to find
+this is expensive I interprocedural etc
+etc a lot of languages and C++ is headed
+in this way change the abstractions you
+don't want to do for loops you want to
+do range based algorithms if you do
+range based algorithms often times you
+can hoist any bounds checking outside
+the loop right and of course you can do
+things at runtime you can literally
+bounce check every single array access
+this is what like ADA does and has done
+for a really long time for safety but as
+far as I'm concerned at least in C++ you
+are best chance of finding these is
+address sanitizer understand this hazard
+was built for this if you really really
+really don't want out of bounds problems
+in your code you need to have fuzzing
+without your sanitizer I'm not going to
+talk about it there's many talks to go
+talk
+this particular problem but if you take
+nothing away from today what you need to
+take away is F sanitize equals address
+okay
+clang in GCC again specific but address
+sanitizer is probably the most important
+thing that's happened at least in our
+tool set in a long time alright so bug
+number two the greatest newbie trap in
+my opinion I'm nominating in all of C++
+I'm curious by the way before I tell you
+what it is if you have a personal
+nomination and you think you've got me
+beat come find me after I want to hear
+what you think is the greatest newbie
+trap and I'll let C++ in my opinion the
+greatest newbie trap and all of C++ so
+again before I before I do the big
+reveal I'm gonna sort of increase the
+chronometer put these in chronological
+order so this is sort of the order in
+which you will probably encounter them
+in your career so hopefully many of you
+have seen this already we'll end on
+something a little more hard I believe
+it to be maps operator square bracket
+operator ooh I heard whispers yes I've
+called it out so I hope most of you know
+where I'm headed but if you don't let's
+let's be clear map has this property
+that so in this case I've set hey 212 in
+my map and then I try to print it out
+and I typo it
+okay I've type out it so I'm trying to
+print out a key that doesn't exist in
+the map most of us know what happens
+here it prints out 0 right and you're
+used to that that seems normal to you
+show this to a programmer that doesn't
+know C++ well and ask them what they
+think this does the actual answer was
+like no higher than third on their list
+this doesn't crash this doesn't print
+out on initialize memory this doesn't
+throw an exception what this does is
+print out 0 and it actually inserts
+something in the map so the size of the
+map at the end of this is 2 okay if you
+don't think that's weird you've been
+doing C++ for a really long time yes we
+won't think twice about using this this
+is an occurrence count right like a
+really dopey small one right like loop
+through the string and in my map
+increment for every character I see okay
+you might write something like this the
+Java version of this is horrible because
+you have to like initialize your
+variable
+right and see this lesson just gets kind
+of it the integers get initialized they
+just get initialized somehow don't let a
+beginner C++ programmer stare at this
+for too long they start asking really
+complicated questions like wait a minute
+you don't you don't initialize any of
+your ins nobody sets anything to zero
+how does that work does that work with
+normal ants no no no no no it only works
+because of value oh I don't want to talk
+about value initialization right now
+with now with someone who's falling into
+this trap I want no part of like well
+see it's like a default construction of
+an INT even though in don't have default
+okay never mind never mind
+just next slide next slide okay so we
+actually protect our sort of beginner
+programmers for this because we drill
+into them contract miss be cons correct
+it will save you from bugs this is one
+of those bugs that saves you from this
+code will not compile okay you have a
+settings map that you're trying to read
+from with a square bracket operator but
+the settings map is Const so this won't
+compile okay because the settings square
+bracket operator might need to insert
+therefore it won't work right oh yeah I
+ruined my own joke how does a newbie fix
+this code if you if you paid attention
+you know how does a newbie fix this code
+yes remove cons thank you yeah you
+remove Const guess what it works I know
+I know he told me to be cons correct but
+it works yeah so I was sitting with
+someone who was struggling with
+something else they were relatively new
+to Facebook I saw code that was exactly
+like this and I said well why or why is
+why is this not Kahn so I already kind
+of knew why and they're like well it
+doesn't work when I put in cos I'm like
+yes let's let's let's put it in let's
+look at the error message this is the
+error message error passing card
+standard map that thought that as this
+argument discards qualifiers so as a C++
+expert you know what that means you can
+you can interpret that a newbie sees
+error passing Const like right the met
+the error literally says there's an
+error passing this Const map into this
+thing so I should remove it it works
+right now of course only newbies fall
+for this mistake right of course twice
+twice as far as I know major
+site incidents have occurred in exactly
+this pattern experienced very
+experienced C++ teams had a widget in
+this case it was like a service handler
+as in its constructor it took a map of
+settings which is already gross already
+gross right and they assigned the data
+member settings to the settings that
+gets passed in and then they print their
+settings server initialized with timeout
+whatever well what happens in a refactor
+if you pass in a map but it doesn't
+contain timeout well we've just
+helpfully in our print statement in our
+print statement set the timeout to zero
+in most socket library is a timeout of
+zero infinite yes so this is a really
+excellent way of making like one service
+is dying and now this service all of its
+threads are an infinite timeouts right
+but of course you know everyone tests
+all their timeout at code paths really
+extensively so this doesn't have yet no
+okay all right so here's the third bad
+news about this newbie trap it's
+actually the one we're the most
+powerless against I have nothing to help
+you
+I have nothing like people have
+legitimately suggested we just ban it
+just ban the square bracket operator of
+map
+consecrating this helps to some degree
+but not always so I got nothing if you
+have a clever idea let me know come find
+me okay I'm interested what what call at
+yeah but so that's good if you know that
+but they don't people can play about add
+four differently that's a different time
+okay so so good that is add is one
+solution to this problem he mentioned at
+because at will throw if the keys not
+there most languages have an equivalent
+or rather an alternate mechanism which
+is extremely common which is this sort
+of get with default so you call it on
+what you can call a Const map with a key
+and if the keys not there instead of
+throwing return the default argument
+seeing suppose doesn't have one of these
+turns out it's actually kind of tricky
+right and this is the official actual
+implementation in GHC haskell of this
+exact idea this is a real programming
+talk now we have haskell in this talk
+we've put away the toys this is Haskell
+now alright welcome this is the actual
+implementation in Haskell it says find
+with default default km there in reverse
+order and Haskell ok it says look up the
+key in the map if you find it or rather
+if you find nothing return the default
+if you find an X return the X that's
+what it looks like in the prelude or
+rather in the the GHC standard library
+this is what the fawley version of this
+exact thing looks like so we have this
+effectively the same function in Folly
+it's not super fair to compare this
+because most of that noise is type
+information and Haskell has type
+inference but this is a template that
+takes a map in a key and the code down
+at the bottom is really like what you'd
+expect right find the key if if it's not
+the ended narrator return it otherwise
+return the default that's what the sort
+of last two lines look like it's very
+straightforward there was something in
+this slide that C++ programmers hate
+they hate it they hate it they hate it
+ok ok so I had a whole separate slide to
+build it there which is I've moved all
+the template noise to make it more
+obvious I said let's get rid all the
+template nonsense and I said let's let's
+just do the string version of this so
+this is the exact same slide except with
+string substituted so I made it much
+more obvious now it returns a string by
+value that means there's a copy here and
+unnecessary copy and when I was when I
+was proposing this talk and I was saying
+hey give me ideas for bugs that have
+been recurring so many people mentioned
+Oh
+having extraneous copies is a really
+common bug oh it is isn't it
+well how do you fix it if you hate
+extraneous copies easy right we know how
+to fix it we would turn a reference to
+the string this works great if the key
+is in the map I don't have to copy the
+same thing out of the map right I don't
+have to anymore I'll just return a
+reference to what was in the map and I
+there's no more extra copies this is
+hopelessly broken this code is
+hopelessly broken do not copy and paste
+this code ok it turns out right oh yeah
+this hook this code is hopelessly broken
+yet congratulations we just crashed this
+site
+it turns out that people love default
+temporaries they love default temporary
+this is in fact the way this this
+function is almost always used on the
+right you're creating a default
+string and if you return that by
+reference because the keys not in the
+map V is now a reference to a temporary
+that has now been destroyed yes this
+patch that I just showed you has been
+submitted like four times and I've
+rejected it three of those times one
+time I shouldn't say hi someone rejected
+it three times one of those times it got
+in and we're like oh no no no III need
+to do like negative caching of gifts and
+say if anyone submits this if just Auto
+rejected okay
+people want to make this change so badly
+but this is a broader class of problems
+right this is that this is a much bigger
+problem that's well-known right and
+there's many creative ways to do this to
+pass a temporary to an object and then
+somehow return a reference to it to the
+caller right and this is a really hard
+problem to fix I think in the language
+there's some library tricks you can do
+often to make it hard harder to do this
+but at some point the language has to
+fix it and I don't know if it can or
+will but it can be mitigated
+so again address sanitizer caches this
+catches it cold the only problem is you
+you you often need this extra flag so
+default address sanitizer at least up to
+some point didn't have this on by
+default I believe it's now turned on by
+default in trunk I don't know which
+version that's actually gonna ship in
+but when I turned it on I had to add
+this flag when I turned this flag on for
+a SAN we found dozens of bugs of this
+form doesn't it was bad all right bug
+number four so this is intermission how
+we doing on time
+so the intermission is interesting
+because I wanted to tell a story that
+works this is not a recurring bug this
+is a bug that is not recurring this is a
+bug we killed it was horrible it was
+constant source of fighting and like we
+actually fixed it it involves the worst
+keyword in all of C++ who knows it auto
+oh no what I what else go to oh that's a
+good one but no not go to what else
+volatile volatile oh who knows what
+volatile does that's an honesty check
+look at all these like okay I'm just
+kidding
+um yeah volatile ZAR really scary one
+lots of people think they know what it
+does at least historically and use it
+really really wrong really really wrong
+where we introduced what is actually in
+practice a terrible idea like we throw a
+paragraph at you if you write the word
+volatile like our linter literally spews
+a paragraph of gibberish at you it's
+kind of me but that's fine it's not
+actionable which makes it a terrible
+lint rule but I don't care if you use
+volatile you know I'm gonna I'm gonna
+lecture you almost every use of volatile
+on our code base had to do with
+threading and trying to synchronize
+threads now there are legitimate use
+cases of volatile that don't involve
+threats they just don't exist in our
+code base for the most part so you might
+live in a code base where you actually
+have like memory mapped i/o and you need
+to do volatile but we don't so I I had a
+really bad lint rule by most lint rule
+standards which said if you write the
+word volatile and it's not in a comment
+I'm gonna lecture you on your diff
+automatically this like really angered a
+lot of people it was fun we would get a
+post that was like actually that I'm
+using it correctly you have one thread
+and there's a boolean and he's writing
+to it and then the other threads trying
+to read the boolean and I don't want the
+compiler optimizations so I make the
+bull volatile we've been doing this for
+20 years you know this kind of stuff and
+uh I you know we we had so many of these
+arguments but the thing that's
+interesting is we won we won the
+arguments like people have been at
+Facebook for a few years they don't
+remember they they don't remember
+volatile arguments the great volatile
+Wars of like 2010 they're gone
+2011 right we people stopped using
+volatile for threads and I think if you
+pause for a second it's kind of
+interesting like why how did that
+actually happen it turns out like people
+wanted atomic flags or mutexes or higher
+you know yet higher order abstractions
+and once we started giving it to them
+somehow volatile just vanished and we
+sort of trained the old guard who had
+learned but the new people who wandering
+the language must be just finding what
+they want the right thing the use of
+volatile is synchronization mechanism
+seems to have mostly vanished and it's
+I'm not exactly sure why but I think
+it's an interesting case study and sort
+of people really want to do
+and they'll find a way to do axe and if
+you maybe if you just give them a
+solution they'll use it turns out yeah
+all right all right bug number five this
+is the worst question in all of C++ this
+is the one that uh that makes my blood
+run cold the way this usually works is
+someone post in our internal group they
+tell a story the story's always the same
+it goes like this we've been having an
+intermittent crash for like a month it's
+really hard to reproduce I can't
+reproduce it what we've what we've ended
+up having to do is bisect it in
+production we build a binary we run it
+for six hours if it crashes and that's
+bad and if it doesn't that's good and we
+we've been bisecting for like three
+weeks and we finally found the diff and
+we don't know why this diff is broken
+we've been staring at it and ripping it
+apart and we don't there's something
+here we clearly don't understand but we
+finally came up with a hypothesis and
+then they ask you the question it's only
+three words is shared pointer
+thread-safe yeah
+he's shared pointer thread-safe what's
+the answer no I like that well any other
+answers aye-aye sir I couldn't hear it's
+not this yeah so you'll hear answers
+like this like yes no it depends people
+love this answer which is totally
+useless but true it's exactly as
+thread-safe as a normal pointer
+technically true but useless if you go
+to google and you type in is shared
+pointer the top result is shared pointer
+thread-safe
+by the way the third result is shared
+pointer slow
+no no share pointer is not slow if it's
+in your profile fixer code is shared
+pointer null is fourth yes your shared
+pointer is no put a check in okay but
+we're here about thread safety all right
+it is share pointer thread safe so I've
+had a lot of time to come up with an
+answer I have a lot of practice I
+believe the answer to is shared pointer
+thread safe to be
+No okay that is technically I believe to
+be a lie but I'm answering a slightly
+different question than the one you're
+asking you asked is SharePoint fritzy
+but what you meant to ask was is my code
+correct and the answer if you have to
+ask is no no so here's my teaching set
+so you might have no idea what we're
+talking about you might be an audience
+one right now but what are these people
+talking about what do you mean thread
+shared pointers and thread safe let me
+explain it to you a shared pointer and
+this is a mental model this is not an
+implementation it's a mental model is
+three things there's there's the actual
+shared pointer struct which is a pair of
+pointers that's what it is under the
+hood and it doesn't have to be but in
+our mental model that's what it is it
+points to two things one pointer points
+to the shared T one points to the shared
+reference count this is where like the
+C++ people get really uncomfortable
+they're like oh it's not a reference
+count there's a lot of other stuff in
+there it's technically called a control
+block and it contains you know but
+fermented model purposes is a reference
+count okay and the answer or rather n we
+get when you copy it all you do is you
+copy the struct with the two pointers
+and they point to the same two shared
+things the shared reference counting on
+the shared T and you we commit the
+reference count right
+that's how shared pointer works under
+the hood that's the mental model the
+thread safety kind of approximately
+looks like this anything that touches T
+is unsynchronized the shared pointer
+will not help you synchronize the T okay
+that's on you if you want
+synchronization at your T do it yourself
+the SharePoint will however manage the
+control block in a particular the
+reference count so if multiple threads
+destroy shared pointers they will both
+atomically decrement a reference count
+that will happen but the one that trips
+people up tends to be this thing on the
+left for some reason people want to read
+and write to a shared pointer
+unsynchronized it doesn't work for the
+exact same reason a pair of pointers
+wouldn't work from two threads I this is
+a this is the thing that for some of us
+seems super obvious so I was like
+testing this with people people at
+Facebook like did you know this did is
+this obvious does everyone know this
+already and one person literally went
+like
+that's the crash that's the crash we
+have a map and their share pointers
+that's the crash I was like okay I guess
+it's going in the talk yeah I've changed
+the definition of the colors now I want
+to talk about our intuition now and how
+I'm moving towards audience to you you
+hire lots of programmers and you're
+training them over time you should know
+this about their intuition they get the
+right hand-side correct they naturally
+assume that T is unsynchronized when
+playing with shared pointers that they
+get it
+it's just intuitive they naturally
+assume that the control block the
+reference counting happens for them
+automatically the thing they seem to get
+wrong is the one on the left people
+really want to read and write to shared
+pointers unsynchronized the pattern that
+comes up over and over and over at
+Facebook and I think this is an artifact
+of the fact that we write a lot of
+services is this it's a buggy form of
+RCU and it's it's actually a degenerate
+but very common form of RC u RC by the
+way is read copy update has a Wikipedia
+page there was a talk about it I'm not
+gonna talk about it too much here but in
+our in our most common use case it's
+actually very simple you have a service
+it handles requests you have one thread
+who's responsible as the updater so one
+thread wakes up every 20 minutes or
+whatever goes and reads some database
+populate some in-memory efficient
+version of whatever's in the database
+and then stores that into a shared
+pointer as the one true most recent
+state in the universe the worker threads
+go into that one true shared state at
+the start of their response they pull
+one out grab a reference count to it and
+say okay I'm gonna use this state of the
+universe for this request and then on
+the next request I'll grab a new state
+so you won't update me between whilst
+I'm in a request but I'll pick up the
+update after I'm done and this is really
+this has a lot of lovely properties in a
+service right because updates are really
+cheap you're not really blocking
+anything to do your update it has the
+downside of course of that you may have
+multiple states in flight right like
+whilst you're updating one state someone
+might be using the old one and you've
+gotta be able to tolerate several states
+like in memory at once to have this work
+effectively but and the implementation
+here is actually really easy like all
+you got to do is at the heart of that
+handoff like have a shared pointer and a
+mute
+and like having atomic data in an atomic
+seven like you're done I'd it's not even
+that it's literally like the easiest
+thing to write but what's interesting is
+our intuition fails us people keep
+writing the wrong thing and then they
+have a really bad month but finding that
+bug takes month a month if they don't
+know what if they don't see it or know
+it
+so mitigation yeah so thread sanitizer
+finds this if you run Fred sanitizer as
+your sanitizer often finds it as well
+but it's not super helpful because what
+happens up happening is you you end up
+corrupting the shared pointers and you
+destroy the wrong thing it looks like
+memory corruption and it's not always
+clear address sanitizer will tell you
+something's wrong but it won't
+necessarily ain't you right at it now we
+get to the library it's part of the talk
+there has been a thing called atomic
+shared pointer since C++ 11 on paper
+this solves the problem of course most
+implementations haven't had one and then
+there was a concurrency test that added
+atomic shared pointer like this this is
+atomic shared pointer like this and then
+like this and then we went back to
+atomic trip pointer like this like I
+heard some but something about a vote in
+Toronto I asked someone in sg-1 so I
+tend to hang out an evolution working
+group of the committee I don't really
+hang out in the sg-1 which is where they
+talk about this I was like can you give
+me the history of this because I'm gonna
+give a talk and I'd like to at least
+tell people like what the deal is about
+atomic tread pointer and they're like
+eyes glazed over and apparently this is
+like a big long interesting I don't know
+about interesting this is apparently a
+big long topic of back and forth of
+what's gonna happen with atomic shared
+pointer I don't actually know its
+current state I suspect will get
+something like it at some point it does
+solve my problem but to be fair I don't
+need a highly performant atomic shared
+pointer to solve my problem I can get
+away with the mutex and a lock and in
+fact there is also another proposal if
+this is interesting to you about a cell
+type of an abstraction which is
+effectively exactly what I want it's
+also before the committee Oh bonus bug
+about shared pointers we have this one
+all the time too I don't know why people
+write this I can't explain it some
+function returns a shared pointer they
+just dereference it immediately and they
+grab a reference to whatever's at the
+other end and now you call reference
+boom so the problem here of course is
+everything that happens after that the
+shared pointer is gone has been
+destroyed because you D referenced it
+and you basically
+don't have the protection of a reference
+count anymore right so all your code is
+now running without a reference count
+protecting you so this one's come up a
+number of times but again address
+sanitizer does catch this one very
+easily all right let's see all right my
+last one this one's my favorite bug
+number six this is code review this is
+gonna be interactive at least a little
+bit I'm gonna show you a series of
+slides with very little code on it very
+little code and I have two questions for
+you
+question one does it compile everyone's
+favorite C++ game will this code compile
+question number two if it doesn't
+compile what error message would you
+expect or even like you're being
+ambitious okay so does it compile what
+kind of error message do you expect
+here's the code include a string a void
+F standard string parenthesis foo closed
+parenthesis semicolon raise your hand if
+you think this code compiles so for the
+odd purpose of the audience maybe 10%
+maybe 10% but I pointed that because
+that's Richard Smith right there you're
+what the editor of the C++ standard
+writing yes the editor of the C++
+standard says this code compiles who's
+changed their mind richard
+unsurprisingly and surprisingly is
+correct this code compiles almost
+everybody in here got it wrong this code
+compiles what what okay so take a minute
+pause the video if you're on video think
+really hard about how this code could
+possibly compile how this code can
+possibly compile and then think a little
+bit more like more existentially like
+what are we doing why are we here I feel
+like I'm wasting my life oh okay this
+code absolutely compiles in the answer
+and I'm not an expert in the standard
+but my understanding is the way the
+standard works at least in this part of
+the standard if something looks like a
+declaration it is a declaration no
+matter what else it might be right and
+that looks like a declaration so this
+and this are basically the same line of
+code those parentheses are optional so
+what you're seeing in the top is a
+declaration of a string called foo okay
+now that's that seems like trivia that
+seems like that seems weird like okay
+how oh yeah here's me proving it by wait
+so you put it into God bolt and you
+can't really see this but what you'll
+see in God bolt with no optimizations is
+the default construction of a empty
+string and then the destruction of the
+string so you'll see the creation and
+destruction of an empty string foo so
+okay but the question becomes like okay
+so what like how is this possibly one of
+the most common and horrifying bugs and
+all people plus and I put I posit to you
+that it is just not in this form it's in
+a slightly different form and this is
+often what it looks like you have an
+object that has an update method and
+this object is meant to be used from
+multiple threads so it needs to be
+internally synchronized and so you of
+course have a data member that's a mutex
+and and on any mutating method you have
+to lock your mutex right that's the way
+it works
+so you lock your mutex and then you do
+the mutation right do you see everyone
+sees the bug right do you see it yet who
+sees it
+only half of you okay yeah so I didn't
+name my lock here right I am not that
+that unique lock is intending to be like
+a lot guard right I'm intending to on
+construction lock my mutex and on
+destruction unlock my new tanks that's
+what I'm hoping this code does that is
+not what this code does
+now what this code does is it declares
+the existence of a unique lock named my
+mutex and that shadows the mutex data
+member that you were trying to lock and
+to be clear nothing gets lost there is
+no lock that occurs here it looks like
+it's locking what you wanted to lock but
+it's definitely not locking what you
+want look and the fix is super easy
+you've seen it a million times
+you have to name the lock guard have to
+give it a name now this is a unique lock
+named G whose construction locks the
+mutex and whose destruction unlocks the
+mutex so your code is now protected by a
+la carte right do a code search for this
+this is the pattern do it unique lock of
+mutex if you have a code that's using
+like relatively recent C++ do a code
+search for a unique lock of mutex github
+search is it won't let me do it so I
+couldn't do it on github but I figured
+since I'm giving this talk and I'm
+telling all of you to search your code I
+should search mine do you think I found
+a bug yes this is what the actual code
+looks like standard unique lock of
+standard mutex parenthesis mutex that is
+not doing what it thinks it's doing that
+is not a la card that is a shadowing
+unique lock that is not locking the
+mutex it tried to lock I didn't just
+find one bug I found two bugs in our
+code base and here's the sad thing about
+this I only found two bugs which is okay
+but we actually have a linked rule to
+protect against this so this is two bugs
+that got into our code despite the
+linker telling them not to do this
+imagine how many we would have if we
+didn't have a linter telling people not
+to do this
+all right now we're gonna do the worst
+C++ quiz of all all right and I've
+taught you everything you need to know
+there's no more tricks I've taught you
+everything you need to know to
+understand what happens next
+all right so does this compile so
+remember this compiles this compiles
+shockingly perhaps this compiles does
+this compile raise your hand does this
+compile if it does this compile yes only
+half of you
+so this compiles as well this compiles
+as well the first one as we've mentioned
+is the Declaration of a string named foo
+the second one is a constructor it
+constructs a temporary string from a
+charge star all right let's make it
+worse
+does this compile I wrote it twice it's
+copy and paste raise your hand if you
+think this compiles no no this doesn't
+compile
+no this is a redefinition error there's
+a redefinition error because if it looks
+like a declaration it is a declaration
+so this is the same as writing standard
+shrink foo scanner string foo it'll say
+you can you can't declare the same
+variable with the same name in the same
+scope so this is a redefinition error
+all right does this compile look closely
+what we have a question it's it so it
+could be interpreted that way it could
+be interpret that the second one is a
+copy of the first but the rule is if
+it's ambiguous and it could be a
+declaration than it is a declaration so
+this is a redefinition error to be clear
+I'm slightly out of my league here
+because now you get into like super
+parsing of the standard but but as far
+as I can as far as I tested nobody will
+compile this and I believe that's why
+because the rule says if it's ambiguous
+with the declaration then it is a
+declaration period and that's why you
+get a redefinition error right does this
+compile all right yeah most of you've
+got it now yes this does compile okay so
+the first one is a declaration of a
+string named foo and the second one is a
+temporary copy constructor of the string
+is just calling the strings copy
+constructor with the first foot just
+yeah okay all right and then finally
+just for symmetry purposes you grab the
+squiggly braces and you pull
+out does this compile yeah alright most
+of you yes so most of you say yes this
+compiles and so the reason this compiles
+this is a this is again a second
+declaration of foo but it's now in an
+inner scope okay so the squigglies are a
+scope and it's now shadowing the outer
+foo you have two declarations of
+variables with the same name but one of
+them is in an inner scope shadowing the
+outer one right that's what's happening
+here so this works so some super
+important notes there's actually a
+subtlety here that's critical to
+understand there are two things that
+make unique LOC conspire to to have this
+really pathological bug prone behavior
+as far as I'm concerned the first is its
+Rai type okay if you do if you have the
+exact same situation with an on Rai type
+you tend to notice very quickly because
+you didn't name it or anything so you'll
+like try to use it or something and
+you'll be like well okay I forgot the
+name but Rai types their mere
+declaration is often all the
+functionality you there it that's that
+is the functionality I declare it right
+and then that means I've got I've got
+one so you're much less likely to name
+it because you don't actually need a
+name you never need to reference it
+right the second part it's actually
+really important is this only works
+because standard unique lock has a
+default constructor right because I
+default construct new text in this case
+I have to use the default constructor so
+unique lock is affected but lock guard
+is not so if your standard lock guard
+will not compile in the case of if you
+if you were to swap that out now if
+you're using standard types that's great
+because standard unique lock has this
+weird property you can lint on it fairly
+easily if it's like our code base you
+have like lots of reimplementation zuv
+lock guards from the years right like
+dozens of them and very few people like
+fully appreciated this problem so we
+found I don't know tens maybe a hundred
+cases of our other lock guards that did
+have default constructors being bugged
+in this fashion so if you have a lock
+guard I like like run don't walk to see
+if it has a default constructor okay and
+by the way unique lock does C++ 17 has a
+thing called scope lock and it's
+entirely unclear to me if it suffers
+from this problem
+not because it's complicated as of
+yesterday when I put it into God bolt
+clang will not compile it in GCC will
+I'm not sure
+so there's scope block may or may not
+have this problem in Siebel 417 so
+anyway the TLDR on all this is if you
+have an RA I type and it has a default
+constructor you're in a very dangerous
+situation potentially where people will
+try to wrap something and forget to name
+the object instead of what they're
+wrapping and they'll end up shadow
+declaring a shadowing thing ok so that's
+my this is my other take away from you
+for you alright so mitigation so W
+shadow is a at least in GCC and clang is
+a warning that's been around a while
+it absolutely detects this w shadow so
+shadow tells you about shadowing
+warnings that's when you have like a
+variable in an inner scope that shadows
+a variable in an outer scope it will
+warn you and if you put this particular
+pattern in and you turn on W shadow it
+will absolutely find this bug the
+problem of course if you've ever used W
+shadow is it's extremely pedantic it's
+it almost always gets turned off it's
+full of noise and things that you
+probably don't want to fix and makes the
+code maybe worse there have been these
+hybrid flag suites so there's shadow
+compatible and shadow compatible local
+these are meant to be much higher signal
+versions of W shadow so shadow
+compatible only will tell you about
+shadowing warnings if the two types are
+compatible with one another and shadow
+compatible local is only if they're
+local they're local in the same function
+and they're compatible with one another
+I strongly encourage you to turn on at
+least W shadow compatible local you will
+find all kinds of if not broken code
+like smelly code like there's an outer
+loop using I and a bunch of inner loops
+using I and it's like let's just let's
+not do that right even if it's not
+bugged you don't want to do that right
+so shadow compatible local is good you
+should turn it on but it does not catch
+this only W shadow catches this bug so
+I'm sorry this the story there isn't
+great but you know that means this is
+easily detectable right our extendable
+clang based linter has a check for this
+it's actually fairly easy to detect but
+it's actually not widely detected if you
+don't have a tool that finds this
+pattern which is to say like unnamed
+lock guards right
+that it sort of immediately wink out of
+existence I suspect you have a lot of
+these especially if you have default
+constructors on your lock cords or you
+use unique lock in your code so again
+I'm not exactly sure what the best so I
+have some extra stuff here that I didn't
+want to get into into detail there's
+there's there's a related class of
+problems which isn't this declaration
+issue but it's more like you create
+something that exists for one line of
+code
+only when you expected it to live
+forever and that's a place where like a
+no discard attribute for constructors
+might be helpful eventually so there's
+like two flavors of this but the more
+common one is that is the declaration
+one so again we have a clang base linter
+so something like clang tidy for example
+could very easily find this all right
+so conclusions C++ is hard that's not
+fair it's kind of a value judgment but
+we should just admit it I think okay see
+this low it's hard like a lot of this
+stuff here
+we've had some of the best C bustles
+people like spend a week finding a bug
+and at the end track it down to like
+their Lockhart isn't like missing a G
+right and like that stinks and the
+consequences of that are really there
+it's a painful thing to debug it's an
+incredibly painful day to find that bug
+and it's a one character you know change
+right the patch is one character tools
+are our best teaching weapons so
+lectures are great I would love to like
+put every face book program or through a
+lecture that just taught them about all
+the bugs that they should never write
+like doesn't actually work all that well
+the sooner after you write the bug I
+tell you the better like right everyone
+would pretty much agree with that right
+if your IDE tells you you just wrote a
+bug that's fantastic if the compiler
+tells you you just wrote a bug that's
+that's pretty pretty fantastic if your
+differ of you tool runs some expensive
+asynchronous thing and comments on your
+change set and says oh that's definitely
+a bug that's pretty good that's pretty
+good if you get an email two days after
+you committed it because some
+monstrosity like some supercomputer did
+some interprocedural static analysis and
+emails you a bug that's still not
+terrible not great but not terrible if I
+have a talk like this and like to
+years after you spent a week debugging
+it I should I explain it to you that's
+like borderline useless right so really
+like for a lot of this I for my money I
+want better tools right and I'm I'll
+talk in a minute about this but the the
+sort of clang extendable linters have
+been really powerful internally in terms
+of for a particular datatype having
+specific rules we can check checking
+certain kinds of semantics I don't want
+lock guards that shadow mutexes for
+example that's a that's a really good
+rule okay yeah I just said this so yeah
+extendable linter so client ID is an
+example of this we have one internally
+called how to even cuz you can't even
+they're clever they're clever okay an
+address sanitizer yeah like I didn't
+really intend for address sanitizer to
+be the solution to all of my problems in
+this talk it just worked out that way
+I've already I can't you can't swung
+cannot speak highly enough about your
+sanitizers and the amount of bugs that
+it finds in a code base if you live in a
+code base that compiles with clang or
+GCC and you've never turned out your
+sanitizer on leave go do it right now go
+go to one of the desks I hope all of
+them are turning on address sanitizer
+right now it's really like it's it's
+life-altering right you'll find a dozen
+bugs in your code base right running
+your test suite with address sanitizer
+turned on for the first time and you
+know don't tell anyone until after
+you've asked for a raise but then then
+teach your team about address sanitizer
+you're welcome ok questions I'm done</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

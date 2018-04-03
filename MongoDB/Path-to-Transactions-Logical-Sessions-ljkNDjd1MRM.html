@@ -1,0 +1,429 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Path to Transactions - Logical Sessions | Coder Coacher - Coaching Coders</title><meta content="Path to Transactions - Logical Sessions - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/MongoDB/">MongoDB</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Path to Transactions - Logical Sessions</b></h2><h5 class="post__date">2018-02-15</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/ljkNDjd1MRM" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">I'm Ali Cabral one of the product
+managers on the core database server and
+I'm Jason carry with me a lead engineer
+all right as you guys know MongoDB is
+developing multi document acid
+transactions well I'm going to be a
+distributed system so applications that
+are backed by MongoDB can scale out
+automatically as the data grows beyond
+the size of one node and they can
+automatically be resilient in cases of
+node failure however the implementation
+of transactions and distributed systems
+requires non-trivial coordination and
+consistency across these nodes that
+standalone systems just don't have to
+worry about we wanted to deliver
+transactions without sacrificing the
+rest but we didn't get here overnight
+the engineering effort and the path to
+transactions has been spanned many many
+years of engineering effort there's been
+many projects along the way that are
+interesting and fundamental to
+transactions and one of those as logical
+sessions what which is what Jason is
+going to talk to us about today so I'll
+pass it over to Jason okay thank you
+alright so as Elly saying I'm talking
+about logical sessions it's a feature
+that we deployed in 3.6 that enables a
+couple of interesting use cases and sort
+of an important part of our long term
+transaction story and I guess I want to
+sort of start off with talking about
+what transactions are how they're
+represented and then walk through a
+couple of use cases for where we're
+using in them in 3.6 and as I'm going
+through those use cases I'll talk a
+little bit about how they're implemented
+and what's sort of interesting about
+them in our system and so let's start
+from the top
+logical session IDs are very very
+lightweight identifier is that we can
+tag to other sort of resources and
+operations in our system and they're
+made up of two major parts the first is
+an ID which is a globally unique
+identifier and sort of like as the the
+technical term gooood I a range of bytes
+that are generated generally from a
+source of randomness there's a couple of
+different schemes to generate them and
+they're meant to be something that you
+can generate local to your machine and
+still end up with an identifier that is
+never going to collide with any others
+that are generated in your distributed
+system and then secondarily we also have
+a UID
+that is a shot 256 digests of your fully
+qualified username and so this means
+that clients they're generating the ID
+portion but they're always fully
+disambiguated from all other clients
+this has some sort of important security
+and practical implementation details
+that we'll talk about a little bit later
+right and it's important that the
+clients are able to generate these IDs
+from a performance perspective right so
+you don't have to reach out to the
+server in order to get this ID
+absolutely we wanted you to be able to
+use logical session IDs with every kind
+of operation and the server in 3.6 and
+so we didn't want to add more than just
+the 48 bytes of sort of overhead that
+this scheme is providing and avoid you
+having to go to a centralized server or
+synchronize you do extra no trips
+anything like that great and so that
+gets us to our sort of first use case
+which I'm calling easy administration
+and so in order to really describe what
+I'm talking about I'm gonna walk through
+a little bit of MongoDB sort of
+deployment architecture as a distributed
+system a couple of common use cases in
+that system and what logical session IDs
+bring to the table that wasn't there in
+3.4 and so to begin with I want to talk
+a little bit about the two kinds of
+distributed NISS that exists in MongoDB
+um the first one has to do with high
+availability and it has to do with
+ensuring that data that you write to our
+database survives any particular node
+failure and so we call these replica
+sets and they are what's in sort of
+inside of these boxes here and you'll
+notice that we have three things called
+Mongo Dee's in this case those are
+database server processes meant to live
+on different physical nodes and some of
+them marked essence of mark peak there's
+one p in each particular set and that
+indicates a primary or the others or
+secondaries and it's worth emphasizing
+that being a primary or secondary is an
+ephemeral state for a node isn't
+something that you're started with it's
+startup and live with forever rather
+nodes sort of all start out equal and
+there's an election that takes place
+where one of them becomes the primary
+and this can change over the lifetime of
+the cluster during node failures or
+network partitions and so that's a
+replica set and this is the way that we
+ensure that you don't lose data we write
+to a primary and then replicate that
+data from
+two secondaries and once your data is on
+a majority of those nodes you can
+understand that even in the event of
+node failure your right will still be
+durable but there's another half of the
+story what if you want to store more
+data than fits on any single physical
+host and that's where sharding comes in
+where replication provides a set of
+nodes that all have exact comp well not
+exact opposite have full data sets
+sharding instead means that the
+individual shards have slices of the
+overall data and so the way this works
+is that you have your app and so that's
+one of these red boxes up here and you'd
+let's say I'd like to do a write so this
+is you're writing a document for the
+first time so you go out and you're
+right goes to a Mongo s and then it
+picks some shard where it's going to
+write the data based on a routing table
+that's available to all of the different
+long glasses so it's going to write your
+data though then later on you might come
+through and you might talk to a
+different Mongo less that has the same
+routing table and you might want to read
+the data back and sometimes the date of
+the year reading isn't necessarily on
+the same notes this is sort of a
+distinguished based on a shard key
+that's in either the document that
+you're saving or maybe in the query that
+you're using if your query can be you
+can figure out which shard the data will
+go to you don't have to talk to all the
+shards you can talk to just to the ones
+where the data could live so you might
+have read that goes out to these two
+particular charts so this is a query
+that might span multi date like multiple
+documents that don't necessarily all
+live on the same chart absolutely and
+one of the things that these reads do is
+that they well first there so they do
+two things they open two types of
+interesting sort of artifacts on the
+servers one is that there are jobs that
+are running we call these operations and
+so you might have an OP and then
+additionally you can have and these are
+things that are actively running so it
+might be an administrative Quran command
+that you're in the middle of executing
+or it might be about going to disk and
+fetching the i/o to actually do the work
+go for the query so those are the
+absolutely active and then secondarily
+you have these other things which I'll
+call cursors and a cursor is sort of
+can be downstream of an operation where
+we do a find open a cursor and then to
+6:00 to fetch successive batches you
+issue get more commands against that
+cursor which return you more information
+and so the cursor has both a batch of
+data to return as well as instructions
+about how to get the next batch and
+cursors are going to sort of be
+interesting a little bit later and sole
+keep those in mind and I'm gonna talk
+right here about how things work in 3.4
+in the event that something goes wrong
+so let's say that you start off a
+command that you thought or a fine
+command that you thought was actually
+going to be easy because you were
+planning on targeting an index and then
+you realize that you actually screwed up
+and now you're talking to all of your
+shards and you're scanning through all
+of their data what you can do can be
+more or less limited and in particular
+you're in a bad place if you're Mongo s
+just goes away maybe it crashes
+something else happens now each of these
+cursors they're just gone there's no way
+to really talk about them assuming that
+you set a timeout on them they will
+eventually timeout but that'll happen
+individually and Norma's amount of work
+might occur to fill them up with their
+first batch of data and there's no way
+for you to get at them and one of the
+big things the logical sessions add ads
+in 3.6 is that all of these commands now
+these are this right path and then also
+these reads there now tagged with a
+logical session ID and so that means
+along with all of the messages that
+we're sending in to the server along
+with the regular payload we also have
+the logical session ID and that means
+that these cursors and these ops are now
+tagged
+they're not regular cursors they're
+cursors annotated with a logical session
+ID and you can list session by users
+right like you can list your sessions
+that you have by user ID you in a
+certain way you absolutely can there's
+both well they're sort of an
+implementation detail that we'll get to
+a little bit later about the global
+notion of the sessions table but you can
+also look inside of any particular Mongo
+D and you can list all the sessions for
+running operations that are available
+there it's the dollar list local
+sessions aggregation stage so you can
+use that for instance to find all the
+sessions for
+user if you'd like absolutely and what
+this allows is it allows you to go ahead
+and now we have the exact same scenario
+where we have this read command that was
+going off that's going off the rails
+maybe you typed it in manually from the
+shell and you realize you've made a
+mistake now you have a way of cleaning
+it up
+what you do is you issue a kill sessions
+command and you can kill either by a
+specific session or all the sessions for
+your user
+and that'll propagate a kill command
+that will go to or let's say in this
+case let's say this was an errant
+process in this app is Rachelle oh sorry
+about that just talk to one of them
+we're gonna do a kill command and this
+kill is going to go out to every single
+line of these shards and it's going to
+say please kill this logical session ID
+and it's going to find all of the
+operations that are in those processes
+that have matching LS IDs and they're
+going to if there are running operation
+cancel them if they're a cursor close
+them and so in this way it's very easy
+in 3.6 to ensure that work is always
+cancelable it so he's stoppable you
+don't necessarily have to have the same
+sort of administrative privileges to do
+this work that you need in 3.4 where
+we've sort of lost track of who owns
+these objects and so you need someone
+like you have to go find a DBA to fix
+your problem now you can fix it yourself
+and so that's the story that we're
+calling easy administration which leads
+us onto sort of our second story which
+feeds into more what logical sessions
+means to transactions and to other parts
+of our system which is distributed
+garbage collection and so in the same
+way that you might want to target some
+of those resources be they long-running
+ops or
+long-running queer or cursors you may
+also want to be able to clean them up
+automatically and today there's only a
+local notion of time out for instance
+you can make cursors that have timeouts
+or don't have timeouts and what they
+timeout based on work that happens on
+those individual nodes rather than work
+that's happening anywhere in the system
+and so in order to fix that problem
+we've introduced a new notion here we
+have a client
+and a MongoDB process in my process I
+mean among goatee or Mongo s anywhere in
+the system and then we have a thing over
+on the side called a sessions collection
+and we're gonna leave that sort of a
+little bit of ephemeral for the moment
+but it'll come back around and fill that
+out and so for every wire protocol
+mission message that a client makes into
+a mangu process they pass the nella
+sighting a logical session ID and the
+controller records that they did this
+and on a 5-minute interval it goes out
+and syncs it to the sessions collection
+and so what this means is that using a
+session in MongoDB UPS updates sort of a
+global state for that session and the
+thing that we're updating it with is
+over here
+it's the LS ID which is your logical
+session ID and also a last use time
+which is a timestamp and the last use
+time is important because our sessions
+collection also has a TTL index on that
+last use field and we use that to track
+all of the logical sessions that are
+more than 30 minutes old and we actually
+delete them at that point and what that
+means is that other controllers on other
+processes can look to that global
+sessions collection and they can see if
+this the sessions that are associated
+with the long-running objects that they
+have inside of their process if they
+have a record that's in that global
+sessions collection even if no one's
+used to them locally recently they know
+that they're still in use somewhere else
+and this is super important for
+transactions because there is a new
+piece of state that we've added in three
+SiC 3.6 which is when you do a right now
+in addition to some of the other
+artifacts you can also do a retrial
+right and a retrial right I won't talk
+about that feature too much in this
+particular presentation but we're tribal
+rights allow you to check whether or not
+you actually did a right if in the
+events of a network failure and there's
+a little bit of state that lives on
+every single node that was involved in a
+write and so let's say you did like an
+updates across many nodes where you
+inserted many different documents it's
+possible to see where it actually landed
+or not and we have to keep State around
+in order to
+make sure that that retry ability that
+promise can still be honored and so the
+way that we still want to clean up that
+state we don't wanna keep it around
+forever and so we use this distributed
+garbage collection mechanism in order to
+ensure that we can actually clean up
+that were tribal right state when the
+session that was doing the retrial right
+actually finishes the controller is a
+local view of the sessions I've seen the
+sessions collection is a global view of
+all the active sessions obsessor
+and the last piece time is the time is
+that the session was less reported by a
+controller to be active absolutely so
+that would be like on a five-minute
+cadence right so it's not the precise
+time I lost use that session it's the
+last time someone reported my session in
+use exactly okay and yeah so in addition
+to being able to clean up retrial rate
+state this fix is another long-running
+problem we had had specifically with
+aggregation and shorted clusters where
+we're trying to assemble some
+complicated piece of data where we may
+not talk to any particular shard for a
+long period of time because we're doing
+some work or returning results from
+another shard and so generally you had
+the choice of either making sure that
+your query finished everywhere within a
+relatively short timeframe or setting
+the cursors to no timeout where you
+would risk losing track of them in the
+event of a failure and so this this also
+sort of closes that out by giving all
+cursors that run into a logical session
+and implicit time out of the session
+lifetime and yeah that's sort of how
+logical sessions work in our system and
+we have plans to add more transactional
+State to this distributed garbage
+collection mechanism and it gives us a
+real level of confidence to know that as
+we develop more distributed features we
+can keep track of the lifetime of these
+objects with one core sort of central
+mental abstraction rather than having to
+solve it on sort of a per item basis
+awesome well thank you Jason
+shaped the time</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

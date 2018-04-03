@@ -1,0 +1,846 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>The Story of Stylo: Replacing Firefox's CSS Engine with Rust | Coder Coacher - Coaching Coders</title><meta content="The Story of Stylo: Replacing Firefox's CSS Engine with Rust - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Coding-Tech/">Coding Tech</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>The Story of Stylo: Replacing Firefox's CSS Engine with Rust</b></h2><h5 class="post__date">2018-01-28</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/S68fcV09nGQ" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">good morning so Firefox is a very big
+project there's a reason why people keep
+talking about Oh something big is coming
+into Firefox something big is coming
+into rest into Firefox and that's
+because Firefox is a really big C++
+project it is over nine million lines
+just of C++ by itself and then there's
+other languages of languages on top of
+that and the engine that's written
+mostly in C++ we tend refer to as gecko
+and gecko has a style system which is a
+component I'll explain a little bit
+which is by itself about a hundred sixty
+thousand lines of C++ code and this is
+something that's been around for almost
+two decades now and has like evolved
+over time and grown larger and larger
+and more complex so the new thing stylo
+is 85,000 lines of handwritten rest and
+that is an important qualifier which
+will explore later but this is what is
+coming to Firefox in about two weeks
+it's gonna be shipping and that's really
+exciting it's been a number of years of
+effort to get to this point so let's
+talk about what a style system actually
+is a web browser so a web browser
+basically contains a pipeline to get
+bytes from the network and then turn
+them into something that shows up in
+front of you so starts with the HTML
+parser and this takes the source code of
+an HTML page which contains their HTML
+tags and everything as an input and as
+an output it turns that into a tree of
+what are called Dom nodes and these two
+these correspond to those tags
+everything inside of a pair of matched
+tags becomes an element and everything
+or everything inside of that that pair
+of match tags becomes children child
+nodes of that element
+so here the HTML has two children and
+each of those children each have one
+child by themselves so after that if we
+come across any CSS text while parsing
+the page will then feed that into the
+CSS parser CSS is the language that
+allows you to style your page based on
+this contents so we might see that there
+is there's there's some CSS text that
+says oh make all spans turn red but make
+any div element that has a header ID
+make the text green and so that's the
+input and the output of the CSS parser
+is what we call a list of style rules
+and these are rules that are easier for
+the CSS engine to interpret later
+without having to parse the text over
+and over so the next step we go through
+is the Cascade and this is from the name
+of CSS that stands for cascading style
+sheets that means that for every element
+in the tree we will proceed through the
+tree and apply these style rules based
+on these inputs were given and figure
+out what the actual computed styles for
+each node should be what color in this
+case is each element going to be based
+on these rules so we look and say oh we
+have received that we have a div with an
+ID header so we can apply the style rule
+to turn that green and that gets
+inherited by all of its children but
+that gets overwritten by the span which
+says oh I should be red so we take the
+result of these computed styles and then
+we feed them into the layout component
+and that's what takes both your your
+tree of nodes and and they're their
+actual style information we've computed
+and then says okay based on these
+computer styles where should we actually
+draw boxes what is the size of each box
+how does it relate to which children and
+parents what how are they aligned
+together that layout is what takes all
+that information and turns it into
+something that you could end up visually
+seeing and so the style system when we
+talk about it encompasses a number of
+these steps it encompasses parsing the
+CSX parsing the CSX CSS they also
+incorporates the Cascade and turning
+everything into a series of computed
+styles it also incorporates
+introspection so JavaScript is able to
+ask your web page what is the computed
+style of a particular element and it can
+also look into what are the contents of
+the style sheets that the browser knows
+about furthermore their CSS animations
+and the style system is responsible for
+processing those at any given time and
+figuring out what the values that are
+being animated should be and finally
+whenever a page is modified then the
+style system is responsible for
+determining what is the most optimal way
+of recomputing all that information
+because it turns out it's not actually
+very performant if you go and either
+rate over the entire tree of all nodes
+every single time you make a change to
+just one of them so you might ask if we
+have this thing which has been working
+for decades and Firefox what is it was
+the reason we would want to go to all
+this effort to replace it and really the
+answer is performance performance is a
+key driver of all web browsers and
+anytime we see something which could be
+improved we start to think maybe we
+should be improving it
+maybe we're just leaving performance on
+the table otherwise and the reason why
+performance is so key here is that the
+Cascade that I talked about it actually
+fits the model of what we call an
+embarrassingly parallel problem and what
+that means is we iterate over each node
+in the tree and all we're doing at this
+point is just reading some data from the
+parent and reading some data from the
+style rules that we computed earlier and
+reading some data from the actual node
+in the tree and then we create something
+new based on combining all that
+information which means that it should
+be possible to distribute that that work
+throughout a bunch of different CPUs and
+get potentially even linear speed ups
+based on the number of CPUs you have so
+if you have two CPUs in theory we could
+do the Cascade twice as fast if we use
+both of them at full capacity if you
+have four CPUs we might be able to do it
+in a quarter of the time that's a pretty
+exciting prospect however as much as it
+sounds like you should be a
+straightforward a straightforward
+operation to perform it turns out that
+it is more complicated than that and
+there's been two attempts to do this in
+Firefox itself in C++ in the past few
+years so one was a group of grad
+students at UC Irvine and they had an
+advisor working at Intel and they
+published a paper on their efforts to
+measure and and do more of the work in
+parallel and it seemed to go really well
+except that the resulting code was
+difficult to maintain there was a lot of
+duplication it was difficult to reason
+about and in general it didn't actually
+look like the most
+thing to spend time on given how many
+other parts of Firefox we could be
+focusing on
+similarly in 2011 we decided to give it
+to an intern which surprised me but came
+up with a patch and it seemed to be
+working but there were these mysterious
+crashes they were really difficult to
+track down it was hard to debug it was
+again hard to maintain and so again it
+just languished there because no one
+really saw this as a high priority when
+it turned out to be more complicated
+than people assumed so let's talk about
+servo servo is the web browser engine
+we've been building since 2012
+completely from the ground up in rest
+with a couple minor exceptions but in
+general we're we're learning we're
+taking lessons we've learned from
+building browsers over the past decade
+no matter Firefox or Chrome or WebKit or
+something we're looking at the best
+choices made in those browsers and
+trying to build something new in rust
+that gets the benefits of more modern
+hardware in particular we're trying to
+build things in parallel from the start
+and we have a strong focus on building
+things in a very modular fashion and
+what this means is that the style system
+in servo not only did we build something
+in parallel in 2013 but also it exists
+in its own crate and it's got strong
+trait interfaces and this means that it
+is much more feasible to look at
+extracting just the style system from
+servo and putting it into another
+project like Firefox as much more
+feasible to contemplate that than it is
+to do something like the reverse of
+taking something out of Firefox which is
+sort of a gargantuan monolithic thing
+and try to extract it into something
+else
+so we started looking into whether this
+would be possible in 2015 and that was
+our the sort of lead developer of this
+project he did a bunch of investigations
+he said ok if we make these changes to
+these interfaces I can get this very
+basic demo styling the Wikipedia page
+for Barack Obama and using multiple CPUs
+and that'll be great and then there then
+he came up with a list of all the
+different things we needed to do to make
+it actually fit everything the Firefox
+could do and so in 2016 that work
+happened and the team is been growing
+and growing
+to get this work done but in order to
+ship in two weeks so the actual process
+of integrating this code is is
+interesting because Firefox exists in a
+single monolithic repo all the Firefox
+code exists in a mercurial repo and the
+servo code exists in a github repository
+and has a bunch of different crates and
+some of them are important as some of
+them are not and servo also chooses to
+make use of the crates at i/o ecosystem
+it's been really great but what it means
+is that for Firefox this is a problem
+because Firefox uses continuous
+integration servers which don't have any
+external network access and that goes
+against the model that is traditionally
+followed by cargo projects so what
+happens is Firefox actually vendor the
+entire source code of servo into the
+Firefox repository and then also vendor
+all of the dependencies of servo into
+the Firefox repository which is an
+interesting stress test for all sorts of
+different systems it turns out and
+honestly I wouldn't actually recommend
+following this path it I'm glad we did
+for servo but it's actually quite a pain
+so let's talk about how this actually
+fits together there's a crate in the
+servo source code called gecko lib and
+that contains all of the API is that the
+gecko C++ code can invoke in order to
+call in to the servo style system
+there's a header file called servo
+binding list at H in the C++ gecko code
+which has equivalent C declarations for
+all of those functions because the way
+you can do cross language
+interaction like this is by pretending
+that you have a C function in rest code
+and then the C code goes oh I know how
+to invoke C code that's great I'll just
+be able to color right into that so all
+of the API is that can be invoked from
+gecko code start with the prefix servo
+underscore and the only interesting bit
+here is that we don't have any automatic
+synchronization here so if you make a
+change to the servo API is that are
+provided in the rest code and you chain
+like you had an argument to something
+that means you also need to update this
+header file otherwise you can get
+surprising program
+Savior and sometimes even crashes so as
+an example here is the API that the
+style system or the the code in gecko
+that invokes the style system from servo
+calls it says it's called servo Traverse
+subtree and it is given a a root node to
+start traversing from and it's given
+some data that servo needs in order to
+do that and some other things which
+servo also needs and returns a boolean
+which I presume means either the result
+is like needs need some more processing
+afterwards or is ready to go similarly
+then we have the equivalent C
+declaration that lives in the header
+file for this and it uses types that
+that map's the types that the Ross code
+receives so everything should just be
+passed across this this sort foreign
+function interface boundary without
+having any problems so on the other hand
+it would be nice if we could just
+encapsulate all of this new behavior
+inside this function you know traverse
+subtree and then just have that happen
+and when when it comes back it's done
+that'd be great however turns out that
+Firefox is a bit more complicated than
+that and turns out that the rest code
+also needs to call back into C++ and
+sometimes go back and forth a few times
+and that means that we need to declare
+API is that the rest code can call
+because it knows how to invoke C code as
+well so there's another header file
+called server bindings which has the C
+api's that can be called from rest and
+these I'll start with the Gecko
+underscore prefix and these on the other
+hand are generated by using the program
+bind gen or the rest side declarations
+are generated by by engine which looks
+at a c header file and spits out all the
+rest declarations you need in order to
+use those types and in call those
+functions it's very handy so the C API
+for creating an error reporter because
+in Firefox a CSS error that gets the or
+if there's an error in your CSS code
+that gets processed then we want to
+notify the developer tools in the
+browser about that
+so servo doesn't know anything about
+Firefox is developer tools it needs to
+just have this interface of this error
+reporter and it says ok gecko create me
+an
+reporter I'll be able to use it later
+and so there's the C API for doing that
+and then similarly there's this rest
+declaration that allows servo to
+actually invoke this when necessary so
+as I said we use bind JNT to avoid any
+mistakes it just generates everything
+automatically and if you ever update the
+C api's or the that gecko provides then
+those automatically get reflected into
+the rest bindings at Build time which
+means that if you add a parameter to the
+C ones then you'll get a compile error
+in any uses of that API in the rest code
+because it says oh there's you know
+you're not passing a parameter that's
+necessary and that's very convenient you
+don't get any crashes or unexpected
+behavior that way it's also extremely
+slow because we end up processing dozens
+or hundreds of header files and it's
+extremely easy to make a change to a
+header file which doesn't actually
+matter to rest but is transitively
+included by something and then that you
+have to run this whole Banton process
+again so that's a bit of a frustration
+for us so there's sort of two main ways
+that you can focus on doing your cross
+language interaction you can either
+encapsulate these these operations
+behind functions or you can dive
+directly into the types and manipulate
+them like manipulate C types from the
+rest code or rest types from the C code
+either one is possible but it turns out
+that there's a bit of a trade-off either
+way that usually revolves around
+performance versus safety so it turns
+out that every time you call a function
+in general if you're calling like a rest
+function from rest code the compiler
+says oh I know what that function is I
+can see how big it is it would probably
+make sense just to inline that code
+directly rather than going through the
+process of performing a call pushing
+things onto the stack
+jumping returning back all these things
+that usually happen and that's fine but
+every time you do a cross language
+function call the compiler doesn't know
+anything about that
+and can't avoid this that means that if
+you're going back and forth between
+languages during code that is
+performance sensitive than the
+can be a problem I mean the benefit of
+using a function is that if you have in
+very very insalata was doing around what
+do types are supposed to be doing
+you can assert those you can have safety
+checks and that is very helpful so
+there's a bit of a trade-off there so as
+an example of this there's there's one
+piece in in stylo where we need to talk
+to gecko to say okay this particular
+thing we need to make sure it is marked
+as being an image element and there's
+too much involved there for us to really
+do that from the rest code so it's just
+a simple function call to one of these C
+api's that were declared earlier and the
+actual gecko definition first asserts
+that you're actually passing a valid
+image and secondly then invokes a method
+C++ method on that type and does
+something funky with reference counting
+related to the kind of or the name of
+the the element that you're interacting
+with this is all stuff that is much
+easier to just push on to the Gecko side
+rather than try to replicate that into
+the rest side so on the other hand if
+you're using types then you have the
+option to just dive directly into the
+memory and start modifying things and
+there's no performance penalty for this
+it's just it's just a memory you have
+pointers to it you can reach in and set
+things or read things and it's up to you
+to make sure that you're actually
+following the model and not breaking the
+system
+I think the downside here is that if you
+do have rules around what's allowed and
+what isn't suddenly that logic is now
+distributed between by two completely
+separate files and two different source
+trees and that that might not be a good
+trade-off but for performance sensitive
+code maybe that's what you want an
+example where we do this I particularly
+like that like there's this comment that
+explains what properties of the model
+that we're relying on I'm in order to do
+this mucking around inside a C type from
+the rest code in this case we have a
+pointer to a C type and we're getting a
+mutable pointer to a field inside an
+array that's stored inside that type and
+then setting a particular field of of
+that sub field to another rest value
+that the
+c-code will eventually understand when
+when it gets back there so we actually
+did something interesting with dealing
+with these with these types between
+languages so by Amgen we'll typically
+just give you declarations which involve
+raw pointers everywhere and that's fine
+you know raw pointers are thing that
+you're used to using in C for example
+and it's not that bad to go back to
+using them in rest but we did something
+where we started naming or creating
+these types in in rust which wrap raw
+pointers but they have particular extra
+meaning associated with them so for
+example we created this the so generic
+type called owned which represents a a
+raw pointer that was originally created
+from a value like a box in rust and so
+the idea here is we create this value in
+rust as a box and then we turn it into
+this own value and then pass it over to
+the C++ code and it gets moved around it
+gets stored places and eventually it
+comes back to rest in the form of a
+known value and we say okay we know that
+it is owned therefore we can turn it
+back into a box and it'll be
+de-allocated safely and properly and we
+have this idea of ownership that
+persists across the language barrier
+even though C++ does not have the same
+kind of ownership model as rust does so
+by I'm Jen does this for us
+automatically we have a list of types
+that we'll just see the C++ type for
+example raw Sphero style set owned
+you'll say okay I know that I need to
+turn this into this actual more complex
+rust type which is the same under the
+hood so in C++ it's just a raw planer
+but it has the same name and we have a
+function which is declared from rest
+which says oh I accept this raw servo
+style set owned wares on the rest side
+we say okay it's not just a raw planer
+it is actually this type called owned
+that specializes on this underlying raw
+pointer and in the actual definition of
+servo style set drop we accept this
+owned value and then turn it into a box
+which will be de-allocated because we
+know what's going on here and we do the
+same for other interesting types so we
+have types that have borrowed attached
+to the name and bind and we'll turn
+those into
+traditional rest references for us and
+similarly borrowed or null which will be
+a raw pointer which might be null we
+then turned into an option value around
+a rust reference which gives us much
+nicer ergonomics and prevents us
+accidentally dereferencing null pointers
+so let's talk about this parallel style
+system stuff we built it back in 2013 it
+was handwritten and it worked fine but
+we switch to rayon in 2016 and that's
+worked out really well for us
+rayon is the library that's written and
+shared by lots of different projects
+that do things in parallel
+it provides a safe abstraction over sort
+of unsafe operations of distributing
+work around multiple workers and so not
+only did we make some changes to rayon
+to better accommodate our use cases we
+also have made use of changes that other
+people from other projects have added to
+rayon and that's been a really nice sort
+of synergistic relationship there so the
+idea in certain stylo is that we have a
+queue of unstyled nodes and it will
+literally be a single node and they'll
+be the root of a tree so there's a pool
+of worker threads that are waiting for
+work and as soon as work becomes
+available they'll start trying to grab
+it off of the queue so when a worker
+grab something off the queue it'll say
+ok this is my node no one else can style
+it I will now proceed and do the Cascade
+on this particular node and I can always
+reach the parent which is already styled
+to get that information and when I'm
+done styling this node I'll write that
+information or I'll write the computer
+style to the node and only then will I
+retrieve the unstyled children of that
+now styled node and add those to the
+queue for other workers to then access
+because this now provides a safe day of
+the dependency where no other workers
+will be trying to interact with a none
+style parent while it's being styled so
+the problem of trying to deal with here
+is that parallel code in general has
+some problems and that's that code
+executes simultaneously and and sharing
+data is a problem so if if they only
+read the same data that's fine everyone
+can read the same thing you get a
+consistent view of the world but if
+you're reading and writing then you end
+up with a problem because you can get
+any consistency showing up or if
+different things are writing at the same
+time still more inconsistent
+that's no good the rest compiler
+protects us against these problems but
+there is an issue and that is when we go
+into C++ from a worker thread that's
+running on a thread we lose the ability
+of the rest compiler to protect us and
+that me is that a C++ method like get
+brute element as shown here it turns out
+it's a problem because it actually has a
+little internal cache the first time is
+called it'll look for a root element
+you'll say oh great ok we can do this
+faster next time if I just store this as
+a member in this class but what happens
+if you have two different workers which
+both call it at the same time for the
+first time and they both try to write to
+the same thing together or read it at
+the same time
+turns out this causes a crash and it's
+really difficult to actually spot
+problems like this for a while early
+developer was trying to keep track of
+like reading through the code thinking
+really hard about what would be called
+at any given time and thinking okay is
+this safe this is probably safe this
+might be safe maybe this isn't safe and
+that doesn't really scale it turns out
+so so it turns out we came up with some
+simple rules to avoid this if we said
+that the the code being called from
+these worker threads was only allowed to
+write to local variables those would not
+be observed by any other workers they
+can read from anything because no one's
+writing to anything and the main thread
+which is usually the one doing all the
+writing doesn't get to run if we follow
+those rules could we get the compiler to
+help us do this and the answer is yes we
+have a compiler plugin for GCC which
+performs static analysis on all
+functions that start with the Gecko
+prefix so all of those API is that can
+be called from rest it will go and
+explore every single possible code path
+that could ever execute in any universe
+and it will see ok are any writes
+occurring in any of these code paths to
+anything that is not a local variable if
+so that is an error and that means we
+now have the compiler helping us and
+telling us whether anything could end up
+causing a crash by being culled from
+these these rust workers and this is
+kinda scary because we found over there
+preexisting problems from code that was
+like a decade old that was only now
+causing us problems because we were
+doing this on threads and it saved us so
+many times as we kept trying to
+introduce new problems we were like oh
+this is great I'll just call this
+function and it's like nope you can't so
+let's talk a little bit about some pain
+points that came from this this this
+work first one to memory usage Firefox
+is really sensitive about memory usage
+there's a sort of a long-standing meme
+that like there's a leak in Firefox and
+it'll just keep growing over time so we
+fix that a few years ago so that's no
+big deal but we're really careful not to
+like keep having memory users increase
+and we have infrastructure which is good
+at measuring current heap usage
+throughout the program but it needs
+pointers to the actual allocated buffer
+in order to be able to report those and
+that's fine in in the gecko code because
+we wrote our own standard library so we
+have all those pointers everywhere we
+can dig into everything rest doesn't
+actually give us that in all cases
+though and turns out that hashmaps both
+are extremely important to the style
+system and are pervasive everywhere and
+they also get really big sometimes so it
+turns out that we were lacking
+significant ability to measure the
+memory usage of this new style system
+that we created so another problem that
+we came across is that we really love
+enemies like enums are fantastic and
+being able to match on them is wonderful
+and every every new rest developer that
+worked on stylo
+got really excited about enums and you
+know sang their praises but it turns out
+that enums have a ability to like grow
+over time as you keep nesting them so
+let's imagine a CSS property called
+borderless style which could have three
+different values it's either none or
+solid or a dashed border when you might
+represent that as an enum with three
+States you know none solid or dashed and
+it has you know a pixel value for like
+how big the spacer should be so under
+the hood this is gonna be eight bytes
+you've got four bytes for the actual u32
+value that is stored in the enum and you
+also have four by
+for the tag which indicates what kind of
+what kind of what state this value is in
+at any given time and that's unavoidable
+so we might look at that and go okay
+well the none state that seems redundant
+why don't we just put this inside of an
+option options are much nicer to use to
+get better ergonomics so if we just have
+an option around this enum we only need
+two states inside of it and now it turns
+out that border style value is still the
+same size it still has a four byte tag
+and it still needs to store four bytes
+for the u-32 value but the option value
+is also has its own tag and that's four
+bytes and then you need to store the
+eight bytes for the nested enum so in
+total your option value is now 12 bytes
+even though it's still still
+representing the same amount of data now
+we will look at this and say what if the
+dash width was optional what if you
+didn't actually like what if there was
+like a default that would be specified
+automatically you might say okay well
+let's make the option inside the dashed
+thing so now we have an option of an
+enum that contains an option sometimes
+so this adds up the option u32 is itself
+8 bytes 4 bytes for the tag 4 bytes for
+the value then you've got the border
+style value which has 4 bytes for the
+tag and now it stores an 8 byte enum and
+the overall enum is still 4 by tag now
+it stores 8 bytes for the value so
+you've got 16 bytes for storing the you
+know almost the exact same amount of
+information now so our option here is
+that we could flatten this automatic or
+not automatically but we can flatten
+this manually and put this all back into
+a single enum that contains all the
+different states you have none and then
+you also have a - none State instead of
+having an option inside of it and so now
+you're back to 1 in um hands back to 4
+by or in fact - 8 bytes in total because
+you only need to store 4 bytes for the
+u-32 value but this isn't this isn't a
+delightful solution because you no
+longer get the ergonomics you associate
+with option values so trading off
+between organics or space is you know
+not my favorite thing so another thing
+we came across is that the the ark
+values contained
+pointers and this is something a silo
+doesn't actually use and this means that
+there's an extra 4 or 8 bytes per thing
+you allocate inside of an arc wrapper
+and we do that a lot in servo so there
+there seem to be some discussion going
+on about whether this is necessary we
+decided that we should just fork arc to
+get rid of it
+compiling time kind of not wonderful all
+the time there's you know 300 thousand
+lines of rest code after you go through
+all the code generation just for the
+largest crate and that isn't easy to do
+quick work on you know minute 34 debug
+build but performance is terrible
+meanwhile six and a half minutes for a
+release build if you get good
+performance and we only use stable rest
+so we can't try a lot of the new things
+which are coming out recently and
+finally fallible allocation is really
+important for Firefox because we need to
+be able to not break the browser if you
+know you run out of memory or some web
+content says you know gives you content
+that is really really large that's no
+good
+and this isn't particularly important on
+Windows for us because has very
+different behavior than other river
+platforms so you know this isn't great
+there's an RFC being discussed but it's
+not ready yet and we needed to be able
+to ship and we were seeing crash reports
+of failed allocations coming up heavily
+on windows standard library doesn't
+allow it so we forked hashmap it's
+disappointing also we duplicated some
+stuff to do that with X as well things
+that went really well
+deriving traits has saved us so much
+time been able to fix entire classes of
+errors and make it impossible to do them
+that's been really great thread safety
+like I said earlier it has saved us so
+much time not making mistakes when doing
+things with threaded code the fact that
+people are really happy to write asserts
+in their code means that we've caught
+bugs that have been lurking in Firefox
+around the old-style system that were
+just swept under the rug but they now
+panic in the new style system and we've
+caught bugs are a decade old because of
+this that's pretty cool
+increased IO has been very helpful
+there's lots of really great packages we
+depend upon so I want to leave you with
+this final conversation I oversaw I
+overheard in in an
+see channel from some of the long-term
+Firefox developers who have been saying
+that they they have found using rest for
+stylo to be an incredibly positive
+experience the lead developer someone's
+been working on Firefox for like seven
+or eight years at this point he said you
+know the best part about stylo has been
+how much easier has been to implement
+these optimizations that we needed and
+it's like it's because of rust that
+that's possible and like can you imagine
+if we needed to do this in the timeframe
+that we've been if we need to like
+rewrite all this in the time frame but
+in C++ like that would be ridiculous
+and additionally like we run fuzzers
+against this new code and it's actually
+extremely rare for those buzzers to find
+bugs in the rust implementation itself
+and that's really impressive like we
+have a long history of seeing lots of
+fussing bugs in the C++ code for the old
+style system and you know imagine if we
+could just like save time by trading all
+of those compiler errors for like just
+bugs we find later it'd be so much
+easier to ship and yeah someone else
+pointed out that like this is we just
+put this on a billboard this is a great
+ad for for the powers of rest so thanks
+for listening I hope this has been
+useful I'd love to talk to you later</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

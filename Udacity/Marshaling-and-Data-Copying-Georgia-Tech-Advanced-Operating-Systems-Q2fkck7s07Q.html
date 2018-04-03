@@ -1,0 +1,172 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Marshaling and Data Copying - Georgia Tech - Advanced Operating Systems | Coder Coacher - Coaching Coders</title><meta content="Marshaling and Data Copying - Georgia Tech - Advanced Operating Systems - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Udacity/">Udacity</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Marshaling and Data Copying - Georgia Tech - Advanced Operating Systems</b></h2><h5 class="post__date">2015-02-23</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/Q2fkck7s07Q" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">first let's look at how we can reduce
+the overhead and marshalling the
+arguments and the data copying just to
+jog your memory marshalling refers to
+the fact that the semantics of the RPC
+call being made between the client and
+the server is something that the
+operating system doesn't have any clue
+about so in other words the arguments
+that are actually passed between the
+client and the server has semantic
+meaning only between the client of the
+server the operating system has no
+knowledge of it and therefore marshaling
+is the term that is used to say let's
+accumulate all of the arguments that is
+there in the call and make one
+contiguous Network packet out of it so
+that we can give it to the kernel and
+the kernel can send it out that's what
+is being described as marshaling and the
+biggest source of overhead and
+marshaling is the data copying that's
+gonna happen and I'll explain that in a
+minute
+potentially in doing the marshaling that
+could be three copies involved where are
+these three copies coming about well
+first of all the client is executing
+when a client is executing a procedure
+all the arguments for the procedure call
+that it wants to do is living on the
+stack of the client and there is an
+entity we've introduced this terminology
+even before called the client stub and
+the role of the client stub is to take
+the arguments of the call which are
+living on the stack and converted into a
+contiguous sequence of bytes called an
+RPC message so the RPC message has no
+semantic meaning it is just a contiguous
+string of bytes which you can pass to
+the kernel and the kernel can then send
+it out on the wire just like any other
+message so that's the first thing that
+the stub does and that's the first
+source of overhead the client stub is
+making the first copy from the stack in
+order to create an RPC message now
+remember that the client is a user
+program so it is living in the user
+space outside the kernel and so this RPC
+message which has been created by the
+stub it is part of the clients address
+space which is living outside the kernel
+so this RPC message is in users
+pace and the colonel has to make a copy
+of the RPC message from the user space
+into its own buffer the kernel buffer
+and that's the second source of overhead
+the second source of copy in doing the
+marshaling of the arguments so now it is
+in the buffer of the operating system
+kernel now the operating system can kick
+the network controller and say hey go
+ahead take this buffer send it all on
+the wire to the desired destination and
+the network controller at that point is
+going to move the bits from this buffer
+which is in the system memory of the
+operating system into its internal
+buffer using DMA and this is the third
+copy that is happening the copy that is
+done by the network controller using DMA
+to move the bits of the RPC message
+copied from the user space into the
+internal buffer of the kernel and now
+this movement is being orchestrated by
+the hardware to move it from the kernel
+buffer into the internal buffer of the
+network controller so that it can then
+get out on the wire so those are the
+three copies involved in marshaling the
+arguments of the call before it can be
+put out on the wire and the copying
+overhead is the biggest source of
+overhead for RPC latency now how do we
+reduce the number of copies well it
+turns out that the third copies if
+you're looking at here moving the bits
+from the system memory into the network
+controller this is a hardware action and
+it is unavoidable and therefore we're
+going to live with it understand network
+controller is completely redesigned if
+the network controller is saying well I
+need to DMA the bits from the system
+memory input into my buffer well I have
+to DMA the bits from the system memory
+into my internal buffer before I can put
+it all on the wire then this third copy
+is inevitable so we live with it but we
+would like to see if we can try to
+reduce a number of copies involved here
+the first idea is can we eliminate this
+copy that is done by the client stub why
+is it happening well it has to create a
+network message in order to send it out
+on the wire as we said that the
+semantics of this call is only known to
+the client
+and the server and the client stub is
+taking the arguments and making a
+network packet out of it and it was
+doing it in userspace and so what we're
+gonna do is we're gonna marshal it
+directly into the kernel buffer in other
+words we've now moved this stub the
+client side stub from the user space
+down into the kernel if you can move it
+into the kernel then from the stack the
+stub can directly marshal it into the
+kernel buffer and so that intermediate
+copies that we had here creating an RPC
+message and copying it again into the
+kernel buffer is avoided if the stub can
+directly work on the stack and write it
+into the kernel memory so what this
+means is that at instantiation time the
+client stub is installed inside the
+kernel at bind time when the client
+binds with the server at the bind time
+what we're going to do is we're going to
+say that here is a client stub please
+put it inside the kernel so that later
+on you can use that in order to do the
+marshalling so the synthesized procedure
+is installed in the kernel for each
+client call so for each client server
+relationship we synthesize a procedure
+which is the client stub install it in
+the kernel for use every time I make
+this call this stub can be invoked to
+convert the arguments that are living on
+the stack into a network message and
+directly put it into the kernel buffer
+so this obviously will eliminate from
+the two copies down to one copy because
+the intermediate copy of converting the
+arguments into an RPC message is now
+eliminated now the problem with this
+idea is that we are saying let's dump
+some code into the kernel and that may
+not be something that is so palatable so
+this is a solution that's possible if
+the RPC service that is being provided
+between the client and the server is a
+trusted service and therefore we can
+trust who is putting the stub into the
+kernel in that case this solution may be
+a reasonable one to adopt</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

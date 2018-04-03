@@ -1,0 +1,1079 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Android Performance: UI (Google I/O '17) | Coder Coacher - Coaching Coders</title><meta content="Android Performance: UI (Google I/O '17) - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Android-Developers/">Android Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Android Performance: UI (Google I/O '17)</b></h2><h5 class="post__date">2017-05-19</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/9HtTL_RO2wI" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">Wow what tepid applause thank you
+hey my name is Chris Craig I work on
+Android UI toolkit and I'm Chet Haase I
+also work on the Android UI toolkit team
+and today why don't we talk about
+performance it's it's been a while since
+we've had a performance talk so we
+thought we should do it again because we
+like talking about performance
+for this year's performance talk we
+wanted to make it a bit more use case
+driven tell you a little bit about how
+rendering works some of the changes that
+we made some of the improvements around
+performance but also go through some
+steps of how you would actually find out
+what jank is and how to fix it in your
+applications so let's do that
+UI performance Hey there you go so we
+talked about frames for a second PS it's
+a really good metric it's a it's a good
+way for understanding what's going on in
+your application but it's actually
+better to think about the duration right
+so it's not how many frames per second
+you can hit honestly the display is
+hitting 60 frames a second all the time
+it's and then you need to sort of hit
+the same number of frames for your
+application in each second but it's
+really better to think about the
+duration that each frame is taking how
+long is that frame taking to actually
+draw because you're not going to fit
+within that window if you're taking too
+long to fit right so if you want to fix
+the jank in your application if you want
+to fix the stutters if when you're
+flinging and scrolling that list there's
+skipped frames in the middle and the
+user is seeing this janky behavior
+fixing that means fixing that frames
+that are simply taking too long so also
+it's good to think about consistency
+it's great if you can you know have 60
+frames per second most of the time but
+then occasionally if you're dropping
+several frames in a row that's not good
+what you really want is consistent
+behavior so chasing jank is all about
+finding the places where you're dropping
+those and making sure that you're fixing
+the bottlenecks that are contributing to
+those so let's talk about time let's
+take a look at time
+going forward from the left to the right
+sorry from the left to the right and
+take a look at what's happening in the
+UI space so if you think about these
+vertical refresh sinks you know on every
+16 and 2/3 milliseconds typically on a
+typical display we're getting a vsync
+request right so this is the hardware
+sort of posting the frame to the screen
+that is when the user sees something so
+divide that by 60 seconds divided by 60
+16 point 2/3 I can go over the math
+later if you need me to then if you map
+frames on to that each of these frames
+this is sort of these gray boxes are
+what your application is doing in order
+to post that information to the screen
+right so ideally your frame would all
+all of the stuff that needs to happen
+for that frame would be within that 16
+and 2/3 milliseconds I need to stop
+saying that I'm going to say 16
+milliseconds and you can interpret it
+however you want so the beautiful icon
+that I hand drew myself down at the
+bottom of the screen that's the user
+seeing things right so on each of those
+vertical sync they are seeing whatever
+the hardware buffer is posting to the
+screen so they're going to see it you
+know they're there they're there but if
+there's a problem when you're rendering
+if one of your frames takes too long
+then the user is not going to see that
+they're going to see exactly what they
+saw in the previous frame because you
+took too long in your application and
+you skipped a frame so that's jank
+that's the stutter that we need to try
+to analyze and fix so let's take a
+little step back and say okay how does
+rendering actually happen in the UI
+toolkit well there's the app perspective
+so what's going on in your application
+and then we'll take a look at what the
+framework is actually doing on your
+behalf so here's some simple code I keep
+looking back and ok so you can see on
+the screen back here here's some simple
+codes we have this color things are
+light gray right now and when the user
+clicks in the middle of this custom view
+are going to change the color we're
+going to tell the view that it needs to
+invalidate itself and then it's going to
+redraw on it in the new color so user
+clicks on the screen that signals that
+sends an event into the on click method
+we're going to change things around then
+we're going to invalidate and then
+invalidate is going to cause a later
+call to
+ondraw it's not a serial thing it
+doesn't directly call ondraw but it
+tells the system hey things need to be
+redrawn and then a later call will
+filter into the ondraw method and then
+the ondraw will draw into the canvas and
+that will eventually be posted to the
+screen through all the operations that
+the UI toolkit is doing on your behalf
+so from the platform perspective what's
+going on is several things in a row
+first of all we on any given frame when
+we get that vsync request we process
+inputs so if the user is clicked if the
+user is scrolling or flinging that's
+where we get that information and do
+something based on it if there's
+animation if they had let go of that
+scrolling list and it's now flinging and
+just posting event so that it gets
+updated as the list moves in space or as
+views move around on the screen we
+process those animation events we change
+the properties that causes invalidation
+so the thing is going to get redrawn
+appropriately then if necessary we do
+layout so something changed in your
+application that changes things size or
+location that's when we measure and
+layout the things that need to be
+changed again causing and validation and
+redraws and then we actually do what we
+call record draw so this is what we were
+seeing on the previous slide in the
+ondraw method this is where you turn
+whatever you want to do into drawing
+operations that we then receive and
+store internally so you're going to say
+well canvas you know draw this new color
+so you're recording the commands that
+should happen in order for us to then
+draw the right thing under the hood and
+then finally render and that's our stage
+in this right so you do everything in
+the first four steps in your code or for
+standard views we're doing it and then
+we handle the rendering and that's
+basically the transformation of those
+recorded draw calls into whatever we
+need to do at the bottom layer I'll give
+you a hint we turn it into OpenGL or GPU
+commands that we then send to the GPU so
+if we look at that in beautiful
+brilliant colors which we're going to
+use in some upcoming diagram we have
+these five stages right so in any
+particular frame the boring gray box
+there it's actually broken down into
+those different stages in our previous
+example in that simple application code
+we didn't have all of the stages because
+there was
+laya required all we were doing was
+changing a color so we had the input of
+the on click and then we had the record
+draw of the canvas operation to draw in
+the new color and then the rendering
+operation that resulted from that and
+it's typical yeah just like it says on
+the slide in a typical application more
+general frame then you're going to have
+all of the steps in there so we may
+process some input and some animation
+and some layout and record and then
+render and all of these things are
+happening in a sequence right so this is
+the order of operations in reality we
+actually have two threads kicking in as
+a lollipop
+where we came out with a render thread
+technology which we've talked about
+before where we process all of the the
+application space stuff going on those
+first four steps in the application
+space are on the UI thread and then we
+have this separate thread that's
+actually handling the rendering they
+still happen in series in sequence
+because the render thread doesn't know
+what to render until you tell it but the
+render thread can also do other stuff
+asynchronously from the UI thread so we
+can send over some of the atomic
+animations that it can process in the
+meantime but in general you do all this
+stuff on the UI thread and then we think
+that information to the render thread
+and then the render said on that
+separate thread will handle talking to
+the GPU so in a well-behaved application
+in a typical let's say this is a
+scrolling or a flinging situation and
+things are well-behaved in the
+application Yin you draw relatively
+quickly this is what things look like
+again the beautiful eye icon at the
+bottom the user sees the frames happen
+bam bam bam bam everything's happening
+within the 16 millisecond barrier but in
+a typical janky situation all of a
+sudden something took longer right so
+here we see that the input command took
+a lot longer so maybe when the user
+clicked some expensive operation was
+performed somebody made a web service
+call or more typically you created or
+you bound to view you did some expensive
+operation that caused us to do a lot of
+work pushed out the length of time that
+you're spending doing all of that
+recording of draw operations and then
+the rendering operation necessarily
+slipped into the next frame and the user
+missed seeing that input because it
+didn't hit the barrier so that's the
+jank
+and that we want to fix alright so let's
+move over to talking about what do you
+do you have problems in the application
+you see now as Jen is described what can
+happen when a frame takes too long let's
+talk about the process that we call D
+janking stepping through your
+application and finding and fixing these
+problems so the first step in dj''q in
+your application is to run a release ish
+build and so what I mean by that is make
+sure that you're running with debugging
+off if you're running with debugging on
+art has to add in a bunch of different
+checks and verification steps they can
+add a little bit of time and skew your
+results a little bit so we recommend
+over writing that or testing an actual
+release build so the second step is to
+inspect your app visually as you're
+scrolling through lists if you see any
+jank occurring just visually detecting
+that if you see an animation you know
+definitely start with the most key
+important parts of your app lots you
+guys have a primary scrolling list great
+place to start
+if you happen to be one of the kind of
+people that can't see Jake if you just
+see oh well it looks fine to me
+you can turn on profile GPU rendering
+and that gives you all these bars at the
+bottom which will tell you when you pass
+that particular threshold and give you a
+little hint as to what might be
+happening based upon the color and
+there's some documentation about that
+online but the real next step after that
+you've seen some jank you see oh yes
+when these items come on screen or the
+first time that I load this particular
+part of the UI you figure out what the
+interaction is you say okay what do I do
+next well the next step is generally
+systrace this trace is a tool that
+exists in the sdk in the platform tools
+directory you can also get it off of
+github if you want the absolute freshest
+version and so from here we're going to
+we're going to do a very quick live look
+through what is this trace actually
+looks like so this is what you might see
+when you pull up assist rates for the
+first time so in this particular example
+I was scrolling through a recycler view
+in my app and I saw oh there's some
+janky frames I can see some visual
+stuttering and so I captured this this
+trace over the duration of that time
+and now a pull-up assist race and oh my
+goodness there is a lot of information
+here there is a lot of noise it is
+really hard to see what should I be
+looking at so first and foremost what
+you can do is you can look here on the
+left you can see okay well there is
+kernels there's potentially other
+processes you know what I'm going to do
+I'm going to ignore everybody else for
+now and I'm going to scroll down until
+the top process the only thing that I
+can see right now is my package Android
+jank town and in fact you can even go
+further than that you can you can look
+on the left here this tells you in fact
+individual threads that we care about
+and this chat was talking about there
+are two threads that matter here there's
+the UI thread of my app and the render
+thread so I'm going to scroll down
+further until all that I can see at the
+very top of the screen is mostly that
+and so from a very high level even just
+looking at this trace without knowing
+much about it I can say okay the the
+time in this trace goes from left to
+right on the leftmost we have 0 seconds
+going all the way further and if you
+can't see the specific details don't
+worry about it we'll go into some zoomed
+in screenshots later but even from this
+very high level view I can say oh well
+I've got a lot of tiny little slivers
+here these little pulses these are
+frames ok great most of that looks
+incredibly consistent looks really
+smooth and it looks to be repeating
+regularly however there are some big
+visual standouts here and this is very
+often what the janking is is looking for
+these particular stands out frames and
+investigating so if i zoom in here I can
+start looking at exactly what's going
+wrong in these frames and I can start
+clicking around figuring out exactly
+what the problem is and just so that you
+can see that we're going to switch back
+to slides and show you the screenshots
+in particular so this is one of the
+simple frames zoomed in pretty
+significantly
+that we saw earlier as those very
+frequent and very regular pulses now
+these were very nice they look like tiny
+little slivers before but let's go ahead
+and look at them to see what a baseline
+is um so first of all one of the one of
+the tricky things about systrace is
+there's a lot of data here there's a lot
+of things to click on but one of the
+nice features is that
+to these UI thread components click on
+it since streets will do its best to try
+and explain it to you so if you click on
+this particular top of the UI thread
+which means this is the topmost trace
+section this is the biggest chunk that
+represents the UI thread work if you
+click on that at the bottom of the
+systrace UI it'll say oh okay well this
+is what choreographer is and in fact
+here it'll even link you to the and the
+documentation where it describes on D on
+Android comm how choreographer works
+similarly if I want to look down at draw
+frame that's the render thread component
+of the of the frame and if I click on it
+I get a similar explanation there's lots
+of this for all sorts of tracing
+throughout systrace especially on the UI
+or under thread where you might be most
+interested okay so now that we know we
+can click on things we can get a little
+bit more information that way let's go
+through exactly what does this frame
+look like what's it doing so the very
+first thing we see here is an animation
+callback if you click on this it'll stay
+animation or if you zoom in you can see
+that and I'm just going to go through
+these that way so this is the animation
+exactly as Chet was talking about it
+before and if we saw before we had a
+whole lot of frames
+I told you it was a recycler view so
+there's one very common reason for a
+recycler view to be animating and that's
+flinging on just the the fling animation
+itself execute recycler views actual
+translate and inflate work as part of an
+animation callback and then the other
+stage that Chet talked about before is
+record draw well this makes sense as
+well but his recycler view is
+invalidating sliding things around and
+drawing okay we kind of get some context
+for what it's doing and in fact if you
+click on this part of the of the
+animation which is inside animation this
+is a recycler view scroll so recycle
+every scroll is actually going really
+really fast here and that's because
+recycler view is doing very minimal work
+in fact if we look at the amount of time
+taken by this UI thread frame it's one
+point two five milliseconds that's great
+the whole frame finishes in in less than
+six this is a great frame
+congratulations now we look at a little
+bit slower of a frame now this one's
+actually not terrible but let's look at
+how it differs from the previous one so
+first of all we notice that there's a
+measure pass in here
+something in something in the hierarchy
+requested layout and got remesh good to
+know and another thing down here we see
+upload bitmap so the first time that the
+render thread sees a bitmap and needs to
+display it it will be uploaded to the
+GPU uploaded to OpenGL so that the GPU
+can draw it really fast now that first
+upload is a little expensive and we'll
+talk about that a little bit more later
+but really if we look at it well the UI
+thread takes 4 milliseconds the entire
+frame finishes in less than 13 this is
+not a problem frame this is this is fine
+but now let's look at the really bad
+ones these are the ones that we saw from
+very far away ok something is definitely
+going on here but if you're new like
+what what's going on how do I figure out
+what's going on so actually if you click
+on this part that says RV create view
+it'll describe to you this is basically
+your adapters callback for oncreateview
+holder this means that recycler view
+needs a new view and it's creating it
+and in fact if you look directly below
+that well a lot of the reason a lot of
+the time that takes up this create view
+portion is that it's inflating and
+inflating especially with the complex
+items in my recycler view can take a
+while well that's unfortunate
+the next part here on bind view holder
+that takes about a millisecond and a
+half not great but ok well what could I
+do um you know this this UI thread frame
+took about 20 seconds 20 milliseconds on
+the UI thread and total to be about 27.4
+not great we are definitely going to
+jank that frame so this is actually this
+process is one that you might go through
+yourself but in this particular case we
+realize well this is this is something
+that we can help you out with in support
+lib and this is a feature that we worked
+in worked in for exactly that purpose so
+let's go back and talk a little bit
+about what recycler view does so
+recycler view is the primary support lib
+component for displaying a dynamic list
+of content that needs to show views
+dynamically that needs to scroll
+infinitely potentially or display more
+content than what is attached to the
+view hierarchy so what do I mean well I
+mean if you have these four items
+partially visible in your recycler view
+you start scrolling
+and all that recyclerview needs to do is
+handle these four particular items in
+fact all that it has to do is offset
+them very slightly and that's the amount
+of work that we see and in fact if you
+remember the very first RV scroll that
+we highlighted it was tiny it was
+trivial because the recyclerview did
+very little but once we get to the edge
+of this particular list well what
+happens now we suddenly might see some
+jank because this is a frame in which
+something interesting happens for the
+first time this list has five items in
+it that means it can't get an item to be
+recycled from previously that means this
+message icon had to be inflated well so
+that's the old way of recycler view
+working so let's welcome let's go back
+to a sort of simplified version of what
+we saw in this trace let's say again
+that this happened during fling we have
+two frames that look totally fine they
+they have short UI thread durations and
+very reasonable render thread durations
+finished before the deadline but then
+suddenly you hit a big chunk of
+animation and as we know in this
+particular case that's because
+recyclerview is doing its create and
+bind work so we say something funny here
+though which with render thread working
+as it does the UI thread is totally idle
+for the ten or so milliseconds in
+advance of this new frame coming on well
+it's not hard to predict as the fling is
+going to continue I mean that's kind of
+what animations do um in this create
+work it actually could have fit right
+there so this is exactly what we do in
+recycler view prefetch we we started
+looking ahead to new items that are
+about to come on screen and basically
+stealing work from them realizing oh no
+that's going to do a lot of work let me
+steal a little bit of that let me go
+ahead and do that inflation early so
+that we don't have to do that on demand
+and this is what it looks like in
+practice so this is a fist raised from
+the exact same app all that I did was
+update update the support live to get
+this feature and suddenly we get an RV
+prefetch event in systrace again click
+on it it explains the prefetch feature
+what it does um and we see wow that's 13
+and 1/2 milliseconds that we pulled out
+of the next frame we saved a huge amount
+of time
+work-stealing and now this is one great
+example of something that the support
+live has done but it's absolutely the
+process that you can go through for
+looking for problems in your your own
+app support lib can't solve every
+problem this way but let's talk about
+prefetch a little bit more so there are
+some caveats so what happens if the item
+isn't actually needed what happens if we
+prefetch an item and suddenly just
+before that item is about to come on
+screen the user decides to tap the
+screen and stop the fling if the thing
+is stopped if you don't end up needing
+the item or if something else comes in
+some last-minute arrival of new data you
+might have done the work incorrectly and
+really that's fine 99.9% of the time
+prefetch is going to make the right
+decision and you might waste a little
+little bit of work in that particular
+case what if there's no render thread
+though if there's no render thread we
+just don't try and prefetch to begin
+with right now
+so because render thread is on the vast
+majority of devices you get this on most
+devices for free by just using a recent
+version of the support Lib but on older
+devices this feature doesn't work so
+availability this is actually introduced
+so a while ago with support lived v25
+but it's been getting better and
+including with the most recent beta of
+26 this feature is built into default
+layout managers so if you just use a
+recycler view horizontal/vertical
+whatever with linear or staggered or
+grid layout you just get this for free
+this is just from updating to the newer
+support light however if you have a
+custom layout manager if you wanted to
+do something completely custom or if you
+wanted to subclass one of them in an
+interesting way just be aware that you
+may need to override this particular
+method collect adjacent prefetch
+positions and this is how you in your
+custom layout manager can get the exact
+same behavior and you can look at the
+implementations of the other ones and
+you can read more about this in just
+wonderful post about recycler view
+prefetch on medium but let's let's top
+it let's step back a little bit and talk
+about well what happens to jan well we
+saw in this particular case that
+recyclerview
+having bursty workloads could cause jank
+but let's talk about sort of stepping
+back what has historically been the
+problems for Android and jank so what
+are the oldest ones that that we've
+thought about is garbage collection
+garbage collection historically had been
+a lot of problem had been a significant
+problem on Android but this has been
+something that the the platform has been
+improving steadily so GC for alloc was
+essentially fixed in L with art I looked
+at hundreds hundreds of traces I haven't
+seen a blocking GC on any but the most
+egregiously allocating apps GC is not a
+huge problem but but then but even still
+the runtime keeps improving runtime
+keeps getting better at GCE lowering the
+overhead of allocation OS thread
+scheduling so this is a particularly
+interesting one we're on very on older
+versions of the kernel and on older
+versions of Android sometimes the
+platform would just make a bad decision
+about when to schedule your application
+this has been improving greatly on
+especially in in and oh but it is
+unfortunately kernel specific so that
+means that it's not guaranteed to be in
+every in Ouro device but definitely look
+for newer devices if you're looking
+specifically into thread scheduling if
+you're trying to to make sure that your
+work is running exactly when you want it
+to rendering is an interesting warrant
+when I work a whole lot of rendering um
+rendering
+specifically one of the things I
+remember Chet and Ramon talking about
+years ago has been view alpha if you
+let's see if there's there's has
+overlapping rendering there's set layer
+type Hardware there's some other
+callbacks somewhere that I need to
+remember well what we try to improve
+that so we started adding auto Hardware
+layer and M get that for free and M plus
+you can still use hardware layer to
+avoid that problem but we've gotten even
+further improvements in in improving the
+worst case um bitmap uploads are another
+one that I talked about earlier that had
+that can cause a significant amount of
+delay and first displaying your bitmap
+but we added a new feature in in prepare
+to draw on bitmaps that would allow
+bitmap loading libraries to
+asynchronously start that work early and
+that's starting to be adopted by them
+view recycling just as I said before
+with another common cause that basically
+support live has significantly improved
+for you so added in twenty five more
+improvements to come there and you can
+and you can go back and watch the
+recording of the art session from this
+i/o if you want to learn more about what
+art has been doing but I wanted to go
+through all of those because I think
+that tells you a lot about how the
+platform has been improving and trying
+to get the to the point where the only
+sources of jank in your application are
+ones that you can solve so let's talk a
+little bit about some of the sources of
+jank that might happen in an application
+that might happen because of something
+that's going wrong inside your app and
+there are a lot of them but let's just
+go really quickly so issues in
+recyclerview we talked about issues with
+recyclerview needing to inflate doing
+that work at the last minute lazily
+possibly causing 10 milliseconds or more
+of work in a single frame but there's a
+lot of a there's a lot of other subtle
+issues in recycler view that can cause
+unnecessary inflation and talk a little
+bit more about that so bitmap painting
+on the UI thread one of the most common
+reasons for your draw callback to be
+very long as because you're trying to
+cache some work cache some content in a
+bitmap but unfortunately drawing to a
+software bitmap can take a lot of time
+especially if it's anywhere near screen
+size canvas calls there are a few canvas
+calls namely draw path if you're
+mutating your path frequently save
+layers it can be somewhat expensive and
+we've actually gone out of our way to
+document some of these and I'll mention
+this in coming up but let's go quickly
+to an example of binder because this has
+been one of the one of the favorite of
+Investigation's of the Android
+performance team in the past release has
+been looking and fixing binder binder
+problems so binder is the IPC mechanism
+on Android if you want to talk to window
+manager or if the view hierarchy thinks
+you want to talk to window manager
+you're probably going through binder if
+you're talking to another person's
+content provider if you're talking to
+surface flinger
+if you're talking across IPC you're
+probably going through a binder and
+binder has tracing
+now unfortunately IPC is often very
+expensive and truth be told it can be
+really easy to accidentally add to your
+application here's a particular
+screenshot of a systrace that has a lot
+of binder transactions going on during
+recycler view scroll if you look at the
+finder finder oh my goodness and they're
+just running another callback on the UI
+thread running lots of binder all of
+these are pretty significant it's the 21
+millisecond frame it's not doing any
+inflation it's not doing anything that
+should absolutely take that long it's
+just binder overheads doing work that
+they really shouldn't be doing on the UI
+thread so tracing binder can help a
+whole lot and that's on by default
+in the newest versions of systrace what
+to summarize there's a lot of reasons
+and we've documented a whole lot of them
+if you go to do android comm slash
+vitals we have a lot of the material in
+this presentation a lot of those samples
+that i went to more more in more depth
+with code examples so on and so forth on
+this website and so now i'm going to
+pass it back to chest he's going to talk
+about maintaining performance in your
+app I should point out to that that the
+document site that Chris pointed to is
+new it was just supposed to add yeah so
+if you think you know the performance
+docs on the site you might want to check
+it out anyway much more detailed
+in-depth info and the documentation team
+was working really closely with the
+engineers like Chris and other teams to
+get the information that was really
+accurate and and deep to help you with
+this be janking so let's talk about how
+you can find and fix and actually
+maintain your own app performance it
+boils down to sort of four steps you can
+think of one is that you can gather
+users to physics to actually figure out
+where the problems are you can add your
+own tracing it's important to note when
+we're looking at all the sister aid
+stuff that Chris Wood was showing that's
+not a sampling profiler it's not a you
+know we're not seeing like per method
+calls that's not all the stuff that's
+going on in your application those are
+specific traces that we have
+instrumented the framework and the
+platform code with so the only thing
+you're going to see in sis traits are
+the traces that we've actually added to
+the platform
+because if we add a ton of traces then
+it's going to slow down the application
+so we add it in two places where it
+really makes sense so you can actually
+add your own tracing stuff we'll show
+you how to do that you can add jank test
+so maybe you actually need continuous
+test so that you can tell when you when
+you implement a change and you have a
+new build of your application and your
+performance goes down wouldn't it be
+nice if you knew that instead of
+depending on you know lower ratings on
+Playstore because your users are the
+first ones to see that maybe you could
+actually have continuous tests that can
+catch that for you and then finally use
+the tools we went in depth on systrace
+but it's worth thinking about some other
+ones that should be a part of your
+normal toolbox when you're developing so
+one of the things I should point out in
+looking at the user stats is this is a
+screenshot of a dashboard that is now
+it's actually sort of a theoretical
+screenshots we don't actually give grey
+boxes that would mean nothing so this is
+from a talk that the play team gave on
+Wednesday and talked about the different
+metrics that they can provide on the
+dashboard now so there are metrics that
+are being calculated and stored on the
+device that depending on whether the
+user opts into it may be uploaded and
+then can be information on your
+dashboard for your application so you
+can see what people are actually seeing
+in the real world including jank sets so
+how many of your frames are coming in
+that's sort of a histogram of these
+duration buckets so how many frames are
+coming in at each level of that
+histogram so you can get an idea not
+just for how your application is doing
+in general but also if you just updated
+it and things got worse wouldn't that be
+nice to know that information
+that's being aggregated and and shown in
+the play dashboard is actually coming
+from internals that we have in the
+platform that were injected in the N
+release where we have this thing called
+frame metrics and we have an API around
+that as well and we compile this thing
+at a very low level but you can listen
+in on that you can implement this on
+frame metrics available listener and get
+the per frame callback data that says
+okay
+here's what the duration was for each of
+these individuals
+and if you think about if you've done
+the GPU profile or the on screen
+profiler we saw the screenshot earlier
+all of that information is exactly the
+durations that you get from the frame
+metrics listener how long did input take
+how long did the animation take how long
+was the total duration of the frame so
+you can get all of that information to
+aggregate it yourself and then upload
+and analyze to your heart's content we
+simplified that a little bit in b-26 of
+the support lib so the beta release
+should have those bits now so instead of
+listening per frame and getting the
+duration and then needing to aggregate
+them we aggregate them for you so you
+can get this parse int array of duration
+buckets basically a histogram and then
+again you can compile aggregate this
+stuff on the device and then upload it
+to whatever server you choose to analyze
+offline so the Playstore dashboard does
+that for you for your overall
+application but if you want to
+instrument particular flows in your
+application that are really sensitive or
+important for you to get right then you
+can choose to do that with the frame
+metric stuff custom tracing so as I said
+all of the traces that we saw in the
+test rates example that Chris was
+showing were the standard traces that we
+have in the platform but you have the
+ability to add your own traces in your
+application so you should think about
+doing this for some of the things that
+you think might be more expensive where
+you know you're you know triggering I
+don't know layouts or whatever you want
+to do it for for when you're binding
+views or creating things that may be
+expensive maybe you want to add a trace
+there and sort of see what that time is
+going to be and what it looks like in
+systrace it's important to know that the
+more you instrument the more time you're
+going to spend actually outputting the
+instrumentation information that's why
+we don't have you know per method
+instrumentation on one hand you don't
+want too much information in systrace
+because then the important information
+gets lost but also you don't want to
+actually skew your time by the
+instrumentation calls that you're
+actually making right so same thing is
+true for your application so you should
+think about you know if it's going to
+take greater than a half a millisecond
+then the overhead of the instrumentation
+is going to be in the noise but it's
+much it's much faster than that you
+probably don't want to do that at least
+not on any permanent
+cases and performance tests it's always
+good to have tests anyway wouldn't it be
+nice if you actually knew when you were
+triggering a performance problem this is
+especially true for big apps and big
+teams so if you have many developers
+trucking code into a common code base
+it's good to have an automated way of
+detecting when problems come in if
+they're not if you have developers
+trucking code in and that are not as
+familiar with your architecture or your
+practices then you want to be able to
+detect that earlier instead of catching
+it the users level and you want to in
+particular have tests around the areas
+of your UI that are more important right
+so if there's a common feed some you
+know common ListView recyclerview
+situation that people are going to be
+going into all the time if that's where
+everybody lands well create some
+performance tests around that and make
+sure that that code stays tight you can
+gather the data on the user side on the
+on the device side and app side and
+frame metrics aggregator or you can also
+do it on the host sides you can run
+these command line tools dumps this gfx
+info that will get all of that
+information GFX info again this is the
+same it's a different view into exactly
+the same kind of duration data that I
+was talking about earlier that you see
+in GPU profiling that you see in frame
+metrics aggregation and in particularly
+you want to watch what's going on with
+the different percentiles of your app if
+you skip a frame occasionally no big
+deal if occasionally you have a 700
+millisecond frame drop that's probably a
+big deal or if you have 10% of your
+frames that are actually missing their
+boundaries that's a big deal right so
+just pay attention to a what your app is
+doing and know and know what the
+performance is like and try to get that
+performance as good as you can but also
+pay attention to what's changing over
+time as you update that app make sure
+that you're not losing performance as
+you do it and then finally use the tool
+so we talked about profile GPU rendering
+something you can enable in developer
+options very easily just sort of see
+where where things are going what's
+going on in the device when you you know
+fling your recyclerview or whatever your
+your common UI case is that green line
+is important if you're going above the
+grain line you missed
+a millisecond boundary and you janked a
+frame this one looks like particularly
+janky frame I don't think they're making
+any frame there so at least they're
+consistent hmm they got that going for
+them so you can do that on the device
+that's this is more sort of at that
+debugger and developer level to sort of
+see where things are at again it's using
+the same information that we compiled at
+the lowest level and just putting it on
+the screen for ease of use Android
+studio just came out with some new
+profiling tools in their latest release
+that we're talking about that in some of
+their talks this week so you can check
+those out in the recordings on YouTube
+in particular for this audience the CPU
+monitor will give you information about
+what's actually going on in all of these
+method calls it gives you a good idea in
+general about you know where the
+performance is going on and it's going
+in your app and also the GPU monitor
+which is again another view into like
+how fast you're rendering this stuff and
+whether you're hitting the 16
+milliseconds in fact I want to say in if
+you're ever familiar with the previous
+tools that used to be part of the SDK
+the traits view that was built in to
+monitor this is the same thing but with
+a far better UI far more usable and
+actually far more correct data as well
+so far far more advisable so the way I
+view is a different tool so we saw the
+deep dive and systrace and especially
+when you first see situates you're like
+I never want to see that tool again
+there's just so much information there
+and you're not quite sure what to do
+with the information that is the tool
+that has all of the information it just
+takes a little bit of getting used to in
+using it to see how it works and how you
+can define the information you need and
+add the custom traces that you want I
+think an easier way to get into it is
+you can dip in slowly by using them much
+easier to use higher level view of
+what's going on with the Android studio
+tools and then if there's a particular
+source of jank that you're trying to
+chase know that systrace is a
+fine-grained tool that's going to help
+you chase that at a much deeper level
+system-wide and finally not on topic but
+for this crowd that's interested in
+performance you may want to try out a
+developer option that will enable this
+alternative render that's not on by
+default but you can see how your
+application behaves with this for
+possible future possibilities
+so it's the skia render you can go into
+developer options and enable that and
+just make sure that there's not an issue
+there if there is it be lovely to hear
+about it that's why we're mentioning it
+today there are some resources that we
+mentioned I will bring them up again
+again check out the vitals page on da
+Android comm in particular they have a
+jank section called Lulu rendering is
+and there are some important i/o
+sessions to check out on YouTube they're
+probably posted already Tim Marie gave a
+great overview about systrace and system
+performance in general so Android
+performance overview the art talk talked
+about performance and memory
+improvements they did some pretty
+amazing stuff on both the runtime side
+runtime improvements as well as the GC
+side so now they have concurrent garbage
+collection there's almost no pauses
+anymore until they need to take a full
+GC eventually and they can compact in
+the foreground you get a minimal size
+keep you get much faster allocations as
+well as collections so the details for
+all of that suffer and the art talk and
+then finally there's a talk by the
+plague folks called no one likes
+crashing or janky apps which is true and
+that's where they talked about the dash
+board and some of the other facilities
+that they're providing for developers
+and that is the talk alright</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

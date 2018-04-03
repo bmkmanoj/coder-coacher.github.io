@@ -1,0 +1,1039 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Operational Best Practices - Scott Hernandez | Coder Coacher - Coaching Coders</title><meta content="Operational Best Practices - Scott Hernandez - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/MongoDB/">MongoDB</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Operational Best Practices - Scott Hernandez</b></h2><h5 class="post__date">2012-06-20</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/sEJa_BoC3ZU" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">alright hello my name is Scott Hernandez
+thank you all for coming to this
+presentation we're gonna be talking
+about operational best practices we're
+not exactly going to start from that
+we're going to start from a bunch of use
+cases and sort of support issues that
+I've seen from the field we'll take
+three different cases we'll walk through
+sort of what was reported what we saw
+and sort of how we figured out a
+solution so taken from real issues from
+real customers some of the stuff comes
+from the wild meaning that it comes
+through google groups through our free
+support some of it comes from actual
+customers or a penas money so you might
+ask what do i do at 10gen that I'm
+involved in all this well I'm an
+engineer I also work a lot on our
+support system and I'm kind of helping
+build out our support team
+internationally so we're hiring about
+people if you're interested doing sport
+we're looking for good people and our
+sports kind of interesting since we do a
+lot of developer related support in
+terms of both operations and schema
+design indexing some of the issues we're
+going to get into here even those
+operational best practices it's going to
+be around not just the systems that
+we're running but also the applications
+that are running on top of them so we're
+going to talk about these support cases
+we're going to analyze you know what
+came in in terms of what people
+described as their problem what was
+actually the issue and then sort of how
+we solved it so hopefully at the end
+we'll have a bunch of best practices and
+takeaways that you can go implement
+hopefully never to see any of the issues
+that we actually talked about in these
+examples so let's start with one
+scenario so the first scenario to talk
+about it's going to be like all cases
+someone says hey we're on fire our
+system is down down in this case means
+users are seeing more than one two three
+seconds for operations all right how
+many people here would characterize that
+as down hopefully quite a few of you
+good how many people just think it's
+silly to care about how slow it is as
+long as it's running it's running
+hopefully not many of you otherwise
+you'll very unhappy users so immediately
+we start doing is collecting logs so
+logs are of course a great way to start
+we can't exactly know what's going on
+yet so we start collecting their app
+logs which turn out to be web server and
+app server logs
+these are showing time outs from their
+application we also collect our server
+logs from the backend MongoDB instances
+these are showing socket exceptions or
+connection exceptions so is anyone want
+to fathom a guess what possibly could be
+the issue here before I give you any
+more information sorry someone said
+something over here I so I can't hear
+you got to speak up I'm index queries
+okay so I Nanak secondary index queries
+very possible another yep running out of
+file handles also a good possibility
+actually neither of those things do I
+talk about in this issue but they're
+very good anyone else so in the back io
+disk i/o very good guess so let's take a
+look at what we see in these logs so
+we're going to diagnostics and logs
+we're trying to understand these
+timeouts on the client side finds out
+that the client actually sets a read
+timeout on the socket or connection so
+they don't want operations that take
+more than 50 milliseconds to ever slow
+down their system they're collecting a
+bunch of let's say analytics so they're
+going to be collecting click throughs
+and web page views and they've never
+want to slow down the rendering of the
+page and it's pretty much a synchronous
+but it still impacts the user if it does
+happen so they set a time out when the
+time out gets hit on their application
+side it essentially closes the
+connection or socket to the server on
+the back end so we can tell hopefully
+you can tell from this your guess would
+be this is a symptom not a cause this is
+not the reason for their problem this is
+just a side effect of something else
+that's going on so also going back to
+the server connection exceptions we can
+match the timing of these two logs we
+see that the time is such that basically
+right before we see an exception on the
+server we see the client timeout and
+then close the connection that's where
+we're getting the exceptions from
+severed connections on one side then are
+being communicated to the server on the
+other side they're essentially just
+being dropped this too is a symptom not
+the cause so now we go to our
+level of Diagnostics we get some graphs
+we'll figure out actually what's going
+on in the server so for all of you who
+are not familiar with it these are
+graphs from mms which is a free
+monitoring system that we provide these
+graphs are going to show us essentially
+what the cues look like in terms of
+reads and writes for mongodb so when we
+talk about queues what we're talking
+about is there's a bunch of concurrent
+operations that are happening anything
+that can't be handled in a given second
+has to be queued logically it's really
+just saying like it couldn't be
+processed if you had 100 requests you
+did 90 of them the queue is essentially
+10 things that never got processed in
+that time period it's not actually a
+queue in terms of you know an actual
+data structure because the way we
+actually process data coming off the
+network is by taking the first thing on
+each connection or socket and then
+processing it but if we can't process it
+it waits and so that's where the queuing
+is yeah so the question is does preserve
+order and the answer is basically no
+because there's a lot of things that can
+happen while it's trying to process it
+that may cause it to wait further things
+like for example one of the things that
+was added in more recent versions of
+MongoDB is yielding on disk access for
+rights so if you're going to do a right
+if the documents not memory we have to
+wait until the page is faulted in that
+has a document which means it's order is
+going to be changed it's essentially
+still in the queue except it's gone in
+been diagnosed as something that can't
+be done right now it goes back into list
+and then it comes back again so any
+number of things can happen in between
+assuming we're waiting on disk during
+that time which is what we're doing here
+so we see this queue you can't quite
+tell but the big line is actually the
+read cue the smaller line is the right
+cue there we go so there we go so this
+little ones the read to you this taller
+ones the right cue we're queuing up
+essentially this is by day over five
+minute periods so if we actually look at
+these individual numbers we'd see since
+their average is probably four or five
+times that queue size but it'd be much
+spikier and would be averaged out so
+during the same time we're going to look
+at the journal staff so we have
+journaling turned on I actually was able
+to highlight the numbers when you roll
+over each point you'll see
+hard to read but this is journaled
+megabytes it's 41 megabytes the other
+one is 80 it's essentially doing this
+every second so it's a lot of writing
+going on and you'd imagine that any kind
+of writing at that level is probably
+going to cause the disk to slow down
+another sign of basically disk i/o
+bottleneck is this background flush
+queue at the bottom graph this shows
+that on average you know we're flushing
+all of the changes were making to the
+database at less than a second for each
+period and during this time we're seeing
+that the flush times actually go up to
+at least 10 times that probably much
+higher because once again this is
+averaged over five minute periods by day
+so it's really averaged out over instead
+of by second so going to make sense
+there so then we figure out if this
+issue we know that it's basically i/o
+bound most things are generally going to
+be I Oh bound except well the case we'll
+talk about that isn't necessarily i/o
+bound so we get back to the user we
+respond on the group and we say hey it
+looks like your disk is able to keep up
+with the operations you're doing what
+can you tell us about the disk so does
+anyone guess what they might have told
+us about their disks they're on Amazon
+at in fact they are an Amazon it doesn't
+actually matter for this case but yes
+they are in Amazon any other
+characteristics you might guess at now
+all right all right so the other thing
+they tell us is that they're using a
+single disk so they have a single ubs
+back volume for all of the stuff they
+have the journal and the database is on
+the same volume so the different right
+loads are actually competing for
+operations on the disk essentially in
+the cloud and it turns out that that is
+basically their problem their their disk
+bound they've got a few solutions so the
+things that got us to the solution which
+actually turned out to be going to raid
+and actually making more disks
+underneath it we're bond during the logs
+looking at an escalating based on the
+number of operations so we're able to
+correlate logs with the timeouts on the
+client side with the socket exceptions
+on the server side they didn't do this
+but this would be a great way of taking
+away and sort of understanding things
+better if they didn't tremenda their
+application and had better monitoring
+for metrics I'm just going to throw that
+out there it's generally something very
+useful and if they'd known a little bit
+better about their application and its
+performance requirements then they might
+not have done this scenario in the first
+place so one of the key things at least
+from this case to take away is really
+think about what you're doing how many
+rights are doing what kind of reads
+you're doing and load test your system
+if that's something that you can't guess
+that which generally people can't so
+they they knew their application
+characteristics but they didn't really
+think what the consequences would be in
+their deployment they didn't actually
+spend a lot of time testing things out
+they just had things working it turned
+out that they got a lot more throughput
+in traffic and that basically hammered
+the disk all right any questions from
+scenario one yeah so the question is
+would shardene help in the first
+scenario and yes it would in so much as
+it would also create more disks for more
+throughput on the i/o side but in their
+case they didn't actually have a problem
+that the single machine couldn't handle
+they just needed better disks yeah
+another question background
+so the question is do you recommend
+using network storage or sands for
+storage and disks we don't necessarily
+suggest one thing or the other there are
+a lot of requirements that you simply
+can't control but in general I've seen
+any resource that has low latency in
+high-throughput with a lot of I ops is
+good if you can get that guarantee from
+a sand or network storage that's great
+if you can't then I wouldn't suggest
+using it it's less about the technology
+more about the performance of
+characteristics of it we've got I know
+people who work great on sands I know
+people who have terrible sands and it
+really depends on what you have but one
+thing I always suggest is testing so
+database characteristics generally are
+going to be for most applications random
+read/write and we'll get to another
+scenario towards the end where that
+actually is a big deal and some of these
+implementations okay so let's move on to
+the second scenario so the second
+scenario basically starts off with an
+alert system tells some administrators
+that their servers raining hot and the
+server running hot means that it's very
+it's higher cpu than they've seen in the
+past and loads climbing so they don't
+see a lot of performance issues but they
+do see random slowdowns they're not
+really concerned about it it's mostly an
+administrative alerting system that's
+telling them this and they're trying to
+investigate what could be the cause and
+what might the fex be and all this is
+happening of course while they see a lot
+more traffic than normal which is
+generally a good pattern to see you see
+a lot of traffic things get slower it
+probably means that you need to scale
+out more in this case actually let me go
+back real quick so they don't have any
+guesses do what could possibly be this
+issue sorry swap um okay could be next
+anyone else yeah in the back indexing
+yep indexing is a good guess anyone else
+with another guest yeah sorry location
+disk allocation can you explain that a
+little more new map file so they're
+adding new disk files and it's causing
+turn on memory contention that pretty
+much where you go with that yeah I could
+see that not sure if the CPU is related
+to that may be so i should actually add
+this the cpu rain hot is actually mostly
+user cpu not system i/o cpu I don't that
+helps anyone what the mother guests or
+not links in the queries I'm not sure
+what that means but I can tell you that
+all queries in Mongo are per single
+collection so there's no way to have
+joins if that's what you're asking about
+so probably not um so instead no index
+sorting with an index without an index
+yes that's a good one too that's that's
+very close to the indexing one that was
+mentioned earlier okay sorry web crawler
+yeah it could be anything but why does
+web crawler cause it and what is the
+actual cause underlying cause so it
+could be anything could be a web
+crawlers doing it could be dost it could
+just be a good day on your website or
+could be the end of the quarter and
+people are ready to spend money in your
+ecommerce site sorry
+creating an index on the flight it could
+actually act creating an index would
+cause that a lot of CPU and a lot of
+disk they actually don't see I didn't
+mention this but there's not actually a
+lot of disk activity going on here the
+system is mostly just CPU hot not disk
+on okay so we bring up ms again or
+whatever graphing system you happen to
+have this was just one we had and we
+take a look at the graphs and we see
+that up here this sort of 200 it's
+actually once again it's averaged over
+five minute intervals with day
+granularity or something so this is
+probably actually spiking at four to six
+hundred not really staying at two
+hundred and so you have to guess of
+course this is a multi-core system
+there's probably eight CPUs in here so
+it's using a whole lot of CPU these
+little the bottom part here is a system
+in IO time so it's relatively low in
+relation we also notice of course as I
+mentioned traffic happen to be coming in
+pretty high at that time these are
+queries down here about five thousand
+queries a second which is a reasonable
+number and once again like I mentioned
+this isn't actually a problem this isn't
+a performance issue that users are
+really seen it's mostly just an alert
+that someone set up which got triggered
+okay so the first thing you might do is
+take a look at logs and turn on DB
+profiling right we know that things are
+slow we don't know what things are slow
+the first step is to figure out what's
+slow it turns out that all the queries
+that are slow actually aren't too slow
+by default in logs we log anything over
+100 milliseconds any operation and we
+look at the logs from this we don't see
+a lot of stuff going on it still looks
+pretty quiet pretty tame everything's
+looks like it's moving pretty well we
+turn on DB profiling for the database
+and we set a threshold much lower than
+hundred milliseconds we set it down at
+50 milliseconds and we start to see a
+pattern occur in terms of a type of
+query this query is constantly being
+shown as the slowest thing going on
+holds the same pattern we look at the
+different queries that are coming
+through the system we identify two or
+three patterns of queries we go and do
+what now with that query anyone we don't
+explain on it so the next step is to
+take that query and I've could have
+taken all the actual bits out of the
+query since it was someone's real data
+and we do in explain we see it's using a
+cursor we see that it's not using the
+cursor very efficiently the N scan and n
+scanned objects are pretty high the
+actual number of things being returned
+are really low comparatively speaking we
+know this index it's being used isn't
+very effective for the query and we also
+notice that we're ordering the results
+in memory so we're not actually able to
+use the index to order the results which
+means a bunch more allocation of memory
+for each of these queries and more CPU
+to actually do the operation right in
+memory sorts aren't expensive but
+they're not free it turns out there's
+actually another side effect of this
+which didn't happen but probably was
+close to happening at some point they
+wouldn't have been able to actually
+order stuff in memory there's a hard
+limitation in MongoDB you can't order
+basically more than four megabytes of
+output documents in memory you need to
+use index we do that they even hit that
+problem but they very well might have so
+we didn't explain we found out the index
+wasn't good we looked at the actual
+fields which I can't tell you what they
+are because then I'd be given away some
+schema information and possibly who they
+are so we created a compound index we
+were able to use the compound index for
+all the criteria that they want to
+search on which are basically three
+fields they want to search on and sort
+by another one this is the new cpu graph
+with the same load essentially on the
+next day we can see the spikes are now
+much lower at least a quarter or an
+eighth of what they were the previous
+day we had problems and so that was our
+solution to this problem yeah
+so the question is if you add additional
+indexes which are going to be ambiguous
+how do you let it know which one to use
+and so the queer optimizer and planner
+basically will run the indexes in
+parallel initially and it find the
+fastest one and then we'll use that one
+going forward it'll periodically test
+them to see if new ones are better and
+it'll use that going forward so it finds
+it on its own you can if you turns out
+you know you had a bad index for this
+and you got a better one you added you
+can add the new one remove the old one
+and then remove the ambiguity in fig you
+in big eNOS good thank you other
+question so the question is how did we
+add the new index which actually is a
+great question because the next slide
+goes into best practices for adding
+indexes this happens to be a replica set
+so we've got a few members in the set
+the best practice for adding an index
+currently because the way the indexes
+work you can create background indexes
+on the primary but when they actually
+get replicated they'll be done the
+foreground which may or may not affect
+your application if it does then the
+best practice is to start from the
+bottom much like a rolling upgrade add
+the indexes on the secondaries and then
+when you're ready go to the primary and
+add in the background or step it down
+let when the other secondaries become
+primary which has the index already and
+then your applications using it you go
+either route this is document up on the
+dock up on the website in terms of best
+practices for doing indexing on replicas
+yeah question back the question is 100
+milliseconds a good default for logging
+operations I think it's actually pretty
+low but it depends on who you're talking
+to there are a lot of people who think
+more than 10 milliseconds to I there are
+some who are fine with a second query so
+it's really up to you we chose I think a
+relatively low default but you can
+change it there is an option you can set
+called slow ms which sets the
+millisecond threshold at 100 by default
+and if you put a different number then
+that's what you get for logging okay so
+here are the takeaways from this one one
+again performance testing tuning very
+important to do with the system level
+very important to do with the
+application level so alerting not
+abnormal states got these guys ahead of
+the game right they saw the CPU issue
+before their application really showed
+it to their users there were some
+slowdowns but it wasn't big it was
+relatively small they weren't getting a
+lot of complaints which worked out
+really well for them and us since we
+were able to help them quickly high CPU
+generally a sign of poor indexing not
+always there are plenty of in there are
+plenty of queries that you might want to
+do that simply can't efficiently use an
+index however you want that portion of
+the criteria of your query to be the
+only part that can't use the index you
+want the other things hopefully if
+you're searching on more than one field
+be able to use the index efficiently to
+pare down the results so that only a
+small portion of the actual documents
+that would have been possible to look at
+are actually gonna be the ones that are
+going to do the slow comparisons for
+example some people like to do some
+people use light queries using regular
+expressions those generally can't use
+index efficiently so those are good
+things to put at the end basically
+either possibly non the index at all or
+just knowing that it's gonna have to
+traverse the whole part of the index for
+that subset at the end rolling upgrade
+sorry so rolling upgrades yeah next
+question
+sorry I couldn't hear you can you do
+what with it I think you're asking if
+there's any way for Mongo to
+automatically know if it didn't use the
+most no so I think the question is is
+there any chance that it chooses the
+wrong index or no index there is a
+chance as I mentioned the way the query
+planner works or query analyzer works is
+by running them in parallel every once
+in a while and see which one had the
+lowest end scanned so if for some set of
+queries or some patterns of queries one
+index works better than another it might
+choose that disproportionately based on
+the values but it's we haven't seen it
+happen a lot I haven't seen happen a lot
+it's possible there's a lot of
+possibilities you can also if you're
+worried about that you can use a hint to
+tell it which index to use explicitly
+and then it'll use that index all right
+on to our last example scenario three
+general slowdown on login so we've got a
+bunch of users on the system when users
+come back to the system to login we're
+seeing it take a disproportionate amount
+of time from there to login
+we're seeing high disk utilization so
+when the users come in we're seeing
+essentially when a block of new users
+come in we see a lot more disk
+utilization when them when they're there
+an active on the site so the first thing
+we go to actually I should have asked
+where do we go now anyone have any ideas
+swap iostat yeah well I oh that's a good
+good call so swap generally a swap
+generally is not an issue someone else
+mentioned earlier so can anyone tell me
+why swap is not necessarily an issue in
+general Mongo dB yeah so the answers hot
+stuffs in memory anyway which is not
+quite was looking for probably true
+memory map files is the answer I was
+looking for memory map files never go to
+the swap partition or swap file the
+reason they never go there is because
+they already have a back on disk there's
+no need to put them someplace else and
+then copy that back to the original
+source of the file so swap is usually
+never an issue however I will throw out
+there that having swap on your system is
+a good idea we should basically never
+use it but if you ever see it being used
+it's probably because some program
+whether it's Mongo d the server or
+whether it's some of the program around
+the system has memory contention it's
+sort of a release valve it gives you the
+ability to put a little bit of memory
+back to disk that may not be in use
+anymore so one example of actual use
+case that we saw this happen two
+versions ago the spider monkey
+JavaScript engine had a small leak in it
+so it would leak memory I wasn't big for
+most people but for some it was and if
+you used a lot of JavaScript for example
+I think one of the one people was doing
+basically a MapReduce every 30 seconds
+which is a lot of map produces over
+months they saw basically gigabytes of
+memory being allocated to the JavaScript
+engine they didn't have a swap file they
+add the swap file all of a sudden
+gigabytes of memory went to the swap
+file which gave them a lot more room for
+their application to stay up without
+having to take it down until they could
+upgrade so the swap file is nice because
+it's a place that sort of that memory
+that otherwise wouldn't be
+to be released can be released a disc
+that may never be used a leaks a good
+example that we try not to have them and
+we no one really wants them but if you
+see that sort of behavior coming it
+might be related to that all right so
+the right answer is course iostat so we
+look at iostat we try to get a little
+bit of idea of what's going on this is
+just one line and a number of lines but
+it's pretty indicative in so much is
+that up here on the utilization side
+we're seeing a high percent disk
+utilization that generally means it's
+working as hard as it can not always but
+generally we take a look at a weight and
+it's waiting a lot on disk we look at
+the average queue which is non zero and
+we look at the number of reads which are
+not huge but reasonable reasonably high
+and we take a look at ms again we
+looking at page faults this time so a
+page fault is basically any time the
+operating system needs to go out and
+load a piece of data off disc put it in
+memory for Mongo to use as someone
+mentioned earlier we use memory mapped
+files in order to actually access data
+on disk and get it loaded into memory
+that process through the virtual memory
+manager cause its faults faults are hard
+faults meaning they come off disk and we
+track them in various monitoring systems
+here's a fault list for that server I
+can't tell you exactly where this
+hundred percent was but it falls
+probably one of the peaks and so what
+can we do about this any ideas a dram we
+could reindex so read less yes we get we
+could slow the application down and read
+less data so we said logins were slow we
+make them slower and then less disc gets
+hit that is definitely a solution I
+didn't float that idea but uh shardene
+sharding could do it as well compacting
+data could do it as well more memory may
+help these are all good ideas and
+probably come and done it turns out we
+found another
+which made those less important and
+we're able to fix the problem without
+change anything didn't have to add any
+resources we didn't have to add new
+machines we were able to flip a switch
+basically make it better it's a weird
+switch to flip but I'll talk about a
+minute's anyone have any guesses to what
+that switch could be it's a setting it
+disc related yes it was read ahead
+someone asked what it was read ahead
+buffering is a good example to if we
+could double the buffer on the disk
+controller that might have helped but it
+seems unlikely so it turns out our page
+faults are relatively low but our disk
+reads were actually really high just
+fortunate actually so we took a look at
+the block device information for that
+device which yeah that's the right one
+which turned out to be about 8,000 for
+read ahead does anyone know what that
+number actually means so the number is a
+it's a size of blocks that are read
+every time a seek is done it's its
+measured in blocks which turned out to
+be actually a constant there 512 bytes
+so that's four megabytes which is a
+pretty good amount of disk to read every
+time you're trying to read a document I
+mean it's possible your documents are
+four mags in size but in this case they
+were actually closer to a kilobyte so
+for every kilobyte they needed to bring
+off disk they actually read four
+megabytes it's pretty high it turned out
+there were also some other side effects
+of this one thing that you might notice
+if you're actually curious with how this
+manifests resident memory is actually
+relatively low lower than you would like
+to see disk i/o is high which we already
+saw in the graph and page faults are
+relatively low relatively low so we
+basically had a huge read ahead four
+megabytes and what we did about it was
+just simply reducing that size so we
+went from four megabytes down to 32
+kilobytes which is you know you could
+have chose something even smaller if we
+wanted considering their documents on
+average we're less than a kilobyte but
+you know
+just with something with reasonable 32
+kilobytes this basically immediately
+caused the system to perform much better
+by using less kayo so the faults
+actually went up which may be
+counterintuitive but it went up because
+it was able to service more requests so
+more request came in more users logged
+in which caused the faults to go up
+which cause the actual disk i/o to go
+down because we changed the read ahead
+so fault isn't one takeaway which I
+didn't actually list in the slides is
+that false isn't a constant its relative
+to how much work is actually done for
+each of those faults so even though a
+fault is four kilobytes in terms of page
+size coming in from disk to memory the
+actual amount of disk that gets read for
+that fault or that event is in a
+constant read ahead controls that as
+well as other things on your system so
+good takeaways pay attention to this
+configuration someone mentioned caching
+on disk controllers also an important
+thing to keep track of it may even be a
+good thing to sort of set the read ahead
+in the cash to be the same value so
+every time you're reading from the disk
+you're reading in chunks that are easily
+cached on the disk controller load
+testing would have found this much
+earlier if they've done any load testing
+on the hardware before deploying their
+application MongoDB depends a lot on the
+operating system a lot so we memory map
+files we don't have direct I oh these
+all mean that the virtual memory manager
+in the operating systems going to be
+doing a lot of work for us and the
+settings for controlling a lot of stuff
+is not in Mongo there in the operating
+system and the device controllers so
+really pay attention to how you're
+deploying your hardware and the Opera
+just on top of it so in this case also
+another takeaway things to look out for
+disproportionate numbers so if you see
+faults relatively low but I Oh huge you
+might think well a something else is
+doing something to the disks which could
+very possible or be you might take a
+jump and think about read ahead which
+most people don't think about it's
+usually not the biggest issue but
+sometimes it is in this case the
+settings were way different than normal
+by default a lot of system
+you'll see read ahead at 256 which is
+128 kilobytes that's more reasonable but
+maybe even too large for some database
+operations all right so now it's time to
+summarize all of the things we learned
+in those three examples those three
+scenarios so I would summarize this as
+system provisioning it's really
+important to think about capacity
+performance scale and configuration of
+the system anytime you've written
+something think about the consequences
+of your action the configuration
+operating system the settings the disks
+spend time reviewing the logs know what
+something abnormal is for your system
+take a look at the sheer volume of login
+you have right if you see the logs
+triple or quadruple and a half an hour
+that's probably indication something's
+going on set up alerts for those logs
+and then rotate and collect them and
+keep them grouped together by
+application essentially by system and by
+cluster so right using the database
+profiler great way to keep track of
+basically the operations going on on the
+server uses a cap collection so it's
+relatively fixed size in terms of
+allocation but it does cost a little bit
+in terms of reading and writing from
+disk it's relatively small it's
+controllable you can set how big the cap
+collection is essentially indicating how
+much memory you want to use for that
+operation run explains periodically
+based on hopefully either the logs for
+celebrations or from the profiling that
+you've turned on I always suggest this
+instrument your code monitor things not
+just from the disk and thus background
+database server level but monitor it
+from the application level and then as
+we notice with upgrading the indexes and
+creating indexes plan and test these
+roll outs of these changes you're making
+make sure that you actually have looked
+at them before you've done them generate
+index on secondaries first and make sure
+that you're basically naming services
+don't use hard coded IP addresses don't
+use addresses that are going to change
+with reboots or with instances
+alright so that's basically the talk
+here's much resource take a look at
+MongoDB org always good MongoDB user
+group lots of people come through with
+performance questions lots of good
+information the community is very
+involved with diagnosing things you
+probably get a bunch of questions for me
+or someone else asking for iostat asking
+for vmstat free information about memory
+use learn unix utilities monitor the
+disc keep historic graphs use mms basic
+takeaways alright anyone has any
+questions feel free to walk up or yell
+at me I think as everyone leaves it'll
+be a little quite a little louder so
+microphone will probably good but go
+ahead and back so I can barely hear you
+something about file handle memory how
+much memory per file handle I don't
+actually know it's a good question we
+don't actually exactly have I mean the
+operating system loads files for us but
+we don't really hold on to the file
+handles so whatever the system default
+is that's what it is the maximum file
+size essentially per file as two
+gigabytes so that's stored I don't know
+if there's I think every handles the
+same size so i'm not sure that actually
+answers your question yeah
+so the question is do even way of
+calculating how much memory per session
+per connection so yes we have a way of
+measuring what each connection costs in
+terms of heap space and stack space but
+your application what you're actually
+doing with those connections can totally
+change so so every queer you do on every
+connection could return different amount
+of data if that's what you're asking so
+there's no way to average that or guess
+what it is I think you're gonna have to
+I think what you're really asking is how
+much throughput is your server going to
+be able to do based on the number of
+connections and that is something you
+have to test based on your application I
+can tell you that the stack size for
+connections is one megabyte so every
+connection is going to take at least one
+megabyte on the server but that doesn't
+really answer your question at all I
+don't think yeah yes so the question is
+for read ahead does that have effects
+and settings based on disk controllers
+and raid and all those things they all
+have different caches they all have
+different read a heads in fact if you're
+using soft raid and lvm they also have
+settings for that so harbour controllers
+have similar settings but not the same
+and not set it not being able to set
+like that but yeah it everyone has
+caching and that's essentially what
+they're doing is trying to read more
+data in the hopes that you'll use it and
+if you do use it then it's good but if
+you don't then it's costly yeah you've
+mentioned a bunch of tools to to analyze
+what's going on what if I'm stupid
+enough to be running by Mongo d on a
+windows box so there's a bunch of good
+tools there also we have a I would say
+there's a large number of people running
+Linux so that's what I sort of talked
+about windows prefer mertz von der has
+most of these stats I would maunder disk
+i/o dis cops latency cpu / process peak
+working set working separate process and
+I give you a long list but it's it's all
+the things you'd monitor anyway there's
+nothing really special in fact most
+administrators will be monitoring this
+stuff and
+way to hopefully and have you noticed in
+the field performance differences
+between running Mongo d on a unix box
+versus a windows box so yeah there are
+some differences the question is
+actually I guess everyone here you're on
+microphone but the difference is there
+going to be all kinds of things as I
+mentioned we memory map files so that's
+going to have a big role enter for
+interpret performance in Windows we
+actually just made some changes in the
+last release to make it a little to play
+a little bit better with the memory
+mapping in windows which is different
+than POSIX and Linux so it works a
+little bit better now before we used to
+have a constraint essentially that every
+time we mapped to file your virtual swap
+file had to be large enough to do that
+mapping because that's how Windows
+requires it and we've changed things a
+little bit which should make it better
+in general we don't do a lot of
+performance tuning and testing against
+the two so i cant giving you hard
+numbers but I've seen windows do well
+running Mongo d so I wouldn't discount
+it but I can't really tell you any hard
+numbers oh good yeah
+so the question or that the statement is
+we use log grip tape it didn't work very
+well looks to the naming the files was
+for so currently that is true we're
+actually going to be cleaning up
+logrotate to specify a mode which is
+more compatible with logs rotate so
+we've a logarithmic command and Mongo
+and you can send a user signal one to
+cause on Linux the log to rotate in the
+future will be changing the log rotate
+command probably adding another user
+signal to behave more closely to the
+UNIX logrotate utility currently there
+are some examples if you look at the
+user group about how to log rotate the
+utility and linux allows you to specify
+a bunch of settings it happen before and
+after log rotation and so there's a
+script that basically cleans up the file
+names a little bit and makes it cleaner
+but it requires essentially a copy which
+is not great but we're working on it
+yeah I mentioned it because it is a good
+utility and usually heaven on your
+system so it makes sense to use it it's
+just a little bit harder now than it
+should be yeah that does work like I
+said there someone spent the time and
+got this working with logrotate yep
+so the question is how does the foreign
+flash is there any optimization done for
+flash and SSD performs really well
+generally there's no optimization done
+most of it again is done the operational
+level so no it works well we have a page
+on the docks about SSDs it talks about
+it shows some characteristics
+performance numbers just sort of in
+comparison and it works really well yeah
+last question they'll take the rest
+outside yes
+so the question is do using does using
+replica sets in a shorted system improve
+query response and by default the
+answer's no because all queries are
+serviced by the primary member in the
+replica set if you want to turn on slave
+okay or read preference secondary
+queries meaning that you don't need to
+query the primary only exclusively then
+it could make a difference but you have
+to also have to think that unless he or
+disc bound or latency bound in terms of
+network problem i can have much of a
+difference because the working set or
+the types of queries that every replica
+is going to be servicing are the same so
+you don't get any special sort of cash
+isolation aside from the sharding part
+of it which you already have whether you
+use replic set or not the big draw for
+using replica sets which sharding is for
+reliability and availability and backups
+yeah actually let me take it outside
+yeah thank you all for coming by the way</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

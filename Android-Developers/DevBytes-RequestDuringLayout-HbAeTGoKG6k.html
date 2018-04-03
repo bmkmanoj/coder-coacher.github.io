@@ -1,0 +1,220 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>DevBytes: RequestDuringLayout | Coder Coacher - Coaching Coders</title><meta content="DevBytes: RequestDuringLayout - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Android-Developers/">Android Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>DevBytes: RequestDuringLayout</b></h2><h5 class="post__date">2013-01-11</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/HbAeTGoKG6k" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hi I'm Chet Haase an engineer on the
+Android team at Google today I'm going
+to do another show in a series I like to
+call you're doing it wrong now the demo
+you're gonna see is not code that I
+would like you to copy and paste in fact
+it is code that I would like you to not
+copy and paste don't do what I'm doing
+today instead it's a hacked up demo to
+show an egregious example of something
+that I have seen commonly in other
+applications and usually the effect is
+more subtle and being subtle it takes a
+long time for me to track down the
+problem but it all boils down to one
+single problem that a lot of
+applications share which is don't call
+request layout during layout and let's
+take a look at the demo and then we'll
+talk a little bit about why this is a
+really bad thing for your application to
+do and a good thing for your application
+to avoid so first of all we have this
+demo I have three simple buttons there
+there's an ad and a remove button and
+then a layout button when I click ad
+it's going to add a button to the
+container so that button should appear
+below when I remove it's going to remove
+the first button in that container if
+said button exists and the layout calls
+request layout on the container itself
+so it basically forces a layout
+so first I'll click Add and nothing
+happened
+but you'll see actually something did
+happen it's just that there was no
+visual change to the activity so if I
+call request layout forcibly on the
+container you can now see oh well that
+button actually was there we just
+weren't seeing it again I can call add
+again add another button and in fact I
+have to call request layout to actually
+see the button I can keep doing this
+over and over again and each time we
+actually add a button but nothing
+happens similarly I can click on the
+remove and a button disappears but the
+container actually should have shrunk
+around it and that simply didn't happen
+so if I call request layout the right
+thing happens again click remove the
+button goes away but the right visual
+thing didn't happen so let's take a look
+at the code and then let's chat about
+what's actually going on so here's my
+hacked up demo and again this is not
+necessarily the inst
+of what I have seen in applications but
+they all boil down to essentially this
+logic which is requests layouts are
+getting called somewhere either directly
+or indirectly during the middle of the
+layout process and that is the root of
+the problem
+so in this particular hacky demo we have
+click listeners on the buttons for the
+ad view button we set a flag that says
+hey I'd like it out of you and then we
+call request layout on that layout where
+we're going to add the view remove
+buttons similarly we set a flag and says
+hey I'd like you to remove one of your
+views and that we call request layout
+and then finally the layout button does
+forces a layout by calling a request
+layout on that container and that sort
+of restores the state that we thought
+the container should have been in when
+we did the add and remove operations
+here's the custom container it has those
+couple of flags in it and then it has
+this on layout override so on layout is
+a standard override from the view class
+so if you would like to do something
+special in your layout for instance
+linear layout overrides on layout and
+that's where it actually lays out as
+children horizontally or vertically to
+position them appropriately on the
+screen before returning from on layout
+so in here we say ok if there's a remove
+request pending then we're gonna call
+this method that says remove button and
+then all we're going to do is remove the
+first child if that child exists and if
+there's an ADD request pending then
+we're going to add a button and then
+we're gonna reset the flag and adding a
+button simply creates this button
+allowing the way sets the layout
+parameters accordingly set some text on
+there so we know which button it is and
+then we add the view so the the actual
+code to remove and add these views and
+set the properties and the layout params
+on all the views although that's correct
+the problem is that we're doing it in on
+layout we're basically in the middle of
+laying out the entire view hierarchy or
+some subset of it that needed to be laid
+out and that's the time when we actually
+call functions to add and remove views
+which are going to affect the layout
+itself so it's kind of a recursive
+problem where we're in the middle of
+doing something and we change properties
+that will side effect the thing that we
+are trying to do in particular and
+here's
+crux of the problem we're in the middle
+of laying out the container and so for
+instance we call super dot on layout
+that's going to call up into the code in
+linear layout that figures out where all
+the children should be and then we're
+going to go ahead and add or remove
+children after that call and when layout
+is done for any particular node in the
+view hierarchy it's going to clear some
+flag saying I'm done with layout so
+what's going to happen is we're going to
+either add or remove views in this code
+and then we're going to return back to
+the superclass the actual layout call on
+the view and the view is going to say
+okay I'm done with layout and then it
+continues along with its life meanwhile
+these guys have been added here and they
+have not had the proper side effect on
+the sizing and positioning information
+of that view so they have requested
+layout which is a side effect of calling
+add or remove you but that request
+didn't propagate because we're already
+in the middle of doing layout and
+figured we were done when we finished
+that layout call so there are there are
+many different ways to do this I have in
+this demo picked probably the worst way
+to do it the easiest way for you to
+actually do this correctly in this
+particular hack hacky demo is well
+instead of actually setting a flag and
+then forcing this thing to happen within
+layout the correct thing to do would
+actually be for example to call my
+layout add button directly in that code
+get rid of these horribly offensive
+lines of code similarly a remove button
+you could call my layout remove button
+and get rid of this hacky approach to
+doing it now this is rather obvious as I
+said this is a hacky demo that that
+shows the most obvious example of this
+but we've seen other things that are
+quite similar to this we're in the
+middle of someone's measurement or
+layout code someone goes ahead and does
+things that are side affecting the stuff
+that the entire view hierarchy is in the
+middle of dealing with you will see an
+approach to this in ListView and adapter
+view in some of the internal classes and
+I've seen some some custom classes that
+do things similarly externally where the
+correct approach if you really for some
+reason need to do this in the middle of
+that code say you're a ListView and your
+recycling views
+and things do get added and removed
+during layout one of the things you
+should keep in mind is that there are
+add view during layout add view in
+layout and remove you and layout these
+are the methods to call if you're
+actually doing these things during the
+middle of layout but the most important
+thing to remember is when you finish
+layout all with the measurement and
+layout information for that container
+should be done it should be complete
+which means if you're adding children
+during the middle of layout you do need
+to make sure that your measurement
+information and that of your children is
+all correct by the time you return from
+layout because that's what the rest of
+the view hierarchy expects so don't do
+it like I did it actually do it
+correctly instead and don't do this
+stuff during layout or if you do do it
+the correct way and make sure that when
+your layout for your container finishes
+everything below it is handled correctly
+so that the view hierarchy is in a
+consistent state with your container
+thanks</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

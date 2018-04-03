@@ -1,0 +1,230 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>DevBytes: Bitmap Allocation | Coder Coacher - Coaching Coders</title><meta content="DevBytes: Bitmap Allocation - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Android-Developers/">Android Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>DevBytes: Bitmap Allocation</b></h2><h5 class="post__date">2013-01-31</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/rsQet4nBVi8" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hi I'm Chet Haase an engineer in the
+Android team at Google
+I work on graphics and animation stuff
+and today I wanted to talk about the
+topic of bitmaps in particular I want to
+talk about bitmaps and garbage first a
+history lesson might help prior to the
+3.0 release we managed bitmap memory at
+the Native level the VM knew about it
+but it really didn't manage it and you
+in your application were responsible for
+calling recycle to very actively manage
+that when you're done with bitmap you
+call recycle that gets rid of the memory
+otherwise you may run out of enough
+memory enough native memory to allocate
+another bitmap so this is a very careful
+things that think that applications
+needed to manage very tightly we decided
+that it would be a little bit better for
+everyone if we actually manage that for
+you and we brought the bitmap memory
+back into the VM along with the rest of
+the memory that the garbage collector
+manages so now when you allocate memory
+for a bitmap we allocate it on the
+virtual machine heap and then we know
+when references to that memory are gone
+so that we can collect it appropriately
+in particular when a reference to a
+large bitmap goes away and you want to
+allocate another bitmap then we can see
+that while there's no reference to this
+other one there we can collect it in
+order to make room for the new one that
+needs to come into the heap at that time
+so all of this is great except that it
+gets into situations where maybe the GC
+is going to be triggered more than it
+was before because you're not managing
+your own memory manually instead we are
+managing that memory for you and we
+manage memory by having the garbage
+collector kick in and collect things
+when it needs to if there's not a memory
+in the heap we'll collect stuff that
+needs to be collected including large
+bitmaps now the trick to this is that
+large amounts of memory can be more
+expensive to collect and large heaps are
+more expensive to collect so if there's
+large pieces of memory due to bitmaps
+constantly churning through the system
+then you're we're going to be collecting
+memory for them a lot right if you're
+constantly like on every frame I saw an
+application like this recently where on
+every frame of every animation
+they were loading a new bitmap and
+getting rid of the old one and in the
+old system they would actively manage
+this and call recycle and the other one
+would be loaded in place and and life
+was good but as of 3.0 that meant that
+the old one was on the heap the new one
+wanted to be on the heap there wasn't
+enough room for the both of them and so
+it needed to collect from the first one
+relatively expensive garbage collection
+to then load in the second one next
+frame around same thing needs to collect
+the old one to make enough room for the
+new one
+now that's a reality of dealing with
+memory management garbage collectors and
+it's it's decent enough but there's
+actually a really good way that you can
+work around that problem and in
+particular if you're working with
+bitmaps that are exactly the same size
+which this particular application was
+then you can actually reuse bitmaps so
+you can have one bitmap that everything
+gets loaded into along the way and save
+yourself some serious garbage collection
+and performance along the way so let's
+take a look at a quick demo I call this
+demo bitmap allocation and it's a
+picture viewer I have some pictures that
+I've loaded up in the background and we
+can click through these and see these
+other images and each one of these
+images is getting loaded on the fly as
+we go through that just for the purposes
+of this demo and then I print out the
+number of milliseconds that it took to
+load each of these images up at the top
+so these loads took 290 326 304 340 320
+so a little non-deterministic based on
+you know what else is going on in the
+system and how long GC is took and stuff
+like that
+now if we reuse the bitmap then again
+this is a little bit hard to see because
+the numbers can be a little bit erratic
+but what I see in runs that I've done at
+least on other devices is a savings of
+in general about 10 to 20 percent which
+is not bad if you're talking about 300
+milliseconds interframe saving 30
+milliseconds is a big deal now ideally
+you'd actually find a better way to load
+these images than loading them on the
+fly when you're ready to draw them
+that's not the best way to go about it
+but the the point of this demo is more
+to show the raw amount of time that it
+might take to load these things and a
+lot of that is the garbage collection so
+let's take a quick look before we look
+at the code we can take a look at a log
+that I ran right before this where I was
+what happened before and after I checked
+that little box that said we use the bid
+map and here's what we get let's see
+here's what we got before I check the
+box is nothing right this this was the
+output not the GC output above but this
+output here is what we saw when we reuse
+the bitmap but when we're not reusing
+the bitmap this is what we see right on
+every frame we're incurring potentially
+very expensive garbage collections some
+of that runs in parallel but we still
+have pauses of 21 milliseconds for Alex
+3 milliseconds here 12 milliseconds
+there if you imagine that a 60 frame per
+second application only has 16
+milliseconds in order to draw each frame
+these numbers are huge you really want
+to avoid them if you can so how do we do
+that
+we use bitmap factory options so let's
+go in here take a look at the code this
+is the bitmap application code and here
+we have the checkbox that determines
+whether we're actually going to do reuse
+or not and in here we're going to create
+our bitmap that gets reused on the fly
+so first of all we're going to decode
+the initial image that we start with
+this application does assume that all
+the bitmaps are the same size and this
+is a restriction with reusing the
+bitmaps with this API is that it will
+only work for bitmaps of the same size
+so we get the size of the initial bitmap
+and we get only the size we don't force
+it to actually load that bitmap yet by
+using the in just decode Bowden options
+and that will return the width and the
+height that we can then use in our
+create bitmap call so we use the the
+width and the height that we need to
+sort of get this sandbox we're going to
+load all these things into then we reset
+that flag and we set the in bitmap flag
+and that is the new API that was
+introduced in 3.0 at the same time as
+the other change to the memory
+management of bitmaps and we set that
+equal to this sandbox bitmap that we've
+just created and then we set the in
+sample size to 1 and this is unnecessary
+an unfortunate bug that got fixed in a
+recent release where if you didn't set
+the sample size it wouldn't do the right
+thing so
+do need to set it to what would be the
+default option in sample size of one and
+then we decode the resource and away we
+go so now we're in our click listener
+every time you click on the image we're
+going to load in the next image and
+we're either going to reuse that bitmap
+or we're not so if the checkbox is
+checked we're going to reuse the bitmap
+and we're going to do that by saying the
+bitmap options equals these options that
+we've created above which has this in
+bitmap parameter set in it which tells
+it's a trigger to the code to say okay
+this is the sandbox where I'm going to
+actually load this new bitmap into and
+so we set the in bitmap flag there and
+then I was just issuing some timing
+because this is how I produce the the
+times that are spit out in the UI so we
+can see how long these things take
+we then decode the resource and that
+will either reuse the bitmap or not
+depending on whether we set the in
+bitmap parameter above and then we set
+the new image bitmap in the image view
+finally we get the final time that it
+took and display that in the UI and
+that's it not very hard to use but
+definitely worth using especially if
+you're in the case where you're
+constantly loading in new bitmaps and
+those bitmaps are the same size as other
+bitmaps that you're now done with this
+basically allows a garbage collector to
+get out of the way because there's
+nothing to collect if you're loading the
+new bitmap into the place of the old one
+so check out bitmap options in
+particular in bitmap and save some grief
+over garbage collection times thanks</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

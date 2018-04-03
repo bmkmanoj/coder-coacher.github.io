@@ -1,0 +1,529 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Path to Transactions - WiredTiger Timestamps | Coder Coacher - Coaching Coders</title><meta content="Path to Transactions - WiredTiger Timestamps - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/MongoDB/">MongoDB</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Path to Transactions - WiredTiger Timestamps</b></h2><h5 class="post__date">2018-02-15</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/mUbM29tB6d8" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">all right so now you guys know MongoDB
+is working toward transactions and we
+put this little video series together to
+walk through some of the technical
+implementation of projects leading up to
+transactions I'm Ali Cabral I'm a
+product manager on the core server I
+focus mostly on distributed systems so
+replication and charting and I'm Michael
+with me who's the director of
+engineering first storage and and he's
+gonna introduce himself and walk through
+what we're gonna talk about today thanks
+Ali
+so my name is Michael Kyle I've been
+working with databases for over 20 years
+and I have a background in transactions
+and transaction processing I did a PhD
+on efficient processing of transactions
+while making sure that applications get
+correct results and I started a company
+co-founded a company in 2011 with Keith
+Bostick in Boston called white tiger in
+2014
+white tigers started working closely
+with MongoDB and realized that we'd
+solved some of the problems in the
+storage engine that MongoDB had in its
+database that led at the end of 2014 to
+mommy to be acquiring Y tracker and the
+white tigers team coming across and
+joining one where DB I'm pretty soon
+after that we started having a
+conversation around transactions because
+why Tiger is a transactional storage
+engine and so very quickly the question
+came up is like how hard could it be to
+make the whole of mommy to be
+transactional if the storage engines are
+already providing transactions
+internally how hard did that turn out to
+be well so that's really what this talk
+is about it turns out that there are
+still some pretty hard problems to solve
+and really that's what we've spent three
+years working on and so what I'm gonna
+talk about today is is some of the ways
+that we've tied together moment eby's
+requirements for transactions with
+functionality in the storage engine and
+really the this all comes together
+around the idea of time stamps in wire
+tiger so I'm gonna explain what they are
+and some of the things we can do with
+them okay so the issue is that we do B
+is a distributed system and the
+replication layer in MongoDB writes
+individual operations as they happen
+into something called the OP log which
+is a special collection inside being
+short for operation log the operation
+line
+and the order of operations that appears
+in the op log is really important for
+the correctness of the system as a whole
+if each node in a replica set doesn't
+end up with the same operations in the
+OP log in the same order then they'll
+end up with different versions of data
+and that's a huland to the data just
+being corrupted or lost so the OP log in
+in MongoDB implies a certain ordering of
+operations but traditionally in storage
+engines the storage engine itself has
+its own idea of ordering so this is
+called concurrency control and wire
+Tiger provides a version of concurrency
+control called multi-version concurrency
+control whereas the operations are all
+happening in parallel the storage engine
+gets to decide what order they're
+recorded in in the journal underneath in
+the storage engines idea of the ordering
+and the journal is important in terms of
+what values can be seen so what Burt
+what values are read by by queries but
+also what values survive if there's a
+crash so if the order in the applaud as
+you can see here one hundred hundred one
+hundred and two is different from the
+order that the storage engine records
+here you can see one hundred and two
+comes before one hundred and one
+this can lead unless we do something
+else this can lead to replication not
+getting correct results right so what
+we've done in white tiger is really
+really tected from the ground up to
+allow this ordering that is determined
+here by Moni DB to be reflected all the
+way down inside the storage engine and
+before making these changes in wired
+Tiger we had to deal with this at the
+replication that's right so we had some
+fairly complicated code up in MongoDB
+that was tracking what operations were
+in flight and controlling how threats
+could read the OP log so part of what
+we've done with timestamps is allowed
+all of that processing to be pushed down
+inside the storage layer where it can be
+handled more efficiently
+and so to give you an idea of what it
+means to react attacked wire tiger from
+the ground up I want to talk just a
+little bit about some of the data
+structures we use to represent data
+inside wire tiger so when you store
+documents in a collection in MongoDB
+there can also be indexes associated
+with that collection and all of that
+data the documents and the index entries
+are stored inside a tree in in cache so
+this is why it is kind of primary data
+structure is this kind of tree an inside
+a tree are keys that allow you to
+navigate around and then you find leaf
+pages here that have keys and values
+together and these values might be the
+Beeson for a document or they might be
+the the index entries that are used to
+store indexes and anytime one of those
+things is updated so if you change a
+document or you insert a new document we
+create one of these things that wire
+tagger calls an update structure and an
+update has incited some information
+about the transaction a link to the next
+update in order and the the data that
+was changed as part of that update and
+when reads come in and and they need to
+figure out what should value should be
+returned wire tiger has its own internal
+logic about following these these lists
+of updates to return the correct one and
+this is the the basic mechanism of
+multi-version concurrency control that's
+been in white tiger for a long time but
+the change we've made is right here
+so we've changed this really fundamental
+data structure to add a timestamp or
+what we are calling a timestamp and this
+is a value that the application in this
+case MongoDB can pass in and and tell
+the storage engine what order of things
+should should happen in so now MongoDB
+can send this down to the storage layer
+and the storage layer will respect that
+time as something valuable that it
+should like respect exactly right so so
+Mangal you can can do two things it says
+the order as the updates happen and then
+what it can do is ask to read
+as as of one of these time stamps so
+then if you query as all the time stamp
+wire tiger we'll make sure that you see
+exactly the values as they were at that
+time and this is true even if there are
+lots of operations going on in parallel
+and some of these updates arrive in a
+different order or they're installed in
+a different order by wire tiger then the
+time stamp order the time stamp is still
+used to guarantee correct results so
+we've really changed right down at this
+fundamental level we've made changes
+inside the storage engine in support of
+transactions and so now I want to move
+on a little bit to talk about some of
+the things we can do now that we've got
+this time stamp mechanism in place so I
+mentioned that when will you be created
+up log as operations are applied on a
+primary and then the applaud is what's
+used by replication to get that data
+onto multiple nodes so each replica set
+node reads the OP log from the primary
+and build up its own local copy of the
+up log and then it has to apply those op
+log entries on the secondary in order to
+bring the collections and indexes up to
+date and the way this is done is by
+breaking the OP log into batches so we
+take some set of records that are
+together in the OP log and we split
+those records up amongst multiple
+threads here and apply them in parallel
+the reason we do any multiple threads is
+that if we do it in just one thread it
+can't keep up with all of that work
+that's going on on the primary so we
+have these multiple threads here and we
+have a clever technique for sharing this
+work out amongst these threads so that
+most of the time if we have related
+updates they go to the same thread and
+they end up being applied in the same
+order on the secondary however across
+these updates they can apply out of
+order so you can see here that what
+although the uploads in the expected
+order 100 hundred and 102 that the order
+that the threads do the work is 101 100
+and 102 so there's a different order
+again to maybe what was in the journal
+and each of these entries in the op log
+represents a modification in the
+database exert an update to your data
+exactly right yeah so so they they can
+be a field update or a new document
+being inserted or various other kinds of
+updates and and applying them can both
+change the documents on the secondary
+but also change the indexes right and so
+the there are several things that we can
+now do that now that we're labeling all
+these changes with timestamps
+one of those is that we can resolve this
+difference in ordering for queries so
+when a query comes in even though these
+these have been applied out of order
+what wire targets time stamps allow you
+to do is come in after the fact and do a
+query as of timestamp 101 say and wire
+Tyga will show you the right things
+they'll show you the changes update in
+location 100 and 101 but it won't show
+you this one here in 102 so you never
+see 100 and 102 without 101 right so
+you're always making sure you're seeing
+a consistent state of the data exactly
+and that then solds some problems that
+have that have kind of been
+long-standing issues in terms of the way
+white the moment eby's replication works
+so let me talk a little bit about one of
+those so I said we split the up log up
+into batches and each batch is applied
+by multiple threads and the batch
+boundaries have typically been
+identified with with locks so as we are
+applying this batch here mommy to be
+internally is holding a global lock for
+that that period and what that means is
+while we're applying these things reads
+execute on on a secondary because it
+wasn't safe because you could get an
+inconsistent view of the data because
+the order of the batch application is
+not guaranteed in any way exactly right
+and so what we've we've guaranteed that
+reads are correct on secondaries using
+locks until now but what that means is
+that at these batch boundaries first of
+all the reads
+to wait for the batch to complete but
+also if the reads themselves take a long
+time then replication itself slows down
+because it has to wait for these reads
+to finish on the batch boundary before
+the next batch can start which could
+lead to replication lag absolutely yeah
+and so one of the things we're we're
+addressing inside the storage layer and
+with replication is allowing reads
+inside this previous batch so here in
+batch one once it's completed and we've
+moved on and we're applying but things
+then batch 2 here all of the changes
+inside batch 1 have been applied and
+they have time stamps so it's now safe
+to read inside there up to this time
+stamp of the the batch boundary and and
+correct results will be returned and
+that means where we're moving towards a
+world where we can read on secondaries
+without any locking at all right but you
+wouldn't see any changes in the batch
+until all of the batches can see that's
+right so we apply all of batch one and
+wait for all the threads that are doing
+that work to complete all of their work
+before they move on to batch two and
+then the reads can can start reading in
+this range here for between the time
+stamps at the beginning and the end of
+batch one now one of the specific
+problems that we've we've had to resolve
+in in this code path relates to indexes
+so even though I said we split up the
+work among threads and we have a clever
+way of sharing that work out it can
+still happen that two different threads
+are working on documents that have the
+same unique index key if you if you
+declare a unique secondary index and so
+one of the things we've we've had to
+figure out is how to make it safe to
+read during that batch if there were
+collisions on a unique secondary index
+key and that's involved a change to the
+format of indexes to support those reads
+so there's been various projects in here
+to make all of this work correctly and
+provide you know correct results
+I'm personally really excited that we're
+going to be able to service reads during
+a PI ops on secondary yeah likewise I
+think I think it's it's gonna improve
+things for our customers but it's also
+going to improve some things internally
+for some of the operations of only to be
+itself does perfect so the next thing I
+want to talk a little bit about another
+application of of time stamps is related
+to replication again but in this case
+it's what I want to talk about is
+replication rollback so to understand
+this we need to understand a replication
+concept which is the majority commit
+point so that's what I'm going to try
+and explain right now so as I said the
+up but the up log is built up on the
+primary as operations complete there and
+secondaries read the OP log and make
+their own copy and then they apply those
+operations but the secondaries are all
+at different points so you can see the
+secondary one here has applied up to
+this point of the op log secondary two
+has gone all the way to the end so it's
+up-to-date with the primary there's no
+lag and secondary three is is right back
+here so it's it's further back and than
+the other two and what we care about for
+the purposes of changes becoming durable
+across a replica set is what's called
+the majority commit point so this is a
+point where we we know that a majority
+of nodes in the replica set have all got
+that op log entry and that's important
+because you know that point will never
+be rolled back and it's safe and secure
+in a case of an election or a node
+failure exactly right so once once we've
+reached that point and and I'll show you
+where it is here so here you can see the
+secondary one has this one secondary two
+also has that same upload entry and even
+though secondary 3 doesn't have it still
+a majority of nodes are up to this point
+so this is our majority commit point in
+this in this scenario and and yeah
+exactly as you said that's the point
+where we know no matter what happens in
+terms of how you've configured your
+systems to hand
+different kinds of failures any of those
+failures can happen and no data older
+than this point will will be lost
+whereas some of these other updates that
+might have been in flight on the primary
+but haven't yet been copied over to a
+secondary if you pull the power on the
+server that's running your primary then
+you could you could potentially lose
+these updates yep
+so the reason this matters is because we
+we can lose that history so if a primary
+does go down so this is here used this
+node on the left here used to be the
+primary if it goes down and then comes
+back up again
+in the meantime typically what's
+happened is some other node in the
+system has become the primary of that
+replica set and when the old one the old
+primary comes back up to rejoin the
+replica set it figures out that it has
+some history here that's no longer part
+of the new replica set so it's no longer
+a valid history exactly right so these
+are these are those kinds of rights that
+were accepted locally on the primary but
+they were never replicated so they
+weren't part of that majority commit
+point and the process that happens now
+is that this primary has to get in sync
+the old one has to get in sync with the
+new replica set with the new history so
+if this one crashed and came back up
+online and now needs to resync to the
+replicas that in order to be a
+productive node that's right and so in
+order to do that what we have to do
+essentially is to undo this part of the
+old history and then we can catch up we
+can get the new history and roll forward
+and catch up that way but it's not just
+as simple as chopping off the OP blog
+and getting the newer blog and rolling
+forward because we've also made changes
+in here associated with these these
+operations and the way that replication
+has handled that up until recently is to
+have to refresh the documents that were
+modified by this part of the history so
+it goes off in requests from some node
+in the replica set copies of those
+documents and then it can be sure that
+any of those changes have been
+not included in those documents and it
+can roll forward the op log and catch up
+that way but that process of refitting
+documents and also just the code
+involved in in maintaining that path is
+quite complicated code and what we
+realized is that what now that the
+storage layer knows about transactions
+and knows about timestamps we can just
+have it go back to this point so what
+we're what we're doing right now is
+transferring responsibility for part of
+that rollback process into the storage
+layer and what replication can say is it
+tells the storage layer as it's running
+what that stable point is what that
+majority committed timestamp is and why
+our tiger will make sure that change is
+more recent than that stable point are
+not written to disk so in fact what
+we've done is changed regular
+collections and indexes down here to not
+use journaling at all in this scenario
+so instead what they do is as
+checkpoints are running in white tiger
+it makes a copy on disk a point-in-time
+copy on disk of the collections and
+indexes at some timestamp and so there's
+a consistent point in time version of
+that data on disk that replication can
+use to roll forward from so this has a
+number of benefits it makes that that
+process of replication rollback more
+efficient it it eliminates some
+complicated code that we've had to
+maintain up them up until now and as a
+bonus which really wasn't our goal but
+as a bonus associated with this we're
+actually only writing 50% as much data
+to the journal so for applications that
+are high-throughput doing lots of
+inserts or updates this should have a
+significant performance benefit in terms
+of how much journal data we're writing
+that's great yeah so um I guess to
+summarize some of what I've talked about
+we've made these changes in wire tiger
+to support time stamps which means that
+the notion of ordering can be supplied
+to the storage layer from MongoDB from
+outside and based on time stamps we've
+been able to simplify and improve the
+way that a whole lot of other parts of
+the system work from parts of index
+maintenance replication the way we do
+rollback here so there have been a whole
+lot of of knock-on benefits from adding
+this kind of making these changes right
+down at the lower level inside white
+tiger amazing what's next well so once
+once we deliver the the transaction
+project and we have transactions working
+we know there are some other areas where
+we can make further improvements so one
+area where we have plans is to improve
+indexing and at the moment you need to
+choose when you use MongoDB whether to
+do your indexing in the foreground or
+the background and there are advantages
+and disadvantages to going either way we
+have this idea that would allow us to
+kind of combine the best of both worlds
+there and and allow you to build indexes
+online but with the some of the
+advantages you get from foreground index
+builds today so that's that's definitely
+on our roadmap another area that we're
+planning to work on is to allow
+long-running reads as all the point in
+time so initially the design point for
+transactions is for relatively short
+running transactions but we know that
+some customers want to be able to start
+a query at a point in time and query a
+really large volume of data that's going
+to involve more kind of low-level work
+inside the storage engine to make that
+work and make it efficient but that's
+you know hype sort of priority task for
+us once we get transactions over the
+line yes sounds like a lot of work but
+seems like you're cut out for it I'm
+glad we have you um well thank you so
+much Michael for walking us through this
+I think this is really incredible and
+I'm excited for transaction thank you
+thanks Alec thanks guys</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>
