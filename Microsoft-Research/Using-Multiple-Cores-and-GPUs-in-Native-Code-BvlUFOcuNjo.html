@@ -1,0 +1,1519 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Using Multiple Cores and GPUs in Native Code | Coder Coacher - Coaching Coders</title><meta content="Using Multiple Cores and GPUs in Native Code - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Microsoft-Research/">Microsoft Research</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Using Multiple Cores and GPUs in Native Code</b></h2><h5 class="post__date">2016-08-08</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/BvlUFOcuNjo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">materials supplied by Microsoft
+Corporation may be used for internal
+review analysis or research only any
+editing reproduction publication
+reproduction internet or public display
+is forbidden and may violate copyright
+law
+my name is Adam Eversole and I've been
+around these parts in Microsoft for
+about 24 years now started out in the
+applications group and my wife's calling
+me for some reason just say go fix that
+all right so I've been here for a while
+I've been in ADT the advanced
+development team here in research for
+the last 10 years one of the first two
+guys that started all off under Gavin
+known as Gavin's group by many anyway
+I'm here to talk a little bit about
+parallel exploiting parallelism and
+native code so everything here is going
+to be about C++ ish stuff so I'm not
+going to really touch on anything from
+c-sharp there's enough to go over and
+native code land to take at least the N
+hour and a half that I have so without
+further ado we'll get underway and the
+reason why I'm giving this talk one of
+the reasons is because I have recently
+been working on machine learning project
+where we are using multiple GPUs per
+server in order to speed up training so
+I've learned a lot about this and I am
+very interested in the topic so I
+thought I'd give a talk on it first of
+all we don't we don't just use GPUs or
+what I call it like to call accelerators
+in fact the the cards that we use in the
+servers to speed up our application for
+training don't even have display ports
+on them they're there Tesla cards and
+that's their only purpose in life is to
+be accelerators and
+so first of all we want to have we have
+some kind of problem we want to we want
+to solve and in order to optimize any
+application you have to start with the
+understanding the problem well and then
+getting some sort of design and code
+code the solution and once you have a
+working solution then you start
+optimizing it it may be that depending
+on your application you can't use you
+know by Tesla GPU cards because they
+just aren't available but depending on
+what hardware capabilities and
+limitations you have you that let you
+decide what type of optimizations you
+can do as far as paralyzed paralyzed
+paralyzed encodings a best way to what
+best method to make the code parallel so
+I'm going to take a sample problem which
+everyone understands pretty well matrix
+multiply so I think everyone understands
+how to do a matrix multiply row times
+column gives you the cell that you're
+looking for so it's pretty well
+understood what what the problem is here
+I'm going to be using square matrices
+for everything even though that's not
+necessary because the application that I
+use generally uses square matrices it's
+in the hidden layers inside of a deep
+network neural network model the all the
+hidden layers use large square matrices
+as as a place to hold all the state for
+for the model so you can look at this
+either as a summation or if you prefer
+the vector notation and it's the dot
+product of the row and the column
+so first of all you come up with the
+coding solution for whatever the problem
+is here's the naive solution the one
+that probably all of you could code
+without thinking about it you just go
+through the rows and the columns and you
+multiply them together and you put it in
+the resulting matrix so there's not not
+too many mysteries there here's the main
+line that does all the computation so
+once we get something that we know works
+and follows the algorithm that we
+understand
+then we can start thinking about what we
+can do to improve it so the first thing
+you probably want to do is using some
+reasonable data set something that's
+like what you're expecting to be used on
+your algorithm use tools such as
+profilers and other tools that are
+available to find the hotspots and find
+the places where you can optimize the
+solution so do use a profiler in this
+particular case it's not very
+interesting because there's not a lot of
+calls it's one call so if I'm using
+instrumented profiler I get one call and
+100 percents in there but in a real
+application
+there's many you look at the profile and
+you find out where where all the time is
+being taken and that's the part you
+optimize everyone's heard of the 8020
+rule you know 80% of time is spent and
+20% of the code and that's the part that
+you want to optimize
+and you have to think about processor
+architecture where I'm going to be
+talking about multiple types of
+processors here we have our intel type
+processors that have huge amounts of
+cash and are optimized to do things
+really quickly have high clock speeds
+and then you have GPUs which are the
+other end of the spectrum I mean regular
+CPUs do branch prediction and they have
+all this all the silicon to make things
+as quick as possible for sequential code
+GPUs on the other hand have very simple
+cores but they have lots of them so
+they're optimized in a different way and
+you have to program for these things in
+a different way and you have to look at
+the the hierarchy of where the data
+comes from if you follow the data in
+application you'll often find where you
+need to work paying attention to the
+data hierarchy is important because as
+you all know as you go down the data
+hierarchy things get faster by orders of
+magnitude disks you don't want to hit
+them at all if you can help it
+even with the new SSDs the if you have
+to go get something off disk it's going
+to be orders of magnitude slower than if
+it's a min main memory and again if it's
+if you can get it from cache that's
+going to be orders of magnitude faster
+than if you have to go to to main memory
+and newer newer implementations of
+processors that have multiple cores
+often have at least two if not three
+levels of cache on chip here's a diagram
+of an i7 actually yeah this is i7 cache
+architecture so the high sevens have l1
+cache that split into instruction and
+data cache 32k of each then you go to l2
+cache which is data and instruction
+combined 256 K then you have 8 megabytes
+of l3 cache which is
+shared among all four pores so
+understanding the the architecture and
+what you have to do to keep things in
+cash can make your application faster
+especially if you're dealing at with
+algorithms that are going to be executed
+billions of times so so what you want to
+do is make sure that your algorithm
+doesn't is cache friendly and won't
+throw things out of cache unnecessarily
+so you want to stay in l1 if you if you
+if you can if not that then try to stay
+in l1 and l2 on the same core and then
+if you get down to l3 it gets a little
+bit slower if you have to go to main
+memory because it's not in l3 your your
+performance just plummets cache lines
+are 64 bytes nowadays on the the most
+common architectures so keep that in
+mind so micro processors are you
+probably know haven't haven't been
+getting faster here for the last eight
+years or so they just decided to add
+more cores instead so three four
+gigahertz is about the fastest you'll
+see mainly because of power constraints
+if you crank up the as anybody who's
+overclocked a CPU knows if you crank up
+the the clock speed it's going to hurt
+you and you get the kulit quite a bit to
+make it work at all so they've pretty
+much stopped making them faster and just
+the transistors still accumulate but
+they're going to other cores and cache
+and other things like that so Moore's
+law still continues transistors are
+still expanding on the normal curve but
+they're going to multiple cores instead
+of faster clock rates and things of that
+nature
+and we're going to have to if you
+haven't already figured this out you
+have to program differently when you
+have four cores than if you only have
+one so optimizing the algorithm in this
+particular case we're using matrix
+multiply and before we even get into
+paralyzing something it's best to get
+the best thing done on one thread that
+you can so in order to optimize this and
+make it more cache friendly if we look
+at the algorithm we notice that we're
+going through an entire row and entire
+column each time if our matrix is very
+large we're just going to blow
+everything out of cache before the next
+iteration and we're not really utilizing
+cache as efficiently as we should be and
+one of those matrices also happens to be
+if they're both row major then one of
+them one of them will be you know
+sequentially accessed the other one will
+not be it will be you know once every
+however many columns there are and in
+that matrix you'll be accessing it in
+that fashion so the cache utilization is
+pretty low and especially in the when
+you are going column by column assuming
+where it's C++ so we got row major
+matrices or arrays so the first thing we
+want to do is segment the algorithm into
+chunks that are cache friendly do each
+chunk one at a time and then you know do
+the rest of the algorithm later to add
+up the chunks properly and the matrix
+multiply algorithm fits very nicely into
+this we can do we can do each we can
+take a chunk of the two matrices that
+were multiplying together and just do a
+sub multiply pretend like they're two
+smaller matrices and do the operations
+in in just that little chunk of the
+matrix and put the result and
+location we know it's going to be in the
+resultant matrix and then the next time
+next to chunks we do we just add to
+whatever is already there in the
+resultant matrix and everything works
+out fine and when you're picking your
+block size you think about what the
+cache cache line size is of the
+processor and that's the size or close
+to it that you want it to be so for our
+matrix multiply example this is a very
+small one but you get the idea we chop
+it up into equal sized chunks and we'll
+take that row of that chunk times the
+column of this chunk to make and we'll
+do a regular milk matrix multiply on
+those four elements put the result here
+then to completely compute that
+particular result in matrix element it
+won't be done until we do this row times
+this column and that chunk and add that
+in to the resultant result matrix so you
+do instead of if you could think of this
+as a four by four matrix and now we're
+doing it doing the same with matrix
+multiply thing but we're doing it you
+know that chunk times that chunk this
+chunk times this chunky you do all the
+combinations just like you normally
+would in a matrix and multiply and you
+end up getting the same result the same
+number of operations as you would have
+if you had done it the normal way yeah
+he's laid up memory those are you
+playing out the chunks into you asleep
+there's much like I know exactly ticket
+so you're um so the it's just this is
+basically you know stored this way and
+in memory just it's just one continuous
+chunk of memory what exactly exactly and
+and if we do it right then even though
+even though this one up here you know
+it's probably it's real major so it
+stores it across the rows just
+contiguous memory so we're actually
+pulling in four lines of cash to get
+this up here and another four lines to
+get it down here but if we do it in the
+right sized chunks and the next
+operations over here are done in the
+right order those will still be in cash
+by the time we get around to him so
+that's yeah you could actually just
+rotate this to trance trance position on
+the matrix before you even start and
+then there they'd all be contiguous in
+memory that's another that's you can do
+that in addition to it
+so for me that's for audio Chinese right
+so you seem enough to blow like that
+concur enough to go when you want to be
+ready change
+you have to load hurt me sorry sorry I
+don't understand at all so so so if the
+memories grow wise or fun and wife you
+still want to take those sub chance yeah
+you still want to be the subjective
+right um I think I think what he was
+saying was if you actually just
+transpose this matrix then you're going
+to get this column now becomes a row so
+instead of taking eight cache lines to
+store this you only take two if these
+are if they're in a single point there's
+floating point single precision floating
+point then you can fit four floats in a
+cache line we write it like when you
+when you reach the end of within a chunk
+of you're not looping back into your
+next chart and you come back to me at
+the end of the current inaudible yeah
+yeah you're probably right there's
+there's there's actually a lot of other
+other things I could have done to you
+know super optimize this I didn't do all
+those because I have a lot of other
+things to talk about but the the concept
+is you want to get you want to be
+efficient with cash and in order to do
+that you want to think about locality
+and you want to do things in the same
+area as much as possible so that the
+things you just accessed if you're going
+to access them again and matrix multiply
+is a good example because you look at
+the same elements over and over and over
+again the same row you know as many
+times as there is columns and so on and
+so forth yeah
+you have within each of these images we
+have you have four sub interestings
+right each which is its own kind blog
+and now you only have that you're
+accounting for two chunks instead of the
+entire matrix yeah you're you only you
+only look at these and we'll get into
+some real code here in a little bit but
+actually does this so you can see what
+it does
+thanks the next line thing it is okay so
+this isn't the most efficient algorithm
+but it fits on a slide and it's a lot
+better than the last one so now you can
+see instead of only three layers now we
+have six layers however the number of
+iterations is exactly the same as it was
+last time
+so you'll notice we have a block size
+that the cache size divided by the size
+of whatever type is coming in here this
+doesn't actually show you this but this
+is a template based on the type so this
+would be like double or a float or an
+int or something I'm using floating
+point in here because that's what I'm
+used to
+anyway these outside loops go up by the
+block size and the inside loops start at
+wherever the block is in the outer loop
+and goes up by the block size now if you
+don't end it has this men here so if
+you're not if it doesn't exactly fit in
+your block size which is probably pretty
+likely you're not going to be going off
+the end and hitting memory you shouldn't
+so that's these three inner loops I'll
+do that and then the internal stuff is
+exactly the same as the West last time
+and again you probably have noticed that
+I KN n don't change this loop so you can
+technically bring this outside of this
+loop and just increment it but I'm
+counting on the compiler to do some of
+that stuff for me yes
+the what the addresses that were
+actually so you you have this box size
+to make sure oh yeah
+so underlined access penalties and
+things like that
+yeah you'd want to pick your block size
+as some power to would be a good thing
+probably something by oh let's see
+whatever I got cash size / so this gives
+us actually 16 I think which in most
+processors today works out pretty well
+so the yeah you have to think about
+alignment as well depending on the
+processor you have a bigger a bigger
+penalty for if you are accessing on a
+line memory
+so here the block size is basically the
+cache point divided by the size of the
+time pressure you have to worry that you
+know your address actually maps to the
+first in your cache line or Kin Kin the
+addresses where you actually start
+getting mapping you know meet way to the
+cache finer than you wrap around um I
+mean I don't finish line to wrap but
+there's an operation to say it I want to
+allocate a 2d array and it will give you
+a 2d array right it's aligned properly
+and and it made waste a little bit the
+edge of each stride just to make sure
+that you stay aligned but its own I
+don't know what is the same like anyways
+press the saying you know strive because
+might be longer than
+so that you have quite a line for us
+yeah you want you want the you want to
+do that if there and most processors
+have a penalty appear on like one bite
+off or something yeah so are you
+suggesting the cache size should be the
+size of your l1 data cache on that or a
+multiple of that I actually when I ran
+this it ended up that doubling or two
+times that value actually ended up being
+the bus so I just fudged the cache size
+up to 128 and it worked out better but
+that's a good starting point so you mix
+that I actually didn't I actually it did
+it did use some of the MMX instructions
+I'm not MMX whatever that yeah single
+instruction multiple data as I am I'm
+sort of whatever the sets called SS FCE
+I forget so this particular one is the
+cache friendly implementation oh and I
+forgot to run this stuff and let me run
+this can't do with that running it I've
+actually got the real code here so let's
+see I'll just throw it return in here
+right after okay so we're gonna compare
+these two
+so I'm doing 1024 by 1024 which means
+we're doing a million multiplies or no
+billion sorry so it takes so there's the
+top one it takes seven and a half
+seconds to do it the dumb way and one
+point two seconds yeah the smart way so
+it worked pretty well and we're still
+all single threaded we haven't gotten to
+any fancy yeah
+so it's a different estate no one L 2
+cache cache and Alfredo
+actually I tried to use the visual
+studio profiler to tell me that but it
+didn't work because everything's in one
+function and the instrumentation version
+instruments the function names and give
+in collects data but I only had one
+function and so it gave me like no data
+so it wasn't very useful if I had more
+time I probably use some other tool to
+try to get the l2-cache be tuned yeah
+I mean the the CPUs have counters that
+will give you how many cache hits you
+got versus misses so you can get that
+information I was trying to using our
+visual studio stuff but for this this
+example it didn't work out so well next
+thing is to understand whatever Hardware
+cans yeah we're gonna get to that yeah
+definitely this this is a toy example
+because I wouldn't do this for real I'd
+use mkl or coulis or something and in
+fact that's what we use in the real
+project is cout gloss
+I mean why reimplemented sorta been done
+right if somebody has done it and done
+it well just reuse it but this is a toy
+example so hardware constraints it
+depends on what platform you're on if
+you're on a phone you probably can't do
+as much parallel processing as if you
+know you're on a server and you know
+what your machines look like and you
+have Tesla cards in their machines or
+something like that
+so it depends on what your hardware
+constraints are a lot of phones nowadays
+are multi-core however and whether they
+let you get at the cores or not that's
+another story
+but most of the new phones are either
+dual or quad core processors under the
+covers PCs and tablets have been
+multi-core for some time now two to four
+usually and GPUs are usually connected
+to your PC's even though they're not
+used for very much at all most a lot of
+business pcs now have a GPU in them but
+you know they're not playing games
+hopefully most the time so the GPU is
+very commonly underutilized and if you
+can use that resource that's already
+sitting there if it's available to speed
+up your application why not
+if you're on a server of course you
+probably have lots of memories and lots
+of cores to deal with and you're in
+you're in a more constrained Hardware
+environment so you know what you can do
+and what you can expect to be there and
+there's custom environments like the one
+that I work in where I I know I've got 4
+Tesla cards so I've got you know
+thousands of cores at my disposal
+GPUs FPGAs Phi is the our fee I don't
+know how they say that that's the that's
+the new in I guess it's not that new
+anymore intel version they're trying to
+use general-purpose accelerator
+architecture so you I don't know if
+you've seen this graph before but this
+is actually how it went this only goes
+up to 2010 and the sorry the
+anti-aliasing there is messing it up but
+as you can see at least until then the
+transistors stayed on the state on the
+curve but our clock rates and you know
+kind of evened out here
+this is clock speed transistors clock
+speed power consumption and performance
+for clock right the four lines there so
+our free lunch has been over for quite
+some time now and we need to learn how
+to use all the cores that are are given
+to us so not only do we have the CPU
+cores to use but also GPUs connected to
+most of the machines nowadays and even
+some of the phones have GPUs on them
+that could be utilized if you can figure
+out how to get by the API constraints so
+using CPU plus GPU for a more efficient
+application is a good idea and something
+we should be thinking about more than I
+think we currently do
+so CPUs versus GPUs CPUs have always
+been optimized for sequential code
+because that's what they've always run
+and they get better and better at it and
+in order to keep up with current clock
+rates they've had to add more and more
+cash to to their chips if you look at a
+picture of an Intel chip which we will
+in a second you'll notice that a large
+portion of the chip is cash a lot of the
+transistors are going to cash that's to
+ensure low latency when you want the
+instruction when you want the data it's
+got to be there though either even do
+prefetching and speculative branch
+prediction and all this stuff to try to
+try to make things faster and they
+generally have high clock rates which
+means three to four gigahertz somewhere
+in there GPUs on the other hand are
+optimized for parallel code they use
+much more the silicon to create the
+cores the actual computation units then
+you get over in the more complex CPU
+cores they don't have that much cash
+they have a little bit now they didn't
+used to have very much at all but
+they're adding some some cash now
+they're made for high throughput so the
+memory bandwidth they'll go to you know
+256 bits 384 bit wide memory buses to
+get between the GPU and the onboard
+memory it's why they have onboard memory
+so they can get to it quickly it's high
+throughput they don't care so much about
+latency because after all it was a
+graphics card right and you didn't have
+to update it more frames more than once
+every you know 60 times a second 120
+times a second is is sufficient so you
+have a lot of throughput but the latency
+doesn't matter that much so that's what
+the GPUs were optimized for and they
+have lower clock rates keeps the power
+consumption down even at that they big
+run kind of hot
+so here's your Intel for core processor
+I think this is a high five as you can
+see this whole bottom section here is
+the l3 cache has eight megabytes of it
+and if you look at the cores themselves
+you'll notice these areas in here that
+are suspiciously suspiciously look like
+potential memory locations those are
+probably l1 and l2 cache areas and this
+is a virtual one but this is this is
+about what they look like if you look at
+the the real GPUs this particular one is
+the latest one from Nvidia it's got
+quite a few cores as you can see all the
+green ones are cores and it's got each
+one of the blocks is a symmetric
+multiprocessor which looks like this if
+you look at it closer so every one of
+these symmetric multiprocessors which
+there are 14 of on the K 20x is what
+this came from these are pictures from
+Nvidia 1414 USM X's so you have 2688
+cores on this card and it runs at 730
+megahertz
+roughly so not 3 or 4 gigahertz all
+right but you know not even one
+gigahertz but they don't really need
+they don't really need to clock up or
+crank up the clock rate so much it has 6
+gigabytes of memory on board so it can
+access it with with to get this 250
+gigabyte per second bandwidth and it
+does have some l2 cache 1.5 megabytes
+but that's nothing compared to like the
+8 megabytes that you'd see on an Intel
+processor and 64 K of l1 cache is shared
+now this is much different than what
+you're used to in a regular CPU because
+you pretty much need to manage this
+cache yourself
+and it's I say l1 shared because if you
+use shared memory which is most well the
+way most of the GPU code is written you
+will be consuming some of this and it
+won't be available for l1 okay so how do
+you use all those cores there's
+different methods of doing it one of
+them is libraries as you mentioned if
+you've got a library that does what you
+need use it mkl for example or lamb pack
+or whatever and for GPU libraries have
+Kubla juice bars for the the cuda folks
+and other ones for the ati versions of
+those so there's there's a number of
+resources out there and if somebody has
+already done all the work for you and
+they work at the GPU manufacturer
+they're probably going to do a lot
+better job than you would so use the
+libraries if they're available next one
+is directives directives are really easy
+to use I don't know how many of you are
+familiar with openmp we'll look at it in
+a second but it's really easy to use
+it's in our compiler today all you have
+to do is put a little directive in front
+of it and flip the compiler switch and
+you've got paralyzed code for loops at
+least I'll show you that in a second
+Lane to language extensions these are
+all extensions to C++ or C I threw in
+the c-sharp stuff just so people would
+know it so it's all available on the C
+sharp side to you yeah
+not now
+multi-floor
+accelerator what works it'll use all
+your pores and leave you the accelerator
+project from Amazon oh oh okay so it's
+project I have not I have not used that
+know Miami actually using something
+called Pete asked by by Chris Ross buck
+and Silicon Valley however and that to
+utilize multiple GPU cards on the same
+machine and that is the same thing
+okay got to talk to you know that
+mistake that download
+he's to do the Downloads people
+not for me at that particular project
+but I'll have to check that language
+extensions so ppl will talk about the
+ones in bold I'm actually going to go
+over c-sharp has P lank and TPL which
+stands for I figured what it stands for
+thread parallel library something like
+that and then of course there's a whole
+mess of async threading API is if you
+want to roll it all your own CUDA C /
+C++ C++ am P I'll be looking at both of
+those here I'm open CL which is a open
+version of similar API set and direct
+compute which is of course the DirectX
+version if you like to write shader
+language open ACC is similar to open MP
+and I'll talk about that in the same so
+open MP really easy to use it's already
+there in Visual Studio so you know just
+put it in your coat
+it's multi-platform that the open
+implies that it's it's so the directives
+are usable across different platforms
+and different compilers support the open
+MP directives it's for sure shared
+memory devices which means it won't work
+on a GPU because GPU has disjoint memory
+open ACC is available it's Nick pretty
+much equivalent directives but it works
+for non shared memory devices like GPUs
+so this is all you really have to do
+have you have a loop put pragma OMP
+parallel for flip a compiler switch and
+you'll magically be using more cores
+than you were before you don't have to
+tell it how many cores or anything like
+that it just figures it out under the
+covers and a note here if you if you
+think this is going to make up for
+having a bad augur rhythm the first
+place you're wrong
+as we'll see I actually coded up I used
+the original algorithm and then the
+optimized semi optimized algorithm and
+ran them both using multi processors and
+I'll just look at those so we'll move
+our return down a few chunks
+so this is our OpenMP stuff let me just
+show you the code because it's pretty
+easy so it's the same as last time
+except for it's got this pragma in there
+and this is the same as last time
+except for it's got this pragma in there
+so all I did was add this little pragma
+line and says hey I want to do this
+thing in parallel this loop and it
+automatically figures out oh you did it
+to that level so everything under there
+is going to be private to whatever
+processor I put it under you don't have
+to to worry about that most of the time
+so and there's a lot more than just
+parallel for if you want to go look up
+OpenMP it lets you do lots of other
+interesting things like if you're doing
+a sum or something of that nature it has
+automatic ways of you know partitioning
+it out and then bringing it back
+together again and so let's run it
+so this is our old one that takes seven
+seconds I think I'll comment that one
+out for the next time so now it's OpenMP
+and you'll notice that the the parallel
+version I've got four cores on this
+thing
+I think it's plus hyper threading so
+maybe eight but you'll notice that i'm
+still slower than the the old algorithm
+the dumb algorithm even with 4 cores
+doesn't doesn't meet the performance of
+just the sped-up single core version and
+then of course this is much better when
+I use the for course so it looks like
+we're getting just over four times the
+performance which is good
+I don't know how much I should count
+hyper-threading quarter
+okay parallel patterns library our ppl
+this is another Microsoft published
+library that comes with Visual Studio so
+you've already got it it does a lot of
+things task parallelism for larger if
+you want to have different work items
+partitioned out that's not what we're
+looking for right now we won't just want
+the parallel for which it also does it
+also has parallel containers that are
+safe for concurrent access so if you're
+using the the usual vectors or other
+type of c++ center library stuff it has
+concurrent versions of those that can be
+used safely from multiple threads so
+that's kind of handy unordered sad a
+couple other things it also has a
+concurrency runtime which does a lot of
+the background work to help help write
+concurrent code it is a CPU use solution
+as well it won't work on your GPU but
+it's pretty easy it's almost as easy as
+the directives just write parallel for
+as we will see right here
+I just collapsed it in me
+okay
+so once again I did both versions
+using ppl and will see that the
+performance is very similar to when we
+did the directives yeah those concurrent
+friendly containers being as opposed to
+just putting a lock around the container
+and then writing and then releasing the
+law I think it depends on how how much
+you need to use the lock presumably
+that's what they're doing and internally
+right so and they they have to assume
+that every every possible write or read
+might be in contention so if you have a
+solution where you know that you know
+there's only one case in which I'm going
+to have a conflict you're probably
+better doing it yourself but if if you
+don't really know or you just want to
+make sure that you're good you can go
+ahead and use the other concurrency
+containers they don't it's not a full
+API said either like it won't let you
+insert in the middle of a vector for
+example and and the memory that it
+allocates is not guaranteed to be
+contiguous so you can't do little tricks
+like address of C sub 0 and just use a
+pointer there might break so let's see
+so it's about the same as openmp opening
+he did a little bit better it did a
+little bit better on the other version
+so your mileage may vary yeah
+like for for looking accesses
+you're right gift make sure yeah it's
+not it's not doing anything all it does
+is it provides the infrastructure under
+the covers the compiler does it to you
+know use all your course so it looks at
+the loop and it figures out you know oh
+I can farm this off to multiple
+processes and he said he wants this done
+it once it done at this level like I
+could have moved that down farther in
+the hierarchy if I wanted to you know
+down the second or third level the loop
+and then I would have been choosing to
+you know do a sequential loop and then
+farm it out lower down in the in the
+stack but no it's not doing anything
+real special like dividing things up for
+you or anything like that memory
+accesses are still memory accesses is
+that the question they were parallel
+reads and
+like a the same kind of structure where
+you were writing the charts matric says
+it was the result prefers books only by
+Tamora oh yeah yeah I mean you'll have
+the same problems with unaligned
+accesses and I mean the original if the
+original algorithm doesn't work it's not
+going to work when it's parallel ah yes
+and in fact I have that's a that's a
+good question for the the audience here
+so let's see I forgot to ask this
+question so let's go look at the ppl
+implementation for a moment
+okay as you can see parallel four is
+right here
+and you just so effectively what it is
+it's four parameters this last one goes
+all the way down to here so it's you
+pass in the the function as or what you
+want executed as the last parameter of
+parallel four and this one isn't
+capturing anything so it's just from 0
+to M step one so that's all I had to do
+for the first one the second one is very
+similar except for the step is different
+I'm stepping by block size now instead
+to answer your your getting at is do we
+have problems with concurrent access
+let's go back and look at open MP CPU oh
+by the way I do I do a check after each
+one of these to verify that it actually
+matches the original CPU version of the
+matrix to make sure it's actually
+working as it should
+does anyone see so this this version of
+it where we block everything up does
+anyone see a bug here concurrency bug
+what these result periods all right here
+as long if you if I get result the time
+unique across
+across threads
+right so you're saying that this access
+might not be safe and you are correct
+that particular line is not thread safe
+now the possibility that I'm actually
+going to hit it's very low so it
+actually hasn't hit because because what
+has to happen is I have to have two
+threads I've only got well eight cores
+if you count hyper threading I've only
+got eight cores but one of them has to
+have V result they both have to have
+read it and one of them increments it
+and puts it back the other one
+increments it and puts it back and I've
+got a race condition IX result as a
+function of K case is based on KB and KB
+is segmented by the OMP parallel four
+right so isn't it the case that like
+Egypt each of those will be accessed by
+in England thread I mean I see in
+general you're totally right have you
+have done J or no had you have paralyzed
+in a different way that plus equals
+really could be dangerous in this case
+because of where you put your to think
+I'm guaranteed that I'm okay I think if
+you put that parallel for somewhere else
+you would definitely hit this properly
+if you put it in one of those tight
+loops right yeah I and you would be dead
+but since but since I did it the way I
+did it the matrix and saying this this
+thread is responsible for that strength
+of the matrix yeah I think you're
+actually right yeah but this is this is
+a this is this is a this is a a cool
+thing about OpenMP I can say
+see pragma OpenMP atomic and it will
+make the next one coming now how's that
+for cool it is I'll show you it's slower
+but it's not that much slower I tried to
+I tried to actually I mean this this
+particular line gets hit let's see
+probably I don't know 250 million times
+some of that order it's not in getting
+that tight loop I mean the this result
+here gets hit a billion times and we're
+one out from that block size is 16 so
+one sixteenth of a billion it stoker big
+if you try to put something you know
+like a critical section you'll this be
+there forever so they do a pretty smart
+job of the way they do
+right now I'm running it as single flips
+so it's it's 30
+there are intrinsic accounts so you can
+use that
+but even using an intrinsic atomic it's
+a function call all that many million
+times it slows things down considerably
+I actually tried that too
+oh yeah yeah it's it's floating-point
+right yeah so there's a fudge factor in
+there exactly and especially for single
+single I mean if you're down like five
+or six decimal places you know that's
+about as far as you can expect it to to
+be the same if you go past that the the
+order in which you add things starts
+making a difference and for these
+particular ones I think I was just using
+random numbers and I had to it was about
+the fifth or sixth significant digit was
+good but past that would would start
+being a problem
+so yeah floating points never gonna be
+the same back to the slideshow okay so
+that's the pattern
+ppl parallel patterns library oops too
+far back
+okay C++ amp which stands for
+accelerated massive parallelism now this
+is the first one that actually uses GPU
+up till now it's all been CPU multi-core
+stuff so C++ amp will use a GPU if it's
+available they also the cool thing about
+amp is it can also be used on a
+multi-core processor if you don't have a
+GPU so they have multiple accelerators
+if you have multiple accelerator cards
+it lets you choose which one you want to
+use if you don't have multiple
+accelerator cards you can say hey I want
+to use the CPU version and you tell it
+it's called what the warp version of the
+accelerator it's a software emulation of
+a GPU that uses the actual course and it
+will use any SIMD set that the the
+processor happens to have so it's for
+separate memory space processors like
+GPUs it includes multi-dimensional
+arrays ways to handle those indexing
+you'll notice that all of my code was
+just using an array and I you know
+figured out the indexes myself this lets
+you do it the easier way or the
+better-looking way memory transfers this
+is a big deal in GPUs because in order
+for a GPU to work on some data it's got
+to be in GPU memory first that means
+you've got to copy it from CPU memory up
+to GPU memory run whatever you gonna do
+and then when you need the result back
+you got to copy it back to CPU memory
+again and if you're not efficient with
+that stuff it ends up costing you a lot
+of time so it handles all this memory
+transfer stuff for you kind of
+transparently if you want it to or you
+can be explicit and say hey I wanna I
+don't want you to transfer it for me
+I'll tell you when it also does tiling
+which is much like the blocking that I
+showed you previously
+but for GPUs it's done in a slightly
+different way because it doesn't have
+all that cash that's used automatically
+for you
+mathematical function library and this
+the like I said the same code can be run
+on the GPU or the CPU so this is what
+C++ amp code looks like the top line
+their extent to that says it's a
+two-dimensional entity so EA eb e c so
+the a a b matrix a mocha plug together c
+is the result so the top line just give
+puts the dimensions in for each of those
+extents an array view is how you say hey
+this is something that I want the GPU to
+be able to see I want the GPU to be able
+to see this this a array which is up
+there and and here's my my new name for
+it which is actually VA you don't see
+because it's off the top but that's the
+actual array that holds the whole set up
+is a vector so this is a vector that
+came in as parameters and same with BB
+and B result or this is the one that
+goes back so you'll notice ABC discard
+data that says oh by the way whatever
+was in this array C thing I don't care
+what it was because it's an output
+it's an output array and so don't worry
+about transferring all this garbage up
+to the GPU because I don't care you're
+gonna write over it anyway parallel for
+each since we have an extent object here
+this ABC which is where is it right you
+see there it is
+so that's the result it says hey I want
+to go over all the extents of my result
+array and I'm passing you in a
+two-dimensional index called IDs the
+restrict am P here says everything else
+in here down to the principal n is going
+to be has to be of a particular set that
+instructions that can be translated into
+GPU instructions
+so it limits what you can do inside of
+there but everything you see here is
+fine
+so regular loop except for this goes
+over so extent zero you'll notice you're
+on one so that's the the second so this
+is the first index or the first whatever
+you caught the ranking of the array so
+the first index the second index so we
+want to loop over the usually it's row
+and then column so this would be columns
+that we're looking at and that would be
+row this would be column and the index
+so it uses these these indexes you can
+get into them so this is two-dimensional
+index that loops over I think you can
+probably figure out what's going on it's
+pretty much the same sort of algorithm
+as the first example we did except for
+it this actually takes care of two of
+those loops out there because it does
+both dimensions of C at the same time
+and down here after we get done we say
+oh we want to synchronize this that
+means bring that thing back to the CPU
+now because it used to be on the GPU I
+want it back on the CPU now and you can
+either explicitly say that or when when
+this goes out of scope as you will see
+in the other example it automatically
+comes back
+so let's watch that thing run
+so I'll show you in a second I can also
+use this line right here this line will
+say hey used the CPU instead of the GPU
+if I don't tell it anything it looks
+around and it says oh do you have any
+DirectX 11 devices on your machine which
+means it works on anything that supports
+DirectX 11 which is great because lots
+of cards do that it doesn't have to be
+CUDA or Nvidia card like the next
+example CUDA does have to be it can be
+an ATI can be anything that supports
+DirectX 11
+could be that creepiness fantasy
+cartridge support there is enough
+this will wait and slow way yeah well I
+actually they have one of the emulators
+which is really really slow and actually
+oh yeah it's it's for debugging and it's
+yes it's bad you don't want to be
+running with that thing ever if if you
+can help it
+there's a logic the directx guys have an
+enumeration API and they have
+capabilities and in fact there's a
+DirectX caps thing that you can run and
+see everything that comes back on your
+system to see what it has and in fact I
+have a I tried to run this on one of our
+GPU boxes but found out that it doesn't
+have drivers that are DirectX 11
+compatible it was running that really
+slow thing so let's do this code this
+one's running with really with the GPU
+this time the particular one I have in
+this machine is just my laptop so it's
+got 192 cores so it's one of the the
+current it's like one core that huge one
+I just showed you it's one of those
+symmetric multiprocessors so it's a
+little guy
+and as you can see we got the dumb
+version 182 181 milliseconds the smart
+one only took 69 milliseconds so we're
+doing much better than we did with the
+CPU paralyzed one which I think our best
+was 312 so even with a rather dumb GPU
+you can get quite a speed-up and in
+things like this algorithm yeah yes and
+let me uh okay let me tell you a little
+bit about what I did here since these
+are so fast I do it 20 times I do it 20
+times and take the average so so
+technically it's not a memory transfer
+every single time so it's amortized one
+memory transfer 20 runs memory transfer
+back check it so there's only two memory
+transfers for 20 runs so one twentieth
+of the memory transfer is in there I
+know I actually will we'll be able to
+see that when I get to the CUDA code
+because it actually has a version of the
+timer that doesn't include the memory
+transfer so you can see the difference
+now let's just run that one more time
+this time using CPU emulate emulation
+just to show you what the differences
+are
+so that's that's the really cool thing
+about C++ amp you can have the same code
+and it will run on the GPU it will run
+on the CPU all you have to do is change
+that line that says what accelerator do
+you want to use excuse me these
+libraries is their library support for
+amp using there is library support for
+OMP yes however it's not as good as
+caboose I wanted to use this really bad
+it does and I wanted to use it but in
+our particular application 90% of the
+things that we do are matrix multiplies
+so that's like at the top of the list
+and that's the one thing that matters
+and and when I benchmarked it so you can
+see you know it's not quite as good as
+our ppl and our OpenMP examples but you
+know it's a lot better than single of
+the tiled version
+oh I haven't actually clean up time
+running them well the real comparison of
+on the amp would be versus just
+vectorized code gray which is when she
+doesn't which he yeah I wish this long
+is the single core is truly vectorized
+code but it might be that tries to hit
+differently about an factorize
+yeah and goes to directx and their
+Delaney execute sit as that dries code
+but if you run the CPU attorney if you
+have tons of for loops which ones being
+better yeah this particular one would
+it's definitely trying to vectorize
+this stuff but it's a different it's
+kind of a different abstraction so it
+doesn't have as much information that
+has to go through DirectX 11 and the
+under the underlying core or the
+underlying emulator isn't really
+hardware so there's a little bit of
+inefficiency there but it's attractive
+that you can get you know pre decent
+pretty decent you know this is better
+than that even on the simple version but
+again it didn't do as well on the top
+version
+we never thinking or to say oh you can
+do the exact same thing at the drop
+point for this one the tiled version is
+done differently
+the I actually when we get to the CUDA
+code I can show you what I did to
+emulate what basically the short answer
+is all that stuff I did to use caching
+well GPUs don't have that kind of cash
+so it doesn't matter in fact it makes us
+slower to do it the other way because
+you kind of have to do the caching
+yourself when you're on the GPU by using
+local memory
+okay so
+so GPU accelerator programming I think
+of our I've actually already told you
+all about this but I'll go through slide
+anyway so the CPU handles program flow
+in a in a GPU application the CPU
+generally gets the data that you're
+going to process you know from disk or
+wherever it happens to be and has to
+copy the data over to the GPU like so
+goes over the GPU the GPU does its stuff
+and then it has to be transferred back
+in the end the key to making GPU
+programs efficient is to eliminate these
+copies as much as possible you don't
+want to you know for every single
+operation go back and forth and back and
+forth you want to copy your data up here
+and let the GPU do as much as it can
+with that data and then when you really
+need the answer on the CPU transfer it
+back remember you've got a copy of that
+data over here so you don't have to it's
+still sitting there until you bring it
+back and you run kernels of code on the
+on the GPU
+it's an accelerator so it does one thing
+you say do this here's the day to do
+this and it does it really fast so GPUs
+have hundreds of thousands of cords
+single instruction multi-thread this is
+a little bit different than anything
+you've probably used to if you haven't
+done GPU programming before what happens
+is the there's these units called warps
+so you've got 32 threads per warp which
+is a unit of processing and also memory
+requests I said that they're the key to
+getting efficient GPU program programs
+is making sure that when you access
+memory what you're going to have to do
+that you do it properly
+which means coalesced and what that
+means is you don't want sequential
+access by a particular strategy to
+threads per warp which has been the
+standard for the last while you want to
+go in increments of 32 so the first time
+you're increment or the first time you
+look at a memory address
+if it's zero the next one you want to be
+32 and why do you want that because all
+the other 31 threads are going to be
+looking at the next one and the next one
+and the next one in the next one the
+next one all the way across in the same
+you know cache line on the GPU so it's
+called coalesced memory access all
+instructions if you go through
+instruction by instruction on GPU every
+single thread is in the same instruction
+at the same time they don't diverge from
+each other
+which is different than what you're used
+to in CPU where they're just kind of all
+are on their own thing and if there's a
+branch in your GPU code if somebody
+takes that branch everybody else is just
+sitting there with twiddling the thumbs
+I wonder when even with the wrench so
+you want to eliminate branches as much
+as possible you want to stride your
+memory access so that your 31 other
+brothers and in the in the same warp
+will be accessing you know adjacent
+memory locations to the one that you're
+accessing so this kind of breaks the
+usual rule on a CPU you want you want it
+you want it to be you know adjacent you
+want them to be Jason you don't on GPU
+you can have up to 1024 and now I think
+is 2048 on the new ones threads per
+block a block is a number of threads
+that can access the same shared memory
+so if you have if you have something you
+want to cache in memory you bring it
+into local memory you cache it there and
+then everybody in your your block can
+access that memory and this is this is
+l1 cache slash shared memory
+and then they have another concept
+called grids which is just a whole bunch
+of blocks and it looks kind of like this
+so each thread gets per thread local
+memory which they call registers they
+had like 64,000 of these things so they
+have tons of registers quote unquote
+and then here's a thread block which has
+some shared memory and then a grid is
+multiple blocks that can access the
+global memory and different grids access
+the same global memory so they're shared
+so if you have something that you need
+to share between between different
+blocks or different grids you can put it
+in global memory but you're gonna pay
+the cost of going out to the slower
+slower method amp c++ tiling the second
+version of the amp code used this
+instead of the regular extent so compute
+domain you see you tell it oh here's the
+C that which is the result vector I want
+to use this as a computer main and then
+down here and your pair parallel for
+each you see a compute domain tile and
+you tell the size of your tile tile size
+comma tau size and then when you're
+accessing it you use the tiled index and
+and then it lets you do some let me show
+you the real code on this I'm gonna have
+a time here but we can go look at this
+for a second
+okay so here's the here's the real code
+and you'll notice that it's caching the
+tile for the a and the B matrix here so
+that's the first thing it does is it
+caches what at once in the local tiles
+it has this thing called barrier weight
+which means I'm going to stay here and
+wait till all the threads get done
+populating these two buffers if you
+don't do that then one of them might get
+ahead of another one because they're not
+all in the same warp here presumably so
+you have to use a barrier wait and then
+after everything's in the a and B matrix
+I can just use the local memory and
+calculate my my sums weight again so
+that it's populated and then I can set
+it and in this case they didn't say
+synchronize like I showed you last time
+it's implicit when the array view which
+is right here when this array view goes
+out of scope it's going to automatically
+copy it back to the CPU presuming that
+you actually want to know what the
+answer was yeah
+why do you wait well this is the top one
+here is populating populating these two
+tiles right then this one is actually
+calculating the temp sums for the tiles
+and then you wait again before you
+actually store it what are you wait here
+yeah presumably nobody should be
+changing the cash that's true so you
+essentially have multiple tiles and each
+tile is assigned to bring in a certain
+piece of data right up there in the tile
+static yeah and that's across tiles
+everybody has a certain assignment so
+when you do this you work it out and you
+say this tile is pre assigned to load
+this memory this tiles pretty excited to
+love that memory so the barrier waves
+are preventing this cross tile
+coordination from messing things up so
+if you don't have the barrier wait at
+the bottom it's going to loop back up
+into the floor loop it's going to start
+pulling in the next version the next
+version well see before you are done
+using it yeah doing them doing this
+cross matrix-multiply
+yeah but but you're right I mean if we
+were just if we were just dropping if
+this if this wasn't here like the last
+iteration you probably don't need that
+but it's just the last iteration right
+that's only in a work yes you and your
+31 other brothers so yeah and I work by
+work basis your you're moving through
+synchronously but like that big picture
+I showed you I had you know 14 different
+processor and each one of them had you
+know 192 cores or something like that
+and then you store the answer damn you
+okay I'm gonna run so the last version
+is to use here's my verify code by the
+way it goes through and looks for let's
+make this back to GPU version so we can
+do some good comparisons take this out
+the last version here X it's not the
+last version but it's probably less
+version I have time for I didn't get to
+CUDA
+so this last one is using Kubla which is
+the blast library for CUDA and it's
+quite a bit faster than everything else
+so don't go and write this yourself
+music applause or mkl if you're on CPUs
+or you know oh where is it oh 27.3 yeah
+that's pretty good
+exact same I do that I copy it up run 20
+times
+copy back down so here's the the best we
+had previously was 70 on the EMP child
+so 27 is significantly better than that
+they actually have a library that does
+it at about 46 I think on this machine
+so they have they have a anti impede us
+yeah so they do consider little better
+than the regular tiled version they have
+a library but it's still not as good as
+qu+ now for CUDA I'm just gonna run some
+of this stuff because I'm almost at a
+time
+I forgot to up the the font size on this
+sorry about that
+okay so these this is the cooter version
+of it CUDA is a is a Nvidia specific
+runtime library and toolset that only
+works with nvidia cards currently
+there's it's open so ATI could implement
+if they want but they have their own
+stream things so they're not going to
+it's the same exact thing the blocked
+version you'll notice here is slower
+than the other version because that sort
+of optimization just doesn't work on
+GPUs here's the simple version 210 which
+is not as good as we got with a MP well
+actually I think it's is that better
+than the MP simple version it's similar
+it's similar I think it was 180 or
+something like that and here is the the
+tiled version which isn't isn't really
+optimized that well in fact it doesn't
+do as good as a MP but oh by the way
+this is the difference 87 versus 92 this
+is without any memory copies so you can
+see the effect there you know five
+milliseconds or so was the difference
+are the penalty
+no this is doing 20 times internally and
+this this number doesn't include any of
+the or the two memory copies this one
+does so it's taken two and 1/2
+milliseconds per copy copy up if you
+have 20 different matrixes to multiply
+yeah you have to you have to copy each
+one up presumably unless like like in my
+application you use the result of last
+matrix multiply to do another one on it
+and it goes up the chain and it comes
+back down that's that's the way machine
+learning deep neural networks work one
+minute okay let me just show you the
+last slide the performance slide since
+all right CUDA C++ oh okay there we go
+so this was this was the whole gamut
+this is in a logarithmic scale and as
+you remember this one took seven seconds
+and this one only took Kubb last took
+what 20 something so this is 25
+milliseconds that's 8 seconds but to get
+it all on the same chart I had to do it
+library myself so so you can see that
+the GPU this is all CPU from here that
+way and this is all GPU down here and
+this is a very lame GPU by the way I ran
+I ran this on Excel
+so I ran this on my you see that
+probably not so I ran the same CUDA code
+on on a a tesla card that has 512 cores
+and it ran the CUDA stuff at 24 seconds
+versus 209 on my 192 core 46 46
+milliseconds versus 235 and 16 versus 92
+that was the first one I think we've got
+a little bit better than that when I
+just ran it so yeah it scales with the
+number of cores you got and if I threw
+this at a k20 x with 2600 or whatever
+cores it's it's done before I can think
+about it so anyway utilize all the
+resources you've got and thank you very
+much</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

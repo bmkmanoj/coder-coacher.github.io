@@ -1,0 +1,1150 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Introduction to HotSpot Internals | Coder Coacher - Coaching Coders</title><meta content="Introduction to HotSpot Internals - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Introduction to HotSpot Internals</b></h2><h5 class="post__date">2015-06-02</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/XjfhsJarQy0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">okay this is this is our introduction
+the hot spot internals session and this
+is intended for people who have the
+foolish notion of going and digging into
+hot spot code and the hope here is that
+when you come out of this session you at
+least have some hand holds some familiar
+places to go to as you start looking at
+the hot spot code this particular
+session comes out of my own experience
+of joining the JVM sustaining team at
+Oracle and being any difficult position
+of having to fix bugs in in hotspot
+without having any experience and
+hitting a very large code base and
+trying to figure out exactly how the
+crazy thing works so so from those
+difficult experiences I'm hoping to give
+you guys something a little better to
+start with a little bit about myself my
+name is Paul Newman
+I work for Oracle I'm part of the JVM
+sustaining team we fix bugs in hotspot
+and Jay rocket r2j BMS I've have a
+longer experience in telecommunications
+I spent a great deal of time at Bell
+Labs and Bell core and Ameritech and the
+somewhat shorter period of time in
+financial services all with sort of
+system level real-time software kinds of
+programming so that's how I got into
+Oracle okay as I said that the hope is
+when you come out of this you'll have
+some sense of how the hotspot code is
+laid out some familiar places to go to
+some some of the important files some of
+the important definitions that are in
+there some of the important algorithms
+and data structures that are that are
+defined and we're going to focus on what
+we in a hotspot development team called
+the runtime which is basically if you
+take away the garbage collectors and you
+take away the compilers runtime is
+everything that's left so the
+interpreter the class loading stuff the
+threading system all three of those
+you'll learn about today but but then
+there's a whole bunch of other
+miscellaneous stuff that's that's in the
+runtime
+okay so here's what we're going to talk
+about just went through the introduction
+we're going to do a summary of the jvm
+model so this really is a summary of
+some summary of the jvm specification
+and the hope is here that we'll all come
+to a common understanding of what JVM is
+and what it does and give you a little
+peek under the hood of what it has to do
+internally in order for it to work and
+then we'll delve into that deeper we'll
+do a little little section here on
+hotspot source code how its laid out and
+as part of that there were also a couple
+of code patterns that are used
+extensively in hospitai thought it would
+be good idea to alert you to so that
+when you run into them and you're
+browsing hot spot code they don't throw
+you off track there some interesting
+stuff going on and then the three
+primary parts of the talk here are are
+again the three parts of the runtime
+that we're going to look at class
+loading and metadata the metadata is
+basically the data that hotspots stashes
+away as it reads in classes which it
+needs to organize in a particular way in
+order to be able to access it in a very
+efficient manner so that we can execute
+very quickly template interpreter is the
+is the interpreter that hotspot uses
+it's a little different than
+interpreters that you may have come into
+contact with before and we'll take a
+look at that and then finally we'll do a
+little bit on the threading system that
+hotspot uses okay all right so JVM what
+is it what is it JVM do so from a 30,000
+foot level this is this is the model
+that we're all familiar with so we have
+source files typically Java but not
+necessarily always that get fed through
+a compiler and generate class files and
+class files are the basic input to the
+JVM so when we started JVM by doing a
+Java command on the command line and we
+specify our class path and our starting
+class the JVM actually looks for those
+in the file system finds them and starts
+executing them and that's what leads
+into though that's what starts off the
+whole class loading process
+so here's a little closer look at this
+on the Left we have a Java source file
+which is a text file Java source file
+contains one or more class definitions
+each class definition leads to a a class
+five-a yes a class file being created
+and here are the language features on
+the left and how they get encoded into
+this class file which is a binary file
+on the right and again all this stuff is
+laid out in a JVM specification I'm not
+going to go to it in too much detail
+just suffice it to say that that all of
+the pieces that are part of a typical
+Java program class and interface
+definitions super interfaces or
+implementation of interfaces field
+definitions method definitions method
+logic and references where you reference
+to external classes or external methods
+those are all get stuffed into this
+class file in a rather compressed format
+and again that's that's the basic input
+to the JVM so what the JVM specification
+tells us to do as a JVM implementer is
+to read this these binary files in
+somehow stash the data away in a in a
+manner that's convenient for us so that
+as we start executing our program we can
+go to it in a quick manner and we'll see
+how that's laid out these are the four
+phases at least according to the JVM
+specification of preparing a class for
+execution the first thing we do is what
+we've just been talking about which is
+to load the file itself we pull in the
+binary data we parse it out into its
+various components stash it away
+inconvenient data structures we go
+through a process called verification
+I'm not going to go into this in any
+depth it just basically takes a look at
+the class takes a look at the classes
+class or classes that we've just loaded
+and make sure that they're not going to
+violate the integrity of the JVM so
+things like stack under flows type
+mismatches between what's expected to be
+on the stack and the operation that's
+going to occur at a particular point in
+time
+that's basically what verification does
+linking is the process of taking those
+references that we have two methods
+fields and classes and actually finding
+inside the JVM the class structures that
+they refer to
+now the jvm specification gives us a
+great deal of latitude as to how and
+when this is done from two various very
+great extremes on one extreme you can do
+the linking as soon as you load in the
+first class you could transitively or
+recursively look at the classes that it
+refers to load those look at the classes
+that they refer to load those etc until
+you until you've loaded the entire
+program and that would be a static
+linking model hotspot is at the at the
+other end where we basically don't do
+any linking or resolution until the link
+until that reference is actually used
+while executing and then we go and we
+look okay do we actually have that class
+loaded already if not then we need to
+load it and so on finally having done
+those things then we go through the
+static initializers for the class that
+we've lured again this is this is a
+behavior that's specified by the jvm
+specification okay
+so this is a Java thread the JVM spec
+says the Java thread is basically just
+an ordered list of Java frames and a
+Java frame has to have the information
+that's shown here and again this this
+can be stashed away in an implement into
+an implementation specific manner
+whoo so you need to know the current
+method that you're executing need to
+know the class that that method is part
+of need to know the byte code that we're
+currently executing there's an array of
+parameters and local so the parameters
+that are passed into the current method
+and the local variables or local
+variable slots that are needed during
+its execution and then finally some sort
+of representation of an operand stack
+since the byte code expects that this is
+a stack based stack based machine or
+stack based model so just to work
+through a couple of these examples if we
+look at the new byte code the byte code
+that tells the JVM to create an instance
+of a class that we've loaded so here on
+the Left we have an array of byte codes
+that were turning our way through we hit
+this new byte code which is followed
+immediately by a sixteen by two
+additional bytes which is a 16-bit index
+into the constant pool that we've loaded
+with this
+we go through that constant pool a
+couple of couple of times and that
+ultimately resolves out to a string that
+represents the class name that we're
+referring to so that's the class that
+we're going to create an instance of
+similarly there's four field access byte
+codes get field get static put field and
+put static and these work in a very
+similar manner we have a stream of byte
+codes over here on the left that we're
+executing through we hit one of these
+byte codes it's followed by a 16-bit
+index into the constant pool we go
+through the constant pool a couple of
+times there's some internal references
+and we end up with three strings over on
+the right the class name the field we're
+about to access and the field descriptor
+which you're probably all familiar with
+is a string representation of the type
+of that field and again similarly when
+we're invoking a new method invoking
+static invokes a static method in both
+virtual and invert and invoke interface
+won't go in to invoke dynamic it's a
+little bit different but basically we
+hit one of these byte codes there's an
+index in with the constant pool we
+resolved through the constant pool and
+find three strings so in all of these
+cases then the JVM has a string as the
+output of these operations and has to
+figure out how to find the thing that
+that string or first do and that's that
+linking operation that I mentioned
+earlier in part of a class file
+preparation ok and then just a very
+brief description of the heap everybody
+knows what the heap is this is what the
+JVM says it's supposed to be and you can
+tell by this description that again we
+have a great deal of latitude as to
+actually how we implement this the heap
+is just where all the objects are kept
+all the class instances and Java arrays
+created as a JVM starts up it's shared
+among Java threads
+maybe extract expanded or contracted as
+needed and then finally and this is
+where the greatest latitude is given
+somehow and at some point in time
+objects or unused objects need to be
+tracked down and reclaimed now as in
+hotspot we try to do this very
+efficiently so that this should happen
+concurrently with your program execution
+so that you don't have to stop and do
+this a perfectly valid implementation at
+least the core
+to the jvm specification is to run all
+the way until you run up run out of
+memory and then stop the whole thing and
+find the unused objects and start it up
+again and do that until you run out of
+memory again that's that's valid
+although particularly not useful
+implementation okay so let's take a
+quick look at hotspot source excuse me
+so hotspot source is kept on the
+java.net website of the open JDK and you
+can if you're looking in hospital the
+entire JDK I personally recommend
+against that because there's just so
+much in there a whole bunch of stuff
+that you're not going to need you can in
+fact download hotspot only which is
+shown in the the second line here these
+are our curial repositories so those
+tools are readily available here's a
+diagram of how this stuff is all laid
+out JDK root is all of these bold
+rectangles here there those are all
+independent mercurial repositories each
+of them has a directory tree or
+representative directory tree within it
+the hotspot has its own repository so
+again you can pull that down all by
+itself
+there's directories underneath that
+we're going to burrow down just a little
+deeper so the source directory under
+hotspot has got four sub directories
+first one is CPU and that contains
+source files that are specific to a
+particular hardware architecture spark
+x86 or zero the OS subdirectory has
+files that are specific to a specific OS
+platform osep you are those that are
+specific to a combination of those and
+then finally the shared directory is the
+one that's most interesting because that
+has all the hotspot code that is shared
+between across all of the platforms and
+that's the major place for all of the
+hotspot common code so on the VM
+directory subdirectory of that you'll
+see these directories and I've
+highlighted four of these here in red
+because those are the places where you
+should probably go to find the most
+interesting
+pieces of hotspot code so class file
+stuff has all this class loading stuff
+which which we just talked about and
+we'll talk about further the interpreter
+directory has got all the stuff in there
+for the template interpreter the irbs
+directory has the definitions of the
+classes that represent java classes
+we'll get into that a little more as
+well as some other interesting
+definitions and finally the runtime
+directory among other things has got the
+thread system files stashed away in
+there so if you're going to start out
+browsing those are those are good places
+to start okay I warned you about this
+common code patterns that are used in
+hotspot so now the c and c++
+pre-processors allow us to use macros
+often those macros are just static but
+macros can also be functions macros and
+the functions expect a parameter and
+those parameters to those function
+macros can also be functions and hotspot
+takes advantage of that quite
+extensively so here's an example which
+I'm not sure how familiar this is to any
+of you guys but here's an example that
+hopefully will bring it to light so in
+the top left we define a a function a
+macro function called colors which
+expects as it's single parameter F
+another function which it then applies
+to these three strings red green red
+blue and green so after that we now
+define a new function G which expands
+it's single parameter X out to an out to
+its parameter followed by a comma so
+here we can take advantage of that G
+function in enumeration by simply using
+that color parameter giving it the G
+function that we just defined above it
+and so now this this enumeration
+definition becomes legal because it's
+got all the all the strings separated by
+commas similarly right below that we can
+define a new function H which if you're
+not familiar with the way the the
+preprocessor works that hashtag X
+actually expands out to the string X
+with double quotes around it
+so now we can define an array of strings
+which represent all of these vet all of
+these values red blue and green and that
+allows us to do something like this
+little chunk of code here we define a
+variable called font color it is that
+type the enumeration type that we've
+just defined on the left we somehow put
+a value in there and then suppose we're
+doing some debugging we can actually do
+this print statement here where we
+actually use this string color strings
+which is defined down here in the lower
+left and give it the enumerated type
+font color and that'll all work because
+we'll actually pass it that color
+strings will actually resolve to a
+string indexed by this enumerated type
+make sense
+I'm getting some nose okay that's not
+good okay we're going to have to come
+back sorry another common pattern that
+is used it takes advantage of the
+scoping capabilities of the language and
+the constructors and destructors that
+are that are part of C++ so for example
+here we have a resource pool called
+called handles and as we start out this
+little block of code that this could be
+either an entire method or it could be a
+sub sub block within a method or an if
+statement or a while loop or something
+like that and at the very top of this we
+define a handle mark or some sort of
+mark which tells that which basically
+marks a place in that resource pool
+where we've started now then we can we
+can then allocate resources out of that
+pool in this example we're allocating a
+handle which is a pointer to a pointer
+to an object and then we can do
+something with that here we've found an
+object and we're going to print
+something out about it but then when we
+hit this lower curly brace then the
+destructor for handle mark is called and
+that will actually release all those
+resources back to where they came from
+so that resource pool will return to the
+state it was in before we entered this
+block of code okay now I'm getting some
+good nods good
+okay another thing that hotspot does
+which which might be a little bit
+strange to people who program in C++
+quite a bit is taking advantage of the
+fact that we'd never have to be more
+than one platform at a time the same JVM
+never never executes on more than one
+platform so instead of instead of
+creating subclasses of a given larger
+abstract class to represent different
+platforms instead we do these these
+kinds of crazy include things where we
+define a class but we suck in files that
+that define platform-specific behavior
+for that class the net result of that is
+there are in occasions there are places
+in hotspot where a given class can have
+someone say widely different but some
+significant differences in how it
+functions and what it does from one
+platform to the other okay so those were
+some or some gotchas here's here are
+some important files you might want to
+look at as you're browsing hotspot code
+this Global's file as you might guess
+contains a lot of global definitions but
+probably the reason that I go here most
+frequently is because it has a complete
+list of all the command line flags that
+hotspot understands they're grouped into
+categories developed and only
+experimental production etc but each of
+them has a little string it's about all
+the comments you get here that describes
+what it does but the nice thing about
+that is having having found one of these
+flags which does something interesting
+you can then start text searching
+through the rest of the code to see okay
+so where is this flag actually used what
+does it actually do the next line there
+the class structures that was in that
+that those are in that oops directory
+that I mentioned earlier so those are
+some of the basic structures that that
+represent Java classes at in instances
+of C++ classes okay so that's a good
+place to look as class HPP and there are
+several subclasses of that and then
+finally these last three are interesting
+because they define the the stack
+structure that the interpreter uses from
+one platform to another they're slightly
+different but that's a neat place to
+look so if you're sort of stepping
+through the interpreter and you want to
+know what exactly what the stack layout
+is at one any point in time you can look
+in these files okay so now we'll get
+into the real stuff now so class loading
+proceeds pretty much as you would expect
+and as the jaebeum's specification says
+and here the only difference here is
+that I've actually filled in the actual
+names of the data structures that
+hot-spot uses to Statuary this
+information so because this is a loaded
+class the C++ class that is used to
+represent it is a class called instance
+class it has a reference to a constant
+pool a constant pool we divide the
+constant pool into two pieces so there's
+a piece of the constant pool that
+captures the static information that's
+loaded from a class file and then
+there's constant pool cache which is
+basically are the pieces of the constant
+pool that we've resolved already
+particularly linkages to other classes
+and methods and fields and so as we're
+searching through the constant pool cat
+cache as we're executing byte code will
+first look in that cache and see if
+we've already resolved that there's an
+array of methods that are defined the
+method structure is divided into two
+classes one called method one called
+const method and con's method basically
+has all the parts of a method the data
+parts of a method that don't change in
+particular the bytecode
+and then the the method structure itself
+has got all kinds of other bookkeeping
+information in a number of times it's
+been invoked whether it's been compiled
+etc okay so that's that's kind of that's
+the translation between those class
+files and the metadata and metadata
+that's kept by hotspot here's our
+metadata or hierarchy so again there is
+there's an abstract class called
+metadata
+excuse me abstract C++ class one of the
+tricky things in talking about this is
+distinguishing between C++ classes and
+Java classes metadata is a C++ class it
+has multiple sub classes the ones we
+just talked about method and constant
+pool and then here's this little class
+hierarchy here over on the right and
+these three sub classes in the blue box
+represent all of the possible classes
+that a Java object can be in hotspot so
+an instance class is an instance of a
+class that has been loaded so it's
+basically a user-defined class an object
+array class is an array of pointers to
+some other object so those are not
+necessarily defined by by a class file
+you don't in job you don't do that for
+arrays and then there's a type array
+class as we call them which is basically
+just an array of primitive types there's
+a parallel hierarchy for OOP as which is
+called OOP desk and this is basically
+C++ classes that represent the object
+layout for these for these specific
+classes or class types so an instance
+OOP desk is a C++ class that represents
+the way an instance object is laid out
+so the fields that we references we
+execute our Java program
+okay and this is probably intuitive but
+I'll just put in here to make sure
+so we had three instance classes here
+these are yes sorry
+question yes so an and OOP is an
+ordinary object pointer so we've
+encapsulated that as a C++ and hotspot
+so when you see when you see anything
+that says OOP that means it's a pointer
+to an object and then if it has
+something after it like you would
+normally see instance OOP would be a
+pointer to an instant soup desk instance
+OOP desk is the class that describes the
+structure of an instance object and an
+instance OOP is a pointer to that
+correct yes precisely yep I'll so yes
+bootstrap classes as well as a
+user-defined classes all of those are
+represented by these kinds of C++
+classes okay so we have three classes
+that are shown here there are three
+instance classes we have a superclass
+which defines a field called a and in
+the process of loading this so the
+hotspot has decided that every instance
+of a we're sorry every instance of this
+class is going to have field a at an
+offset of eight bytes from the beginning
+of the object we have two subclasses the
+one on the Left defines two additional
+fields B and C and they're assigned
+locations 12 and 16 in any instance of
+that particular class subclass on the
+right defines another field different
+field D which happens to be assigned
+another offset of 12 bytes from the
+beginning of the object so if we the
+upshot of all this is if we encounter an
+object of any one of these three classes
+we always know that
+yield a is at offset eight so super
+classes are always prefixes of their
+subclasses and the way objects are laid
+out that make sense so if you run into a
+subclass you know exactly where to look
+at four four fields that are defined by
+a superclass okay
+template interpreter how am i doing on
+time not too bad
+okay so a typical interpreter has what
+what we call a fetch switch exact loop
+so normally you interpreter would would
+pull out the next word or bytecode or
+whatever it is that it's interpreting
+but then go through a humongous switch
+statement and say exactly what did I
+just pick up and then would would branch
+out to some other routine to actually
+execute that that code the template
+interpreter hotspots template
+interpreter doesn't do that it's if okay
+now I'm dating myself here
+are there any fourth programmers here
+nice rock on all right so it's very
+similar to indirect threaded code and
+forth or basically we we pull out a byte
+and then we index into an array which
+has a dispatch directly to the thing
+that we're going to do so it's a it's a
+squish down version of a switch table so
+it's called a template interpreter
+because we actually start this out with
+a platform-independent
+template which describes every one of
+the Java byte codes it describes what
+kinds of conditions are expected on the
+stack when it begins and what kinds of
+conditions are left on the stack when it
+when it finishes executing and so at
+runtime which may seem like an unlikely
+time to do this at runtime that template
+is converted into platform-specific code
+which then forms our dispatch table what
+that means is that the template
+interpreter has has a built in written
+in c++ macro assembler for each platform
+so so you find these weird things where
+you have c++ methods that have a whole
+slew of
+which are actually calls out to other
+C++ methods which are part of the
+assembler and those actually deposit the
+specific instructions for the platform
+into the code buffers so when you run
+into these these definitions in the
+template interpreter and you see all
+this assembly code and you go what the
+world is going on that's what it is the
+template interpreter maintains a single
+word top of stack cache in a register
+and that saves us from having to
+actually go to the operand stack in a
+particular frame and as if you've looked
+at byte code at all it repeatedly either
+pulls something off the stack or pushes
+something onto the stack
+well we try to keep that as often as
+possible in a register so that if a
+bytecode creates something in the top of
+the stack and then the very next
+bytecode or a subsequent bytecode
+actually looks at that value which it
+often does then we already have it in a
+register we don't have to do the two
+memory operations to push it and pop it
+and then finally because this thing
+because the template interpreter is an
+assembly language and it's limited in
+what it can actually do what it actually
+can do there's several escape sequences
+to call out to the JVM itself and save
+help I need you to do this for me I need
+you to allocate a really large object
+for me things like that which are
+difficult to do in assembly okay so we
+mentioned the top of stack cache State
+I'm going to go into this in just a
+little bit of detail because it's a
+little bit confusing so there's there's
+an enumeration within hotspot which
+which tells the interpreter at any given
+point in time what state the this top of
+stack register cache is in and so
+there's these multiple values here
+represent all eight of the primitive
+types that sorry all seven of the
+primitive types that Java defines and an
+eighth type which is the Atos which is
+basically an object pointer says that
+this is top of stack register cash
+contains a pointer to some object could
+mean a right
+anything else and then finally there's a
+state that represents there's nothing
+and there's nothing cashed currently so
+here here's a here's the class that
+actually defines the template which
+again I told you we start out with a
+template table a template for each
+possible byte code and so this is what
+this is most of what the template
+contains so there's some flags and stuff
+but most importantly here's this TOS
+state so this is the top of stack
+register state that that bytecode is
+expecting when it begins execution and
+then another value indicating what how
+it's going to leave things whether it's
+going to leave something in a register
+and what type would will be or not so
+the way that's used is here so over here
+on the lower right we have where we're
+executing a method we're right in the
+middle of some byte code we run into
+these two byte codes x and y and so we
+know that byte code x leaves an int on
+the top of the stack and byte code y
+immediately following it happens to
+consume and end well that's exactly the
+kind of situation that we go through all
+this all this bookkeeping for so here's
+our dispatch table as we construct it
+after we work through those templates
+and it's a two-dimensional array indexed
+by bike the bytecode value as we
+mentioned that indirect threading code
+as well as the top of stack state that
+the previous bytecode lessoning Zin so
+here's our here's our assembly
+representation of our assembly
+instruction that executes bytes bytecode
+X and the very last thing it does here
+is it goes as as an interpreter should
+it gets the next bytecode and it finds
+the I tos entry because again by code X
+leaves an int on the top of the stack so
+it's going to look through here find
+this leftmost black box or pointer and
+so then we'll be able to jump straight
+into the assembly code for bytecode Y
+which immediately starts executing this
+stuff based on an INT being in the
+register
+okay make him sense if however the
+bytecode prior to why didn't actually
+leave an int in that register say it
+didn't it left nothing in the pin the
+top of stack cache then you would
+actually have to go through the vit
+execute the very beginning the preamble
+piece here where it says pop int we
+would actually go to memory and pop the
+first value off into a register and then
+we can proceed with the same common code
+okay good
+took me months to figure this out all
+right
+okay so as we're executing we run into
+method invocations and the interpreter
+has to manage the stack so over here on
+the left is a representation of what the
+stack will look like stack is growing up
+in this case so before we have an
+invocation we have our local variables
+which are the parameters that were
+passed into this particular method as
+well as the local variable slots that
+had to be allocated for its execution
+there's a save area which is a bunch of
+platform-specific stuff
+return addresses frame pointers the
+previous byte code pointer stuff like
+that and then you hit then the the
+hotspot interpreter maintains an operand
+stack where operands get pushed and
+popped onto pushed onto and popped off
+of as the bytecode requires so now after
+we do our invocation our method
+invocation all of this stuff on the
+bottom is pretty much the same that save
+area is maintained the operand stack
+which was active at the point of this
+method invocation is also saved but the
+caller the calling method has pushed a
+number of parameters on the stack the
+call add to method will allocate a
+number of additional locals on top of
+that it will save the context of our
+previous method invocation and
+established its own out branch stack on
+top of that okay so so the good part of
+all this is that these these local
+variables are kept in a single
+contiguous array so as the byte code
+hits them and asks for the value of
+local variable 3 for example we know
+exactly
+where to go and find it on the stack
+okay all right so threads so hotspot
+maintains a 1 4 1 4 1 threading model
+and all the platforms are run on which
+means that a Java thread corresponds to
+an OS thread which corresponds to a
+hardware thread so if you've got a
+multi-core machine then all of our
+platforms are able to take advantage of
+that so those those define threads in at
+the OS level and how it's about
+maintains a 1 1 4 1 relationship with
+those so this is the there's a hierarchy
+of thread types that hotspot maintains
+and they're shown here I've highlighted
+2 in red VM thread is a special thread
+within hotspot which does special
+operations that different threads
+request in particular the call out to a
+VM thread from from an ordinary
+executing javathread can ask for things
+like a safe point so you can bring the
+whole VM to a consistent state so you
+can then do interesting things like
+garbage collection is 1 or stop the
+world garbage collection but you can
+also do things like traversing different
+thread stacks to see which methods are
+actually being invoked so you can
+collect you know information about them
+and figure out which which methods need
+to be compiled Java thread here in red
+is the represent representation for all
+actually executing Java threads so one
+operation that that hotspot threads do
+frequently is try to find their thread
+object so typically the way way you have
+to do this is you actually have to go to
+the operating system and say hey OS what
+thread mi and it gives you some X gives
+you back some kind of thread identifier
+and then you got to look that up in some
+table to actually find the internal
+thread object and then you can
+manipulate that so what hotspot does is
+it defines platform specific ways of
+tracking this down very very quickly the
+reason we need to do that is because
+threads very often will will
+do things that are thread-local for
+example allocating small objects we try
+to do in a thread-local fashion so we
+don't have contention for per memory
+pool if all the threads were all going
+for one place so we assign pieces of the
+heap to each thread so they can actually
+manage that independently and that's
+kept in this or at least pointed to by
+this thread local storage thing so so
+threads as they're executing will hit
+this very very often I need to allocate
+an object I need to find my little piece
+of the heap and then it can do it ok so
+we maintain a single helix ingly linked
+list of Java threads this is just a
+representation here it's the head of the
+linked list is a class called threads
+which contains only static variables so
+you can actually if you're debugging or
+stepping through hotspot execution this
+is the way you can find your way to the
+list of Java threads each thread object
+points to an ax with the actual Java
+object that represents that thread so
+there's an internal C++ object that
+represents a thread and then there's the
+actual thread object on the heap which
+you can do things with as you're
+executing your program ok make sense ok
+so this is how this whole thing fits
+together so we have multiple Java
+threads they execute through the
+interpreter and as they're executing
+through the interpreter through this
+dispatch table doing a fetch next
+bytecode jump through the dispatch table
+they're accessing the metadata that
+we've loaded that we've loaded in the
+class loading part which we talked about
+at the very front of this and they're
+accessing the heap and modifying and
+creating objects so that's kind of the
+big picture view of how of how hotspot
+fits together and those are kind of the
+primary components so that's what I have
+for you today I am open for questions at
+this point this is crazy
+yes question back there
+right so if we if we execute bytecode
+why and and the previous bytecode is for
+example left up I hope everybody heard
+that question by the way if a previous
+bytecode had left for example a float or
+a double on the stack instead of an int
+then these pointers over here in the
+dispatch table would point to an error
+of an error routine which basically says
+this is not a valid state we've got a we
+have an invalid we have a type on the
+top of the stack which this which is
+incompatible with this bytecode we're
+about to execute and so then we throw an
+exception yes oh you first the verifier
+should do most of that and it's it's not
+necessarily I mean the check is free
+right we have to do a we have to do a
+pointer lookup anyways and we don't
+actually expect this to happen but if if
+you're going to look up a pointer you
+have to handle that situation gracefully
+so yes you're you're absolutely right
+it's normally caught by the verifier in
+the red please
+if your job model has the captain adjust
+you know six packages impasse name
+applies in the job jar file is that only
+first won't get loaded into cease for
+the second one when they look at
+building a system
+you mean if if you have two classes in a
+jar file with the same name same class
+name I think would normally yeah just
+load the first of those yes well can you
+give me a give me an example of why you
+might want to have we do not communicate
+very well yes if somebody just loading a
+system and then suddenly yeah sure
+some some unexpected loading order yeah
+would be good to have that as an error
+and what hotspot does is it actually
+memory maps each jar file so it knows
+exactly where to go for in order to find
+things but it does not scan for
+duplicate class names yeah sorry jar
+signing would help with that yes
+absolutely yeah yes some of this was
+shown right here it only holds the top
+of stack in a register you don't have
+like the last four entries
+correct just one yep yep and that's
+where I mean that's where the hottest
+activity is is at the top of the stack
+but yes and I mean it could be a future
+improvement for us to do multiples
+obviously it would take major surgery to
+do that on this but but we've also had
+to execute on platforms like x86 who
+just give you a pittance of registers so
+yes in back yep one of the things that I
+that I started out doing and still enjoy
+doing from from time to time just to
+figure out what in the world is going on
+is to create your own little class that
+ultimately calls out to some sort of
+read operation that blocks and so having
+done that you can then attach a debugger
+to it and you can see how the stack is
+all lined up when you've hit this this
+read operation and then you can start
+you know poking at pointers and say oh
+okay there's the save area for that
+frame and then there's a save area for
+that frame and you can you can actually
+return from that topmost read operation
+and then start stepping through byte
+codes for example if you want to do with
+the with the interpreter so that's
+that's a really good way to start and
+then if you have complex operations that
+happen as part of that like allocation
+of another object or something like that
+then you can actually start tracing
+those through the parts of hotspot good
+question yes
+Java exceptions are marked on the stack
+yes and then as you hit an exception
+condition while we're while we're
+executing then we roll back the stack
+looking for the particular mark okay as
+we do as we process a class file and
+process the byte codes that are
+associated with a particular method
+there are if you have ever you ever used
+Java P to disassemble a java class so at
+the bottom there's an exception table
+that gets encoded in and we basically
+just roll back the stack looking for the
+place that's supposed to handle a
+specific exception yes correct
+yes yes that process is in user space or
+no space or do you really create hey
+this is you know you were saying - two
+minutes
+what is when someone is really like hype
+like know how to read and use process
+I am inserting mappings like no
+education she really not hate this job
+train master this UNIX process or it is
+just a UNIX process correct yes so so so
+hotspot occupies a single memory context
+so everyth everything on spot memory and
+and when you create a new thread you we
+actually ask the operating system on
+UNIX or any other platform we say create
+a new thread for us and that means that
+we've created an OS schedulable entity
+but it has the same memory context does
+that answer your question I think not
+kind of right so in the old I mean on
+Linux for example the old the old
+threading model said that you you
+actually execute a thing a clone
+operation where you specify what's going
+to be in common between the the new task
+Linux correct yes yes other questions
+yes
+Oh big percentage yeah vast majority
+yeah but the these template interpreter
+snippets are technically written in C++
+but they they have call-outs to C plus C
+plus plus method names with things like
+LD and you know so it's it's an
+assembler language embedded in C++ yes
+sorry which what information Oh
+profiling information let me think about
+that profiling yes
+so normally profiling would be done as
+we invoke a new method and we would make
+a little mark it's actually yes so it's
+it's actually inline in the interpreter
+assembly code so what the interpreter
+attempts to do in many cases is although
+there would be and a simple way to do in
+a particular operation like for example
+fine find a method structure that
+represents a particular method and
+increment a counter in it it will be
+easy to do in C++ but when the
+interpreter attempts to do is to do that
+in sort of unwound assembly language so
+that you see these things like okay fine
+find the method structure and what is
+the offset of the invocation counter
+within the method structure find that
+increment it using the assembly
+instruction and store it back so that's
+the kind of and similarly for
+manipulating the heap it'll it'll
+actually allocate an object using
+modifying the heap data structures so
+it's some of the assembly stuff gets
+gets pretty ugly but it's supposed to be
+fast yes
+red dumped yes does require a safe one
+yep yes
+how does help out do optimization that
+is a very okay so so there is a linkage
+as we maintain entry points to two
+methods we actually maintain two entry
+points and interpreted entry points so
+if you're entering that method from an
+interpreter then you use one of those
+entry points if you're entering it from
+compiled code you use the other entry
+point and the reason for doing that is
+to allow us to switch back and forth
+because because the compiled code uses
+it uses different calling conventions
+than the interpreter does so we have to
+do these kind of if if you're an
+interpretive mode and you call a
+compiled method you've got to tidy up
+the stack a little bit before you before
+you call the compiled method and vice
+versa if you're going back to
+interpreter that could be quieter
+holy-moly so is was that what you were
+asking yeah
+yes no it's in it's in Oracle now I
+think our first release of it was like
+7u 40 or something like that yes
+hopefull database give ear well you
+think that well the Oracle database
+start using hotspot oh you mean the well
+Oracle uses you mean as opposed to J
+rocket oh oh
+bundled with it I see yeah if forgive me
+we're a little siloed here but um yeah
+we there's normally is there's a lag
+time as you might guess between the
+release of an update of a JVM and when
+it's adopted by other projects WebLogic
+and coherence and all the other dizzying
+array of project products that Oracle
+has yes yes killing a thread and making
+a new one so the the thread specific
+garbage collection algorithm is is very
+quick
+you know we've basically allocated these
+objects linearly and we can keep track
+of all the references from the rest of
+the heap to those to those that small
+array of objects so that's it's a very
+efficient operation I wouldn't think
+that creating another thread would would
+buy you much if anything yes in the back
+and so so J rocket is basically in
+maintenance mode right it's still on jdk
+six and there will never be a JDK 7
+release of J rocket what we've been
+doing over the past two years or so is
+gradually taking some of the interesting
+and useful technology pieces out of J
+rocket and migrating them into into
+hotspot so flight recorder this perfect
+example okay all right well thank you
+very much thanks for coming</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

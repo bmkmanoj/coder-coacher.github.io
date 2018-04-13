@@ -1,0 +1,681 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Debugging Code that Crashes the BEAM - Richard Kallos | Coder Coacher - Coaching Coders</title><meta content="Debugging Code that Crashes the BEAM - Richard Kallos - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Debugging Code that Crashes the BEAM - Richard Kallos</b></h2><h5 class="post__date">2017-03-24</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/41hNS39Xi8s" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">all right thank you for the introduction
+thank you all for being here and welcome
+to debugging code that crashes the beam
+so let's just go over the general layout
+I'm going to introduce the main ways
+that Erlang interfaces with C code so
+that landscape might now change because
+people are investigating other languages
+which compile object files and I'm going
+to talk about when things go wrong and
+that will then segue into debug VMs and
+ETP the emulator toolbox for
+pathologists I'm going to show some very
+very small completely contrived demos
+that will sort of demonstrate how easy
+it is to take down the VM when you're
+writing C code and then we're gonna wrap
+everything up so a little bit about me
+most of it was already covered but I am
+working full-time and I am studying
+full-time and in just last summer my
+professional career as a programmer
+started so I'm still very much learning
+about everything the main languages that
+I use are Erlang C and a bit of bash for
+plumbing reasons effectively because of
+the really really tight latency
+constraints we have in AD Tech when
+Erlang doesn't do something that we want
+fast enough we often wind up rewriting
+the stuff we need in C and then usually
+linking it in as a port driver or an if
+as to why I'm giving this talk right not
+an extremely experienced programmer but
+there are some very cool things that I
+have found with regard with respect to
+debugging code that gets linked into and
+then run by the beam these neat things
+are not exactly the most searchable
+online I'm hoping that this presentation
+will sort of serve as a signpost to help
+others in the future and to help you who
+are here
+so let's dive into this Earling has
+several different ways of interacting
+with code written in other languages
+these are the main four there are also
+things like je interface and bifs but
+I'm really only going to be talking
+about these three and I'm not even gonna
+go into very much detail there's a
+really nice tutorial about that so
+Erlang lets us interface with other
+programs and this is really spectacular
+for when we need speed that the Erlang
+virtual machine doesn't necessarily
+provide if we need to quickly encode a
+string differently or if we have some
+number crunching that we need to do or
+random number generation crypto or when
+we need to integrate with other
+libraries suppose we're using some fancy
+new message broker system and that's
+written in C Erlang gives you the
+opportunity to use that it's completely
+available to you so starting with ports
+these are the main mechanism by which
+the Erlang VM communicates with the
+outside world effectively a process will
+open a port to another process and they
+communicate with each other via standard
+in and standard out and already this
+gives us a lot of flexibility because
+things like a new plot or R can
+communicate through these channels so
+right off the bat we have wonderful
+integration with other well-behaved
+programs and so the cool thing here is
+that the non Erlang code is separate
+from the beam it's a different process
+we like process isolation here and
+unfortunately there is a bit of an
+introduced cost with overhead for
+serializing and deserializing next up we
+have port drivers and this is basically
+a port slapped on to what is
+called a LinkedIn driver and this is
+basically a compiled shared object file
+which gets loaded into the beam and then
+these callbacks are called when certain
+events occur this is how the Erlang VM
+does file i/o this is how it manages
+sockets it also does it uses it in a
+whole bunch of different places and so
+there's a really large API that we can
+use we have great things that we can do
+with these port drivers however they are
+tricky to debug and a misbehaving driver
+can cause the entire virtual machine to
+misbehave in summary they're really
+great for these asynchronous operations
+that we need to do so any kind of i/o
+port drivers are great Lucas got me very
+excited this morning when he announced
+inif select because well let's talk
+about what NIF's are sown ifs are
+similarly a compiled object file that
+gets loaded in to the Erlang virtual
+machine but the way that NIF's work is
+that when they're loaded in they will
+replace functions inside of a module
+with the native versions NIF stands for
+native implemented function and this is
+how the Erlang standard library deals
+with regular expressions and it's crypto
+module when you look through let's say
+crypto dot url' what you will see is a
+lot of these functions will have a small
+macro called NIF stub and when that gets
+expanded that's really an error because
+when the crypto module is loaded what
+should happen is that the NIF library
+gets loaded in and all of those stubs
+are replaced by functions written in C
+so these nips have really really low
+overhead which is really great because
+we're trying to eliminate overhead with
+our very very low latency requirements
+however much like port drivers these are
+very tricky to debug and when they miss
+B
+they have cascading effects these are
+best used for synchronous operations
+that terminate very quickly and the sort
+of canonical definition of very quickly
+is under one millisecond if you have
+sniffs import drivers that take longer
+than a millisecond to execute you have
+sort of a responsibility to chunk up the
+work and to make your port drivers and
+nips yield so I said misbehave a lot I
+sort of alluded to what that means but
+let's just talk about how the Erlang VM
+schedules processes so Erlang uses
+what's known as pre-emptive scheduling
+it will start running a particular
+process and after it does a certain
+amount of work it's going to swap it out
+with a different process it counts these
+reductions which is basically it amounts
+to a function call and that measures how
+much work the process performs so when a
+process reaches the reduction limit it
+switched out and replaced with another
+process in the queue how and the problem
+here is that the beam cannot count
+reductions that happen outside of Erlang
+code if you have an if that takes five
+seconds to run it really only shows as
+one reduction to the virtual machine and
+this is bad news because Erlang has one
+scheduler thread per CPU core but these
+scheduler threads are talking to each
+other constantly there are various
+synchronization processes that happen so
+that all of the schedulers are kind of
+working together they're communicating
+and so when a process is executing
+native code it's not communicating with
+these other schedulers and the longer
+that goes on the more the other
+schedulers start to misbehave because
+it's missing all of these
+synchronization barriers so other
+schedules will
+they're schedulers will wind up waiting
+on the scheduler that is running a long
+NIF or poor driver so some general tips
+for writing dips and port drivers you
+should make sure that they run very fast
+time them constantly and if they do take
+longer than a millisecond you should
+make them yield and have them reschedule
+themselves so that they can be executed
+after the scheduler has run some other
+processes first and another option that
+is available to us is if you're writing
+a port driver there is a separate thread
+pool which is mainly used for non block
+or sorry for blocking i/o you can take
+your port driver out and it gets put
+into a separate thread pool because it's
+doing there it's probably writing to
+disk or waiting for a file descriptor
+and you can also use dirty NIF's and a
+dirty myth is effectively when you
+annotate an if saying hey this is CPU
+bound or hey this is i/o bound and the
+Erlang VM will basically use dirty
+schedulers to manage this work that's
+happening either way so what do we do
+when we have bugs in our port drivers
+and NIF's we have a really great wealth
+of tools for debugging C as well as for
+debugging Erlang however we can't really
+use any of them when we're debugging C
+that gets run by Erlang we run into
+trouble because this has happened that
+the beam binaries that I use don't have
+debugging symbols so if I try to use gdb
+and I'm printing a back trace I tend to
+get a bunch of question marks which is
+not always helpful but that's fairly
+straightforward to fix another problem
+is that valgrind
+will occasionally report false positives
+saying hey this
+thing is leaking memory when it might
+when it actually isn't it just happens I
+believe because the Erlang virtual
+machine has its own memory allocation
+and it's also difficult to run NIF's and
+port drivers in isolation these these
+NIF's and port drivers are run are
+written in such a way that they can
+they're meant to be linked in and run by
+Erlang there is no sort of main function
+in these so if you want an entry point
+so that you can do fuzzing let's say
+with American fuzzy lop it's it's really
+not straightforward for NIF's however a
+colleague of mine has more or less well
+he has something working his name's
+Julian Squires he presented at last
+year's Erlang factory about this tool
+called Miffy and effectively it's just a
+very small shell that will let you load
+in an if and feed commands to it and
+then Miffy with whatever and if you
+decide to load can then be tested using
+AFL it's very handy we usually have a
+fuzzing job running somewhere on one of
+our servers that add gear I don't
+believe this problem has been solved for
+port drivers really it's a lot hairier
+to deal with so the good news is that
+Erlang has something called debug VMs
+which is effectively just a Erlang VM
+binary that is compiled specially to be
+run in different debugging tools like
+gdb or valgrind they also have make file
+targets for purify and quantify if you
+use rational software and they have
+other targets for profiling as well so
+I'm who among you on your work machine
+will compile Erlang from source ok cool
+that's that's a few of you that's
+awesome
+if you're going to be writing NIF's and
+port drivers I highly recommend it if
+only for the reason that you get access
+to these debug VMs it is so helpful to
+be able to run the virtual machine with
+your NIF inside of gdb and to really it
+will save you weeks if you do have an
+issue so I highly recommend it as a
+matter of fact in the slides we're
+really just going to go through the
+process of building Erlang and debug VMs
+so Erlang is now in github so we clone
+it and then we'll check out a particular
+tag all the major minor and even bug fix
+versions are tagged which is really
+sweet
+and so we'll check it out we'll read the
+install guide because that's what it's
+really helpful we'll find out that we
+need to export this url' top variable
+and then we're going to basically run
+configure make sudo make install install
+our documentation right there you can
+see that I use Stowe it's basically lets
+you manage symlinks really easily so I
+can actually have multiple versions of
+Erlang installed and I can swap them out
+pretty easily so the next step where we
+actually build the debug VMs is we're
+gonna go into this the RTS emulator
+folder and then we're just gonna make
+all of these targets or just some of
+them I exclusive I almost exclusively
+use debug and valgrind the debug target
+builds your beam binary that will you
+will run inside of gdb and the valgrind
+target will make a beam binary that you
+can be run in valgrind and so once you
+have those you also have this CL script
+which you will invoke whenever you need
+to in order to start up Erlang inside of
+these tools quick note our - our gdb
+will use the command line
+client for gdb if you type - gdb it will
+actually run Emacs if you like that I
+just want you to be aware of it or if
+you hate it you know be aware of it so
+the next thing that we have is the
+emulator toolbox for pathologists I find
+this extremely handy when I get a core
+dump from the beam because it crashed
+because I write NIF's and I'm not very
+good at writing nips yet
+so what ETP will let you do is when
+you're inside of gdb you can print
+Erlang terms usually when you're in gdb
+all you see are pointers to things and
+you have no idea what those things
+actually are with ETP you can actually
+print the Erlang term inside of gdb it
+blows my mind so the source file for
+these gdb commands is sort of this path
+I highly suggest you read it otherwise
+you can also access the documentation
+inside of gdb you just type help ETP and
+it will print out some nice things for
+you so I'm just gonna show what I copy
+pasted it into my slides so I'll start
+Erlang in gdb I'm in gdb I well this is
+a an example that was taken from the
+mailing list it's a really simple
+example that I liked I tried to get
+something that I printed with IO format
+but too little time so we're gonna set
+this breakpoint and then we're gonna run
+Earl and we're in Earl
+if you press control C you'll actually
+go back into gdb which is kind of cool
+and we're just going to run Erlang notes
+hahaha bad arc and we're gonna get a
+breakpoint when the C function is called
+and as you can see we have these two
+pointers and we have no I
+what they actually mean and so the heads
+on debt of ETP is that I can say hey
+what's that thing pointing to and it
+says oh that's a pig that's the pig that
+called dysfunction and I can say hey
+what's that biff orgs thing it seems
+reasonable to expect that it's the
+argument that we passed and so ETP has
+several other really handy functions for
+just generally getting the state of any
+running process in the Erlang virtual
+machine so I can type ETP process info
+and I will get a message that's very
+similar to what you may find in the
+Earle crash dump file that gets
+generated when Erlang has to go down but
+it shuts down gracefully when you're
+writing NIF's you can't you're not
+necessary there is no guarantee that you
+will have a graceful shutdown sometimes
+you might just have a core dump or
+sometimes not even a core dump and so
+you might have to set your you limit to
+unlimited then run your Erlang virtual
+machine wait for it to crash and then
+look at the core file but this lets you
+investigate what the state of the system
+was when it went down and this is really
+helpful when you're writing NIF's
+because this is really the only help you
+get if you have an if that does
+something that a normal process
+shouldn't do and the operating system
+kills that process ie you're in whole
+your whole VM you have no idea what
+happened if you're lucky you have a core
+file and you have debugging symbols and
+you can you know of ETP
+and you can investigate what went on so
+ETP has really helpful functions for
+dumping the memory of the heap of any
+process you can dump the memory of all
+of your processes you can look at
+message queues and it's it's very
+helpful for when you don't have an earl
+crash dump file so I highly recommend
+that you
+you take a look if you decide to build
+debug VMs and after that we have just a
+couple of other demos this one is
+borrowed by Rafal who works in Poland at
+erlang solutions this segfault library
+is basically the smallest NIF that I
+could find that will take down the VM
+basically instantly so if we you know
+run rebar shell and we run this segfault
+generate function we get a seg fault but
+is one really good at breaking so I've
+been greeted by this when working at add
+gear I have an if I'm not really good at
+writing C and so I will I will write
+code that crashes and when I'm greeted
+by this it was demoralizing and my
+coworker Julian says have you heard of
+debug VMs and I'm like no so we start up
+well first I'll export that variable
+which is important for how I invoke my
+debug VM and I start my er Lang shell in
+gdb and I make sure that I pass reboot
+the output of rebar three paths to the
+code path for Erlang this is I use that
+command a lot and basically it will
+function as if I had called rebar shell
+but inside of this gdb so here I am I
+got some helpful messages Oh gdb is
+loaded I'm reading symbols from the beam
+binary and ETP will print some various
+properties of the vert the Erlang VM
+that you're running and then you get a
+handy gdb prompt and we can start we can
+run this we get our shell
+I'm gonna call my segfault generate
+again and I'm gonna get a segfault
+but now gdb is telling me hey you know
+the operating system told you to shut
+down and here is what you were running
+here is what you were running so line 6
+what is line 6 oh where
+do you referencing some variable and
+we're setting it to a hundred well what
+is going on what is the value of that
+variable we'll type list and it's null
+goodness that's that's two lines to
+break the Erlang VM it'll break any
+process really
+but Erlang sort of is up on well it's
+it's known for being extraordinarily
+stable C is known for being really good
+at having code that has vulnerabilities
+in it and so when we combine them
+together we get you know Erlang well we
+get the stability of the lowest common
+denominator here which is C so two lines
+takes down your entire Erlang node but
+we managed to pinpoint it in a matter of
+minutes thanks to the debug VM and gdb
+so we're not always dealing with just
+seg faults we can also have buffer
+overflows memory leaks memory leaks are
+particularly troublesome because they'll
+just slowly slowly develop and then when
+your system runs out of memory the
+operating system will kill a process and
+it's it's fairly innocuous so I have a
+very small demo heavily inspired by that
+last library which rather than seg
+faulting whenever you call the NIF it'll
+just leak a little bit of memory so
+rather than you know run it for days and
+wait for it to crash I'll just run
+Erlang inside of valgrind and here we go
+so we're we get a message saying hey
+we're in valgrind
+and then we get our Erlang prompt and
+I'm gonna say leak or call this function
+20 times I get my tuples back and that's
+it I'm gonna press control C and I'm
+gonna exit and I'm gonna see what
+valgrind has to say about how the
+behaved Eyelock i leaked memory oh no so
+I'm gonna rerun this with leak check
+equals full and I'm gonna see what the
+story is you know where am i leaking
+memory and so the way to do that is
+you're going to pass some flag or you're
+going to set a variable which will
+basically get read in by this CL shell
+script and it will pass that to valgrind
+and then it'll pass
+what's at the end of the line there to
+Earl and we're going to be back in where
+we were we're gonna redo everything
+we're gonna leak a bunch of times and
+this time valgrind is gonna say here's
+you know your general back trace you
+called malloc from you know een if I
+lock in this function generate and with
+within minutes you've sort of narrowed
+down where your leaking memory to a
+single function which is pretty
+wonderful for when you know you
+previously thought you may you didn't
+have these tools I use this basically
+all the time sometimes one of one of the
+VMS running on our servers will crash
+and sometimes if the error log
+information is interesting enough I make
+shell into that server and build a debug
+VM just so that I can peek around it's
+very very helpful
+I've even run our software inside of gdb
+like just letting it go and it was still
+surprisingly fast which was kind of cool
+but that's that's basically what I came
+here to say I had a bit of trouble
+finding out about this when I was
+starting out and I'm just hoping that
+this will sort of serve as a signpost
+for the future and you will all know
+about it and you can tell all your
+friends and when you go to the office
+but basically Erlang will let you
+interact with code written in other
+languages through the use of ports port
+drivers NIF's see nodes Biff's J
+interface a whole bunch of other things
+you can port drivers and niffs are like
+the single easiest way to kill an Erlang
+node and in my experience they've been
+the most difficult thing to debug
+however we can use these debug VMs to
+run the beam inside of these debugging
+tools and they will let us find almost
+exactly where we went wrong and I make a
+lot of mistakes so this is super helpful
+for me and ETP the commands for gdb
+thankfully provided by the developers
+for of OTP provide a lot of useful
+commands for just generally poking
+around when Erlang does not quit
+gracefully and what you're left with is
+tears and a core dump so my my general
+one sentence wrap-up of this is if you
+have to debug a port driver or an if you
+you have help I have some links here the
+install guide T tells you how to install
+debug VMs you have the Erlang
+interoperability tutorial which will
+teach you how to write ports port
+drivers NIF's and c nodes you have this
+nifty library which will let you run an
+if inside of a small facsimile of the
+beam and that can serve as an entry
+point to your fuzz testing this is not
+to be confused with another library
+called Miffy that library is also super
+cool but also super scary the other
+nifty will let you write C code in line
+in your Erlang source file and then that
+gets stripped out and compiled into an
+if and loaded back in its wild there's
+this bitwise library
+in Steve vinasse Keys github which shows
+a couple of demonstration niffs that
+show just how the Erlang schedulers
+start to misbehave if you write NIF's
+that take too long he also provides a
+slideshow which is super handy going
+through those slides gave me a much
+better idea of what I was working with
+and Scott Fritchie also has this NIF
+wait more demonstration if that show how
+the scheduler logic sort of degrades and
+then lastly we have a tutorial written
+written by Rafal who has that segfault
+library and it talks about analyzing a
+core dump from the beam and in it he
+uses ETP to sort of show what is going
+on where things are breaking and it sort
+of catalogs how a particular bug was
+fixed and that was a lot shorter than I
+was expecting but that's that's all I
+have to say now go forth and debug
+excellent walk and bonus points for
+being ten minutes ahead of time or so uh
+well I I generally think that the beam
+is pretty stable otherwise so if you do
+get a mystery segfault its probably than
+if that's the first place I would look
+I love that blog
+oh that's a that's a really good
+question
+so the question was how can the
+documentation around these features be
+improved well I'm hoping that when
+someone Google's you know oh no my NIF
+is seg faulting that somewhere Google
+will respond with hopefully this talk
+and that this will sort of help them
+orient themselves I don't really know if
+this stuff is not particularly
+documented because writing NIF's and
+port drivers is discouraged or if it's
+just I mean there's so much work going
+on as for things to improve it I do plan
+on writing blog posts mainly that's
+that's usually where I find my
+bite-sized solutions and if I don't find
+blog posts then I'll dive into the
+Erlang documentation
+so the question was is ETP compatible
+with other debugging tools no I believe
+it's it's really just written for gdb so
+if oh I'm not familiar with RR which
+cool if RR understands gdb or if it runs
+gdb in any sort of way then I'm hoping
+that it could understand DTP but that's
+that's something that would be really
+cool that's that's really cool RR for
+rewinding
+okay great question so the question was
+what is my use case for
+niffs and port drivers and sort of at
+what point was it did it dawn upon us to
+sort of write these things I
+unfortunately was not at add gear at the
+time when a lot of the NIF's were
+written however I am actively working on
+a port driver which has the Erlang vm
+react to I notify events and so that's
+sort of the integration side I'm really
+not the right person to answer that
+question but I can certainly forward
+that so yes I notify ken l like there is
+the I notify watch or I notify wait tool
+which will sort of write something out
+to a shell when it does happen however
+I'm not I haven't played with it very
+much I don't actually think that I
+notify watch repeatedly prints events I
+think it just opens a watch collects
+events and then when you
+I like send sig into it it will then
+tell you the statistics unless I've
+mistaken that with some other tool
+yeah it would definitely be a way to
+sort of isolate yeah there's there's
+definitely a bunch of different ways
+that you could react to I notify events
+without having to write your own C code
+that gets loaded in and then crashes the
+beam repeatedly for reasons you don't
+understand for weeks so if you have the
+ability to hmm in in this case it's
+probably more for speed than for
+interacting with the rest of the system
+so if you have real like a real need for
+speed its it's hard to avoid writing the
+stuff you need in in native code and
+then loading it in i'm however hopeful
+in for the future because of rust and
+the various compile time guarantees that
+it offers and it builds you know these
+these native binaries and if you write
+them in a certain way that Erlang
+understands them you can load in an if
+that's written in rust and there's an
+elixir library called rustler which
+which does that and a couple of my
+colleagues are actively investigating
+replacing NIF's with rust ada is another
+thing worth investigating i it light
+bulb
+amazing I'm definitely gonna play around
+with that I can put up with that if if
+it's a dot so are there any other
+questions all right well thank you guys
+very much
+I had a blast</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

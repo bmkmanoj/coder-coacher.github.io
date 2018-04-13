@@ -1,0 +1,946 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>How to migrate a web API to Erlang, change databases (...): Seth Falcon | Coder Coacher - Coaching Coders</title><meta content="How to migrate a web API to Erlang, change databases (...): Seth Falcon - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>How to migrate a web API to Erlang, change databases (...): Seth Falcon</b></h2><h5 class="post__date">2012-06-20</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/QBukmNdM-n8" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">alright well first of all thanks thanks
+a lot to erlang factory I'm really
+excited to be here again my name is Seth
+Falcon I work at Opscode and I want to
+share today kind of case study of kind
+of tell the story of why we ended up
+migrating our our web api from a ruby
+and couchdb stack to an erlang and my
+sequel stack and i want to talk a little
+i'll tell you a little bit about how we
+did that and some of the lessons learned
+in terms of some of the tools so i'll
+tell you have some tips that we came
+across about using web machine which is
+what we used on the Erlang side and I'll
+also talk some about how we approach the
+actual migration which was pretty fun
+and and in the end really successful in
+terms of not having people notice but I
+need to give you a little bit of
+background just to kind of set the stage
+for the story so so Opscode we make a
+product called Chef and chef allows you
+to describe your your infrastructure the
+configuration of your servers and and
+how they communicate with each other as
+code there's a kind of a DSL on top of
+Ruby that you describe the configuration
+in it's a client-server model so you run
+there's a centralized chef server and
+that's what's hosting the web api that
+i'm going to be talking about and then
+you run the chef client program on on
+your servers which we call nodes so
+you'll hear me talking about nodes and
+that's that's what I mean I mean your
+servers that are running chef client to
+talk to the server and make API calls
+it's really great if you're curious
+about it there are four of us here from
+opscode so come grab me afterwards or
+some other time the chef server API so
+where we started from written in in merb
+so a ruby web framework since has been
+merged into rails we use a unicorn and
+engine
+to to deploy that so it's a state
+stateless horizontally scalable kind of
+set up the the chef server talks to
+CouchDB for for data talks to a
+authorization service which actually we
+wrote in Erlang early on it also talks
+to solar two for search requests so a
+typical request is going to talk to the
+database and pull out some public key
+data to do authentication it's going to
+pull we're going to be focusing on the
+node data so no data from from CouchDB
+based on some analysis of our data set
+at the time that this story is unfolding
+our median node size was 22 k 3rd
+quartile was 44 k so the data involved
+not tiny perhaps but certainly not large
+by any means after pulling the data it's
+going to do an authorization check and
+then depending on the verb if it's a get
+it's going to return that data if it's a
+put it's going to process the request
+body update the database and then send
+back a response so that served us really
+well for a while but as as the the
+product got more popular and our user
+base grew and the the load increased
+things things were things started to not
+go so well operationally what you're
+looking at here is average API response
+time across all of our endpoints I know
+the numbers are way too small to see but
+the the wiggly Peaks there are around
+500 milliseconds so we really didn't
+like that that number in terms of we
+really thought we should be a lot faster
+and also it really was concerning just
+how Wiggly things would really like to
+see something more reliable so things
+weren't going so well the other thing
+that was starting to happen
+operationally is that we were having a
+sort of mini outages on kind of a
+regular basis where where things with
+CouchDB weren't going so well
+what you see here is the uptime graph of
+our couchdb server the peaks represent
+times that we had to restart couchdb
+because of places where it got stuck and
+that was sort of the the resolution the
+gaps are places where we failed over to
+a 2i that we have a active passive high
+availability so those sort of ignore the
+gaps and then way on the right there
+where things get more regulars where we
+finally just had a cron script that
+restarts it on a regular basis the other
+thing that was starting to happen is is
+that is that the stack overall was
+consuming a lot of resources in terms of
+ramen and cpu on the database side but
+mostly ram on the on the server api so
+that kind of sets the stage for okay we
+need to do something and so in stepping
+back you know one of the things that we
+wanted to ask is well okay like how bad
+are things like what you know do we have
+something that can we expect that if we
+change its going to get better so we
+asked how much RAM should it use and
+this is a totally made up number but but
+kind of good for some context so I
+figured well third quartile node size
+was 44 k so that's sort of you know
+worst-case issue at the time our load
+was about 60 request a second so some
+kind of made up unrealistic lower bound
+for for how much memory we might need to
+to serve our request would would be 2.7
+megabytes obviously not not a realistic
+way to do a computation you've got code
+that's going to be in memory of course
+in any kind of framework you're going to
+have some copies of the data and so on
+so I don't know x 10 just to get a next
+increment of a wild total wild guess
+right but we don't have to guess we can
+actually measure so so we went and
+looked at our at our unicorn workers and
+and found that actually at rest shortly
+after startup we were seeing ram ram use
+of 100 megabytes and with the unicorn
+model and this is also
+sort of starting to step back and think
+about the model of hosting web services
+with a stack like Ruby where you have
+you have a unicorn process separate
+process for each request so your
+concurrency is is one request per worker
+under load what we were seeing was
+actually a larger number so we were
+seeing 204 megabytes per unicorn worker
+under load and so you get to a point
+where where your your concurrency starts
+to be actually limited by how much RAM
+you can throw out the problem which is
+kind of a funny thing so so how does
+that work out we were running 12 12
+workers per server we had eight servers
+kind of adds up to the shocking number
+so we're pulling Jason out of a database
+and turning around and serving it back
+and to do this with you know what is
+essentially a modest load was nineteen
+point two gigabytes of RAM ok so that
+was motivating the it really felt like
+there was a fundamental thing with the
+way the the model of using Ruby and
+unicorn with the separate processes
+where where there's just a fundamental
+limitation also some details of the Ruby
+garbage collector that are unfortunate
+with the way that the Ruby garbage
+collector sweeps through the whole
+object space means that that if you do
+forking with copy-on-write you don't
+actually get that benefit because as
+soon as anything touches that as soon as
+the garbage collection runs all of the
+memory is touched and copied and so
+unicorns eat ram
+ok cool so so looking for other
+solutions and we'd already used or lying
+some in-house and actually for a little
+web service that we had some experience
+with Erlang and web machine and we
+really felt like the the you know /
+process garbage collection was going to
+be a very clear win for for Erlang with
+this kind of model one of the things
+that we saw with the Ruby again sort of
+some some issues with the garbage
+collection is that as soon as you get
+one large request going through a
+unicorn worker the RAM use for that
+worker tends to just stay allocated and
+high it doesn't give it back and so with
+conversely we were confident that even
+if we had that same sort of spike on the
+Erlang side that that process is
+short-lived it goes away memories
+returned and that's kind of nice so web
+machine is this fantastic tool open
+source put out by the folks at bosch oh
+really great tool kit for quickly
+putting together rest services and and
+so that's what we did and started and
+ported our node and search endpoints
+were the first ones to go to web machine
+so I kind of want to take a little pause
+in the story and share some of the like
+what we learned from implementing and
+working with web machine a lot because i
+think it's a it's a common enough
+framework that there might be some value
+in ensuring some tips so i've got i've
+got four tips and i'm going to tell you
+a little detail about two of them and
+and the last two are in the slides with
+some detail or you can ask me afterwards
+but i don't have time to go into it so
+just to run down them quickly first tip
+is about not forcing your application
+logic into the kind of call back
+structure of web machine to too tightly
+at the second tip is about one approach
+that we came up with for sharing the
+resource functions across resource
+modules we also found it useful to use
+the finish request callback for for
+logging in metrics and to sanitize error
+responses so we don't return
+stack traces and we also came up with a
+method for for manipulating the dispatch
+list to inject a configuration across
+all of the resources in a nice way and
+so that's kind of fun so so with web
+machine the model is that it models the
+the HTTP or HTTPS a big state machine
+this is a diagram that kind of shows the
+flow and sort of maps to the callback
+functions I know you can't read it but
+you get a sense of kind of its
+complexity and it helps you get rest
+resources to get that right but but what
+happens is that your application logic
+doesn't always fit into these callbacks
+so a couple of examples one of the
+things that happens early in processing
+a request is is there's a callback
+called malformed requests where if it's
+malformed you know web machine will
+return a 404 you and and otherwise go on
+to the next steps so if you're if you've
+got a poder a post kind of request that
+you're handling in order to answer that
+question you have to parse the response
+body to determine whether it's malformed
+or not but the functions that that the
+callbacks that that actually like handle
+that post and put it in the database
+calm way later so so the way you
+typically get around that and and kind
+of work with that is that you you
+memorize that the result of that in the
+in the resource state and so that's one
+approach of kind of fitting your
+application logic into the web machine
+and into the shape of the HTTP state
+machine another example is is for the
+forbidden request and and so what
+happens is you know you come in and you
+do forbidden and then I've kind of cut
+the diagram and all this other stuff
+happens and then way down later in the
+state machine is the part where you call
+resource exists and and decide whether
+it's a 404 or not now in most web
+applications in order to decide if
+someone is authorized you have to fetch
+something from the database to look up
+and akal to decide if they're authorized
+so like you're going to
+no if it's not found pretty early on and
+and I think a lot of people and and
+myself included when I first started
+with web machine I tried really hard to
+make sure all of the kind of logical
+steps of the callbacks in web machine
+that I was you know that that in the
+resource exists call back I was doing I
+was doing that task in my application
+and that that's just a you know you you
+can do that as much as it fits but when
+it doesn't fit I think it really helps
+to kind of give up on that notion a
+little bit and relax and not stress out
+about it because you'll hit your life
+less so so for that case what we do is
+here's an example of a forbidden
+resource and if if we get sort of a not
+found case we just go ahead and exit
+early halt we don't we sort of get rid
+of action at a distance and perhaps
+that's not the true web machine way but
+but it really it really was liberating
+to not try and map too closely to this
+okay and then our our innovation such as
+it is on sharing resource functions
+really boils down to one realization so
+all resource functions use a state
+record and what we came up with was if
+we define a common state record that
+that allowed us to write shareable
+resource functions so our what we did is
+to find something that we called the
+base state and it has fields that are
+shared across all of our modules so here
+I'm showing you request ID but for us we
+also have like a organization ID and
+some other details that make sense
+across modules and then we also have a
+resource state field and the idea there
+is that for each resource module where
+there is specific data we define a
+record type that's used only in that
+module and that that's kind of a nice
+separation so that the common bits have
+a common record state to work with but
+there's still a place to hang and
+memorize the resource specific steps so
+for the the node endpoint we would have
+a node state record that would go in the
+resource state field and so using that
+allowed us to share resource functions
+so we have a module that we call chef r
+SW m and so here's an example where
+we're defining
+service available is authorized in
+Finnish request we have this little
+helper macro that helps define it still
+export it and then that macro is really
+simple you give it a module and a
+function and it just kind of it's just a
+little typing saver essentially to put
+the put the definition so kind of you
+know when we were developing this we
+actually looked at well maybe we should
+do a parse transform to do the sharing
+and we kind of came up with this and
+really liked it because it's dead simple
+there's really no magic but we still get
+to get to have some common modules where
+we share a lot of the logic across the
+different resources okay so skipping the
+finish request details and skipping
+dispatch args for common config okay so
+some of the good stuff so how did we do
+so we reported the two heaviest
+endpoints the the search endpoint in the
+nodes endpoint we ported that from the
+Ruby and and my seat and couch TV to air
+lying with web machine and my sequel so
+memory wise considerably better so we
+were idle 19 megabytes loaded seventy
+five megabytes compared to 204 on the
+Ruby sod now that number is a little
+deceptive because that may seem kind of
+close but when you map that to the way
+that you have to have the numerous
+unicorn workers so we were using across
+our cluster six hundred megabytes
+compared to nineteen point two gigabytes
+for the Ruby so we were pretty pleased
+about that that savings so the other the
+other part of the story which I haven't
+given as much detail on yet is is the
+CPU use and and so we did do some
+profiling before we got started
+wondering where the the Ruby code was
+spending its time so we thought is it
+you know the database calls or JSON
+parsing is it the public key crypto that
+we're doing to authenticate requests
+maybe it's garbage collection maybe it's
+garbage collection so it turns out
+with the Ruby code that over forty
+percent of the time was spent in CPU
+spent in garbage collection and what you
+see here is on one of our API servers
+the the break there in the middle of the
+graph the drop in CPU use was when we
+deployed the ER line code onto the same
+box so we're serving all of the same end
+points but the break occurred when we
+move two of those end points to Erlang's
+a week so not only did we save on RAM
+but we also got a nice CPU benefit and
+again we're doing the same work just in
+a different stack and so that was good
+so um so that's sort of the first half
+of the story of some of the why a bit of
+the how on moving from the Ruby stack to
+the Erlang stack so so now I have more
+the harder part of the story to tell
+perhaps there's this thing that happens
+right with the new technology you find a
+new technology you're really excited
+about it it's kind of like a new
+relationship you know it's solving all
+of your problems everything is good
+there's kind of a honeymoon period then
+over time perhaps you start to encounter
+some limitations some problems and maybe
+you find out how you're using the
+technology wrong and and maybe sometimes
+you can work it out and you try you know
+and and then other times it becomes
+something where you can't work it out
+and you have to break up and so that's
+that's a what happened with us and
+CouchDB we had to break up now that
+isn't to say cash to be isn't a
+perfectly good solution for for other
+applications but but for our application
+we realized we had to part ways I want
+to tell you a little bit about why so
+our load involved a lot of frequent gets
+inputs of this node Jason so this 22k
+know Jason and and the result of that
+with couch db's append only be tree is
+the rapid accumulation of garbage that
+means that you have to spend a lot of
+time compacting and then
+action in couch TV is something that you
+have to do from the outside manually the
+compaction impacts your latency because
+you're doing stuff with the database and
+and it's got to do some locking and it
+actually turns out that i believe up and
+so recently but certainly with the
+versions that we were using that couchdb
+actually has a serialization locking
+essentially around accessing a single
+database so so we were seeing higher
+Layton sees and not getting as much
+concurrency as we thought we could have
+and and that led us to a design in which
+we had more databases because we didn't
+want to have fewer databases because
+that meant less concurrency but then we
+ran into problems trying to make use of
+the replication feature in CouchDB and
+so we have lots and lots of databases we
+each and and we tried pretty hard to get
+the replication to work and we couldn't
+make it work reliably it's not to say
+that it doesn't work at all but we were
+able to to get it to work for our case
+and so that meant that that you know we
+had certainly a lot of the advantages of
+couches REST API in the and the
+document-oriented database and a lot of
+those nice features but we weren't able
+to take advantage of the replication
+that and do h a in the sort of couch way
+so so we had to move our ha2 to use drbd
+active/passive a che which works really
+well but doesn't but doesn't give you
+the magic scaling ponies of having
+multiple multiple databases which which
+can be nice another thing we ran into
+was file handle leaks where over time
+what we saw is couch the couch DB
+process taking more and more memory the
+the box actually going into swap
+although not actively swapping which was
+kind of interesting but also
+indicative of a resource leak type thing
+so file handles would get allocated and
+never returned and this was this was in
+many cases the main reason why we needed
+to restart couch TV and that would
+resolve it so needless to say it became
+an operations thing it became it became
+the component in the system where when
+we were having problems with the site
+when things got slower or we were seeing
+errors that's where we kind of started
+to look first and a lot of times that
+was the right place to look first and
+you know restarting it got things going
+so all of these reasons motivated us to
+to look elsewhere so in stepping back
+what what is it that we need from from a
+database so clearly we need something
+that's going to be happy with a with a
+pretty right heavy load we're pretty
+much always doing gets inputs and that's
+the heaviest part of our load
+sophisticated queries is maybe a bit
+strong but but we definitely have a
+problem that that is not a simple key
+value problem there's a lot of parts of
+our problem that can be solved by a
+simple key value look up but an
+essential part of the sort of chef
+system and the api's involves
+collections of things so there's there's
+a call to get the to get the collection
+of all nodes or the collection of all
+rolls and and so secondary indices and
+an easy way to do that is a fundamental
+thing that we needed and then you know
+we need to we need to be able to have it
+be highly available and that's that's
+kind of a minimum bar I imagine there
+are those of you wondering to what
+extent we explored other no sequel
+solutions and we definitely did do some
+investigation there but we also asked
+ourselves a kind of a converse question
+of why not sequel and and as we were
+kind of looking at our data and looking
+at our load what we realized is that we
+really didn't have a large data problem
+our data set size is actually pretty
+modest and and given that we have this
+need for we have a right heavy load we
+have a need to do queries that sequel
+can do
+very easily we decided to do to look a
+little bit more closely at implementing
+the old-school way so we did some
+measurement actually used another tool
+from the folks at bash oh there's they
+have this basher bench utility that
+allows you to kind of define custom
+drivers to do benchmark analysis and
+then it creates data and then it has an
+R script that uses our if you're not
+using our it's a really great tool for
+interactive statistical data analysis
+and it makes really pretty pictures like
+this and and so we were able to test our
+theory of taking the the node the Jason
+blobs that that that represents the no
+data and storing them as as blobs in in
+my sequel and indeed we saw you know
+orders of magnitude more throughput and
+so that works really well so so we went
+ahead and moved forward with replacing
+the data store with my sequel just in
+terms of why my sequel as opposed to
+other things we definitely looked at at
+postgres and in fact our private chef
+product that you can install on your
+data centers we deploy that with
+postgres so we have an abstraction layer
+that allows us to talk to different
+databases but the main motivation for us
+at the time was that we already were
+running my sequel in production for some
+other service and we had on the team
+fairly deep expertise in terms of
+operating experience with the
+replication and backup of my sequel and
+so you know kind of all things being
+equal those factors were really worth
+considering yeah so we replace CouchDB
+with my sequel while the system was
+running
+yeah so like you know they're not like
+we talked at the time we're like yeah
+this is kind of hard like you know
+changing the tires on an airplane in
+flight or something and so then I was
+googling around for funny images or
+something and this is like this is not
+the only one on the internet just like
+it's like this thing like there are yet
+this is like a thing you do you um do
+you go in the desert and you and you
+turn your car sideways and changing the
+tires I'd like really there's lots of
+like people I don't know Wow okay so
+live migration starts out pretty easy
+kind of three three simple steps you so
+for us each of our customers has an
+organization on the site so the site is
+multi-tenant that we term each
+organization and org so I'll probably
+use that terminology so you put the orgs
+into read-only mode so that means the
+Ruby API basically gets set up so that
+whenever it receives a request it it
+just for right it sends a 503 then you
+can copy the data from CouchDB to my
+sequel and then you can change change
+your routing and send requests over to a
+chef so that's our code name for the
+airline stack of the API okay so there
+are some details gets a little bit
+harder so you need a tool that's going
+to coordinate the the feature flipping
+so that's the thing that's going to take
+an Oregon put it into read-only mode and
+you need some coordination around
+updating the config of the load balancer
+and making sure it recognizes the
+updated config you you don't want to do
+this org at a time because you have lots
+of orgs and you don't want the overall
+migration to take longer than needed so
+you want to do batches and then if
+you're doing batches you want to sort of
+keep track of what where the batches are
+and and keep track of individual
+organizations if a support request comes
+in for some reason you want to be able
+to quickly determine which whether an
+org is migrated or not or in the process
+of migration you know that nothing goes
+according to plan and that you'd really
+like your migration script to be able to
+recover from a crash of some kind
+because that's going to happen and you
+don't want to have to store
+your migration from scratch things like
+that and and then you know as we talk
+through our plan and and we kind of
+thought we understood the problem we
+realized there's even some some further
+subtleties and details that make the
+problem a bit harder so the main the
+main challenge that we didn't realize
+until sort of going talking through the
+details a bit more is that it's all fine
+and well to set a feature flipper and
+put an organ to read only mode
+incidentally we can do that just for the
+node request so so that when an org is
+read-only customers can still do other
+things with their org it's just they
+can't write two nodes when they're in
+that state but but you so imagine a
+write request comes in gets sent to the
+database the database for whatever
+reason is taking a long time to process
+that and get back meanwhile you have
+your feature flipper turn turn the front
+end to read-only mode ok and so once
+it's in read-only mode you'd like to
+think that you have a consistent state
+to copy the database except you have a
+right that is pending and so you should
+wait until that right is done but then
+you need to know when it's done so so
+what we ended up doing we added Redis to
+our migration tool stack instrumented
+the Ruby code to track in-flight request
+so each time a write request comes into
+the Ruby stack it it updates a set it in
+Redis and says hey I'm working on a
+write request when it's on its way out
+it removes itself and so this way mover
+which was the the name of our migration
+utility could you know poke the feature
+flipper the feature flipper pokes the
+API and says going to read only mode
+then mover can pull Redis and say hey is
+this org actually in read-only mode yes
+okay now it can migrate the data it can
+help the load balancer of course we had
+to add some extra complication in terms
+of error handling so that so that if an
+org had
+some kind of data consistency or
+otherwise we wouldn't want to leave them
+in a read-only state so we want to log
+it track that state and then flip them
+back and so you know after we'd work
+through this we had to actually
+implement this this migration utility
+and the first thought was actually that
+we were going to script this up in Ruby
+we shop overall does Ruby and Erlang and
+and this feels in a lot of ways like a
+scripting task you can kind of imagine
+how you go through the different steps
+and how you'd have helper functions that
+that kind of set that up but as we were
+looking at looking at it what there were
+kind of two things that led us to go in
+a different direction one of them was
+sort of a pragmatic thing which is that
+we had just written all this airline
+code to to take data and put it into my
+sequel and so it would be nice to just
+reuse that and all of that for the API
+for the purposes of the migration and
+then the other thing was observing how
+what happens to an org is is really a
+little state machine it starts out in an
+unmated state then it goes into a
+read-only state but they have in-flight
+requests then it goes into a read only
+and no in-flight requests and migration
+can proceed and and then it's in the
+migrating state and then either it's
+completed or it's aired out and and so
+that kind of led us to the somewhat
+surprising like if you'd said ahead of
+time you know to in the past to me hey
+you're going to implement the migration
+tool as a gen fsm an airline I would
+have said like did you just tell me to
+write a MapReduce function but actually
+it worked out really well and and it
+kind of it was it was actually one of
+the first times that I had really
+heavily used gen fsm but and this is
+kind of an unusual maybe use case for it
+but I really like how it turned out and
+I would I would do it again and so I
+kind of we kind of scripted with Jen fsm
+where all of the kind of helper
+functions that you would imagine in this
+sort of a script map to state functions
+and then the the server state that you
+pass through gives you a really nice
+organization to keep that state nice and
+orthogonal from your from
+functions and that made it a lot easier
+along with of course the supervision
+tree and that sort of stuff to make the
+migration tool fault-tolerant so that it
+could it could crash at any point and it
+could recover and know where it was we
+kind of in the diagram you can see we've
+got debts over at the bottom and so we
+serialized all of the state at various
+points to a local debts file so that so
+that everything was locally coherent and
+could be restarted and and kind of even
+better you get a free repple for your
+for your tool which is it's just a
+really powerful kind of setup so you you
+know you can start it and then you can
+ask it questions about status and and
+that's you know you kind of get that for
+free and and that's a it's just a really
+nice model to have especially for an
+operational tool like like we were
+building so yeah so overall a thumbs up
+on OTP Jen fsm happy tools I feel like
+that that really helped us in terms of
+just keeping the the tool organized but
+also in terms of its robustness and and
+then also just kind of Erlang in general
+with with kind of the process isolation
+so we had a we actually had two gin FS
+M's we had a manager Jenna fess em and
+then we implemented the the workers so
+each each org got its own worker to
+affect the migration and that worker was
+a behavior that was a gin fsm so that we
+could kind of factor out the common bits
+for the different data types for future
+migrations and if you know if anything
+went wrong with a particular org the
+manager was able to deal with that and
+know about it so there were just a lot
+of things that that whole OTP set up
+really helped with yeah so how did that
+go you know and anyone who's done big
+things in live production systems knows
+that things very rarely go to plan we
+were we had done a lot of testing we had
+done time measurements and estimates we
+thought the migration would take about
+three hours we were working on it for
+three days
+I Kevin here can attest to that we work
+together on on that so that was the bad
+news that was a pretty terrible there's
+there was a lot of fixes that we had to
+come up with and unexpected things that
+happen the good news was that I really
+didn't lie we were able to accomplish
+the migration without interrupting
+customers you know individual customers
+were we're in this read-only mode for
+for under five minutes in most cases
+under a minute I think we had maybe one
+person give a support ticket about the
+issue and then it turned out actually
+that their issue wasn't in fact the the
+migration so that was really exciting
+cool I better speed up just a little bit
+i want to show you some results of what
+happened when we moved the data off of
+CouchDB and onto my sequel so this first
+one is CPU usage couchdb my sequel the
+sort of peak that we are running at was
+it let's say a little under six hundred
+percent so that kind of maps to using
+six cores after the migration we dropped
+down to about 400 so about four cores I
+don't know if you can see that little
+bump but that's that's what the my
+sequel database had to say about it
+here's that same graph but looked at as
+load average so there we were saying at
+a load average of seven and drop to two
+and a half or so on the my sequel side
+totally different scale instead of going
+from zero to ten it goes from 0 to 1 and
+we went from point to 2.3 so that was
+that was kind of appealing but CPU use
+isn't what really matters what really
+matters is the overall latency of of the
+system so here's our average API latency
+so you've got the the wiggle wiggle
+wiggle and and around you know a little
+under 500 milliseconds and then boom
+real nice drops were a lot faster and a
+lot more reliable and that's across the
+board in fact this this graph is the
+rolls endpoint which did not migrate so
+it
+still in Ruby and it's still one couch
+TV but by taking the load off of CouchDB
+with our heaviest end point this is the
+90th percent percentile latency wiggle
+wiggle wiggle and yeah so this was cause
+for some celebration we had a little
+dance partner here's memory use on the
+database we didn't get a big benefit in
+couch because we're still using couch
+and so you don't see a drop their the
+red on the top is swap but my sequel
+looks pretty nice this graph may be kind
+of hard to read from from the distance
+but this is CouchDB right metrics and so
+before the migration we were running
+about 10 writes per second and then
+afterwards it drops to sort of 0 per
+second this one it was kind of a tier
+inducing graph for us looking at
+Ethernet traffic we're sort of just
+under 100 megabits and then drop way
+down so that's kind of testament to to
+the the node data that we were serving
+out of couch was kind of somehow a large
+enough volume to have a real effect one
+of the things that we did for inputting
+the data into my sequel as we compressed
+it with gzip and so when you look at
+network traffic after the migration on
+the chef server you see this this really
+nice drop in inbound traffic because the
+the day we're pulling from the database
+is now compressed so that was a huge win
+and that was something you know that we
+weren't sure about but but I showed you
+the bachelor bench measurements and that
+was a case that we measured does gzip
+actually you know give us a throughput
+advantage and absolutely it did so
+thanks for your time that's that's kind
+of my story of of the migration of why
+we did what we did a little bit of how
+we did it so yeah
+so that's that's a good question I mean
+it sort of goes back to the history of
+chef and how it was developed so I
+wasn't around I wasn't around for that
+decision so it's a little bit hard for
+me to give an answer yeah I mean it you
+know on the it had a lot of nice things
+in terms of helping to get the product
+jump-started really quickly I think the
+development went really quickly you know
+I think it was really hard to see what
+where the scaling issues and what the
+load was going to look like at the time
+that technology was chosen I mean that
+so that's also part of it
+I guess the most diplomatic thing I
+could say is it's it's sort of a timing
+thing so I think we actually I believe
+we did some experiments with with
+Cloudant which is big couch yeah or used
+to that right yeah right i mean it was
+it was it was early days and you know i
+mean i mean it's it's a timing thing and
+i should also mention that in terms of
+some of the things you're seeing couchdb
+is a young product so so yeah I mean
+it's going to evolve and get better I
+think for for now for for our use I
+think we found a solution that feels
+like it it it solves a lot of problems
+in a nice way for us so I don't really
+imagine us going through the effort of
+migrating back so let's see if I can
+remember the names off the top of my
+head we are using a mi sequel the branch
+from yon blast is that is that right i'd
+be happy to come find me I'd be happy to
+share that and then we're using the EPG
+SQL driver we did find some problems
+with the the main branch there although
+we we put some patches that we run
+internally and since then have found
+Anton who's sitting there has a fork of
+the EPG SQL library that has some really
+nice fixes and actually our plan is to
+start using that because it addresses
+those we started off using a pool boy we
+ran into some problems with pool boy
+that I believe have since been fixed
+thanks to John Hughes and quick what's
+up ok so right about the same time that
+they were doing that debugging work we
+were encounter
+the same issues with that without tool
+in production I had written a puling
+library a while back and I I sort of
+cleaned that up and we're now using
+pooler which is available on github for
+our connection pooling and that's been
+working really well so I my
+understanding is that we will be open
+sourcing the this Erlang port and and
+and that will include the relational
+database driver bits
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,1786 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Dave Watson “C++ Exceptions and Stack Unwinding” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Dave Watson “C++ Exceptions and Stack Unwinding” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Dave Watson “C++ Exceptions and Stack Unwinding”</b></h2><h5 class="post__date">2017-10-30</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/_Ivd3qzgT7U" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">Welcome to C++ Exceptions
+and Stack Unwinding.
+It's early in the morning,
+so forgive me if I'm a little slow.
+My name is Dave Watson.
+I am a Facebook engineer,
+here to talk to you about exceptions.
+So while, I'm going to
+teach you a little bit
+about how Facebook uses
+exceptions and stack unwinding,
+I'm also the current libunwind maintainer,
+so most of my talk is actually coming
+more from a maintainer standpoint,
+then from, as a Facebook employee.
+At Facebook, though,
+we do use Linux 64-bit x86.
+That's what I'm most familiar with.
+We're going to be talking about
+a handful of different stack unwinders.
+They're listed up here on the slide.
+These are all, kind of the
+ones that are most used
+in Unix operating systems,
+so if you're using Windows,
+I don't nearly have as
+much knowledge about that.
+Windows uses SEH, structured
+exception handling,
+which is a little bit different,
+but actually you'll probably learn
+quite a bit in this talk anyways.
+They are similar enough
+to still be relevant.
+So of the unwinders that are used
+in the Unix based operating systems,
+we have libgcc.
+You guys are probably
+familiar with the gcc.
+It has a stack unwinder in libgcc,
+used for exceptions and
+back trace functionality.
+The one that I'm the
+maintainer of, libunwind,
+started as an HP project for
+the Itanium architecture.
+Libunwind actually
+provides its own interface
+to programmatically unwind the stack.
+So you could unwind and
+see things about the frame,
+the current function name,
+look at some of the registers,
+do introspection.
+Not just, well unwinding for
+exceptions or back traces,
+but really, whatever
+you want to use it for.
+There's another project.
+It confusingly has the exact same name.
+It's also called libunwind.
+It's part of the llvm group of projects.
+The githubs are up there on the slide.
+They're unfortunately, very similar,
+so grab one or the other.
+Llvm's libunwind uses the
+same interface as libunwind,
+so I'm gonna talk about
+the libunwind interface
+that's implemented by those two projects,
+but it is not the same as libgcc,
+which doesn't export a
+public unwinding interface,
+other than throwing exceptions.
+Cool.
+So we're going to talk
+about a little review
+of zero-cost exceptions.
+You guys are probably
+pretty familiar with it,
+but we'll do some review
+for five or ten minutes.
+Make sure we're all on the same page.
+We're gonna then talk about the various
+layers of abstraction that
+we have to get through,
+to actually get from
+throwing an exception,
+to handling it in a catch statement.
+So this includes C++, API, and ABI,
+the Itaniumd ABI,
+and finally the libunwind API and ABI.
+Then we're going to dive into some things
+that are pretty operating system specific,
+so dwarf, elf, and what SIS calls
+actually have to be available
+to do unwinding and exceptions.
+So I mentioned Itanium.
+Itanium is an architecture,
+was an architecture, people still use it.
+We mostly care about, when
+I say Itanium in this talk,
+the exception handling ABI.
+It has outlived the architecture,
+and become widely used
+for all the different
+Unix operating systems.
+So when I say Itanium,
+don't think architecture, think,
+oh exception specification.
+This is what everyone's using
+to unwind their exceptions.
+Cool.
+So zero-cost exceptions.
+Hopefully this means if
+we don't use exceptions,
+or even more specific,
+don't throw an exception,
+we're not actually paying any cost
+for having this exception
+handling in the code.
+And let's see if that's really the case.
+So we're going to compare
+it to return codes.
+Here's a super simple example
+of some function that
+calls another function
+using return codes.
+So bar return's a return code.
+In this case, we're gonna check
+and see if it is less than zero.
+If so, we're going to
+assume that's an error
+and propagate it up the stack.
+If not, we'll go do some real work
+and return a different return code.
+We generate the assembly for that.
+This is X86.64 assembly.
+I'll just walk you through all
+the examples in the assembly.
+In this case, we do a
+little stack adjustment.
+We actually call the function.
+We do some tests.
+If the return code is less than zero,
+we do something different.
+We adjust the stack again, and return.
+Great. Pretty straight forward.
+Seven or eight different instructions.
+The comparison, the try catch.
+We're assuming in this case
+that bar throws an exception,
+and we want to handle it somehow.
+I didn't actually put
+anything in the block,
+but you do something there.
+Catching all exceptions in this case.
+Generate the assembly.
+Great, zero-cost.
+All the introspection
+of what the actual turn
+code was has disappeared,
+and it didn't disappear entirely,
+it actually went somewhere else.
+We just generated it into
+a different block of code,
+so the zero-cost just generates
+the two pieces of code,
+the handling of the error,
+or exceptional case,
+into a different block,
+so we can have a hot piece of
+code and a cold piece of code.
+And we can actually see
+our first little bit of C++
+exception handling ABI here.
+Cxa begin catch and end catch.
+Of course, had I put something
+in the catch statement,
+there would be code
+generated in the middle
+to actually implement the catch statement.
+So in addition to splitting
+apart the exception handling
+in the actual instructions
+that you want to run,
+we actually need a little
+bit more information.
+I can't put it on a slide,
+because unfortunately I
+don't know of any great tool
+that will put a human
+readable version of it,
+but it's super easy to explain.
+If you have multiple catch statements,
+you can have different exception types
+that you want to handle,
+so we actually generate
+a little table that says,
+&quot;Oh, here's the types of
+the various exceptions
+that we're going to handle,
+and here is the catch
+statements for them,&quot;
+so it'll jump to the little piece of code
+called the landing pad
+for that catch block.
+In addition, it generates a little stub
+to actually clean up the frame.
+So say we threw an exception from bar,
+and didn't want to handle it.
+We didn't have that last catch block
+that was catching all.
+If we just wanted to propagate
+the exception up the stack,
+we'd actually want to delete
+everything that had a
+destructor on the stack.
+So in this case, I stuck
+up just an example.
+A mutex that probably
+wants to get unlocked
+using that lock guard.
+So it'll generate a little stub of code
+that will run all the destructors,
+and continue unwinding up the stack.
+So the return code equivalent of throwing
+is just returning a return code.
+It's a single instruction.
+Conversely, the zero-cost exceptions
+have eliminated most of the
+cost from catching exceptions,
+and instead put all the
+complexity into throw.
+So a super simple throw statement
+gets generated into
+something like this instead.
+So we call cxa allocate exception.
+We initialize the exception
+with a bunch of instructions there,
+and then we throw the exception.
+Great, so that's the end of
+our little bit of review.
+Let's start looking at what
+these actual C++ ABI functions,
+how we would implement them,
+and what they actually do.
+So the first ones we saw were
+begin catch and end catch.
+Book ended on top of our catch statements.
+So exceptions in C++
+are reference counted,
+so you can do things like
+get the current exception
+or exception pointer.
+So the actual exception
+object isn't deleted
+until the reference
+counter goes down to zero.
+In C++, you're also allowed
+to have a stack of exceptions,
+so if you vary a catch statement,
+and you want to throw another exception
+while you're already
+handling an exception,
+yeah, sure, you can do that.
+Go ahead.
+We'll just keep track of it in a stack.
+At Facebook, we actually have some tools
+that will interest back to the stack
+and print all the exceptions
+you're currently handling
+at the same time.
+I'm not going to recommend
+this as a great way
+to deal with exceptions.
+You probably don't want to
+handle more than one at a time,
+but it's totally supported.
+So these functions are
+super easy to implement.
+They're very short.
+Next we have allocate exception.
+Implementation under the hood
+is pretty much as it says on the tin.
+It allocates an exception.
+Pretty much just calls malloc.
+So has a little piece of memory there,
+and sticks the exception into it.
+For return codes, these
+are passed in register,
+or on the stack, back up the stack
+as we're unwinding.
+For exceptions, well they
+may be a little bit bigger,
+so we generally put them on the heap
+as we're unwinding the stack
+because the stacks
+going to disappear on us
+as we're throwing the exception.
+So one little trick here,
+is that what if we are
+actually throwing bad alloc?
+So, or say we were using
+our system allocator,
+it runs out of memory somehow and says,
+&quot;Okay, I'm gonna throw bad alloc.&quot;
+but the first thing you
+get to in the C++ ABI
+is, allocate exception,
+which is just going to call malloc
+using the system allocator.
+Well it's probably going to say,
+&quot;I can't even, I don't
+even have room for you
+to allocate bad alloc.&quot;
+As it turns out,
+we just allocate a little
+bit of memory at start
+and then stick bad alloc into it,
+so we kind of just, like work around it.
+So we have just enough
+memory for a few bad allocs
+to get thrown up the stack.
+So pretty much the rest of the talk
+is talking about how cxa
+throw is implemented,
+so how do we get from the throw
+to the landing pad?
+This is pretty much all the complications
+of how exceptions are implemented.
+So that's it.
+That's all the C++ that
+I'm going to talk about.
+We're now diving into the
+world of the Itanium ABI.
+The Itanium ABI is language agnostic,
+so it implements exceptions
+for a bunch of different languages,
+so I made mention of a few of them,
+but this isn't C++ specific at all.
+Cxa throw is actually
+implemented very simply.
+It does a tiny bit of accounting
+for the reference
+counting of the exception,
+and then dives right into
+unwind raise exception.
+So we pretty much immediately
+jump into the Itanium ABI.
+So the Itanium ABI as an unwinder,
+is implemented in libgcc,
+or the other unwind libraries I listed.
+The personality routine,
+which is the language
+specific part of the unwinding
+is implemented in your C++ library,
+so the one we use is libstdc++.
+And that's where the
+personality routine lives.
+In this case called
+gxx, personality v zero.
+And so, many years ago,
+before I knew about,
+as much about exception unwinding,
+I knew this as the thing
+that was the first thing to complain
+when you tried to link
+your C++ library together,
+and forgot to link with libstdc++.
+Always complains it was missing.
+Great.
+So your personality routine,
+what it's actually doing
+is walking that table that lists,
+oh here's your catch blocks
+with the type of exception
+we wish to handle,
+and here's the actual
+exception you're throwing.
+And it just tries to match up the types.
+So it walks the table,
+finds the right landing
+pad, catch block to go to,
+and jumps there.
+It's actually pretty simple.
+It's implemented in two
+or three pages of code.
+It also has a different mode,
+where it will say,
+&quot;I don't know how to
+handle this exception,
+so we're going to keep
+unwinding the stack farther,
+and run little stubs
+that run the destructors
+for the frame.&quot;
+That's all it does.
+It may need a little bit of
+extra information to do this,
+so we have unwind, get and
+set instruction pointer
+to find out where we are,
+or to set it to the correct landing pad.
+We also have access to all the
+general purpose registers on the machine.
+These are all abstracted
+out in the Itanium ABI.
+They're just numbered 1 to 16,
+or however many you actually have.
+So generally the Itanium
+ABI is implemented
+in terms of a lower level API.
+In this case, libunwind has its own API,
+and it's pretty straightforward
+to implement the Itanium
+ABI in terms of unwind.
+So this is what libunwind, or
+llvm's libunwind provides you.
+You have initialization
+function, unwind init local.
+So we are initializing our
+unwinder from this place,
+right here, where I am
+on the stack, right now.
+And so we are going to unwind from here.
+Wherever you called this function from.
+There is a init remote variant as well,
+so you can initialize from somewhere else.
+From a different process,
+from a different machine,
+from a core dump.
+So all sorts of cool things you can do
+from where you want to start unwinding.
+Unwind step is where most
+of the magic happens.
+It is what takes you
+from your current frame
+to the previous frame.
+Unwind resume actually resumes execution
+from wherever you are.
+So you call unwind step a few times,
+and then you can resume
+from a few frames above
+as if you had called return instead.
+We also have get register and set register
+that implement the get and
+set for the Itanium ABI.
+And also get proc info.
+This is the thing, that
+generalizing a little bit,
+that gets enough information
+so that the personality
+routine can go and handle,
+and knows all of the types of
+the different catch blocks.
+So let's go ahead and try and implement
+a super simple exception handler.
+This code is actually just simplified
+from the code that libunwind
+actually does do implement exceptions,
+so it actually is exactly what is used.
+Itanium ABI specifies a
+two-phase unwinding process.
+The first phase is the search phase.
+We're going to search through
+and try and find the correct handler.
+So first, we just initialize
+from wherever we are,
+in our while loop to unwind frames
+until we find the right handler.
+So first thing we do is step backwards.
+Unwind step returns either an error code,
+or it tells you that it's
+gotten to the top of the stack,
+and there's nothing more to unwind.
+Or it says, okay great.
+We unwound one frame successfully.
+But the first we need to do
+is actually just step back one frame.
+Why would we step back
+one frame right away?
+Well it's because we're
+actually in the Itanium ABI.
+We're actually in the unwind
+raise exception function,
+and we are guaranteed to
+not have your catch handler
+in the unwind raise exception function.
+So we step one is to get
+back into your function.
+So the first step is good.
+We're just getting back to your function.
+We grab whatever information
+the personality routine
+may or may not need,
+and we call it.
+Personality routine takes an enum.
+In the first phase, it is search.
+So it searches through its tables
+to see if there's a match
+for the currently thrown exception.
+The current exception is
+in the context object.
+So this is abstracted out.
+C++ knows about the
+context in the personality.
+The language agnostic Itanium
+ABI knows nothing about it.
+It knows nothing about exception types.
+So the personality routine
+takes care of deciding,
+hey is there a catch
+statement here or not?
+If there is, it says handler found,
+we break and go to phase two.
+If there's not,
+eventually unwind step will return,
+oh we got to the top of the stack,
+and terminate is called.
+So let's say we found our handler.
+We're now going to start the
+second phase of the unwinding.
+We restart from the beginning.
+Initialize back from the very beginning.
+Unwind init local.
+Next, we step again, right away.
+Step, grab the personality routine.
+This time call it with the cleanup enum.
+So this time it's running
+all your destructors.
+It also returns, hey is
+this the right location
+that we actually need to
+install the context, or not?
+So if this is our handler,
+we're not going to clean up.
+Instead, we're going to reset
+the instruction pointer,
+which is done somewhere in the personality
+using unwind set instruction pointer,
+to the catch block.
+And then libunwind says, unwind resume.
+So it resets all the registers
+to the correct values
+and resumes execution from there.
+Great.
+So we have this two-phase
+unwinding process
+specified by the Itanium ABI.
+What does this actually
+buy us in practice?
+As it turns out, not a lot.
+It lets you have the full
+stack trace available
+to terminate if you threw an
+exception and it was unhandled.
+So you, as the programmer,
+your value in two-phase unwinding
+is just getting better debug info.
+You can actually write the unwinder
+with the single phase
+of unwind if you wanted,
+and it would be faster.
+Cool.
+So terminate, if we do get terminate,
+let's see how this
+actually works in practice.
+So here's a simple example.
+I'm using gcc to compile this code.
+So I made main.
+To make it a little more
+complicated, I said std thread.
+Let's just throw an exception
+from the std thread,
+in this case bar.
+So if everything is
+working as I said it would
+in the previous slides,
+we should have the full
+back trace available to us
+in the debugger.
+It should say, oh.
+Bar threw an unhandled exception.
+And then we should see
+whatever started thread.
+So here's what I got.
+I did this on Linux.
+I think I used gcc six for this.
+So here's my back trace.
+It definitely threw the exception,
+definitely called terminate.
+But I don't actually
+see bar in here anyway.
+There's std terminate,
+and then there's start thread.
+As it turns out, gcc has a bug in it.
+Or an issue.
+Before gcc eight, which is not out yet,
+I believe it is fixed in trunk,
+but not in any released compiler.
+What actually happens is this std thread.
+Before it calls your user
+function or your lambda,
+it actually has a try catch around it,
+so it catches all.
+It catches all exceptions.
+So we're switching from
+phase one to phase two.
+It needs to do this to
+implement p thread cancel.
+So I actually don't use p thread cancel.
+I don't care about p thread cancel.
+Neither does the code.
+It rethrows the exception,
+and that's fine,
+but that means we've gone
+through phase one and phase two,
+found the handler, started execution,
+rethrow exception is now
+going back to phase one.
+It actually calls terminate
+because it didn't find a handler for it.
+Unfortunately we're at the wrong location,
+and our debug info is all screwed up.
+We can fix this though.
+We stick a noexcept in there.
+What does no except do?
+So this is straight from
+the standard wording.
+Noexcept may or may not unwind the stack,
+which potentially allows the compiler
+to implement noexcept with,
+well implement it faster.
+Well in practice,
+ignoring the standard text,
+but what actually happens.
+Let's stick the noexcept in there,
+and run the code again.
+It actually looks much
+different this time.
+Instead of 7 frames,
+we now have 16 frames,
+which is great.
+So what actually happened
+was the personality routine
+realized there was a noexcept in there,
+and there probably shouldn't
+be any exceptions being thrown.
+Instead we immediately call terminate.
+So I really like this example
+because we can actually see
+all the different layers of
+abstraction at work here.
+We can actually see bar in the back trace.
+We can see cxa throw, the C++ ABI.
+We see unwind raise
+exception, the Itanium ABI.
+We then see the personality
+routine being called,
+and then finally terminate.
+So it's all just kind of
+laid out for you there.
+There for you to see.
+So in addition to throwing exceptions,
+or even pragmatically
+unwinding your stack,
+there's a couple other really
+commonly used functions
+that use the same machinery.
+So POSIX provides setjmp and longjmp.
+In C, these are actually
+easy to implement.
+Setjmp just grabbed all your registers,
+including your instructions
+stack pointers.
+And longjmp, after you had presumably
+increased your stack size,
+done a couple functions.
+It's just a long, non local return.
+It wants to return, not
+from the current function,
+but all the way back to
+where setjmp was called.
+So the way it does this, is just,
+slams back in all the registers it saved,
+including the stack pointer
+and the instruction pointer.
+Works great in C.
+Doesn't work so great in C++
+because we need to run the destructors.
+So instead, we use the same machinery.
+Instead of calling a personality routine
+to try and decide if we
+have a catch statement,
+and trying to match up exception types,
+we do it instead by just saying
+unwind to this instruction
+pointer in this location.
+So the actual Itanium ABI
+function is called unwind,
+force unwind I believe.
+So, just a different place to
+stop the unwinding process.
+Similarly, the Gnu C
+library provides backtrace.
+Super useful, we use it all the time.
+You pass it in array, and it fills it in
+with all the instruction
+pointers up the stack.
+So a whole array of instructions
+representing your backtrace.
+And this is implemented the same way.
+It unwinds the stack one frame at a time,
+fills in the instruction pointer.
+It only uses like a phase
+one kind of unwind, though.
+It's not actually calling any destructors.
+Not calling any personality routines.
+Not calling any stop function
+like setjmp and longjmp.
+It just goes all the way back up the stack
+until it says, either I
+filled in the entire array
+that the user passed me,
+or there is no more stack to fill in.
+Cool. So how do we actually
+implement unwind step?
+That's probably the most
+complicated process of all this.
+Like, how do we get from one function
+to the previous function?
+So, dwarf debugging symbols
+are really how we do this.
+So the elf is just a file format.
+We don't actually care about
+it in terms of this talk
+except that there is a section,
+one of the pieces of the elf
+format is an EH frame section.
+Exception handler frame.
+So it gives us enough
+information in dwarf format,
+to actually go and unwind the stack.
+So there's some command-line tools
+you can dump your dwarf
+expressions from your file.
+Use read elf debug dump frames.
+Give it the binary names.
+It'll spit out some stuff like this
+for ever single function.
+So it's actually a lot of data.
+So they're called dwarf, D-Ws for dwarf,
+C-F-A is for canonical frame address.
+So canonical frame address.
+If you're on an architecture,
+and you're using frame pointers,
+it is the frame pointer.
+It's just saying, this is
+what the frame pointer is.
+Of course, using dwarf unwind information,
+you don't actually have
+to have a frame pointer.
+So you can compile without frame pointers.
+Or maybe your architecture
+doesn't use them,
+and dwarf will still work just fine.
+So I'll just tell you, explain
+how some of these work.
+Advance location is super easy.
+It just means advance one location
+in your instruction stream.
+So in this case, the
+first one is advance one.
+The def cfa, there's
+three of them out here.
+Def cfa offset, def cfa register, def cfa.
+These are defining what
+your frame pointer is,
+your canonical frame address.
+So normally you specify
+both the offset in register.
+You can also specify
+either just the offset,
+or just the registering.
+Keep the other half of it the same.
+So the first one they're saying,
+reset the offset to 16,
+but keep whatever it was
+before for the register.
+The second one is saying, oh
+our new cfa register is rbp.
+The frame pointer on x86.64,
+but keep the offset at 16.
+And last one says rsp
+is the new frame pointer
+with the offset eight.
+And this corresponds to the
+generated assembly like this.
+It's a standard function prologue
+of pushing the old frame
+pointer onto the stack,
+moving the current stack
+pointer into the frame pointer.
+Doing whatever we did in our function,
+and then the standard function epilogue
+of popping off the old frame pointer.
+So visually that looks
+something like this.
+We're stacked, I'm just
+assuming like in this diagram,
+that we're pushing things
+onto the stack always,
+never popping them off.
+We have a series of registers
+that we want to know how to restore.
+How to get from this frame
+to the previous frame,
+so presumably there were some
+registers that were saved
+that we need to then put
+back into the registers
+before the stack disappears.
+Because as you're unwinding the stack,
+you need to grab any information
+you need out of the stack
+before you move to the previous frame.
+So in this example, it pushed R1 on,
+and then pushed R6, and
+then pushed R1 on again
+because it had done something with it.
+It also has some frame
+oriented registers on there,
+like the return address
+in the frame pointer.
+So we need to restore the
+registers when we're unwinding,
+but what registers do we
+actually need to restore?
+It turns out not all of them.
+We can kind of break up the registers
+into several different categories.
+The caller-saved, the callee-saved,
+and the frame-related.
+So instruction pointer,
+frame pointer, stack pointer.
+So as it turns out, the
+only ones we need to save
+are obviously the frame-related.
+We want to know where our
+canonical frame address is,
+our frame pointer.
+But only the callee-saved
+registers need to be saved.
+For the caller-saved registers,
+your function, if it has
+a catch statement in it,
+it actually knows exactly what it needs
+if it's gonna resume execution there.
+So when it generates the
+code to call a function,
+and has a little landing
+pad, the catch statement,
+it knows it can insert some
+code into the landing pad
+to go and grab these registers again
+and restore them if it needs to.
+It can't do the same for
+the callee-saved registers.
+It doesn't actually know
+which registers were used.
+It doesn't know where they were stored.
+So instead, the dwarf information
+has enough information
+to do that to restore
+just the callee-saved registers.
+Cool, so we're going
+to take a little aside
+into one of the bugs I had
+to solve in stack unwinding.
+So about a year and a half
+ago, I spent most of my time
+working on jemalloc,
+which is our memory
+allocator implementation.
+It has some, a debug mode,
+where it takes stack traces
+every x byte that you allocate.
+So you allocate every 100 bytes,
+it will go and take a stack trace
+when you call malloc,
+so it can try and figure out,
+give you a nice profile
+of which pieces of memory are allocated
+and where they are allocated from.
+As it turns out, one day,
+one of our engineers said,
+&quot;Hey, this is taking three
+times longer to run our program
+than normal,
+and I've narrowed it down
+to this unwind information.
+Like grabbing this backtrace
+is taking way longer than it used to,
+and we have no idea why.&quot;
+And I was like,
+well we really haven't
+changed jemalloc recently.
+Let's take a look.
+Let's debug this, and
+figure out what's going on.
+And after about two weeks of
+banging my head on this problem
+I came up with this small
+reproducible test case,
+in this three lines of code.
+So clearly if you were to compile this
+with an optimizing compiler,
+03 or 02, this would just be nothing.
+It would just return right away.
+I mean, it's a char array of size one,
+and it's aligned to 32 bytes.
+Okay great.
+Even if you were using
+a non optimized mode,
+you'd think this would
+compile down to something
+that would, maybe allocate space for this
+on the stack, with a
+prologue and epilogue,
+and then return.
+As it turns out it does that,
+but in the most convoluted way possible.
+First it takes, not the return address,
+but a pointer to the return address,
+and stores it in R10.
+Then it aligns the stack using a mask.
+So the stack grows down,
+and it says, let's hand out the
+least, the 32 on the bottom.
+And so we'll align it to 32 bytes.
+Then we push the address
+to the return address
+onto the stack.
+Then we're going to do a
+standard function prologue,
+push rbp, and them move in
+the current stack pointer
+to the frame pointer.
+Then it decides to push and
+pop R10 for whatever reason.
+And then finally it does a
+standard function epilogue
+of popping the frame pointer.
+And then again, it takes
+the address of something
+and stores it in the stack pointer.
+So kind of crazy.
+The dwarf it generates
+looks something like this,
+which is also crazy.
+So both the assembly generated
+and the dwarf expressions
+are correct.
+They both run just fine.
+They are just nonstandard
+code that would be generated.
+So while 95% of functions probably
+just use advanced location
+and def cfa, and maybe define a few,
+where the registers are saved.
+You can also define expressions in dwarf.
+So dwarf actually, as it turns out,
+is completely turned complete
+with the expressions,
+provides a full interpreter, stack machine
+that you can use to
+specify whatever you want.
+So this, take the address of something
+and dereference is not,
+and you can't specify
+this in normal dwarf,
+only in expressions.
+So the one we care about
+here is the second one.
+Def cfa expression.
+It takes the frame pointer register rbp,
+subtracts from it, dereferences it.
+Okay great.
+It's actually pretty short in the dwarf,
+but it is not something
+that is standardly done,
+so it was making our
+whole program go slower.
+To understand why it was going slower,
+I'm going to have to get through the rest
+of how the unwinder works.
+But expressions can be totally,
+arbitrarily complicated.
+This one is not made up.
+I grabbed this from the standard library.
+It grabs a couple of registers,
+put some literals on the stack,
+hand them together, does
+greater than, shift left,
+but totally, completely,
+arbitrarily complicated.
+As it turns out, there's a researcher
+wrote a whole paper on how to attack,
+maliciously attack your program,
+using dwarf instructions.
+That's kind of cool.
+I thought it was a good read.
+Cool, and now we're really
+coming to the heart of the winder
+or what I consider the heart.
+How do you find these dwarf instructions?
+Actually, implementing
+a dwarf parser is great.
+There's a bunch of them out there,
+and it's not that interesting.
+As it turns out, all
+the different unwinders,
+all parse the same.
+I mean, they'd have to to be correct.
+But how do you find the actual dwarf info,
+and how do you make it go fast?
+As it turns out,
+obviously the teaser for
+the talk in the slide,
+there's a giant lock in how
+you find the dwarf information.
+So if you have statically
+linked your binary all together
+in one giant blob, great.
+There's just one EH frame section.
+That's the only one you have to search.
+It's super easy.
+If you had dynamically
+linked things together,
+there's a bunch of different sections
+that you now have to go and try and read
+and find the right one.
+So some of this is
+operating system specific.
+You can, of course, go read
+the proc file system in Linux
+and try and figure it out.
+Glibc provides dl iterate phdr,
+so iterate the dynamically
+loaded libraries
+and find the headers.
+You could also load dynamic
+libraries, dlopen, dblclose.
+So the lock we're taking
+is the list of dynamically
+loaded libraries.
+So while you're iterating over things,
+you can't open and close libraries,
+and vice versa.
+So, if you're complaining
+about exception speed
+and multi threading,
+this is probably the issue
+you're running into first,
+is there's, hard to even remember
+where there isn't a giant lock
+that you try and have to get around.
+And how we get around this,
+is completely different
+for the different non riders.
+They all basically use caching
+in some form or another
+to try and cache this information
+so they don't have to iterate
+over all your loaded libraries.
+So the main problem with unwinding
+is dlopen and dlclose.
+So great, you open something.
+You can't actually unwind
+unless it's already open.
+So presumably you already
+have the code loaded,
+if you're throwing an
+exception and unwinding.
+Let's assume you have already done dlclose
+in a safe manner,
+and you're not trying to
+unwind on a closed library,
+which again, that's
+correctness on your part.
+The problem really comes down to,
+we're now dlopening something
+after having dlclosed something.
+Doesn't have to be the same thing.
+It could be completely different.
+These things could be put
+in the same place in memory,
+so when we're talking about caching,
+we have to make sure
+our caching is correct,
+even though things may be changing
+using dlopen and dlclose at the same time.
+So the different caching
+strategies are something like this.
+Libgcc is the most conservative.
+It always takes his lock,
+that always calls dl iterate phdr,
+grabs the lock.
+Dl iterate phdr actually has
+a super interesting optimization in it.
+It has a count of how many times
+you've called dlopen and dlclose.
+If that count is the same,
+we just assume that our cache is correct.
+So nothing was loaded, nothing was closed.
+We can use the cache.
+Immediately goes and checks the cache.
+It's cache is pretty small.
+It caches eight objects.
+The things it caches are,
+it is caching an instruction pointer range
+to the EH frame section
+in your object file.
+If it's not on the cache,
+it has to walk the whole
+list of object files
+and try and find it.
+Llvm's unwinder, llvm libunwind,
+has a different strategy.
+It also does caching.
+It has an unlimited cache
+as far as I can tell,
+it's just a link list.
+It uses a read/write lock to protect it,
+so if it's not updating the cache,
+all the readers can
+just use the read lock,
+and try and read cache.
+It also briefly takes
+the global lock always
+to make sure that the cache is valid.
+But then it can grab an unlimited
+number of things from it.
+It doesn't cache full object files.
+It caches the functions,
+so each function has a
+series of dwarf instructions
+associated with it,
+so a slightly smaller
+range of ip addresses,
+our instruction pointer addrees to
+the functions that it's actually
+using for the dwarf instructions.
+Libunwind takes a different
+approach from both of those.
+It's an even higher level cache.
+It also doesn't always take the goal lock.
+It is a little more optimistic.
+It says, hey if you're just trying
+to get information out of this,
+you're just doing a backtrace,
+you're not actually resuming execution,
+we're just not going to take the lock.
+We're just going to assume
+our cache is correct.
+It does have a few checks
+to try and see if the cache is correct,
+but there could always be a race
+with the actual dlopen and dlclose.
+But most programs don't
+use dlopen and dlclose,
+so not usually an issue.
+When it unwinds an exception,
+it does always take the lock,
+so that your code never crashes.
+It's always correct
+with dlopen and dlclose.
+So the caching that libunwind does,
+is quite a bit different,
+and looks more like this.
+Instead of a range of
+instructions pointer addresses,
+we're caching only a single
+instruction pointer address ever
+so you have to have this
+individual instruction pointer
+have been through this point before,
+have thrown an exception
+through this exact point before
+for it to be in cache.
+But that means we can
+cache things much faster.
+So I said that each function call,
+or each place you're
+throwing an exception,
+you have to restore a
+specific list of registers.
+The callee-saved registers.
+So how do we restore this
+particular list of registers?
+Well we can run through
+all the dwarf instructions,
+and figure out the last place
+that each of those registers was modified,
+and then we know how to restore.
+So the dwarf tells us how to restore it.
+But let's say instead,
+we run through all of it the first time,
+and then just save it for
+this individual location.
+So, for each of these function calls,
+in this example of, like void foo,
+multiple things could
+be changing on the stack
+for that function,
+the dwarf instructions
+specify the entire function,
+but we don't stave the information
+for the entire function,
+we only save it for the function calls.
+So again, our cache is
+instruction pointer,
+corresponding usually to a function call,
+or a throw statement,
+to a list of callee-saved
+registers to restore.
+So libunwind actually
+doesn't run any dwarf,
+assuming you've hit the cache.
+No dwarf pricing, nothing.
+So we're caching the
+results of running the dwarf
+instead of caching the dwarf to run.
+And it is much more
+sensitive to hash table size,
+so if your cache is too small,
+because it does stores
+individual instruction pointers,
+it's going to take a lot longer
+to try and go and do the full parsing,
+and try and find the dwarf again
+if you've missed your cache.
+So we actually have one other thing
+that we implement in libunwind.
+We actually have a
+backtrace cache as well.
+So we implement fast backtraces.
+So backtrace is actually mostly
+what we use libunwind for at Facebook.
+None of the other unwinders
+have fast backtrace support.
+You can of course grab a backtrace
+by just using your frame pointer,
+assuming you've compiled
+the world of frame pointers,
+and you probably will have to compile
+the world of frame pointers
+to guarantee you have them everywhere.
+And we actually do.
+All the code that we compile from scratch,
+we enable frame pointers everywhere.
+Of course, we have a bunch of code
+that we didn't compile ourselves
+that may or may not have
+frame pointers in it
+that we would like to
+still get backtracers for.
+In addition, I showed you
+the dwarf expression before.
+That actually messes up
+the frame pointer unwinder
+because the return address
+is not directly in front
+of the frame pointer links.
+It actually uses a non standard location
+to store the return address,
+so frame pointer unwinder
+broke on that as well.
+So the backtraces.
+What do we need, when we do a backtrace?
+Previously unwinding, we've been talking
+about all these callee-saved registers
+that we need to go and
+parse the dwarf to do.
+We don't actually need any of these.
+We're not restarting execution.
+The only thing we care about is
+where was my previous
+canonical frame address,
+or frame pointer,
+and where is my return address?
+Where is my instruction pointer?
+That's all we're filling in
+in the array for backtrace.
+That's all the information we need.
+As it turns out,
+we can compactly represent
+all of this information
+in a much tighter format
+than could be done using
+the full unwind info.
+In fact, we compact it down to 64 bits.
+So dwarf is a little bit more
+verbose format for that cache.
+It turns out some architectures
+actually have more compact representations
+of their full unwind info.
+So if your function needs to
+restore zero, one, two registers,
+we can compact that down
+to a minimum amount of
+information as well.
+So if we're using backtrace,
+fast backtrace support,
+we try the fast backtrace cache.
+If we miss there, we try
+the full unwind cache.
+If we miss there, then we're going to go
+and try and search through
+all the object files
+and find the correct dwarf to rerun
+to get us the correct locations.
+So fast cache looks something like this.
+There's various different types
+of unwinding that fast cache can do.
+Of course, if you have a frame pointer,
+it can say hey, I know
+this is a frame pointer,
+let's just use the frame pointer unwind.
+Of course, this isn't always rbp,
+sometimes, like if you're
+in the exact wrong location
+it could be rsp,
+as I saw, as we saw in one
+of the examples earlier.
+There's also signal frames,
+which are slightly different.
+We can unwind to them as well.
+We just need to know where
+the ucontext structure is.
+Again, this is operating system specific,
+but actually it's the
+same on FreeBSD and Linux
+and several others.
+Ucontext has just saved
+all the registers for us
+before it jumps into the signal handler,
+so let's go grab the
+previous set of registers,
+and we know how to do that.
+So we store an enum in
+our packed data there,
+as well as whatever information we need.
+So either rbp or rsp for frame pointer,
+or we know we need to go
+and grab the ucontext,
+and there's an offset in there.
+So to fix that issue
+we were having earlier,
+I, for the alignment, the
+stack alignment of 32,
+I actually just added a new mode to this
+saying, oh it's an alignment instruction.
+Now you need to go grab rbp,
+and you reference it,
+and that's going to give
+you your new frame pointer.
+So if we miss on this cache,
+of course we just fall
+back to normal unwinding.
+So the bug we were having earlier,
+like most bugs in production,
+is actually several different things
+all had to fail all at the same time,
+so we had to teach the
+fast backtrace support
+how to parse dwarf expressions.
+Then the cache was too small.
+We were calling backtrace
+for so many different places
+that previously all
+had the backtrace cache
+and not the full unwind cache.
+We now had to go and make
+the full unwind cache
+quite a bit bigger
+to make sure that we could actually hit it
+all in the right places,
+so even if the backtrace cache failed,
+we would hit the normal cache.
+So now in libunwind,
+the cache size is configurable.
+And then we still had the
+global lock contention
+in dl iterate phdr,
+which is really what was
+slowing everything down,
+so we were hitting global contention
+for a multi threaded program.
+I don't actually have a
+great solution for that yet.
+You can of course do things
+like lock free lists,
+but nothing is guaranteed to still be safe
+with dlclose at the same time.
+So here's the benchmarks
+for the various different
+unwind libraries for this.
+I just set up a giant
+stack of call frames,
+so I don't know I think I used 100.
+And then called backtrace.
+So if you call backtrace normally in gcc,
+you'll get libgcc running
+through the full exception
+handler framework.
+I also compared it to a
+simple frame pointer unwinder,
+which is of course super fast
+assuming you've compiled
+the frame pointers.
+And then I compared it
+with unwind backtrace,
+which is using our fast backtrace cache
+to see how fast it goes,
+which of course is quite a bit faster
+in order of magnitude faster than libgcc.
+Now the other two,
+how I ran them was actually pretty cool.
+Because we're using a consistent ABI,
+the Itanium ABI,
+I didn't actually have to change,
+recompile the program at all.
+I just did ld preload in,
+the exception handler for
+libunwind and llvm's libunwind
+and just reran the program.
+So it was super easy to get
+these other numbers as well.
+You could actually change
+your unwind library
+when you're about to run your
+program using the linker.
+So here's libunwind.
+It is a little bit slower than libgcc,
+but not too much.
+And llvm's libunwind is much slower.
+It looked like,
+when I was trying to
+profile them a little bit,
+that the parsing of the
+dwarf was taking longer,
+although I'm not 100% sure why.
+I am sure why libunwind is so much slower.
+It actually provides a guarantee
+that the rest of them don't provide.
+By default, it is signal safe.
+So if you want to do backtraces,
+or do some stack unwinding
+from a signal handler,
+libunwind lets you do that.
+Signal safety encompasses,
+also, memory safety as well,
+so if you're running an allocator,
+like jemalloc or tcmalloc,
+if you want to take a backtrace,
+you pretty much have to use libunwind
+or some sort of custom
+frame pointer unwinder
+because otherwise you're going
+to get a recursive call back
+into your allocator if your unwinder
+is trying to allocate memory.
+And why would it allocate memory?
+Well, for its cache.
+It probably wants to allocate some memory
+to stick something in its cache.
+So both jemalloc and tcmalloc
+have the option of being
+compiled with libunwind
+to utilize backtraces.
+As it turns out, we can
+turn off the signal safety
+and see how things look.
+So I just configured it,
+disabling all of the signal safety.
+There's various ways to do it,
+I just put one of them on the slide.
+And in deed, the caching.
+Both the fast backtrace support,
+because it has to, you
+know, go all the way down,
+gets a little bit faster.
+And libunwind gets a
+little bit faster itself
+if you're just using the
+normal dwarf cache as well.
+So caching at a higher level
+is definitely faster
+than caching lower level
+and rerunning all the dwarf
+expressions all the time.
+Cool, so that's just about all I've got.
+I hope you've learned a little bit
+about exception handling.
+So the root of what we're
+trying to do with exceptions
+is split the function into two,
+a hot path and a cold path.
+We can speed up the cold path
+by using a lot of caching,
+but we're not talking about
+like an L1, L2, L3 cache.
+It's probably just in memory somewhere.
+And how much are we caching?
+Totally depends on your unwinder.
+For libunwind, even if you're
+using a very large cache,
+probably less than a megabyte of memory.
+For our production programs
+that we use at Facebook,
+it's still quite a small amount of data.
+So if you miss cache,
+you're going to have to go
+all the way down to the operating system,
+and ask it to iterate
+over all of your different loaded library,
+and it'll take a global lock to do that.
+So it's going to be significantly slower.
+Cool. Thanks.
+Anyone have any questions about unwinding?
+(audience applauding)
+- [Audience Member] Thanks for the talk.
+I'm afraid I know more about exceptions
+than day one, two.
+This is complex.
+Can you tell us something
+about the past security vulnerabilities
+related to unwinding,
+and the mitigations that were
+put in place after those?
+No. I'll refer you to the research paper.
+I don't know a lot about
+the security implications,
+sorry.
+- [Audience Member] Thanks.
+[Audience Member 2] Let's say
+you've got two different objects,
+which define the same exception class.
+And they are opened using yellow book
+so that libcurl doesn't get a chance
+to use one of them.
+But they are both present in the process.
+Okay.
+[Audience Member 2] How
+does a catch statement
+understand which exception is which,
+or is it either?
+So you're asking,
+if you dlopen two different libraries,
+and there's two different objects
+that are going to be thrown,
+but you're asking if they're
+different or the same,
+and how they're different?
+So for, this is taken care
+of at the language level
+as far as I know.
+That C++ will give them different type IDs
+that they're comparing,
+so either they're the same or they're not.
+They're different type IDs
+within that comparison.
+[Audience Member 2] So it uses rtti?
+Yes. So exceptions definitely use rtti
+when doing the comparisons.
+So depending on which
+compiler you're using,
+even if you turn off rtti,
+but you are using exceptions,
+you'll still get some
+of the rtti machinery.
+[Audience Member 2] Thanks.
+[Audience Member 3] I
+know you talked more about
+the sort of catching
+side, the unwinding side,
+than the throwing side.
+You mentioned cxa allocate exception,
+and then there's the validation
+involved in exception handling.
+But is there any
+experimental investigation
+into how do we get rid
+of that heap allocation,
+or how do we host the
+most that heap allocation?
+Not that I know of, no.
+[Audience Member 4] Alright,
+so I'm used to dwarf,
+meaning debug information,
+which can be safely straight
+from the executable.
+Should be a simple question.
+The dwarf in the exception handler,
+that's just using the same format.
+But presume that's pretty critical
+to the execution in compuscript.
+Is that correct?
+You're correct.
+So while debug information,
+debug information is
+in a different section,
+it's not in the eh frame section,
+it's in the debug section.
+If you want to split debug info,
+it can be in a different file,
+but the eh frame section
+is always in the same,
+and so while they both use dwarf,
+the information is completely separate.
+You can actually pull enough
+information from the debug info
+to do unwinding, but not vice versa.
+So, it's basically a
+stripped down debug section
+that always ships with your binary.
+[Audience Member 4] Thank you.
+[Audience Member 5] Hi.
+Great talk, thank you.
+Unwind information.
+Is it available for every
+instruction in the function,
+or only for call saves, and throwing --
+That is an excellent question.
+It used to be, 10 or 15 years ago,
+only available for throwing
+statements, and call saves,
+which as you would expect,
+those are the only ones
+you would actually need
+to throw an exception.
+This is not the case if
+you want to do backtrace.
+You can backtrace from anywhere.
+You can set up a signal handler,
+and then send it a signal from anywhere,
+and you want to do backtrace.
+So as far as I know for the last 10 years,
+all the compilers have been generated
+for every instruction in functions.
+[Audience Member 5] So in theory,
+if I want to turn excess variations
+into a proper C++ exception,
+it should be possible, right?
+Yes. So libunwind allows you,
+it is signal safe.
+The C++ exception handling
+machinery that I've seen
+in libstdc++ is not signal safe.
+So in theory, yes you can do that.
+I haven't seen anyone do it yet.
+[Audience Member 5] Thank you.
+[Audience Member 6] In
+one of your early slides,
+it looked like you were
+catching the exception
+without a const reference.
+So I'm curious how that can
+affect unwinding performance.
+I don't know the answer to that, sorry.
+Most of my experience
+is with the Itanium language
+agnostic piece of it,
+so probably asking a compiler
+writer would be better.
+[Audience Member 6] Thank you.
+[Audience Member 7] You
+mentioned a potential issue
+with loading and closing libraries.
+Does that really happen in production,
+because I don't see the use case
+of multiple just going by
+opening and closing libraries
+all the time.
+No it generally doesn't
+happen in production.
+I have never seen it happen in practice.
+But it's the reason given
+for having to always take the global lock.
+And I've totally written a small unit test
+that can exploit it,
+but I haven't seen it
+happen in production.
+[Audience Member 8] As
+for the previous question,
+I'm pretty sure I read
+that catching by reference,
+or by value is exactly the same,
+but I will not be quoted on that.
+Just double checking.
+I would be interested in getting
+out of the worst case execution time,
+which is involved in exception handling.
+And suddenly the memory allocation,
+which sort of brings it, say,
+kind of unbound it theoretically at least.
+Is there any other --
+So what I've seen the
+worst case in production,
+it has all been lock
+contention on the global lock.
+If you are a single threaded program,
+the worst case I've always seen
+has been parsing the dwarf
+instructions themselves.
+You know, grabbing them off a disk,
+and then parsing the format,
+which you would need a
+full parser to parse it,
+and then actually executing
+all the instructions
+and finding the correct
+registers to restore.
+So this all kind of dominates
+any sort of allocations.
+[Audience Member 9]
+This global loader lock.
+It sounds a lot like the loader lock
+from James McNellis's talk
+about DLLs the other day.
+And of course that was about
+Windows with DLLs, not POSIX.
+But is this exactly the same idea,
+and in his talk,
+he pointed out there were ways
+you could deadlock yourself
+by you know, dlopen and
+things inside Windows --
+I didn't see that talk,
+but it sounds almost the same.
+And yes, I'm sure you
+could deadlock yourself
+by dlopening and dlclosing
+things from different libraries.
+[Audience Member 9] What if you did it
+within a destructor,
+would that be a problem?
+If you stack unwound that instructor.
+Is that not a problem?
+If you're unwinding,
+and you did it within a destructor,
+and closed the library that
+you're unwinding through,
+yeah that could be a problem.
+[Audience Member 9] Okay.
+[Audience Member 10] In answer
+to your previous question,
+you said that typically doesn't happen
+that someone dlopens and
+dlcloses different threads.
+So is there a way to compile
+libunwind or llvm unwind
+to assume that no one does that
+to get the benefit of
+not having to use locks?
+That it's your own fault
+if you broke the assumption?
+There is no current way,
+there is no way to do that
+currently that I know,
+but it is high on the list of things
+that I want to fix.
+Thank you.</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

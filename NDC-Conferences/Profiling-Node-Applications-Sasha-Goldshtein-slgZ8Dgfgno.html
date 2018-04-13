@@ -1,0 +1,1482 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Profiling Node Applications - Sasha Goldshtein | Coder Coacher - Coaching Coders</title><meta content="Profiling Node Applications - Sasha Goldshtein - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/NDC-Conferences/">NDC Conferences</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Profiling Node Applications - Sasha Goldshtein</b></h2><h5 class="post__date">2017-09-25</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/slgZ8Dgfgno" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">all right uh hmm welcome thanks for
+coming I hope you're enjoying nd C this
+is my first and this is Sydney I've been
+to in DC Oslo several times in London
+but it's really fun to be on this other
+side of the world my name is Sasha
+I live in Israel I work for a training
+and consulting company back there we're
+in a three-week tour holiday business
+vacation kind of thing here in Australia
+and we've really enjoyed it so far so
+this is profiling nodejs applications
+and I'm assuming you have no js'
+applications you're building or you're
+considering to build and at some point
+you run into performance problems or you
+want to avert the performance problems
+in the first place I'm also assuming
+that you will at some point reach
+production and then you'll also have
+issues in production so you'll have
+performance problems in production to
+debug as well and indeed the focus of
+this talk is mostly on investigation
+techniques and tools and practices that
+you can apply not only in your
+development environment but also when it
+hits you in production so we'll take a
+look at some techniques that you can use
+without having to restart the process or
+add some modules especially just in
+order to get some profiling and
+performance information so kind of the
+the main objective if the clicker would
+work let's see there we go
+so the main objective is investigating
+profiling nodejs applications in
+production I'm assuming that most of you
+are probably using Linux as your
+production environment for a node.js
+right that sort of makes sense
+you can run node.js on Windows you can
+run node.js on Mac Smart OS whatever you
+but I'm assuming Linux is the one most
+of us use so the tools and the examples
+I'm going to be showing or going to be
+on Linux but I will show equivalents or
+at least mention equivalents from other
+operating systems that you can use if
+you are using those there's four bullets
+in there that I would like to achieve by
+the end of the presentation so I want to
+tell you about which production ready
+tools you can use to profile your node
+applications to get
+forms data out of your node applications
+I want to talk about CPU profiling which
+is a real issue for node apps as they
+tend not to be so good at CPU intensive
+work so figuring out where the CPU
+intensive parts are and optimizing them
+is important and we'll also visualize
+this information using flame graphs
+which you might be familiar with from
+other places we'll talk about getting
+accurate coal stacks for various kinds
+of interesting events like garbage
+collections in your node.js process or
+things that slow down your event thread
+like doing synchronous i/o synchronous
+file accesses synchronous Network
+requests that sort of thing and we'll
+see some examples which obviously are
+not full-blown actual investigations but
+sort of show you what the thinking
+process is and how I approach in anyway
+a typical performance issue from start
+to finish
+and just a couple of words about myself
+that's part of what I do I'm a
+consultant working on performance
+investigations debugging stuff in
+production for customers across various
+runtimes and operating systems and so
+this is sort of what I do and I really
+like telling other people about it as
+well before we dive into the tools
+there's some introductory sections that
+we have to cover this is something I put
+on all my performance talks and that's
+mine the overhead so if you have any
+kind of performance tool someone
+recommends or someone puts online you
+should not right away run it in your
+production environment a lot of tools
+especially tools that call themselves
+profilers tend to have a really
+considerable overhead on your system so
+you might be able to run them in
+development but you shouldn't probably
+run them as is in production so again
+having that background of doing
+performance investigations in the field
+I do tends to be very wary of this sort
+of thing and the overhead certain
+performance tools have so the tools
+we'll be talking about mostly are very
+suitable for production use but you
+should absolutely not trust my word
+about it and you should really test in
+your own environment and see if that
+still makes sense for you and for
+example a lot of CPU profilers they work
+really well if you put them on a box
+that has four or eight processor
+but then all of a sudden you have a box
+with 256 processors and then the CPU
+profiler becomes the bottleneck and just
+brings your whole environment down so
+it's a it's really something you have to
+test another piece of theory that I want
+to get out of the way is the difference
+between sampling and tracing tools and I
+will start looking at specific examples
+so a lot of the things we'll be doing
+today are based on tracing a certain
+kind of event that happens in the
+node.js runtime in your JavaScript code
+in the operating system code and some
+events are sufficiently low frequency
+they happen rarely enough that you could
+actually record every single event so
+for example garbage collections for most
+node processors would probably happen a
+couple of times per second or something
+like that so you can record every
+garbage collection to a file and analyze
+that later but for some events there's
+so high frequency that you simply can't
+record every individual occurrence and
+that's where sampling comes in so
+instead of recording every single event
+you sample and just record every tenth
+event every millionth event every
+billions event so you only have a
+statistical picture of what's happening
+and not each individual event as it
+occurs so we'll be using tools from both
+flavors for CPU profiling for example
+tracing is pretty much impossible and
+sampling is the only thing you can use
+because you can't trace each CPU
+instruction as it gets executed so in
+terms of operating systems and so the
+scenarios we'll be looking at there's
+five major things so we have CPU
+sampling we have dynamic tracing by
+which I mean attaching to various
+interesting functions in the node
+runtime we have static tracing which
+I'll explain what we get there but node
+is instrumented with a couple of
+interesting markers that we can monitor
+for interesting information about HTTP
+requests garbage collections that sort
+of thing there's also a bunch of
+different monitoring tools more
+lightweight monitoring tools that depend
+on the OS and there's the v8 profiler
+which was actually start with which is
+built into the runtime built into the
+node.js runtime which is v8 and so
+there's rough equivalence for most of
+these things on non Linux platforms as
+well but we'll be focusing on Linux
+the rest is just to give you an idea of
+what you'd do if you actually had to do
+it or a different OS so mostly it's the
+same principles it's just gonna be a
+slightly different tool so let's start
+with the v8 profiler and I'm gonna do a
+mix of demos if I have time and just
+slides that have all the demo steps so
+it's really going to depend also on the
+questions you ask if any and how much
+time we spend on each demo so the first
+scenario we're kind of gonna attack is a
+high CPU node application so we have a
+node app running and all of a sudden
+there is high load and it's consuming
+almost 100% CPU and we want to figure
+out why what's taking so much CPU why
+the sudden change maybe and actually
+nail down the piece of code that's
+consuming lots of CPU and we're gonna
+use the v8 profiler for this and this is
+actually borderline acceptable for
+production use and I say borderline
+because using the v8 profiler does
+require that you launch your node
+process with a profiling flag upfront so
+it's not something you can do with no
+additional configuration just grab a
+random node system and attach a profiler
+you have to run node with the prof
+command-line switch there is also
+another option which is to start with
+the profiler disabled and then call an
+API use a JavaScript module to start and
+stop profiling programmatically which is
+also reasonable but it again does
+require some changes maybe you'd have
+some kind of secret endpoint that would
+start profiling and then another
+endpoint that would stop profiling and
+get you
+the profiler results so these are all
+sort of feasible options but it's
+something that's again borderline
+acceptable for production use so how the
+whole workflow works for the v8 profiler
+you start by launching node with the
+profs which you exercise the application
+you run the performance scenario we're
+interested in and that generates the
+runtime actually generates log files
+pretty massive log files that have a
+bunch of stack traces for what the CPU
+is doing inside your node process and
+then you run node
+again with the - - proof process switch
+which reads the log file and generates a
+report so I'm going to try and show you
+a quick example of this so over here I
+just have this little tiny web app that
+actually I have a run script for so
+that's just run SH as a little script I
+have that runs the the process sets it
+up and now we can issue requests so I'm
+gonna specifically request localhost
+three thousands users authorized and I'm
+gonna add quotes here authorized and
+yeah I don't actually remember the whole
+thing let's see if I have oh sorry that
+went away users off is what I need and
+then user name foo and password gooo now
+let's sort of set aside the fact that
+I'm passing the username and password as
+query string parameters let's sort of
+totally ignore that but then when I
+actually hit the page it returns an
+error and sorry let me just for one
+second there make sure that I'm actually
+using the right thing so users oh it
+should have been a post yeah so that's
+it so - ex post okay so that return is
+unauthorized which is what I expected in
+I mean it's sort of sensible so I try to
+authorize with an invalid username and
+password and that returns an error but
+people are sort of complaining that the
+whole thing is is kind of slow and on a
+particular server I might be having a
+flood of these authorization requests
+that are slowing the server down so I
+could maybe run a benchmark like issue a
+thousand of those in ten concurrent
+requests and using the post method and
+then just the same thing
+users off username foo password GU let's
+just run this thing for a moment so
+that's a B just running the benchmark
+and it's fairly slow
+I'd say it's supposed to print I think
+every 10% completed right so I only
+asked it to run a thousand requests and
+only now it's got through a 100 and I
+mean it's all super powerful box but
+still I'm expecting some a somewhat
+higher rate if I just hit control C
+you'd be able to see my statistics here
+so my median request is 1100
+milliseconds for a single authorization
+attempt and that's suspiciously slow and
+also while this benchmark is running if
+I just run top for a moment there and
+resize to make room for the process name
+over here you'll see the node process
+taking well almost 100% CPU well the
+benchmark is running so that might be
+expected might not be expected but it
+seems that we have a very very busy
+server here that's that's being
+overloaded by this authentication or
+authorization requests so here is where
+you'd use the node profiler especially
+if it's something you can so easily
+reproduce and development so this is
+where the node profiler works best and
+I'm going to kind of skip through the
+steps and just show you the general
+process so again like I've done in the
+demo I've run top and then you'd run
+node with the - - probe switch and
+repeat the experiment and that produces
+these gigantic log files and then you
+run node with the probe process switch
+like this and just pass in the log file
+and that generates a huge text file a
+huge text report and so I've sort of
+removed relevant stuff and just kept the
+important parts of that report for our
+purposes so it begins with this summary
+over here that says that 96% of my time
+is actually spent in C++ code so not
+actual JavaScript at all but C++ now C++
+as you know if you have a node
+C++ can only come from two places it's
+either with the runtime itself or its
+native module right it's a module you're
+using that has a C++ component in it now
+in the C++ section specifically in the
+report you will see the hardest
+functions and then you'll see that
+ninety three point five percent of my
+C++ functions is actually this one
+function here called crypto pbkdf2 now I
+don't know if you're exactly familiar
+with it but it's a hash function it's a
+function that hashes a sequence of bytes
+produces a hash and it sort of makes
+sense that we would be doing this as
+part of authentication
+maybe hashing the users password and we
+also have another way to confirm so this
+here is the call stack leading to repeat
+to the pbkdf2 function most frequently
+and that call stack goes through crypto
+j/s which is JavaScript code calling
+into C++ code and from my side
+I've called pbkdf2 sync and I've done so
+over here so that's users j/s line for
+the six this is where I'm actually
+calling this pbkdf2 sync function now
+you might argue at this point that I am
+synchronously from my route invoking
+this hash function and I totally
+shouldn't be doing that I should do that
+a synchronously right and like why would
+I even use pbkdf2 sync if there's a
+pbkdf2 without the sync at the end but
+it turns out I mean even if I did do
+this asynchronously it wouldn't get rid
+of the CPU computation that had to be
+performed like the hashing is still
+there I could do it on the event thread
+and then it sort of pauses the response
+from getting there or I could do it in a
+background thread but it's still I mean
+there still wouldn't be a response until
+the computation is done and I couldn't
+really overlap multiple of those hashing
+operations because it's not IO it's not
+happening on a different server it's
+just happening on different CPU so I
+might try to actually change this code
+to be asynchronous but it definitely
+looks like we're doing a lot of
+hashing operations / authentication
+requests if it takes over a second per
+request and indeed if we do look at the
+quote for a moment there so just gonna
+look in users je s and then there's this
+author out so you can see over here that
+I'm actually calling pbkdf2 sync and
+then this argument over here is the
+number of iterations desired and that's
+ten thousand and that's really crazy for
+for for hashing the users password I
+don't think we need ten thousand
+iterations for that so that's clearly a
+place we can improve and I don't know if
+you noticed but the report actually
+gives you the line numbers right so not
+just the JavaScript file name but also
+the line number invert the column number
+where the samples are coming from where
+the stack is coming from so is this this
+is fairly useful for identifying busy
+CPU functions in your code
+figuring out what calls them I should
+note that the v8 profiler the way it's
+currently implemented it would only
+profile your event thread your main
+thread your single node.js thread if you
+have additional threads they can't be
+running JavaScript right because node
+can only run JavaScript in a single
+thread through process but you could
+have additional threads running native
+code running modules and that sort of
+thing and they would not get profiled by
+the v8 profiler so it's only if it only
+picks up the main thread and it requires
+that you launch the process with this
+ugly switch that generates a lot of data
+into a file so it's kind of getting
+borderline production-ready
+I'd say and we definitely want other
+alternatives the one thing that this
+profiler has going for it is it's it's
+just built-in it's out of the box if it
+works on all platforms it's it's the
+default but you shouldn't just stick to
+the default there's better tools coming
+up so the better tool coming up that
+pretty much every talk on Linux
+performance eventually ends up
+mentioning is perf and perf is the Linux
+tool for performance investigations
+especially for CPU profiling of the kind
+we've been doing so far it's capable of
+a lot of different
+event sources so it can record CPU
+samples it can record context switches
+it can record a variety of information
+about your system including disk
+accesses networking and that sort of
+thing
+perf is developed as part of the Linux
+kernel tree so it's just sort of aligned
+exactly with the Linux kernel you're
+using and you can install it from your
+packages from your package distribution
+for example on Debian systems it's
+usually in Linux tools common on Red Hat
+it would be in the perf package so you
+can install it and then start using it
+now for a node process specifically
+there's a certain challenge with using
+perf that we'd have to overcome so again
+the objective is going to be the same we
+have the same process with a heavy CPU
+usage and we're going to figure out
+where the CPU usage is coming from but
+we don't want to launch the process
+ahead of time with a profiling flag and
+go through the whole process we want to
+attach to a live running application and
+extract information out of that so
+here's what the demo is going to look
+like here again I might run through it
+live a little later so it starts with
+perf record which is the basic verb for
+recording CPU samples and recording
+actually a lot of other kinds of events
+that perf supports and then we have
+importantly it requires route unlike the
+v8 profiler perf mostly requires route
+you can sort of get it to work for an
+individual process without being rude
+but you need to make sure certain things
+are configured properly so if you want
+to go there talk to me later but for now
+we're just gonna assume route then
+there's a process filter which tells
+perf which process you care about so
+that's just gonna be the node
+application this is the frequency with
+which perf is going to look at that
+process and see what it's doing so it's
+going to grab samples of what the
+process is doing and finally the G
+switches for stack traces so just in
+addition to the current function take a
+stack trace of which function calls that
+that other function and so on so we have
+a complete tree of functions are not
+just the current one so you're on a perf
+recording and then you run perf report
+and perf report is supposed to display
+this user
+friendly summary to the terminal telling
+you which paths in your code were the
+hottest kind of like the v8 profiler
+over here which gave you a report of
+which functions were the hottest ones
+that's also the same thing that perf is
+supposed to do except it would probably
+look like this so it would have a bunch
+of numbers really really many numbers
+possibly hundreds of screens full of
+these numbers and all of these things
+are actually JavaScript function names
+but perf doesn't know it
+as far as purpose this is just arbitrary
+addresses in memory and the reason for
+this is as you know now employs a
+just-in-time compiler so your JavaScript
+code is compiled to CPU instructions at
+runtime and that translation that
+compilation is totally unknown to
+proof.proof doesn't know how to
+translate the just-in-time compiled
+function addresses to function names in
+JavaScript there's the same problem
+exactly if you are using perf to profile
+Java apps on Linux dotnet core apps on
+Linux which I gave a talk about today
+virtually any runtime that is not
+statically compiled ahead of time like
+C++ would have this problem so the way
+to resolve it is to run node with a
+magic flag and now at this point you
+might say I mean this also needs you to
+run node with a magic flag so what's the
+advantage compared to the built-in
+profiler why are we even talking about
+this the major difference is the proof
+flag which we talked about before that
+starts profiling right away and starts
+emitting huge amounts of information to
+a file this flag here the perf basic
+profit flag instructs the runtime that
+whenever a method is getting compiled
+whenever a method is getting JIT
+compiled at runtime the method address
+and name are stored into a file so it's
+not actually starting profiling it's
+just emitting some supporting
+information I can show you the file then
+a quick demo over here so if I just get
+out of them
+and I run node with - - perf basic proof
+on that particular app oh yeah I have to
+kill the existing one first okay so now
+if we look in in temp there is well
+there's actually two of them from
+another experiment probably but there's
+this map files that get created and let
+me show you what a map file what-what
+these map files actually look like so
+let's go to perf paid of node that map
+that's what the perf map files look like
+so there's an address and a function
+name an address and a function name and
+this might not look like JavaScript it's
+some internal v8 implementation details
+but at some point we are going to get to
+JavaScript as well so here we go
+write buffer J s and errors J s and
+collection J s and so on so this file
+that gets emitted by the node runtime
+has the translations between function
+dresses and function names and perf is
+able to pick up that file automatically
+with no further instructions from you it
+just goes ahead and looks for that file
+reads the data and then puts it in the
+report and then the result looks like
+this rather than rather than addresses
+we now get a clean call stack which has
+all the functions we previously saw like
+pbkdf2 sync pbkdf2 in crypto so that's
+all the same stack we saw before
+however I'd say for a real app that has
+more than just one hot bath this
+approach where you browse to a bunch of
+text in your terminal is not gonna scale
+very well for you
+the v8 profiler suffers from the same
+problem it spits out a huge report that
+you now have to read we clearly need a
+way to visualize this information
+regardless of its origin right so it's
+just it could come from perf it could
+come from v8 it could come from some
+windows stack tracing mechanism
+don't care I have a bunch of stacks
+leading up to my hot spots and I want to
+visualize them and that's where flame
+grafts are gonna help us so for the
+particular example I used in the demo if
+we actually went through the whole
+report that perf produced that's 18,000
+lines so nobody's gonna read that and
+that's for a very very simple
+application you could easily get
+hundreds of thousands of lines to go
+through if you keep persisting with the
+text-based approach similarly as flame
+graphs for this and flame graphs if you
+haven't seen them before is just a
+visualization method for stack traces
+you have a lot of stack traces leading
+up to a certain hot spot in your code
+and you want to put them in a single
+diagram without having to wade through
+screen fools of text they were invented
+by Brendan Gregg for this purpose and
+they can be used for CPU sampling and
+for a bunch of different things
+we'll see flame graphs later in a
+totally different context for
+identifying off CPU time and not
+actually on CPU time it's also going to
+be useful there now how do you read one
+of these things rather than the slide I
+just want to show you a quick live
+example so this is a flame graph
+generated from a node.js process first
+and foremost ignore the colors the
+colors are just there for prettification
+right so the the whole thing is a little
+easier on the eyes or not arguably it's
+just there to differentiate the
+different functions so the colors are
+totally random and they are designed to
+make it look like a flame hence the name
+flame graphs now each rectangle you see
+here is a function right so this is
+pbkdf2 in crypto j s this is pbkdf2 in
+the c++ v8 code this is users J s line
+85 and so on so that's just JavaScript
+functions and C++ functions each
+rectangle is a function the vertical
+axis is the call stack so if you have
+for example over here we have users J s
+line 85 and then pbkdf2 Sinkin crypto J
+s it means this one was called by that
+one so it's just the stack growing up
+that sort of makes sense then we have
+the horizontal axis and most of it is
+just currently one rectangle but then
+towards the top we have some splits
+right so the horizontal axis is just
+alphabetically sorted it's not a time
+line or anything chrome developer tools
+that there is a similar verse similar
+chart in there called the flame chart
+and it's not a flame graph right so
+flame graph and a flame chart total
+different things a flame chart actually
+has a time line component to it this
+doesn't this is not a time line it's
+just a summary of where you spend time
+in general and finally the wider
+something is the more prominent it is so
+you should immediately look at the
+widest towers in your flag graph so in
+this example it's all pretty much
+leading to the same place which is here
+pbkdf2 request work and that ended up
+calling a couple of internal functions
+which also called a couple of internal
+functions but that's just I mean that's
+implementation details for the node
+crypto module I don't really care about
+those I mean my code pretty much ended
+10 frames previously up up the stack so
+this is just a way of visualizing a
+stack trace now this is actually a zoom
+into a larger flame graph where this was
+just one tower and I've zoomed into that
+tower but there's also another couple of
+towers at the bottom there and there's
+even this tiny Tower which I'm not sure
+where it's coming from
+yeah so that's also coming from node
+which called sis a pole that's how now
+it waits for events so given a flame
+graph you can obviously zoom in on
+things you can even do a search like I
+could search for clips search for Krypto
+here and then it's gonna highlight any
+frames that have crypto in them so that
+sort of helps navigate the whole thing
+you can put a file name there you could
+put a module name there it's gonna help
+you navigate through the flame graph so
+how do you make flame graphs like that
+one way which is totally not node.js
+tailored it's a totally generic way
+using a script called flame graph PL
+it's a perl script there is also a
+couple of more native node
+implementations there's one called Oh X
+there's also one called stack vis
+there's a bunch of options they all
+produce the same thing virtually the
+same thing that diagram that shows you
+the hardest stacks the hardest call
+stacks in your code so again here's what
+it might look like for our example again
+we just saw an exam in the browser
+pbkdf2 is the hardest frame and the way
+we generated this if you look at the top
+is just by running perf script and then
+feeding the output into a couple of Perl
+scripts which produce the the final
+result which produced the diagram and
+the diagram is an SVG illustration which
+you could obviously load in any other
+browser so we just saw how perf improves
+upon the process by letting us attach to
+a live running process capture what's
+doing capture a profile and then analyze
+it and produce a flame graph there's
+still a major deficiency which is why
+I'm going to introduce you to yet
+another tool to get another approach of
+profiling node apps on Linux and to
+understand what's wrong you have to
+consider high frequency events so the
+way perf works basically is that it
+records a lot of events very quickly
+into a file and passes that file to a
+user space application to a script of
+some sort to do the actual analysis in
+our case it might have been generating
+the flame graph in other cases it might
+be a text-based it histogram
+illustration whatever but you have to go
+through a file to user space so if you
+have a high frequency event that you
+want to record like this using perf
+you're gonna run into bandwidth issues
+with your disk so I did an experiment on
+an AWS ec2 instance I downloaded a file
+over a one gigabit per second link and
+while I was downloading the file
+I used perf to capture events for each
+packet getting received now not the
+packet day
+right so not like a network sniffer I
+don't care about the data just the raw
+event the fact that I got a packet I
+wanted that recorded so I had a rate of
+approximately 89 thousand events per
+second and that produced log file which
+grew at 19 megabytes per second of log
+data so that's that's a lot obviously if
+you have a not super fast disk it could
+actually saturate your disk just just
+the profiler itself writing profiler
+data to a file would saturate your disk
+access completely or at least slow it
+down a lot needless to say you need a
+lot of disk space for 19 megabytes of
+second worth of data if you plan to
+record four minutes or hours it's not
+gonna scale so this whole approach where
+you record everything and then you
+analyze it later you do post-processing
+that's an unreasonable approach I'd say
+for certain kinds of events and just to
+sort of get ahead of myself the next
+thing we're going to be doing like the
+next scenario is going to be identifying
+blockages on our event thread like why
+is our event tread getting blocked maybe
+on Io maybe on network access maybe on
+something else and to get that
+information we would need to record
+context switches whenever our event
+tread switches out of the CPU and goes
+to sleep we would need to record that
+event and on Linux you could totally on
+a very reasonable production system you
+could totally get millions of context
+switches per second so if you record
+every single one and plan to analyze
+them later it's just not gonna scale not
+even four minutes
+not to mention hours or days so to do
+that kind of investigation you do have
+to process events in real time
+you can't keep every single event you
+have to process them in real time and
+discard them and this is where we need
+to introduce a new technology and that
+new technology is vpf it's not node.js
+specific in any way but we will
+obviously use it for node.js application
+profiling so BPF was invented as a
+packet filtering technology
+if you've used
+Wireshark or TCP dump or T shark all
+these different tools you've used PPF
+it's a language used to describe packet
+filters it has nothing to do with
+performance tracing whatsoever but
+that's where the story begins in recent
+Linux versions BPF can be used not just
+for packet filters but also surprisingly
+for high frequency processing of events
+coming from the kernel so it could be
+events like CPU samples that could be
+events like contacts wishes could be
+events like disk accesses so you could
+use BPF to process at a very high rate
+to process events in the kernel where
+they arrive so just to contrast the two
+approaches on the top you have the
+perfect
+where you have some kind of data source
+regardless of what the data source is
+but you have something pushing events
+into the system and then perf would
+produce data file that you then have to
+analyze and get some kind of report or
+monitoring data out of so this could be
+a flame graph this could be a histogram
+whatever with the BPF approach you don't
+have to store and pass forward every
+single event instead you have a BPF
+program that runs in the kernel and that
+program performs the aggregation that
+program generates the necessary
+information so you don't have to keep
+every single event and then they only
+think that goes to user space is a
+summary data structure and then you have
+an application a user space that would
+display it in some way so you don't have
+to keep every single event that's the
+main takeaway now you are not actually
+going to be writing BPF programs
+yourself it's just the technology which
+has a lot of tools built on top that
+sort of make this possible BPF is
+available in Linux kernels over the last
+two and a half or three years or so so
+the only reason I haven't started with
+BPF in the first place is that you might
+still find yourself one an older Linux
+version where you still have to use the
+perfo proach from the olden days but
+hopefully going into the future
+the perfo proach of storing every event
+is going to be
+displaced by tools that do real-time
+analysis instead and that opens the door
+to a bunch of interesting things which
+we can talk about after the after this
+session so the set of tools we're going
+to be using specifically just to give
+you a reference for later
+it's called BCC it's a toolkit based on
+BPF that has a collection of tools
+mostly Python scripts mostly scripture
+and Python for a variety of different
+performance investigations just to give
+you an idea their scripts for nodes
+specifically in there but there's also a
+lot of stuff for database engines for
+disk i/o investigations for Network
+investigations of different kinds
+there's a variety of tools for everyone
+there and it's an open source project
+that's maintained by a bunch of people
+I've also contributed a couple of tools
+to this project and it's already used
+pretty widely by Google by Netflix by
+Facebook it's BPF and BCC are actual
+technologies that are getting traction
+in the wild so again we want to use some
+of these tools to profile or nodejs
+application and what I'm going to start
+with is just a very very quick mention
+of how we could get the same result
+right the same flame graph of CPU usage
+using the BCC approach so I'm not going
+to go through this very thoroughly
+because it's going to produce the same
+result but just to illustrate the
+difference the way it works with the BCC
+tools is you get a script called profile
+that attaches to the system at a certain
+frequency
+just like Perth did and produces the
+input for flame graph generation and it
+looks pretty similar to what we did with
+perf with the key difference being that
+the aggregation of coal stocks happens
+in the kernel so rather than store every
+single event there is a BPF program in
+the kernel that's doing real-time
+accounting so we have seen this call
+stack a thousand times we have seen this
+call stack two thousand times we have
+seen this call stack three thousand
+times without recording each individual
+sample to a file so again the output
+might be very very similar but the
+approach used to generate this output is
+totally different
+and the overhead difference can be an
+order of magnitude so it can really
+lower your overhead when running on a
+production system and additionally it of
+course saves you the disk space you
+don't need to store this huge proof data
+files so the next thing we're going to
+do is what I promised you in the first
+place we're going to look at off CPU
+profiling so identifying situations
+where the event tread the main
+JavaScript reading node is stuck and not
+by CPU work but actually waiting for
+something sleeping doing synchronous i/o
+something blocking that doesn't let the
+event thread handle additional requests
+and we're going to use a couple of tools
+for this from BCC the first one is going
+to be off CPU time the other is going to
+be file slower let's just take a quick
+look so here's a sort of a summary of
+our initial findings that lead us to
+this investigation
+I've I've got a certain end point called
+stats on my node service which produces
+the following tiny JSON document not
+really interesting but then I ran a
+benchmark and looking at the benchmark
+results I can see that my mean response
+time was 116 milliseconds from that
+endpoint but on the other hand I can see
+that the CPU was not very busy the CPU
+was a 35% so and for some reason right I
+expect a higher rate of requests I
+expect to be able to handle requests in
+less than 116 milliseconds so this is
+what leads me further into the
+investigation now we could use a CPU
+profiler now like the v8 profiler or
+perf but it would only show us what's
+going on in these 35% it's not gonna
+show us the rest of the time where we
+are not using the CPU but rather
+blocking in in some way and this is
+fairly tricky like if you look online on
+how to figure out why my event thread is
+blocked it's non-trivial and a lot of
+the solutions involve adding code or
+adding modules that would do some kind
+of instrumentation which is totally
+non-trivial for production use
+what we're doing here is just using the
+tool from BCC called off CPU time it's
+designed for exactly this situation
+where you want to figure out what you're
+doing of the CPU while blocked and not
+on the CPU while running and we point it
+at the node process and we instruct it
+to generate folded stacks file which is
+basically input for flame graph
+generation so we could just feed that
+into a flame graph generation script and
+get the following flame graph now it's
+not actually an interactive flame graph
+it's a it's a screenshot on a slide so I
+can zoom in like I did before but we
+could manually zoom so this whole
+section on the right there's something
+here but it's fairly narrow so I'm just
+gonna ignore it completely and look only
+on this side here so there's this major
+tower over here go all the way up to the
+top and if I look at my at the bottom of
+this tower it says over there index j s
+line 73 that's something in my code and
+what it seems to be doing is closing a
+file or something similar and so this
+code is still in v8 so note closed UVF s
+closed that still C++ in v8 in the node
+runtime but then this whole section
+going all the way up that is kernel code
+that's a kernel functions in Linux and
+if we look at these functions a little
+more closely
+again we're not kernel developers we're
+not supposed to be but the function
+names are often pretty descriptive so
+first of all X of s is of course our
+file system X of s is the exam file
+system and then if you just look in the
+function names it looks like we are over
+here flushing a file and that's
+happening while closing the file and
+there's a lot of stuff here with bitmap
+write and log allocate and that sort of
+thing that's happening inside the file
+system so this is all what happens when
+you close a file that you previously
+have written to and then the file system
+has to flush your changes to disk so
+that happens here upon closing the file
+but that's sort of not the point the
+point is that we are synchronously
+closing that file and blocking the the
+event loop because this is all happening
+again from index j s9 73 if we had done
+this asynchronously wouldn't be blocking
+the event loop while closing the file so
+this is clearly time spent in
+synchronous file IO and if we go there
+to index J s-line 73 I don't know if
+it's actually 73 still but let's see
+just look for sync yeah so here it is
+this is the stats endpoint and as you
+can see here what it does is just that
+calls write file sync and write file
+sync internally does of course close the
+file as well synchronously because I
+asked for the whole thing to happen
+synchronously and only after the whole
+thing I returned the response and that's
+all happening on the event thread and
+blocking it now I know it's not a very
+realistic scenario but that's not kind
+of not the point
+the point is that we were able to look
+at a totally arbitrary process and
+figure out what's blocking the event
+thread and maybe what we can do to
+unblock it now of course in some cases
+you just see that you know the event
+thread is as busy as it can be and
+there's nothing you can further offload
+but in a lot of cases there is there is
+a bunch of stuff you can move away from
+the event thread and speed up your rate
+of event processing so that's an example
+of off CPU profiling that I wanted to
+show you now once we have that and we
+know that we are closing files writing
+to files
+there's also another tool we could use
+before heading over to the source code
+and that's file slower also from BCC and
+this is a super simple tool I just point
+it at a process and it spits out all the
+file system operations performed by that
+process that are slower than a certain
+threshold so here my threshold was one
+millisecond so it's just spitting out
+all the file operations slower than one
+milliseconds and so each line here you
+can see it
+as the number of bytes being written or
+read the latency in milliseconds and the
+file name so you can do a complete
+investigations of what files are being
+accessed by your node process this is
+not note specific at all it's it's
+completely generic this log that we are
+sorry the flame graph we got over here
+it did require again the same map file
+that map's JavaScript function names to
+addresses but otherwise it's a
+completely generic technique okay next
+thing I'm going to show you is the built
+in static instrumentation inside nodejs
+and how we can do a couple of pretty
+cool things with it so just as a
+high-level overview static
+instrumentation is about putting static
+points in your code in libraries and
+runtimes in your applications that you
+can later instrument in production and
+trace so you could for example trace
+your orders you could trace your
+authentication requests you can trace
+your garbage collections if you're a
+runtime you could trace your module
+loads or requires if you're a runtime so
+that sort of thing and it turns out
+there's a lot of this static
+instrumentation built in to a lot of
+languages that we're using currently on
+Linux today so the JVM has done PHP has
+them node has them as well now node
+itself doesn't have a lot of these but
+the runtime the v8 runtime is a simplest
+plus runtime so we can find a lot of
+additional instrumentation points over
+there and I'm gonna show you a couple of
+examples so what you want to do first is
+just see what kinds of things we can
+trace in a running no js' application
+and we're gonna use a couple of tools
+for this some of them are from BCC some
+of them are just Linux tools like
+abdomen so first of all this is a tool
+from BCC called tip you list which you
+can point at a process and it tells you
+what static instrumentation points exist
+in that process and specifically I've
+highlighted all the node specific ones
+so you have events for GC start and GC
+completed
+you have events for HTTP requests coming
+in HTTP responses going out this is a
+set of probes that were put there by the
+node developers so we could trace these
+events as they occur in production
+another approach which is only
+applicable for compiled languages like C
+and C++ is just look at all the
+functions in a particular binary because
+for compiled languages we could actually
+trace any function we want so this
+incantation at the top instructs object
+amp to print out all the functions in
+the node binary and then format them a
+little nicely a little more nicely but
+this is just basically C++ function
+names from the v8 runtime we're not
+supposed of course to know what each
+function does but if you're looking for
+something specific by keyword you could
+probably find what you're looking for so
+here's an example of a couple of things
+we can do using this approach this first
+command here
+the trace command what it does it
+attaches to one of these static
+instrumentation points in this case HTTP
+server requests so whenever our node
+application handles an incoming HTTP
+request this here is the trace message
+we want printed and the Arg v and Arg
+six look a little magical you do need to
+do some spelunking behind the scenes to
+figure out what they are I will save
+that for later and there's a process
+filter as well like which process do I
+want this information out of the output
+looks like this fairly simple and
+hopefully by looking at the output you
+can see that mark 5 seems to correspond
+to the HTTP verb and arc 6 seems to
+correspond to the requested URL so this
+is basically just a way of doing dynamic
+logging just point this tool at a
+certain application and tell it to trace
+a message when something interesting
+happens so in this case the touch target
+is no js' specific it's the HTTP server
+request static trace point now we can do
+something similar with
+with other kinds of points like that
+instrumentation point like that and I'm
+gonna do it through a scenario which is
+identifying excessive garbage
+collections so suppose you have this
+node process that's doing lots and lots
+of garbage collections it's not actually
+as uncommon as it might sound like high
+CPU load is more common than excessive
+GC and probably various kinds of
+networking issues are more common than
+excessive GC but I've seen my share of
+excessive GC issues as well you know
+that now has a garbage collector and
+garbage collectors they do tend to
+sometimes do excessive work and by
+excessive I mean they can pause your
+process while the garbage collection is
+happening they can introduce a high CPU
+load so basically we're spending time
+collecting garbage rather than
+processing useful requests so that's
+that's just stuff that happens if you
+put too much load on your garbage
+collector so we're gonna use a couple of
+tools to diagnose that so the first tool
+is note specific it's called UGC it's
+also based on BPF and it would print a
+message whenever there is a garbage
+collection in a node application and it
+tells you the duration of that garbage
+collection so before you start
+investigating you can just figure out if
+you even have a problem before you
+allocate any further resources to it so
+looking at this output here specifically
+the highlighted sections we have garbage
+collections taking I mean not very long
+because it's in microseconds so 9,000
+microseconds is just 9 milliseconds but
+they are happening fairly frequently
+like if you look at the first column
+here the start column that's in seconds
+so in less than 200 milliseconds we had
+over a dozen garbage collections in that
+process each taking less than a
+millisecond or slightly more than a
+millisecond but we definitely have a lot
+of garbage collections happening and of
+course you could aggregate this
+information just tell me how much time I
+spent on GC in the last 5 seconds and
+then you could get a reply that may
+might say well over the last 5 seconds
+you spent 3 seconds doing garbage
+collection and that's obviously very bad
+and you want to figure out why you don't
+want to spend most of your time garbage
+collecting so what comes the useful next
+is again a couple of tools that can do
+sort of dynamic instrumentation of a
+node process so this example here has us
+using a tool called funk latency and
+that's a tool that attaches to a certain
+function and gives you a summary of how
+long that function took to run so it can
+give you a summary of how long a
+particular function took over an
+interval of time and the output as you
+can see is a beautiful ascii-based
+histogram all right so it doesn't really
+look like a histogram because there's
+only one bar that's very big and all the
+other bars are kind of not pronounced at
+all
+but it is a histogram and it shows you
+that most of my garbage collections
+because that's the function I was
+tracing most of my garbage collections
+took less than a millisecond like I had
+1900 garbage collections under a
+millisecond but I also had 38 garbage
+collections taking between 8 and 15
+milliseconds and that's slightly more
+concerning and in a real app you might
+see even longer delays you might see
+garbage collections taking up to a full
+second even or even more if you have a
+large heap that needs to be collected so
+given that you sort of what I discover
+figure out where these garbage
+collections are coming from like what is
+your JavaScript application doing to
+trigger so many garbage collections and
+there's something else you can do I'm
+gonna skip this little section here
+there's something else you can do to
+make to get this kind of data there's a
+tool called stack count and that one
+will tell you which paths in your code
+lead up to a certain function this is
+very similar if you think about it for a
+moment this is very similar to what we
+did at the very beginning we got lots of
+stack traces telling us what the process
+was doing in general but this is no
+longer in general I know there's a
+specific event there is garbage
+collections that I care about so tell me
+the coal stocks leading up to garbage
+collections not just arbitrary coal
+stocks but only coal stocks leading up
+to garbage collections and you could
+actually visualize them with the flame
+graph as well if you have lots of stack
+traces you should immediately think
+flame graphs as a way to visualize this
+information I haven't done this actually
+for this example so it's just text it's
+a stack as you can see and then a number
+that says how often how frequently we
+actually saw this stack so this stack
+here
+appeared 111 times that's what it means
+and if you look at the stack itself it
+has a mix as usual of v8 code and
+JavaScript code from our application the
+highlighted sections specifically as you
+can see point to users je s line 7 which
+allocates lots of memory by slicing a
+string and slicing a string it it seems
+would go into the v8 runtime try to
+allocate space figure out where out of
+space and then do a garbage collection
+and that happened 111 times so again by
+looking at the most frequent call stacks
+leading up to garbage collections you
+can often figure out what your
+application is doing what is its
+allocating that would cause the garbage
+collection to take longer to happen
+frequently and I mean eventually all
+garbage collections are caused by
+allocations you allocate memory and at
+some point the garbage collector kicks
+in so this is a good way of figuring out
+which allocations often caused the
+garbage collector to kick in and again
+what you do with this information you
+probably want to try get rid of some of
+these got some of these allocations
+maybe reuse some of these objects that's
+sort of the general strategies you'd use
+we don't have time to explore this
+specific piece of code but slicing
+strings is is naturally an operation
+that produces a lot of garbage you have
+the old string and then you produce a
+new string out of it and that's a whole
+new allocation that has to happen I want
+to show you just one more scenario I
+have two but we only have time for
+once I'm gonna show you the they're more
+useful one I think and that's a demo
+which focuses on your apps interaction
+with the operating system so there's
+some kind of weird error that you're
+getting and you suspect it's not coming
+from within your actual JavaScript code
+it's coming from interactions with the
+operating system and we're gonna use a
+couple of tools here but I actually want
+to spice it up just a tiny bit and use
+an extra tool for this semi switch to my
+terminal here for a moment just do this
+yeah it's supposed to kill the nose
+process first that's interesting for
+2000 years all the years even though
+I've killed my what else could be using
+port 3 so well I don't want to waste a
+lot of our time so I'm just going to go
+through the slides anyway but yeah what
+I wanted to add is just one other tool
+which I can actually run regardless and
+that's a tool called sis count which I
+want to show you even though the app is
+not actually running so sis count is a
+tool that sits there and looks at all
+the system calls a particular process or
+the whole system is making and system
+calls as you know are just arbitrary
+interactions with the OS so it includes
+reading and writing files creating
+processes sending data over a socket
+receiving data over socket scheduling
+switches between threads and processes
+waiting for something a bunch of
+different things so sis count is a BPF
+based tool which traces system calls and
+prints out a summary of the most
+frequent system calls getting invoked
+and that summary can be made available
+on a per process basis or just a
+system-wide basis and if you look here
+it would seem that while the system is
+completely idle the closed syscall is
+one that's getting invoked most
+frequently so 33,000 times during my
+recording interval reason I'm showing
+you this is that sis count is a very
+useful way of sort of characterizing
+your workload characterizing what your
+system is doing as a whole so you might
+have a million lines of JavaScript
+inside but looking at the interactions
+with the outside world can often give
+you a good idea of what the system is
+doing is it doing lots of Network IO is
+it doing lots of filesystem accesses is
+it just sleeping a lot is it for king
+additional processors gives you a
+general picture of what's happening on
+the system in our specific example which
+is illustrated here on the slides I just
+hit a certain end point and again this
+beautiful HTML back that says an error
+occurred or maybe it's more specifically
+an error occurred while opening a file
+and that's kind of what you have to work
+with
+so again workload characterization like
+this with sis count can give you an idea
+of what the process is doing like what
+again which system calls are getting
+invoked and possibly linked to an error
+specifically once you know it's it's a
+file problem you're trying to open a
+file and fail in there is a tool called
+open snoop that you can use and that's a
+tool designed for file operations it
+will print out a message when you try to
+open a file and optionally it has a
+filter only for failures so only print
+mess a message when I try to open a file
+and fail and it tells you which file I'm
+trying to open so here it is and the
+error I'm getting and error 2 and Linux
+is file not found so it looks like this
+file just doesn't exist but I mean it
+could be something else maybe the file
+is already open maybe the file I don't
+have permissions to read it or it's some
+other thing like that so open snoop can
+filter out your file opens for you and
+print out failures so I only have 30
+seconds left so I'm going to skip over
+my last example here but just to give
+you a very very general idea of what it
+was eventually we get to a point where
+we could take a running data
+his engine and printout all the queries
+as they get executed so we take my
+sequel or Postgres or you could
+potentially adjust it to other database
+engines as well and we just in
+production print out all the queries
+executed by that database so that again
+is not exactly no js' specific but it's
+obviously very very useful I assume a
+lot of you have some kind of database
+that you're using alongside with your
+node app so if you're interested in that
+just take a look at the slides so just
+jumping to the summary I wanted to show
+you a couple of different approaches for
+profiling now apps in production we
+started with the v8 profiler which is
+kind of built-in and nice and cozy but
+it's very very limited and you need to
+launch your node process with the
+profiler attached in the first place so
+that's a little limiting then we talked
+about perf and what perf can do in terms
+of recording CPU information CPU usage
+and then we switched over to the BCC and
+vpf tools and there's a variety of tools
+there I only try to illustrate a couple
+of those tailor it for difference in
+areas that people hate often with node
+applications I also have up online I'll
+show you the link in a moment I have a
+bunch of additional examples that you
+might want to look at including some
+networking issues like a node app making
+slow Network requests DNS resolution
+issues database issues so there's a
+bunch of different things these tools
+can be used to investigate so I have
+some references over here but this is
+the important slide so it has the link
+to the slides themselves and that other
+link over there the Linux tracing
+workshop that's a github repo that has a
+bunch of examples it has all of my demo
+code but it also has lab instructions
+that you can follow to learn more about
+these tools so it's basically a
+self-contained learning repository that
+you can use to experiment with the v8
+profiler with perf with the BCC tools
+with everything I've been talking about
+in the last hour so if you find it
+useful please let me know if you have
+any questions we don't have time right
+now but I'll be staying here in the room
+or outside so please feel free to come
+and talk to me I hope you enjoyed the
+rest of n DC and see you at the party
+thank you very very much</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,1448 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Handling Eventual Consistency in JVM Microservices with Event Sourcing | Coder Coacher - Coaching Coders</title><meta content="Handling Eventual Consistency in JVM Microservices with Event Sourcing - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Handling Eventual Consistency in JVM Microservices with Event Sourcing</b></h2><h5 class="post__date">2016-09-21</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/53DVkaW5Fb0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">well I guess we since the microphone is
+turned on I guess we might as well get
+started it's great to see that so many
+of you are interested in hearing about
+micro services with eventual consistency
+and event sourcing and so on so really
+the goal of this talk is just to show
+how event sourcing which is actually an
+architectural pattern an approach to
+persistence and designing business logic
+from quite a long time ago is actually
+super useful in a micro service
+architecture so it's kinda like one of
+those old ideas that suddenly is very
+relevant today because as you're gonna
+see it solve some critical problems in a
+micro service architecture but before we
+get to that a little bit about me so I
+actually live across the bay in Oakland
+I got my start in programming way back
+in the mid late 80s building Lisp
+systems Lisp of course being an early
+object-oriented and functional language
+you know I wrote the book pojos in
+action which was all about how spring
+and hibernate revolutionized enterprise
+Java development and then an event at
+some point I started tinkering around
+with what was this obscure service
+called Amazon ec2 so this was 10 years
+ago now and that evolved into a wooded
+into a product called cloud foundry
+which was then acquired by SpringSource
+back shortly before spring sauce was
+acquired by VMware that was the original
+one and these days I do everything
+related to micro services so consulting
+and training and I also have a startup
+called eventuate and we're building a
+platform to make it easier to develop
+transactional business applications
+using the micro service architecture and
+in addition I have a whole bunch of
+content for learning about micro
+services so go to learn micro services
+dot IO and you'll see all kinds of code
+articles presentations etc hi guys I'm
+Kenny biscotti I'm a spring developer
+advocate
+pivitol my interest little bit shorter I
+am from the Bay Area here I live in San
+Mateo so just a short drive up and I'm
+writing a book called cloud native Java
+which is available today early release
+actually just signed a few just about an
+hour ago and this is all about building
+cloud native applications as JVM micro
+services and it covers all of the
+concepts that you're hearing about cloud
+writing java applications for the cloud
+but it uses spring spring boot and Cloud
+Foundry so if you're interested in that
+take a look if you're not then you talk
+to me yes that's awesome
+well it's good stuff so now we've got
+the introduction out of the way let's
+talk about event sourcing and so I'm
+going to you know describe that and then
+we're gonna transition into the
+microcircuit Xer and just and show how
+event sourcing can solve problems in
+that architecture and kenny is super
+brave so he's gonna do live coding and
+it is gonna work me I just show slides
+with with code never brave enough to do
+like coding yeah anyhow so so what's
+this event sourcing thing so let's
+imagine that you want to persist a
+domain object so regardless of whether
+you're using JDBC or JPA normally what
+you will do is take a domain object and
+map it to a row in a table so in the
+case of an order it would get mapped to
+a row in the order table columns of the
+table of course correspond to the
+attributes of the domain object yeah
+sometimes there's other you know rows
+and other tables but that's the general
+idea right so in a sense the way we
+store objects is simply by saving away
+their current state and on the one hand
+that has worked incredibly well I mean
+that's sort of the standard way of
+persisting data right but it turns out
+that we're actually throwing away a lot
+of valuable information about our about
+our application about the state of the
+world like so an object is in a
+particular state sometimes it's nice to
+know how did
+get into this state you know who did
+what and when so sort of an auditing
+capability and then there's also
+sometimes a requirement to actually know
+what the state of an order was some
+point in the past
+that's especially relevant in a
+financial domain you know when the SEC
+comes and bangs on your door right you
+actually have to be able to recreate the
+state of the world so that you don't
+sort of go to jail or whatever they do
+to you so you know here's a really
+mundane example so it's you know Amazon
+order details page right it's showing
+when that order was was placed when it
+was shipped and when it was delivered so
+that that's sort of a simple case and
+you could imagine just having columns in
+the order table that correspond to the
+different activities around that order
+but in other scenarios it's a little bit
+more complex so here for example is an
+assign a task right you know sort of
+task tracking project management tool so
+not only does it show the current state
+but there's an awful lot of history
+there so it shows that you know in order
+this is this is for me creating this
+presentation it was like yeah so three
+days ago I think I started working on it
+right and I assigned the task to myself
+and then you know went through various
+state transitions so there's an
+arbitrary amount of history that's being
+maintained for that task and that's not
+just sort of for compliance or
+regulatory purposes but that is part of
+the user experience right if you're
+working on a team you need to know who
+did what and when but what's interesting
+is that normally how we implement these
+kinds of features is sort of somewhat as
+an afterthought right or at least it's
+just additional code that we have to
+write and then sometimes we like write
+our core business logic and then it's
+the the market or product people say oh
+can you please record history or add
+auditing and then we write some more
+code that's not really tied in with the
+business logic and there's always a
+potential for the two to diverge right
+you know I've sort of done that you know
+you sprinkle
+insert into order table statements
+throughout your code to give yourself an
+auditing capability so you know and then
+it kind of works but it kind of doesn't
+you know I think it is potentially
+problematic an error prone but it turns
+out there's that there's actually a
+different way of persisting your data
+and that's called event sourcing and the
+big idea here there is a very event
+centric way of viewing your domain
+objects viewing the world and so the big
+idea is for every domain object or more
+specifically every DDD aggregate turns
+out that ddd domain driven design which
+came out in 2003 2004 yet another sort
+of ancient text that's incredibly
+relevant to the world of micro services
+so with that you actually identic split
+lea a identify the state changing events
+for each domain domain object or ddd
+aggregate there's actually a sort of
+cloud collaboration technique known as
+event storming which is sort of a
+workshop where you sit with domain
+experts to figure out what the events
+are so somehow you come up with a set of
+event and then you actually represent
+them explicitly in your domain model as
+event classes so not only would we have
+an order but we'd also have various
+event classes corresponding to the state
+changes to that order so order created
+order canceled order approved order
+rejected shipped so on and so forth
+so think of it like as a state machine
+and that the events objects correspond
+to the various transitions so that's
+step one we you model the events but
+then we're event sourcing gets super
+interesting and very different is that
+you actually persist the events in the
+database so we no longer have an order
+table storing orders or a customer table
+storing customers but instead at least
+conceptually you just have one table in
+your schema the event table
+and when say an order gets created you
+insert a row into that table
+corresponding to that water created
+event when that order gets approved you
+insert another row when that order gets
+shipped you insert a third row so that
+is how you store your order as a
+sequence of state changing event so
+there's no sort of single row in in an
+order table storing the current state
+instead with storing the history it's
+somewhat reminiscent of a sort of
+version control system for source code
+where you're actually storing a series
+of deltas and there was one many years
+ago where in order to reconstruct the
+current state of a file you had to apply
+all of the deltas in sequence and then
+someone had the bright idea of storing
+the latest version and a sort of having
+reverse deltas but that's sort of
+another bit of history so this is how
+you store your domain objects as events
+conceptually in an event table and then
+when you need to reconstruct the current
+state of a domain object you load those
+events sort of in the same way that
+hibernate or JPA will look will query
+the database get back a bunch of rows in
+order to hydrate a domain object so in
+this model you load the events from the
+database replay them and that enables
+you to rehydrate your domain object so a
+good example is with an account where
+bank account where you have an you know
+an account opened event with the initial
+balance and then a series of debit and
+credit event and you reconstruct the
+current balance by basically adding up
+all of the debits and credits with the
+initial balance so that in a nutshell is
+event sourcing event centric domain
+model and event centric persistence and
+before this microservices thing came
+along it was already recognized in some
+by some as having value so number one by
+explicitly representing every state
+change as an event you have this audit
+log that is guaranty
+guaranteed to be a hundred percent
+accurate every state change that's
+performed by a user has a corresponding
+event and it's this perfect audit log
+also because you're storing the history
+of a domain object you have the ability
+to easily implement temporal queries you
+can actually just ask what was the state
+of a domain object two weeks ago and you
+just load the events up until that point
+in time combine them together and you
+have the state of the world very useful
+when the sec comes cooling another
+benefit which is really intriguing is
+you actually have a complete history of
+everything that has gone on in the
+system so you can implement a new
+feature today have it process all of the
+past events and in many ways it's
+actually as if you had gone back in time
+to the beginning and implemented that
+feature so you sort of get a time a time
+machine and then a more mundane benefit
+is that it eliminates our mapping you
+know that's sort of a classic problem
+that we haven't really solved despite
+the existence of JPA or hibernate before
+that like how do you map your rich
+complex domain model to your simplistic
+relational database well with this
+scheme you don't you're not doing that
+you're just storing the events which
+tend to have a much simpler structure
+also when you save an event you are
+basically publishing it so this so event
+sourcing gives you a very reliable event
+stream that you could feed into a
+machine learning algorithm to make you
+know pretty sort of predictive analytics
+and improve the user experience or you
+can use it to send out notifications so
+an event occurs deep in the bowels of
+your system you can turn that into it
+you can easily turn that event into an
+email the order of ships the United
+flight was late again
+the package of ships etc and then as
+you're gonna see in a minute this the
+the fact that you can easily
+publish the events actually solves a
+really critical problem in a
+microservice architecture so event
+sourcing per se you know is not a silver
+bullet they don't really exist so
+there's a bunch of drawbacks so it
+requires an application rewrite it's a
+different way of structuring your
+business logic as you're gonna see but
+if you're in the process of migrating to
+a micro service architecture then that's
+a good time to sort of rewrite your code
+anyway there's a learning curve it's
+different events live forever which is
+good because you need that sort of
+auditing capability you know seven years
+of sort of history there for instance
+but it does mean that an old applet an
+application might have to deal with
+multiple versions of events so you have
+to think very carefully about how you
+evolve your schema then and then also
+querying the events store can be
+challenging there's no explicit
+representation of the current state so
+imagine you wanted to find bank accounts
+over a certain amount you'd actually
+have to have a nested select that folded
+the events together in order to compute
+what the balance was which gets
+expensive and you know complex very
+quickly later on I'm going to talk in
+the context of micro services I'm going
+to talk about a solution to that problem
+and I'm gonna try and not fall over this
+cord so there's sort of some interesting
+trade-offs but as you're going to see
+there's a lot of value in using this
+approach in a micro service architecture
+and at this point it's time for a demo
+okay so when we're talking about event
+sourcing or when I talk about it in the
+past a lot of people are wondering what
+does that look like in code right so
+it's it's a very big concept and to
+understand the differences you really
+have to take a look at example so with
+Chris's help over the last year actually
+I've gotten into event sourcing and I
+put together a couple examples most of
+which are on my blog and the one that
+I'm going to walk through right now is
+so the first demo is going to just run
+through aggregates how do you create
+aggregates how do you take a status
+field and turn that into an aggregate
+from events so just walking through this
+this is an open source project that I
+put together it's 10 microservices and
+it's an online store I call it cloud
+native Outfitters so you can see here
+this is all spring boots spring cloud
+and the online store web here at the top
+in purple that's gonna be the angularjs
+application and that's gonna integrate
+with a collection of micro services on
+the backend so I have a catalog service
+account service inventory service cart
+service and order service now using a
+bench sourcing in two of these services
+I'm using it for the order service and
+the cart service just like Chris showed
+you just now it's the various that's a
+very similar concept in the order
+service but you can also create
+aggregates of actual objects kind of
+like your account balance but you can
+actually recreate the state of a
+shopping car just by taking the events
+that we're logged right so a user takes
+a command on the front end that turns
+into a series of events and you can use
+those events to mutate the state of an
+object until it recreates the object
+that of the very last terminating event
+so I'm gonna actually walk you through
+what that looks like in the actual demo
+so this is cloud native Outfitters I
+like to say it looks a little bit like
+amazon.com right just a little bit so it
+only sells for t-shirts that's the
+problem
+so only for t-shirts about cloud now I
+can go to one of the products in the
+catalog
+I can also log in here and add something
+to the cart so go ahead do that
+my very secure username and password
+so I'm redirected back to the
+application I'm signed in and now I can
+go to one of these products and I can
+add a product to the cart so I'm gonna
+go ahead and add one we can see that it
+was added and I can go to my shopping
+cart and just as we expect we see that
+product in the cart
+so what's happening here in the backend
+I'm not really storing this object per
+se I'm actually just storing a series of
+events so I have a cart events table and
+I'm recreating the state of the shopping
+cart just from those events
+now the code looks like this so I have
+an integration test here and what I'm
+doing is I'm calling shopping cart
+service let me see if I can get rid of
+this and I'm adding a cart events so the
+card event object is gonna have a couple
+fields it's gonna have a card event type
+so if we look at that we can see I have
+add item remove item clear cart and
+checkout so I can add an item I can
+remove an item and then eventually I
+have a terminating event which is either
+clear cart or checkout now when I hit
+that event that means that I need to
+clear out the state of the car right so
+I'm gonna have an append-only series of
+events and I'm gonna have a set of
+terminating events that tell me what's
+the current state of the cart now
+actually aggregating that object if I go
+back to this integration test I'm just
+going to go ahead and step through debug
+it we're gonna take a look at the table
+that I'm storing these events in this is
+what I call a roll your own event
+sourcing solution we're gonna look at
+eventuate next which is using an actual
+kind of platform to do this so as this
+fires up all right so now let's go ahead
+and take a look at my table card events
+and we can see that there's no rows in
+this table right so we have created at
+last modified card event type the
+product ID and the quantity um that I'm
+either adding or removing and then the
+user ID who's adding that to their car
+now if I step so if I step through the
+first event here we go back to so I've
+added a item SKU two four six four two
+now if I go back to the table and
+refresh here we can see that that event
+was at it now that's all I'm doing so I
+don't actually have a table for my
+shopping cart I just have these events
+and so if I step through all these
+events and go back to the table and
+refresh now we see we see five rows here
+now that represents the total state of a
+shopping cart for any user and so what
+I'm going to do here is I'm going to
+have a method that's going to
+incorporate each one of these events
+it's going to mutate an object until it
+arrives up to terminate the state which
+is the current state of the shopping
+cart so if I go down to this method here
+on line 50 let's get rid of this
+so I have a method here which is
+shopping cart shopping cart aggregate
+cart events now that's going to actually
+recreate that cart from a series events
+so I'm passing in a user I'm providing a
+catalog here that's how I'm going to
+combine the product SKUs with the actual
+products in the catalog and I'm using a
+project reactor here to actually stream
+from the database in a sequence of
+records and then for each one of those
+records I'm doing a take while and
+mutating this data shopping cart until I
+eventually get I end state and so that's
+the basic idea of this so now with an
+order it's gonna be different right so a
+status field we're just gonna be
+mutating one field it's quite simple but
+more advanced applications of event
+sourcing are going to do things like
+this like a shopping cart and that's the
+demo
+cool it worked it worked excellent all
+right okay so that that that's the
+basics of event sourcing you store event
+you in the database and to reconstruct
+the state you load those events and as
+you just saw you at in in functional
+programming terms you do a functional
+fold of those events to compute the
+current state so let's now talk about
+microservices seems to be a hot topic
+Java one and and and I'll excuse me
+it's the the video is not working
+they'll screen down that end yeah
+there's a whole bunch of wires and stuff
+here yeah
+quick let's reboot the whole system and
+see if that fixes it okay so you know
+let's just spend two slides talking
+about the microservice architecture
+right and really the big idea behind the
+micro-service architecture is that it
+tackles complexity
+you know we today we build very you know
+generally we build very large very
+complex systems you know Jeff usually
+ultimately we end up with large teams
+right and so the microservice
+architecture sort of solves the
+complexity problem by modularizing the
+application where in this case modules
+are actually services you know like the
+traditional way in a monolithic
+architecture of modularizing your system
+is with sort of packages and that has
+never that basically ends up
+degenerating over time whereas in a
+micro service architecture you your
+module is a service which has an
+impermeable barrier and it will not
+degrade quite as fast so if you think
+about an online story you know
+Kenny showed write rather than a giant
+monolith which could be a million or
+more lines of code you have a collection
+of services each service corresponds to
+a particular business function well can
+we save that till the end hold that
+thought
+you know it corresponds to a particular
+business function so we've got catalog
+service reviews orders customers
+recommendations and so on you know you
+don't up with quite a lot but where it
+gets really interesting is not only are
+you functionally decomposing your code
+but you're also functionally decomposing
+your data so instead of one giant
+relational database containing
+everything you each service basically
+has conceptually its own database or at
+least its own private data that is only
+accessible through that services API and
+then you know that so that's the
+critical part and then sitting in front
+of the services you'll probably have a
+Mike an API gateway that basically acts
+as a facade that encapsulates those
+micro services and exposes an API to the
+clients of those services and the
+services would be individually developed
+it's deployed and scaled right and by
+teams that are acting autonomously so
+you go fast so that that's the you know
+micro service is in a nutshell the
+problem that you run into is that there
+are challenges around implementing
+transactions and queries right we
+functionally decomposed our system but
+transactions and queries do not like to
+be functionally decomposed so if you
+think about for instance the the problem
+of checking credit right imagine that
+customers have a credit limit so when
+you place a new order you have to verify
+that that order will not exceed the
+credit limit in a traditional walk
+application you simply begin a
+transaction find the orders fight the
+existing orders find the customer
+compute the available credit and insert
+a new order if everything's ok and the
+acid transactions give you a guarantee
+that if there are simultaneous attempts
+to place an order for the customer those
+transactions will be
+serialized any and that business rule
+will be maintained but if you think
+about this in a micro service
+architecture orders are in one service
+customers are in another you can't sort
+of do queries like that in one
+transaction anymore
+not only that right if you wanted to
+have a transaction in the traditional
+sense it would have to be a distributed
+transaction two-phase commit but two
+two-phase commit is not really a viable
+option for modern applications because
+on the one hand it guarantees
+consistency subject to a lot of fine
+print it just for practical reasons
+people have found it doesn't work at
+sort of high scale very well you know
+modern technologies particularly no
+sequel databases and modern message
+brokers don't support two-phase commit
+plus you have the cap theorem that
+basically sold that fundamentally says
+you have to choose between consistency
+and availability and people prefer to be
+available rather than consistent right
+so you because of that it doesn't really
+make sense to use two-phase commit so we
+need a different way of doing
+transactions the other problem is it's
+like well you know when we want to query
+the database we just do select and join
+against a whole bunch of tables and
+without really thinking too hard about
+it obviously there's you know there are
+limits to how many tables you can join
+efficiently but you know here's a query
+that finds high-value recent customers
+that trivial query but once again in a
+micro service architecture customers are
+in the customer service orders are in
+the order service and we can't really do
+queries like this right we can only go
+against api's so we need a different way
+to implement sort of many of the more
+interesting queries in the application
+and I'm gonna get back to queries in a
+minute but I want to talk about use how
+to deal with the problem of transactions
+and data consistency
+so the traditional approach to solving
+this problem of sort of well how to
+maintain consistency in the absence of
+distributed transactions is actually to
+use an event-driven architecture I read
+an article by some folks at eBay who are
+using this approach sort of roughly you
+know 2009 maybe so quite a long time ago
+and the big idea is you just have an
+event-driven approach where a service
+when it changes its data publishes an
+event other services consume that event
+and change their data in order to be
+consistent and you can imagine a whole
+sort of it's sort of an event-driven
+eventually consistent workflow so here's
+how you could check credit so a request
+comes in to the order service
+it creates an order in sort of this
+created state and it publishes an event
+that event gets consumed by the customer
+service which goes ahead and performs
+the credit check and you can see here it
+you know inserted or recorded the fact
+that order four five six seven was
+reserved three hundred and forty-three
+dollars of the available credit and then
+it can publish an event saying I've
+reserved the credit which can get
+consumed by the order service which can
+then change the state of the order to
+approved so rather than just one sort of
+atomic distributed transaction we now
+have a series of three transactions one
+in order management one in customer
+service and another one in order
+management and the old ventually we have
+approved the credit and you know for
+instance the credit limit was exceeded
+it were publishing if the customer
+management service would publish an
+event which would cause that order to be
+cancelled so it's sort of a very
+different behavior we are now eventually
+consistent like if you just let these
+events propagate through eventually this
+the world will sort of be be consist in
+a game so that's the general approach
+and as I said first read about something
+similar to this being Donna eBay where
+this is you know they had basically
+services each with their own database
+own you know the own Oracle or at least
+relational database and they didn't want
+to use distributed transactions for the
+reason I mentioned so they used an
+approach like this but there's an
+interesting little problem in order for
+this to be reliable you have to
+atomically insert an order into a
+database and publish a message to some
+kind of message broker if you did one
+and not the other your system would be
+in an inconsistent state and the irony
+is is that the traditional way of doing
+this in a java application would be with
+a distributed transaction right
+involving your JDBC database and your
+JMS message broker but for the reasons I
+outlined you know the whole point reason
+we're talking about this is because
+two-phase commit is not an option so
+there's an interesting technical problem
+with implementing and event-driven
+architecture and it turns out there's a
+few different approaches that you can
+use and you can go read about them if
+you go to learn microservices dot io or
+more directly to microservices dot io
+you will see a write-up of this but for
+instance one approach which actually is
+being done at LinkedIn today is that
+they they tail the transaction log so
+they basically leverage the database
+replication mechanism so you see you
+know the application changes the
+database that gets recorded in the
+transaction log which you can read and
+so you see a sequence of changes coming
+out of the transaction log which you can
+then publish his messages as events so
+that for examples one way of doing it
+and that there are a few others but the
+one I want to talk about today is this
+approach well it is is event sourcing
+right
+because if you think about it event
+sourcing is an event centric way of
+persisting your you know sort of
+business objects so going back to the
+notion that you have to simultaneously
+update the database containing the
+current state and publish an event what
+event sourcing eliminates the need to
+update the current state because all
+you're gonna do is save an event in this
+event store right which is a single
+operation which is guaranteed to be
+atomic so just the inherent way within
+which event sourcing works solves this
+problem of atomically updating state and
+publishing an event which is really
+quite nice and that this is what got me
+interested in what until previously had
+been a somewhat interesting but yeah
+I've just kind of a curiosity so in the
+in the architecture right you got the
+order service customer service they're
+both create where the order service is
+creating updating and querying orders
+the customer service is doing the same
+with customers right and the orders and
+customers are both represented by
+streams of events but then they're both
+subscribing to each other's events so
+when the customer when the order service
+changes in order the customer service
+gets the event and light and when the
+customer service changes a customer the
+order service gets an event so event
+sourcing just fits very naturally into
+this whole event-driven micro service
+architecture it's a really good
+foundation for that you know a little
+bit more about that so if you think
+about what when a request comes in to
+the order service to update an order
+what it first does is load the orders
+events from the event store it would
+then create a blank order object using
+its default constructor it would then
+apply the events to reconstruct the
+current state it would then process a
+command which represents the request to
+act
+update the order like approve or cancel
+which then yields more event which get
+applied to the order in order to bring
+update it in memory and then those
+events get saved back into the event
+store so that's sort of the traditional
+load modify write cycle but you know
+which we've been doing for years with
+JPA
+now adapted to the to the event-driven
+architecture and that might be done with
+optimistic locking so that you can
+handle this you know concurrent updates
+but then where event sourcing really
+comes into play is that other services
+can subscribe to certain events get
+notified so in this case the customer
+service gets notified when events happen
+published by orders and it can go and
+update its customer which would then
+trigger more event right so that that's
+that's that's sort of how these services
+collaborates who achieve and eventually
+sort of consistent world we didn't go a
+little further than that you can have
+arbitrary services subscribing which can
+then get notified when the events occur
+and they can go update what are known as
+well materialized views which I'm going
+to talk more about in a minute and they
+could send out notifications and just
+sort of perform very sort of arbitrary
+actions based off this event stream so
+that that's you know so that's how our
+event sourcing fits into the micro
+service architecture a little bit about
+the event store so it's sort of a hybrid
+of a database because you can insert
+events find events by primary key so
+that's sort of the database component
+it's also like a message broker because
+you can subscribe to the event and so
+people have you know I've talked to have
+implemented their own you know on top of
+a relational database in dotnet land
+there's one called get event store and
+my startup
+building one as well and we have an
+open-source version that's basically
+built on top of my sequel and Kafka
+hence sort of this hybrid of the two
+model you you insert events into my
+sequel load events from my sequel and
+then if you're in then you can subscribe
+to events and there's some there's a
+mechanism that make sure the changes to
+my sequel get replicated over to the
+Kafka so check it out but as I said you
+know and also as Kenny demonstrated you
+can also roll your own as well so that's
+the event saw saying I want to finish up
+by talking very briefly about the
+problem of queries and I focus pretty
+much on maintaining data consistency but
+this other problem you have is how to
+implement what were previously quite
+simple queries so hence this like high
+you know finding high value recent
+customers right that would have to be a
+distributed query which you can't do
+also now that we've added an event
+sourcing as I mentioned right at the
+beginning querying the event store what
+to find objects based on their current
+state is quite difficult now because the
+current state is not readily accessible
+you just have a series of state changes
+so a query like this would have to be
+rewritten to use a nested select to
+basically fold the events together so
+trivial queries that are no longer easy
+in a micro service architecture so the
+other approach is to use another pattern
+called command query responsibility
+segregation and the big idea is that we
+have this idea of commands right which
+are you know creates updates and deletes
+the HTTP put post puts and deletes and
+then you have queries which correspond
+to HTTP gets so the idea is that rather
+than having one system that sort of
+handles
+both you actually segregate as the name
+suggests responsibility for handling
+commands from responsibility for
+handling queries and so you have your
+system is split into two
+come on side query side so the command
+side which is handling the HTTP POST
+puts and deletes is implemented using
+event sourcing base domain objects and
+so it's publishing events to the event
+store you then have the query side
+that's handling the queries that
+maintains one or more materialized views
+based on the stream of events that are
+coming from the command side you can
+think of this as something as a
+generalization of something we've been
+doing for a long time namely using my
+sequel or a relational database as the
+system of record and then using elastic
+search or Lucene or solar to do the text
+search right so in in this using this
+terminology elastic search is a CQRS
+view and in this architecture elastic
+search will be kept up to date by
+subscribing to the events that are
+coming from the command side so it's
+just a generalization of that so you can
+imagine that each you know the query
+side has one or more views and then the
+the type of database that you use for
+the view depends upon the kinds of
+queries that you need to support so if
+you want to have your supporting a REST
+API that's handing back Jason you could
+use MongoDB if you're using if you need
+to do text searches you could use
+elastic search if you want to do graph
+queries because you're doing some kind
+of social graph kind of search right you
+could use a graph database like neo4j so
+you have a component that's subscribing
+to event updating the view and you have
+another component that is handling the
+HTTP request by
+querying the view so that that's sort of
+kind of the big idea and you've just met
+four for each kind of query that you
+need to support you will have a one or
+more of these views and I've got some
+code here but I think Kenny's gonna talk
+about this a bit so the idea is like
+here's a MongoDB document that stores
+information about a customer and
+embedded within it are the customers
+recent orders so with one primary key
+lookup of this Mongo document you get
+back this blob of JSON that you can hand
+to an angularjs client and it's super
+efficient and the code that maintains it
+using spring well here's the event
+handlers which are basically using
+spring data from MongoDB to keep MongoDB
+up to date so there's a bunch of
+benefits to this it tends to be pretty
+necessary in an event sourced
+architecture because the event store is
+somewhat challenging to query the notion
+of having of seperating of concerns
+command processing from query processing
+is useful you know simplifies the
+respective parts of the application and
+it also easily supports multiple
+denormalized views of your data so you
+could have graph searches text searches
+and primary key based lookups of blobs
+of JSON within one application and
+support them all in a very scalable
+performant way downsides of course is
+there's a whole bunch of complexity
+multiple views right patek possibility
+of code duplication between the command
+side and the view side and also this is
+you have to deal with replication lag as
+well so it's like writing to a might to
+a my sequel master and then reading for
+then querying a my sequel slave it takes
+us you know so many milliseconds for the
+changes to propagate from the master to
+the slave and so there's some some
+clever coding might be required in some
+situation but in general I think it's
+quite this notion of having multiple
+databases to support different kinds of
+queries and and keeping them in sync
+using events is a very powerful one and
+on that note it's time for Kenny so this
+this is the fun demo so yesterday it
+took me about three hours so I I've
+known Chris for a while he's kind of
+been a mentor to me when it comes to
+event sourcing and I hadn't tried out
+eventuate so yesterday because he had a
+local Edition I was like I need to make
+it open source you need to make it so
+you can run it locally it took about
+three hours to put together something
+that took me about two weeks to do the
+roll roll your own so I'm just gonna
+walk through that code what it looks
+like and kind of the development
+experience and oh you need to turn on
+mirroring cuz it's looking good yeah
+okay good now all right wonderful okay
+so in this example I guess I should just
+walk through the repo real quick
+okay so the what I put together was an
+example of the order service here so I
+took the order example that Chris put
+talked about in his slides and I pretty
+much replicated that using eventuate so
+just to talk about the development
+experience a little bit what did I ended
+up doing is I saved a lot of time right
+I also was able to get these added
+benefits which is I got the CQRS stuff
+as a part of my micro service when I
+rolled it myself I didn't get that I had
+to I just had aggregates basically so I
+can get that eventual consistency but
+there really wasn't a way to send
+durable messages to other services and
+kind of have this chain of request
+response until a system became
+eventually consistent right there's this
+idea that it's very hard at micro
+services to have foreign key
+relationships between your applications
+and so that's what this solves out of
+the box so just walking through one of
+the tests here what I did for this
+application is I created just a basic
+REST API an orders API where you could
+create a new order and what it does is
+it combines the database and it combines
+the events tour right so we have a
+status for the order my status can
+either be created pending confirmed
+shipped in that order now my API here
+actually means zoom in here so my API at
+V wanna orders that's going to allow me
+to create an order it's gonna allow me
+to update an order and I can update in
+order to transition states so what the
+events tour is going to do is it's gonna
+combine with the database in this case
+I'm using my sequel it's going to
+combine the status that's been
+aggregated from the events with the
+actual domain object for my order now
+putting this together I don't really
+have this is actually the order object
+here with the status the ID and then the
+entity ID the order number now the
+entity ID here that's gonna relate it to
+the event store now I don't have to
+display that in my JSON this is just for
+debug purposes but that's gonna be that
+relationship to the event records so the
+event store is gonna keep track of the
+domain object just by ID and that's how
+it's gonna know how to combine that
+state with that object I also have my
+order number here which is really going
+to be the ID of that object that people
+see now I can actually go through this
+workflow which is to update it in this
+case I'm going to send an update request
+to one
+my orders if it's in a created state I
+can make it to go to pending confirmed
+and ship now to walk through the code
+here I have a basic spring food
+application and to get the started I
+need to run eventuate locally so I have
+a docker compose file here in micro
+services just out of interest who just
+has docker on their laptop so everybody
+it's pretty handy right yeah it's great
+for development so here I have the this
+actually what Chris put together which
+sets up the containers so basically what
+eventually it is is this multi container
+application where I have here I have
+zookeeper which is going to be a backing
+store for Kafka I also have my sequel
+here that we're gonna use to actually
+store metadata about the events as well
+as our actual domain object now I can
+use a different store if I wanted to in
+this example I'm just using one my
+sequel database and then we have the CDC
+service now that's gonna be eventuate
+actual oh yeah what that what that's
+actually doing it's tailing the my
+sequel transaction log looking for
+changes to the events table and for
+every event that is inserted into the
+event table publishing a message to
+Kafka right so it's kind of the glue in
+between those now all I have to do to
+get that started is run docker compose
+up so if I go to my terminal okay I have
+that right here
+see if it's running oops I ought to be
+up the level yep yeah it looks like it's
+running so now that it's running I can
+actually tail the logs here and and so
+we can kind of see in real time as I
+create objects as I update their state
+we can kind of see the flurry of output
+here as I'm tailing that multi container
+application now I need that it's gonna
+be my backing store in my development
+environment there's also the cloud-based
+one right that you have yeah running on
+AWS which is essentially the same thing
+it's just deployed on an AWS so as a
+developer here now I have my backing
+store it's just kind of like running a
+database locally and let's go ahead and
+walk through the code now now there's an
+actual model here that you're going to
+need to be aware of so when I started
+out this example I had to really take a
+look at the documentation and understand
+the CQRS pattern now you're going to
+have commands so if you want to think
+about commands as any interaction with
+your users on the front-end like when I
+add something to my cart
+that's gonna be a command which is going
+to trigger an event now that events
+going to have a set of other services
+that are that are subscribed to it
+they're getting that notification and
+they're able to take some action based
+off of that so you have these commands
+you have events and then you have
+actions and that's driving this entire
+system so here I have in my commands I
+have a set of commands that iterates or
+moves the status of an order forward now
+I have a base command here and that's
+going to extend the eventuate command
+because you have a library here for
+eventuate and then i'm going to create
+my individual implementations of the the
+order command now that can contain
+information anything that you're going
+to need to know when that command is
+triggered off from like the front of the
+application to actually create an event
+now this is a very oversimplified
+example and if I go to my order service
+v1 now this is what's going to drive it
+so what our service v1 it's just a
+service that I wrote where the order
+controller
+is actually just going to have a thin
+API on top of that so I have I can get
+an order I can put an order and I can
+post more so I can create an order I can
+update an order and I can get the
+current state of an order now in the
+order service we can actually see the
+code that I think you changed a few
+things here I'm gonna roll with it so
+the the main one here is that process so
+we have this order aggregate object here
+so I go to the definition of this now
+this order object this is going to be my
+domain objects I'm using spring data JPA
+here so you can see my entity here and I
+have to name it because it's a reserved
+word my sequel so it's gonna be my order
+table and I think I can actually see
+that I have the database open on the
+other database so you can actually see
+the orders here that I've created so we
+have one here now that's just going to
+contain the information about the order
+but the status is actually going to be
+applied from the events so if I look at
+the events that have been recorded you
+can see the events hide very similar to
+what I showed you earlier when I rolled
+it myself
+but now this is just being handled by
+eventuate by the event store so here I
+have my series of time sequenced events
+and I'm going to iterate through those
+and create the current state of my order
+object now I'm just going to go ahead
+and start this application up and we can
+run through the test
+I think it's gonna work we'll see well
+it was working as of like an hour ago
+so should be okay should be fine right
+Hey all right you know important lesson
+you have to write an automated
+end-to-end test that is trivial to run
+otherwise your system will stop working
+even if it only has one service
+absolutely especially in this case okay
+so I'm gonna show you a end-to-end test
+here that I have Oh quite a bit - yeah
+he's just making my code better why I
+just passed in a optional parameter that
+would make it point at the daka virtual
+machine rather than localhost that was
+all it's probably a good idea okay so
+here we have the actual curl request to
+that endpoint so you can see here the
+first thing I'm going to do is I'm gonna
+create a new order so I'm gonna make a
+curl request here it's kind of ugly but
+that's gonna be a v1 orders right I'm
+gonna take the result of that that comes
+out and I'm just going to assign this to
+the order number object because that's
+all I need I need that order number so
+it's gonna create an object an initial
+state have created and then I'm going to
+go ahead and test it rating that through
+the different states so the first thing
+I'm gonna do here is and I'm going to
+make a click request from that object so
+that's gonna be here so I want it to go
+from created to pending so I'm gonna
+make that request to that that update
+endpoint of v1 orders with the order
+number and then I'm just going to apply
+that and I think the data is here right
+so I'm just saying status pending now if
+it's in a creative state then it's gonna
+go ahead and apply the pending but if
+it's not in a created state then it's
+not a proper status that it can actually
+take take on so it's going to come back
+with an error saying that's an invalid
+state so you have to apply the right
+status so you can go forward and you go
+backward because the event log is going
+to be append only so I'm going to
+iterate here through each one of these
+endpoints and I'm going to go all the
+way to ships so if I go ahead and run
+this
+we can see that it's calling the service
+and it's created the object and it's in
+a creative state and then it's just
+going to continue updating it until it's
+all the way to a ship State now that's
+it's very basic this is very
+oversimplified but it's powerful because
+I also get that CQRS stuff too right so
+if I go back to the code we can actually
+take a look at that that query so I have
+order query here now this is where I'm
+going to have my query side event
+handlers and I can go ahead and just
+subscribe to these events and it doesn't
+matter which micro service I'm in in
+this case I have everything in one just
+for this example but you're gonna have
+many different micro services and you
+can just listen to the series of events
+from any micro service and then you can
+take some action from there and so I
+have that already in this and it's just
+a very simple class here and that can be
+expanded on to work with other services
+now I was gonna do the full-on
+integration but we didn't have enough
+time so I have I'm actually gonna finish
+this out I have an account service here
+and I'm going to take the next step here
+to have that integration between these
+two services so the source code is
+available on github and I'm going to
+update it until it's good to go but yeah
+that's go tests now it's got tests right
+and - and everyone loves tests alright
+all you want to flip back is
+yeah cool so you know so we're gonna got
+this codex arm port if you go to learn
+microservices dot io you will see other
+code examples as well so that that's
+sort of pretty much it so it's sort of
+like you know ki want to say you know
+micro service architecture functionally
+decomposes an application into a set of
+services transactions and queries you
+know actively resists decomposition and
+so in order to kind of reimplementation
+z-- you need to use an eventually
+consistent event-driven architecture and
+a really good way to do that is with
+event sourcing and then for anything
+other than primary key based lookups you
+will almost always have to use CQRS
+maintaining all these separate views
+that are kept up-to-date by subscribing
+to the event stream using event handlers
+just like we saw so that's pretty much
+it and yeah here's our contact info so
+you know I guess our twitter handles are
+not there there wasn't there wasn't
+there wasn't room anyway so that that I
+hope that you found this useful and
+thank you for listening and I guess
+we've got a couple of minutes for
+questions and I feel like this this side
+of the room is really neglected they're
+so far away so we start with the
+question over there
+oh yeah you know this is an interesting
+application it's actually a hybrid JPA
+and event sourcing based applications so
+an aggregate is simultaneously persisted
+in JPA using JPA and using the event
+store but you could view that as sort of
+a way to kind of bridge between a sort
+of a legacy application that's expecting
+the traditional persistence model and as
+a more modern approach using event
+sourcing oh yeah I mean that yes yeah I
+mean the short answer is yes but there's
+a whole bunch of fine print around how
+to do that properly but yes
+oh okay what's really cool about this
+model is that you're running zookeeper
+zookeeper is a backing store right on
+Kafka so it's scalable right so you have
+all of these arrows coming in to there's
+a pendency on it but it's going to scale
+very well and it's a very generic thing
+you're not like locked into that model
+as you saw earlier when I showed you the
+roll-your-own it's a it's a very basic
+model with a bench sourcing right the
+thing that you're gonna be even if you
+use the application framework itself
+you're locked into it right so I mean
+swappable back i mean event stores it's
+early days right there's not really yeah
+I mean one thing I would add is yeah
+conceptually I often describe it as a
+single event store right in the same way
+that I think of dying AWS DynamoDB is
+this thing in the cloud where stuff
+stored and and but in both cases
+internally it could be highly
+distributed highly replicated so it's
+not a single thing and in the case of
+this might sort of my sequel based
+approach in actual fact each service
+could actually have its own events table
+in its own database so it would be come
+from that perspective it would be
+completely isolated design time run time
+from all of the other services and the
+only thing that's sort of shared at that
+point is say the Kafka messaging
+infrastructure because even though that
+it doesn't necessarily have to be shared
+but it's really really convenient if you
+just go to the message broker as opposed
+to knowing which particular message
+broker you want to talk to so it's so it
+is it's so it's sort of in summary is
+yeah sort of abstractly there's one but
+in practice you could actually split and
+decompose
+yeah
+so the issues around latency I mean it's
+possible that inter I mean I don't know
+what the typical latency is I think it's
+just a small number of milliseconds it's
+not necessarily high and if you wanted
+to you could imagine and in a different
+implementation using sort of lower
+latency messaging technologies right
+like some people talk about using for
+instance like shared memory as your
+inter process communication mechanism
+obviously that's all within one
+particular machine but at least
+demonstrates that you can have inter
+process communication in the microsecond
+range which is probably fought you know
+which is fast enough for like low
+latency trading applications
+you want to say something okay so I goes
+back to the reason why we're developing
+micro-services so kind of like isn't
+there a whole lot of overhead with
+having the load events to reconstruct
+the current state I think this sort of
+yeah the reason why we're doing is
+because we gain agility right so I this
+monolithic application has caused us to
+be very slow at adding features and so
+our micro service teams are going to be
+able to independently deploy features
+and so now we can take this giant
+monolithic application we can you know
+displace it up into little blocks and we
+can independently deploy features now we
+are going to have overhead with that
+model because it's a distributed system
+and CQRS is the best way at this point
+to be able to do these kinds of things
+where you're creating a materialized
+view of the world so and what one point
+I would also add is imagine Li you have
+a bank account right which and you would
+probably argue where that bank accounts
+are open for a very very long time so
+there's thousands of debits and credits
+that have to be loaded and folded right
+whereas in water now that's just a few
+over there they have relatively simple
+life cycles but there is a pretty
+standard technique in event sourcing
+known as snapshotting so you
+periodically take a snapshot of the
+current state of the domain object and
+then you only ever have to load the
+events that have occurred since that
+snapshots so in the case of an account
+yeah every 10 days just pick a random
+algorithm you you save the current
+balance you then find that current
+balance find the transactions that have
+occurred since then so the net result is
+you never have to go back to the
+beginning of time and load a very large
+number of events
+deep sea yeah so doesn't isn't this
+event store a smart pipe I think it
+would be the question and I would argue
+no like an ESB is a smart pipe because
+it actually contains business logic
+right and cut you know code runs in the
+ESB which makes it you know by
+definition is smart where is in a crude
+sense a an event store is really a
+database plus a message broker and you
+do not run custom code within it so I I
+view it as as as somewhat dumb really in
+comparison and I guess we have to stop
+talking so thank you bubi around</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,1448 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Sergey Ignatchenko “Ways to Handle Non-blocking Returns in Message-passing Programs...” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Sergey Ignatchenko “Ways to Handle Non-blocking Returns in Message-passing Programs...” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Sergey Ignatchenko “Ways to Handle Non-blocking Returns in Message-passing Programs...”</b></h2><h5 class="post__date">2017-10-25</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/6lXUrvlMXNU" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">Hello (mumbles) to all.
+Today I'll be speaking about
+message-passing programs
+in particular ReActors,
+and about eight different ways to handle
+non-blocking returns in them.
+In addition I'll try to
+make a very brief overview
+of existing proposals
+and the consideration
+by C++ Committee also known as WG21,
+and we'll try to
+demonstrate how do they fit
+into our non-blocking returns.
+That's a lot of stuff and
+to fit into allotted time
+it has to be a very intensive session.
+My apologies if anything
+looks too sketchy.
+In the end I will try to
+provide a few pointers
+where further information can be found.
+Before we can really start with the talk
+I'd like to make an
+important announcement.
+I have to confess that this
+is not really my presentation,
+rather it is a talk by, du dum,
+this guy.
+And you can also see
+him on Mighty Shore too.
+It means that if there is anything good
+with this presentation it
+should be attributed to me.
+And if there is anything
+bad it is all his fault.
+By the way if you think
+that my accent is bad
+you should be grateful that
+it is not him speaking.
+I can assure you that his
+accent is much worse than mine.
+As you may guess it is quite difficult
+to produce human sounds for a rabbit.
+But leaving that aside we can proceed
+with the substance of the talk.
+In part zero of the talk,
+well as we in C++ learned,
+we have to start everything with zero.
+I'll try to define what is
+the task we are going to show.
+First we will have an
+extremely brief overview
+of message-passing and ReActors
+including the benefits,
+and then we'll include
+non-blocking processing
+which is very closely
+related to interactions
+between main processing
+and return processing.
+In particular we'll mention that depending
+on where is the big one to process,
+intervening way while
+waiting for the result
+of our outstanding call,
+non-blocking processing can
+be simple as a blocking one.
+There is no one single
+definition of message-passing,
+but we can weigh the idea is
+things that it is the best
+to use the following
+adage from Effective Go.
+Do not communicate by sharing memory,
+instead share memory by communicating.
+While this wording
+doesn't come from C++ land
+it does kind of way is the concept
+which is more or less
+equivalent to share nothing.
+In practice it means three things,
+first all the parts in business logic
+is confined to one single thread,
+or at least as if it is one single thread.
+Second there no memory
+sharing which in turn means
+that all the mutexes are gone.
+Last but not least we should have a way
+to pass messages between
+different threads,
+processor, or even different computers.
+Unfortunately we don't have time
+to get into detailed discussions
+on the benefits of message-passing,
+so I will just list them here highlighting
+the most interesting ones.
+Most importantly message-passing allows
+to avoid cognitive overload
+which arises whenever we
+are trying to deal both
+with business logic and
+with thread synchronization
+at the same time.
+This in turn simplifies
+programming greatly.
+Second with message-passing
+it is easy to make
+our programs deterministic which in turn
+enables such goodies as
+production port-mortem debugging.
+Yes it is used in practice
+and replay-based regression testing.
+And when it comes to currency,
+scalability and performance,
+message-passing architecture tends to meet
+mutex-based ones too
+in particular due to zero contention
+and due to avoiding expensive
+thread context switches
+and context switch can cost up to
+a million CPU clock cycles
+if you account for cashe invalidation.
+Another performance related
+consideration is that
+message-passing programs tend to have
+much better special locality,
+and overall from scalability point of view
+message-passing architectures
+are shared nothing.
+And share nothing
+architecture rules forever.
+There are many different ways
+to implement message-passing.
+However to be specific for this talk
+I'll concentrate on one single incarnation
+of message-passing as one which
+I prefer to call ReActors.
+Reactors are historically
+known under different names,
+Actors, Reactors, Event-Driven Programs,
+and ad-hoc Finite State Machines.
+They are widely used in very different
+programming environments from GUI to HPC
+with game development in between
+and are supported by different
+programming languages
+and frameworks starting
+from Windows Messages,
+and does away to Node.js.
+Now it certainly looks
+as a good time for C++
+to start supporting event-driven programs
+as first class citizens too.
+Most important for us however is that
+while from now on we'll be
+speaking only about ReActors,
+most of our findings are generalizable
+to more generic message-passing.
+One exception is related to
+locator-related serialization.
+While it does look for ReActors
+at the moment I don't
+know how to generalize it
+to all the message-passing programs.
+I will be speaking in terms
+of ReActors quite a bit.
+Let's establish some basic
+terminology which we'll use.
+Let's name a common denominator
+for all our ReActors and GenericReactor.
+As we can see it is an almost empty class
+with abstract class with only one
+official function react.
+There are different
+interpretations available
+we will stick to this one.
+Let's name infrastructure code,
+a code which calls our ReActors react.
+Pretty often not strictly required
+it happens inside so called event loop
+shown on the slide.
+As we can see
+everything happens in one single thread.
+So there is no need to have any kind of
+thread synchronization
+within ReActor react.
+As for a get event function
+it can get events from
+pretty much anything
+starting from select, pull, epull, kq
+on the server side
+or using libraries such as
+libuv on the client side.
+I have to know that the event loop is not
+the only way we can use our ReActors.
+In particular it is
+perfectly possible to have
+thread pools calling reactors.
+As long as we are synchronizing
+on the reactor before
+goiing into ReActor react.
+But in any case what is really important
+that we are avoiding all kinds
+of thread synchronization
+within our ReActor react.
+And finally let's name
+any specific derivative
+from our generactor
+ReActor specific ReActor.
+It is the place where all our
+business logic will be implemented.
+One important thing to know is that
+mutual function based implementation
+is certainly not the only
+one possible for reactors
+and that we can achieve pretty much
+the same result but using templates.
+This one is just simpler to demonstrate.
+After we defined our landscape
+let's see what is this specific problem
+I'm trying to discuss today.
+It is a problem of
+non-blocking processing.
+Non-blocking code has
+a pretty bad reputation
+among developers, in
+particular it is perceived
+to be significantly more complicated than
+equivalent blocking code.
+As we'll see a bit late that in part
+it can be attributed to
+to the lack of adequate support
+for non-blocking processing
+in the program language.
+But in addition there is a little bit
+of confusion about the context of
+non-blocking processing.
+In practice it happens
+that we have to distinguish
+wo very different scenarios.
+The first scenario arises when we do not
+need to process anything while waiting
+for the result of our outstanding code.
+In this case if going for
+a non-blocking processing
+they'll be doing it only
+for performance reasons.
+And indeed in this case code complexity
+of non-blocking code will increase
+compared to the blocking code.
+The second scenario occurs when
+we do need to process intervening events
+while waiting for the result
+of our outstanding operation.
+Examples of such situations are numerous.
+As one all important example,
+for an interactive program refusing
+to process inputs while waiting
+for a result of outstanding
+over the internet operation
+will result in effectively hemmed program
+which is pretty much suicidal.
+And if we will look at
+this second scenario
+from the point of view of code complexity
+we will see that while
+non-blocking code can be ugly,
+blocking code to implement
+the same interaction
+between processing of return
+from our non-blocking code,
+from our outstanding code.
+And the main processing
+we need to resort to
+thread synchronization which happens to be
+much worse than a non-blocking code.
+In particular I'm of a very strong opinion
+that combining of business logic
+with thread synchronization
+in the same piece of code
+almost inevitably leads
+to cognitive overload
+exceeding that magic number of
+seven plus minus two entities which we can
+deal with simultaneously.
+This in turns means that reasoning about
+blocking code which
+processes intervening events
+inevitably becomes extremely difficult.
+This dual nature of complexity
+with relation to non-blocking processing
+leads us to the concept of
+mostly non-blocking processing.
+Where we'll use
+non-blocking processing only
+is there is a chance that we do need
+to process intervening
+events while we are waiting
+for the results of our standing goal.
+On the other hand mostly
+non-blocking processing
+we may block as long as
+the outstanding operation
+is short enough so we
+can postpone processing
+until a group of the intervening events
+until we have the result.
+One such example includes
+accessing local disk
+or local database.
+For most of real world scenarios
+we can say that if this takes too long
+we should be already speaking about
+fault recovery and not about
+non-blocking processing.
+Unfortunately we don't
+have time to elaborate
+on mostly non-blocking processing.
+What is mostly important
+for us now is that
+mostly non-blocking
+processing or otherwise,
+we are mostly interested in interreactions
+between main control flow and
+processing of returned values.
+Let me repeat it once again.
+It is all about interactions,
+pretty much nothing else.
+Now we can get to the real stuff.
+In part one of the talk we'll define
+the Holy Grail of our
+non-blocking processing.
+In general we'd want our
+non-blocking processing
+to be as close to the
+blocking one as possible
+but there is a significant
+caveat related to those
+interactions which I mentioned
+just a few seconds ago.
+Then we'll proceed to taking a quick look
+at eight different ways of
+handling non-blocking returns
+one by one.
+Of course given our time restrictions
+detailed analysis is not possible,
+but as promised before
+I will provide pointers
+to a more detailed discussion
+at the end of the talk.
+To compare different ways of
+handling non-blocking returns
+we'll take one simple
+closed real world example
+and we'll see how our
+eight different approaches
+will handle it.
+The idea of the processing
+which we'll use as a lithmus test
+for our different ways of
+non-blocking processing
+is shown on the diagram.
+We have a game and the
+player who wants to purchase
+something to be used in the game.
+Players tells what he wants
+to purchase to the client
+then clients sends a request
+to our cashier reactor
+then cashier reactor
+sends a database request
+to database reactor.
+On receiving the reply
+there are two possible cases
+if transactions has
+failed for whatever reason
+we return error back to the client,
+but if
+the purchase was
+successful we have to issue
+another request to game world reactor
+so that item becomes
+available in the game world.
+On receiving the reply
+back from the game world
+we send an okay reply back to the client.
+By the standards of this
+thing which is systems
+it qualifies as a very,
+very simple use case.
+But as we'll see it is
+sufficient to demonstrate
+the differences in a
+non-blocking processing.
+Let's take a look at the blocking code
+which implements the logic on the diagram
+on the previous slide.
+What is clear is a non-blocking code
+cannot be really as
+simply as blocking code
+we should at least try to
+have it as close as possible.
+In this blocking version
+everything looks very simple.
+There is a very modest
+amount of boilerplate code
+and the essence of our
+interactions is very clear.
+First we are making a blocking RPC call
+to other database reactor.
+And then depending on the
+result of the first call
+you may issue now a blocking rpc call
+to our game world reactor.
+That's pretty much it.
+Let's also know that for this type of code
+we have to assume that
+we do have some kind
+of interface definition language ideal,
+and an ideal compiler regenerates stops
+and scale it on for these
+blocking RPC functions.
+When the bright future
+described by Herb Sater
+in his talk on Wednesday materializes
+we will be able to have in language ideal,
+but at this time we are not there yet.
+We will also assume
+that our ideal compiler
+is sufficiently universal
+or written by ourselves
+which is certainly not rocket science
+and that we'll be able to generate
+anything we need not only
+for this blocking processing
+but also for all our eight variations
+of non-blocking processing
+which we'll see later.
+When looking at our blocking code
+we have to note that for
+non-blocking purposes,
+blocking code we have
+seen is not exactly ideal.
+In particular as our non-blocking code
+is all about allowing interactions
+with our reactor state
+while a call is outstanding
+it means the state of our reactor can
+change while we are within the call.
+As a result the code on the slide
+may occasionally fail.
+Compared to the previous slide though
+what we did is just add in
+those two highlighted lines.
+And while in blocking code
+they are perfectly fine,
+in they non-blocking code
+this assertion may fail.
+Indeed while we are waiting for the result
+of the purchased item to arrive back
+there may have been an intervening event
+which may have caused changes within our
+cashier reactor object.
+To allow developers to know
+when such implicit updates
+can possibly happen
+it is necessary at least to make
+it clear where exactly those points where
+the state can be implicitly modify
+can potentially occur.
+On the slide those points are marked with
+reentry markers for function calls.
+There is no special
+meaning for reentry here.
+It is merely intended to
+illustrate some kind of marker.
+As we will see equivalent markers
+will look very, very
+differently depending on the
+technology, specific
+technology we are using.
+However my current point
+is that we have to have
+some kind of indication for those points
+where the state can change.
+With this in mind my current
+point of view is that
+this code on the slide
+is the best one we can actually
+get for our non-blocking code.
+At the very least I haven't
+seen anything better.
+As such I will consider it as a Holy Grail
+non-blocking implementation
+for our example
+scenario of item purchase.
+And we'll use this Holy Grail code
+as a baseline for comparison
+for all our eight non-blocking takes.
+Historically first
+non-blocking implementation
+were based on playing messages.
+Such an implementation for
+our item purchase example
+is shown on the slide.
+Yes it is this better.
+Let's take a bit close look at it.
+First we need to create a struct to store
+the context of our request so we can
+handle it on properly.
+There is nothing really meaninful here
+but we still have to write
+this boilerplate code.
+Nothing interesting.
+Then we have to have a map
+to request IDs to this
+struct which stores the context.
+Again there is not much meaningful here.
+I should mention that while in some cases
+it is possible to say for example that
+there is only one
+outstanding request per type.
+In general it is usually better to avoid
+this kind of things as
+they have a tendency
+to become unmanageable very quickly.
+The same stands for ad hoc tricks
+which allow to identify replies
+by embedding additional information
+and to reply instead of request ID.
+As we got our initial
+request from the client
+we need to save the
+context into the struct,
+compose the message using a function
+provided by our ideal compiler,
+sends a message and save
+our struct into the map.
+By the way in addition to
+being extremely verbose
+this code is also very error prone.
+This kind of code is
+not only ugly but it's
+pretty easy to make a
+mistake when typing it in.
+Then on receiving a
+reply from our DB reactor
+we need to find the request in the map
+and check its status.
+Now just for a change we have one line
+of non-boilerplate meaningful code,
+the one which was present
+in our non-blocking version.
+But as you have already guessed
+it is followed by even more boilerplate.
+Overall amount of boilerplate
+code in take one is enormous.
+Out of over 70 lines
+of code in our take one
+onlyu about 10 are meaningful.
+It becomes especially
+obvious when we place
+take one code and Holy
+Grail code side by side.
+This slide pretty much summarizes
+as a problems with stake one.
+Amount of boilerplate code is so large
+that all the business logic
+is completely buried in it.
+What's interesting though
+is that I've seen perfectly
+working systems based on this kind of
+on looking handy.
+So the maintenance costs was
+a completely different story.
+For our take two we
+will consider technique
+which is quite popular in
+game development today.
+It is based on non-blocking
+void only RPC calls.
+The idea behind using void
+and non-throwing RPC calls
+is that as there is no reply whatsoever
+it means that we don't
+need to answer a question
+what to do when the reply arrives.
+On the other hand such void only RPC calls
+provided only marginal
+improvement over plain messages,
+in particular to implement a typical
+request response example
+we have to use two void only RPC calls,
+one to send a request and
+another to send reply back.
+As a result most of the boilerplate code
+from take one is still
+present in take two.
+We still have to use
+request context struct,
+map of request IDs into these structs
+as well as we have filled the context
+on sending request and find it
+on receiving reply and all the options,
+all the opportunities to get things wrong
+are still already here.
+Overall improvements in
+readability of take two
+compared to take one are not as large
+as we'd like them to be.
+While 50 lines of code
+is indeed better than 70
+it is still five times more
+than in our Holy Grail code.
+Our take three is about
+object-oriented callbacks.
+It is a thing which I was
+doing myself about 20 years ago
+when architecting a pretty
+large reactor based system
+as the architecture is still in use
+pretty much without
+changes and it does work.
+As we can see from slightly
+increased font size
+take three is just a bit
+less verbose than take two.
+With take three it is all
+about callback objects.
+And it takes lots of
+boilerplate to describe them.
+We need a callback object
+to handle return from our
+non-blocking request with the database,
+and again there is nothing
+really meaningful here,
+it is just boilerplate.
+And another callback
+object for the non-blocking
+call to our game world.
+And only after we are
+done with describing those
+callback objects and are over 50% down
+our take three code we get
+to somewhat meaningful stuff.
+It still has lots of
+boilerplate but at least
+it is interspersed with
+something meaningful.
+Currently (mumbles) is a
+code is processing of our
+regional purchase request from the client.
+And here is its own handler.
+One thing which we can
+notice about take three
+is that there is no longer explicit
+handling of the request
+ID to call back mapping
+on this code.
+While these maps are still
+present behind the scenes
+we manage to hide them from the view of
+application level developer
+which is actually a big relief.
+If you compare our take
+three to our baseline
+Holy Grail code we'll see that take three,
+while being less verbose than take two,
+still has like four
+times more lines of code
+than Holy Grail one.
+On the plus side however in addition
+to being less error prone
+as in takes one and two,
+we can see that meaningful
+code is concentrated
+in a smaller portion of our take three
+which improves readability.
+Overall take three while being verbose
+has been observed to be perfectly usable
+and perfectly working.
+I would even go as far as saying that
+it is the best thing we could do
+before the advent of C++11,
+and most importantly
+before lambdas (mumbles).
+Up to now all our takes
+were doable even in C++98.
+Now let's see how we can improve it
+with the power provided by C++11.
+Our take four is all about lambdas,
+more lambdas and even more lambdas
+leading us to an infamous lambda pyramid.
+We can immediately see that
+amount of boilerplate
+has reduced drastically.
+Actually it is the
+first time when the code
+is at least somewhat
+readable in one single slide.
+Idealogically in the code in our take four
+is actually very similar to the code,
+to the object-oriented
+callbacks in take three.
+It is just that instead of those verbose
+object-oriented callbacks we are using
+lambda closures
+conveniently generated
+for us by the compiler
+behind the scenes.
+Here are our lambdas.
+One important point about C++ and lambdas
+is that while we are using
+lambda captured by copy,
+it still captures current object.
+The one referred to by
+this pointer by reference.
+Accidentally this is exactly the behavior
+we should want to have for our purposes.
+We do want to capture
+stack variables by a value
+so they survive when we exit
+from our cache equation item function.
+But at the same time we do
+want to capture our reactor,
+object by reference so we
+can access its current state
+when processing our non-blocking return.
+If we compare Take to our Holy Grail code
+we'll see that verbosity
+wise they are about the same.
+However, readability wise take four
+is still far from perfect
+and it will become even more obvious
+if we introduce exception handling.
+Most importantly, the code
+which is logically linear
+on the right side becomes nested.
+It was in our take four code.
+This as well is counter-intuitive indents
+for the logically linear
+code is what earned
+take four the name Lambda Pyramid.
+As soon as the number of
+non-blocking operations
+in a regional linear
+code goes to four, five
+the whole scene becomes
+quite poorly readable.
+Let's see how we can improve further.
+Our take five is about so-called Futures.
+Very, very briefly the idea
+is to create a placeholder
+known as Future, where the
+result of certain operation
+which will only become known
+in the future can be stored.
+And as soon as we have
+those future objects
+we can specify actions
+which have to be done
+as soon as the result is in
+the future becomes known.
+These actions are often
+referred to as continuations.
+If we compare our take five to
+our baseline Holy Grail code
+we will see the verbosity of
+futures are still in check.
+But unlikely on the pyramids,
+the code which is linear
+on the right is still linear on the left.
+I'd certainly say that take five
+is the best we discussed so far.
+By the way, as an added benefit
+concepts such as we need
+to wait for two RPC codes to complete
+are easily expressable with futures too.
+Last but not the least about take five,
+let's know that in spite of
+being conceptually similar
+to STD future our reactor
+futures are not identical to it.
+Most importantly, STD
+future at least as of now
+is mostly about thread synchronization.
+And our reactor futures they operate
+within the context of one single thread
+and actually all about continuations.
+As a result, reactor
+futures are more similar
+to folly future.
+Though it seems that future,
+future is from STD experimental
+will implement continuations
+and can be used for this purpose.
+If we extend the idea
+of futures even further,
+we can get to constructing
+the whole code trees
+from lambdas.
+The value of such approach becomes obvious
+as soon as we realize that
+not all the code is linear
+and that there are
+conditions and exceptions.
+As we are very limited on time today,
+I won't give an example
+of these conditions.
+But here is an example
+comparing our Holy Grail code
+with exceptions added.
+So it's inherently more complicated
+than previous Holy Grail code.
+With, we'll compare it to
+the code builder approach
+in take six.
+The idea behind code
+builder is that we are
+effectively building a
+code three in runtime.
+And as soon as this code three is built
+then our infrastructure code
+can run it in a perfectively
+asynchronous manner.
+Most importantly, for
+our current purposes,
+is that elements of our code three
+directly correspond to the elements
+of our original Holy
+Grail code on the right.
+Whenever we have try on the right side,
+we have a corresponding ttry on the left.
+Whenever have linear code on the right,
+we have more or less
+equivalently blocking code
+on the left and so on.
+And even if we'd have loops
+with non-blocking codes within,
+which are pretty difficult to handle,
+we will still have a
+one-to-one correspondence
+between blocking code and non-blocking one
+and with exactly the same nesting too.
+Overall take six while being
+admittedly more verbose
+than take five is much
+more flexible than that.
+And before the advent of co_await
+it could be a good choice for
+more complicated used cases.
+By the way, if we introduce
+preprocessor in the picture
+we are able to reduce verbosity
+of take six significantly
+while preserving old
+group with properties.
+With the improved readability
+is worth the trouble
+of debugging code with
+heavy preprocessor macros
+is an open question but
+such possibility does exist.
+Our take seven, well we are
+getting close to the end,
+will be about stackful
+corouitines and or fibers.
+Fortunately for us we don't have to go
+into a lengthy discussion
+about the differences
+between the two.
+For us, it's efficient to say that fibers
+and stackful coroutines are pretty much
+the same for our purposes.
+In a non-exactly standard,
+but still widely cross-platform C++
+stackful coroutines are
+presented by boost coroutines.
+Though, personally, I'd
+prefer to, my ideal compiler,
+to use boost context directly.
+As we can see the code in our
+take seven on the first glance
+looks better than that of
+take six and take six A.
+However, it comes to the cost
+of two important caveats.
+First, with stackful/fiber coroutines,
+it becomes very difficult to serialize
+the state of our reactor and to achieve
+quite a few all important
+properties of reactors
+including such beauties
+as postmortem debugging
+and low latency fault tolerance.
+It is necessary to
+serialize reactor state.
+Granted in C++ serialization
+is not a picnic
+even with lambdas, but
+with stackful coroutines
+I don't even know how we
+can approach this task.
+By the way, if somebody
+in the audience knows
+I would be very interested
+and hear it after the talk.
+Even more importantly, stackful coroutines
+come with a big, fat word of caution.
+While with fibers co-routines
+became our futures
+and write the code
+exactly as blocking one,
+which is one on the left, we
+don't really want to do it.
+When we compare our take
+sevenx using x to denote
+that it should not be used
+to the Holy Grail code,
+we'll notice that there is
+one important thing missing
+from the code in take seven X.
+It is those reentry markers
+which are necessary to indicate points
+where the state of reactor
+can be potentially changed.
+This in turn, as we discussed above,
+leads to a difficulty to see errors
+and to significantly
+increase maintenance cost.
+As a result, I do not recommend
+using take seven X for
+real world projects.
+A really short, real world
+story in this regard.
+Sometime ago I was presenting the text
+of an x option to a billion dollar company
+having several million
+lines of reactor code.
+The point was to change
+their current take three code
+with something more modern and palatable.
+Long story short, right
+after I presented them
+with take seven &amp;amp; they asked me,
+&quot;Hey, how we will know those points
+&quot;was a state that can be modified?&quot;
+It illustrates one of
+the early raised points
+that those reentry markets on the right
+are really important for real world
+non-blocking development.
+Our last take, take eight,
+is related to the concept
+which is well-known for
+us as programming language
+such as C# but is a new
+kid on the block of C++.
+I'm speaking about await
+which was recently renamed
+into co_await.
+As of now it is not a
+part of the standard yet,
+but implementations are available
+for both for MSVC and Clang.
+As we can see the code in take eight
+is almost exactly the same
+as our Holy Grail code
+on the right.
+Even our reentry markers
+have exact counterparts
+on the left side.
+Still you have to know that at least for,
+as of current C++ proposals take eight
+is not 100% ideal for our purposes.
+Most importantly it has problems
+with serializing the state of our reactor.
+And while the problem is not
+as severe as that of take seven
+it is still going to cause
+quite a bit of trouble.
+On the plus side, it might
+be possible to serialize
+our reactor AU with co_await
+by the part of serializing
+the whole allocator.
+But it is rather tricky, it
+relies on certain properties
+of underlying operating
+systems and as a result
+causes complications
+with such things as ASLR.
+From our current perspective,
+it is also not 100% clear
+whether this is really guaranteed
+as that all the co_await
+frames will really go
+through our own allocator in
+all compilers and libraries.
+Now as we are done with
+describing our text
+we can compare them.
+Most of this table should
+be self-explanatory,
+but if you think you do
+need additional word or two.
+Of course, readability is
+in here in this objective.
+There is no way around it.
+But it certainly exists and
+it's certainly very important.
+As for hidden state
+changes it is essentially
+about having those reentry markers
+or reasonable facsimile to denote points
+where the state of our
+reactor can suddenly change.
+Note that for take seven
+we cannot really enforce
+reentry markers on the functions
+which call our RPC functions.
+So in case of nested calls,
+reentry markers are gone.
+This is pretty bad, as
+we will need to resort
+on non-enforceable things
+such as naming conventions
+to denote such potential points of change,
+and this will lead to increase
+in code maintenance cost.
+With regards to serialization
+of take four to take six,
+it essentially hinges on
+serialization of lambdas.
+Currently it's a pretty
+complicated subject,
+but at least there are two
+potential ways of doing it,
+which we have seen to work
+at least in certain context.
+The first way is to have
+some kind of preprocessor
+which will replace all those lambdas back
+with object-oriented callbacks,
+which is serializable.
+And the second way is to
+serialize the whole allocator
+including all the lambdas.
+While neither of those approaches
+perfectly seem to work,
+although with a fair share of trouble.
+For co_await, for serializing co_await,
+my current understanding
+is that it might be doable
+using, but we have only the second option;
+to serialize it as a part
+of the whole allocator.
+And as I already mentioned,
+it's quite a risky one.
+Verbosity is related to
+clashes of virtual addresses
+when deserializing.
+And the risk related to compiler libraries
+ignoring our allocators
+for whatever reason.
+Overall I'd say that depending
+on specifics of your project,
+three different approaches
+may happen to be viable.
+The first one is
+object-oriented callbacks.
+They are good, old, working
+for sure even in C++98,
+and having, they have no
+problems with serialization.
+They are not exactly
+the most readable ones
+to put it mildly, but if you
+want a sure-fire approach
+which will work and which will allow
+to serialize your state
+without any need to experiment
+they will work at least
+for smaller projects
+and I also seen it working
+for a million lines
+of code project too.
+Second option is futures.
+They are good if you
+want to stick to C++11.
+On the other hand,
+serialization is going to be
+quite a bit of headache.
+But is generally a
+solvable one way or another
+The last one co_await is almost
+perfect for our purposes.
+Still, serialization is going to be
+even a bigger headache than for futures,
+while hopefully still doable.
+To summarize, while quite a few Takes
+are usable in real world, unfortunately,
+none of them represents an ideal solution
+for our non-blocking problems.
+At least not yet.
+Now, let's discuss current
+C++ standard proposals
+and what we want from
+them from our non-blocking
+handling perspective.
+First, there is co_await, currently billed
+as 'stackless coroutines'.
+As of now co_await seems
+to be the most likely thing
+to make it into the next C++ standard.
+And in my not so humble
+opinion, it certainly is
+the most viable proposal out there.
+There is still a
+significant issue with using
+current co_await for our purposes
+and still related to serialization.
+But, well that's still the
+best thing we can have.
+The second proposal is
+boost-style stackful coroutines.
+Though I know that Gor prefers to know,
+to name them fibers.
+From our perspective
+with stackful coroutines,
+one big problem is that
+we have reentry markers
+that we can hide reentry
+markers in nested calls
+which will cause quite
+a significant increase
+in maintenance cost.
+Plus, situation with
+serializing stackful coroutines
+is even worse then for co_await.
+So rough translation, I have no idea
+how to serialize stackful coroutines
+even if we are speaking
+about serializing it
+into exactly the same executable.
+The third proposal on our list
+is so-called resumable expressions.
+To be perfectly honest, I
+do not like this proposal
+for two big reasons.
+First, it doesn't allow to
+enforce reentry-style markers
+which is pretty similar
+to stackful coroutines.
+And second, while implementing
+a wait-style logic,
+they are using mutexes, and
+with devastating results too.
+More on it a little bit later.
+The last one on our list
+is so-called Call/CC
+call-with-current-continuation.
+I have to admit that I don't
+know much about Call/CC
+that's why the grey color on the slide,
+but it seems to me that
+it's way too low-level
+to be intuitively used in app-level code.
+Now let's give a few
+pointers on what is important
+for our non-blocking
+purposes implementation-wise.
+As none of those proposals
+is carved in stone yet
+and implementations are even less so.
+There are a few things out
+there which either do exist
+but can magically disappear from the draft
+and things which we'd like to have,
+well if not now but at
+least in the long run.
+First, we do need to see
+those points where the state
+of our reactor can be suddenly changed.
+In this regard, I'm a
+very big fan of so-called
+Suspend-Up and Out model used by co_await
+nee Resumable Functions.
+Using an opportunity to speak
+to some members of the committee,
+please, please do not throw
+Suspend-Up and Out model away,
+especially on the premises such as this,
+such as those in P0114R0.
+During our discussion, we mentioned
+serialization quite a few times,
+overall it's a very,
+very important feature
+in the context of using
+deterministic properties
+of our reactors and message-passing
+programs in general.
+In particular, practical
+implementation of such things
+as postmortem production debugging
+and low-latency fault tolerance do require
+to serialize the state of our reactor.
+On the other hand, it is
+very clear that currently
+without any kind of
+serialization available in C++
+we cannot ask to serialize
+lambdas or await-frames.
+Still there are two things
+we could ask, humbly ask for.
+First, we want to be
+sure that await-frames
+are using only heap and
+not stack, nothing else.
+It seems to be the case now
+but as it's not codified,
+well anything can happen.
+This would allow us to implement
+this kind of serialization that we need.
+It will be ugly, but as
+stop-gap measure, it will do.
+In addition, when
+serialization is supported,
+using static reflection or otherwise,
+we want to have it supported also
+for lambda closures and for await-frames.
+In particular, when static
+reflection is ready,
+please make it sure that it does cover
+both lambdas and await-frames.
+Not sure whether it's feasible but well
+at least we can ask for it.
+Last but not the least
+for stackful coroutines,
+having current stack serialized
+and deserialized later,
+assuming it is exactly the same executable
+where deserializing it
+might be of use too.
+Last but certainly not
+least, we don't want mutexes
+within implementations
+of whatever coroutines
+are pushed at us by
+the almighty committee.
+As practice has shown, mutexes
+are so difficult to deal with
+that even the committee
+members can easily leave
+a bad mutex-related bug in their code.
+To show this, let's take
+a look at the proposed
+implementation of await in P0114R0,
+also known as Resumable Expressions.
+As for using it,
+it is more or less on
+par with our take seven,
+not perfectly but more or less usable.
+However, the devil, as
+always, is in details.
+I would be really happy to say
+that implementation of await
+is an implementation detail but,
+so we shouldn't care about it,
+but there is a significant problem
+with this specific implementation.
+The problem is that emulation of await
+in Resumable Expression is mutex-based.
+In practice, it will mean that there is
+a potential context switch
+at each of those points.
+And as context switch takes
+at least 2,000 CPU cycles
+and can easily go, and if we account
+for cache invalidation
+costs it can easily go up
+to a million CPU cycles.
+Well, I cannot say that I like it.
+To make things even worse,
+implementation proposed
+in P0114R0 calls a user-defined function
+from under the hidden mutex.
+Such a practice has been observed
+to lead to unexplainable to user deadlocks
+happening once a month.
+It is worth noting that this problem
+was first described as early as in '98
+when analyzing a hopelessly
+buggy multithreaded STL implementation
+which accidentally carried a copyright
+by another WG21 member.
+The worst case of observed
+behavior was what is seen
+in developer space as deadlock
+on one single recursive mutex.
+This is a thing which
+cannot possibly happen,
+unless there is a second mutex
+conveniently provided by the library
+exactly to allow for
+this deadlock to happen.
+My educated guess is that
+the same problem exists
+for P0114R0.
+Necessary disclaimers.
+Code in P0114R0 is convoluted enough,
+so I might have misread it.
+Apologies if it's the case.
+Most importantly, both
+the problems arising
+from using the mutex
+might be fixable or not.
+Honestly, I don't even see
+why this mutex necessary
+in the first place, but
+well if there was a reason,
+then we may be in trouble.
+Fortunately, our further
+discussion doesn't really depend
+on P0114R0 being fixable.
+But it illustrates all the
+important point of avoiding
+mutexes when implementing coroutines.
+To summarize this long and as I see
+some people leaving, probably boring talk,
+in one single slide.
+We can say the following.
+First, we do need a way to
+handle non-blocking returns.
+And it is all about interactions with,
+between main processing and
+the return call processing
+and potential changes
+to the state in between.
+As a result, we do need
+a way to clearly see
+when the state has a potential to change.
+A reentry marker, whatever reason,
+whatever replacement
+technology can provide.
+Second, unfortunately none
+of the options we have
+to handle non-blocking
+returns in C++ is perfect.
+Some options are outright
+ugly, some don't allow
+to see potential for state change
+and some are not easily serializable.
+On the other hand,
+I am comfortable to say that as of now
+co_await is certainly our best shot.
+It is the best we can realistically get
+in foreseeable future.
+On the other hand, when
+serialization comes to standard,
+I'd certainly appreciate
+to, a way to serialize
+or statically reflect such things
+as lambdas and co_await frames.
+This concludes our very intensive talk.
+I hope that I was able
+to convey my thoughts
+in a digestible manner.
+Now we have three minutes left
+to answer some of your questions.
+(applause)
+- [Participant] Hi.
+Could you elaborate a little bit
+on why you see serialization
+as such an important priority?
+Because one of the advantages of reactors
+is that we can make them deterministic.
+And to abuse, to use or
+abuse the determinism.
+One of the things we
+want to do is to be able
+to serialize the state
+and then write also,
+in theory we could serialize
+just all the events,
+but in practice serializing
+all the events for a program
+over the last, over, which runs
+over this is not practical.
+So what we need is to have a snapshot,
+from time to time to have a snapshot
+and then write all the events so we can
+realistically deserialize
+it because it's just,
+well, otherwise, the
+length of all the events
+will be completely unmanageable.
+- [Participant] Okay, thank you.
+- [Participant] So I
+know one of the problems
+with the lambda pyramid is
+that it's extremely difficult
+to write unit test for.
+Could you comment on unit testing
+for some of your other proposal issues?
+It is, well we have reactors.
+Actually it happens that the most popular
+and arguably the most
+efficient way of testing
+is testing the level of events.
+So it is fairly rarely
+that we really need to go
+into the unit testing
+which goes below the level
+of processing individual messages.
+So the usual way of testing a reactor
+is to have an engine that just rows events
+at your reactor and then
+you have all the thing
+reproducible because the whole thing
+is perfectly deterministic by definition.
+As for unit testing, it
+is done, but honestly
+I didn't really see it
+happening in the lambda context.
+You're right.
+It is a headache, so.
+Co_await might be the answer
+here but still yet to be seen.
+No questions.
+As always that means that
+either everything is clear
+or that nothing is clear.
+I hope that it is the first one.
+Thank you.
+(applause)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

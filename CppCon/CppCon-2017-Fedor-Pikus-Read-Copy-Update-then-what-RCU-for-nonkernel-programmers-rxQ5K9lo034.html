@@ -1,0 +1,2047 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Fedor Pikus “Read, Copy, Update, then what? RCU for non-kernel programmers” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Fedor Pikus “Read, Copy, Update, then what? RCU for non-kernel programmers” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Fedor Pikus “Read, Copy, Update, then what? RCU for non-kernel programmers”</b></h2><h5 class="post__date">2017-10-19</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/rxQ5K9lo034" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">- All right, well, let's start.
+First of all, thank you all for coming.
+As I warned you, it's going to be a
+somewhat convoluted and confusing talk.
+And that's just the nature of the problem.
+And there are two ways of dealing with it:
+try to make the material less confusing,
+or try to make you change your mind-frame
+so you're kind of more used
+to living with confusion.
+And we're going to try to
+meet somewhere in the middle.
+So I'll try to ease you into why
+we're talking about RCUs
+and why they're interesting.
+So obviously the starting point
+is we want high performance.
+For high performance, we need
+effective utilization of
+our processor resources,
+which means often we need concurrency
+to keep all of these cores busy.
+Now, sometimes you are lucky,
+and you get it easy, and you have
+read-only data and a lot of
+computation that you do on it.
+Now, if you're doing computation,
+presumably you're
+interested in the results.
+So not everything is ever read-only,
+but let's assume that the
+results are infrequent, small,
+so locking and writing the
+results isn't a concern.
+So you have huge amount of read-only data,
+and you just send all your cores
+doing their processing on it,
+and it's perfect scaling, go wild.
+Basically you have multiple reader threads
+or consumer threads.
+They are consuming the data.
+There is no synchronization,
+and why there is no synchronization,
+because in order to have a race condition,
+you have to have at least
+one write somewhere.
+If you have no writes at all,
+there is no race condition.
+You're just reading.
+So that's the ideal case,
+if you live in this world.
+It actually does happen,
+especially in scientific computation,
+where you have models
+running for a very long time
+and inputs don't change.
+But much more often than
+that, what you have,
+well, first of all,
+let me show you that it
+actually does scale pretty well.
+This is a trivial kind of
+simulation of a simulation.
+I'm just searching for
+data in a read-only list
+on multiple threads, and
+just the more threads I
+get, the better it goes.
+So they're just reading the list.
+The list never changes.
+To make sure that it actually scales well
+to large number of threads,
+I actually put it on a large machine
+with a lot of independent cores.
+Testing on a very large server does,
+it has its advantages.
+You may say, sometimes,
+okay, it may not be realistic
+for your four-core machine, but it
+does let you see all the things
+you otherwise might get away with.
+If you have a small,
+little serial piece of code
+that takes one percent of
+your overall computation
+on 100-core machine, that's
+like half of your computation.
+So you're basically
+using at most 50% of your
+large, expensive machine
+if you have that.
+On a four-core machine,
+you wouldn't notice.
+So if you want to really
+stress-test your code,
+the more hardware you can throw at it,
+the easier it is to see
+what you're doing poorly.
+Now, if your life isn't quite that easy,
+there is a much larger demand where
+data is almost read-only, which means
+it changes, but it
+doesn't change very often.
+So you have a lot of readers
+that do their heavy computing,
+and you may be able to get
+away with a single writer
+just because you don't
+have that many writes.
+It may be easier to have
+kind of one writer at a time.
+And multiple threads can write,
+but you just have a
+lock so only one thread
+plays writer at any given time.
+Sometimes you just have one writer thread.
+And it's not a concern because
+you're not bandwidth-limited on writes.
+You're limited on reads.
+Now, ideally what you would like is,
+let's say you have gigabytes of data
+and once per hour, you update a few bytes.
+It stands to reason that it should be
+practically the same as a read-only
+as far as readers are concerned.
+At least, that's what you would like.
+But there's a problem
+getting there, because
+even if writes happen very rarely,
+there is a potential
+for the race condition,
+which is somebody's reading
+while you're writing.
+And if you don't do anything about it,
+it's a data race.
+And if you don't do anything about that,
+well, technically you are
+in undefined behavior world.
+How often have any of you seen
+the simple solution to it,
+which is
+it's once per hour, let's
+hope it doesn't happen
+while I'm running.
+(laughing)
+Now, assuming that that
+doesn't work for you,
+you still don't want the
+readers to wait on each other.
+You don't want the readers
+to wait on the writers.
+Ideally, you wouldn't want writers
+to wait on the readers, either.
+After all, it's one write per hour.
+Why wouldn't you let me do
+it right now, when I want it?
+Well, you obviously don't
+want any locks in this system.
+So how about a lock-free implementation?
+Well, there are lock-free lists.
+I wrote one.
+It's based on atomic shared pointers.
+And there it is.
+It actually does scale, but
+it's just much slower overall.
+Now, it's not a fair comparison.
+It's not a fair comparison, because
+a lock-free list based
+on atomic shared pointers
+is a very generic solution.
+It supports multiple writers.
+It supports heavy write
+workload just as well
+or just as badly as a heavy read workload.
+It doesn't really care
+one way or the other.
+It's a good solution for the
+problem that it solves well,
+which is if you have, basically,
+writes and reads in about equal amounts
+going at the same time.
+But it's a wrong choice
+when updates are rare.
+So it's not that it's a bad code.
+It's just it's the wrong tool for the job.
+Well, we know the right tool for the job's
+the read-write locks.
+That's what they are for.
+Multiple readers, a
+few infrequent writers.
+Okay, let's put the read-write locks on.
+Let's not do any writes yet.
+This is just the readers.
+So writes could be happening
+but aren't actually happening.
+So the readers do take read lock,
+but the writer thread is not running.
+Well, that's the performance already.
+Now I'm going to turn
+on the writer thread.
+It got a little worse.
+And then when you have more readers,
+it's pretty much washed out.
+At least, that's what it
+did on this machine with,
+I'm just using the POSIX read-write locks.
+You could do a more
+efficient read-write lock,
+but still, it's clear that there
+is overhead on the readers.
+And there's overhead on the readers
+even if you don't actually have writes,
+which is,
+this is really like a
+big slap in the face.
+Just for the possibility that tomorrow,
+somebody might write into this data,
+I'm paying more than an order
+of magnitude in performance.
+And that's before,
+tomorrow, actually I write.
+Now, the reason is you have to avoid
+that potential race condition,
+and you really, really
+don't want to pay for it.
+Well, think of this presentation
+as a concurrent application.
+I'm the only one who
+can advance the slides,
+but you're all reading it.
+Do you block each other from reading it?
+No.
+Whatever I publish here, you
+can read at your own speed,
+as long as it's still presented,
+basically until I run out of space.
+So something like that is what we want.
+Let's switch tracks now.
+You know sometimes you go to a store,
+okay, I want a snack.
+What's the best that I
+can get for a dollar?
+So that's kind of the other
+approach we are going to take.
+What's the cheapest atomic operation?
+Just to show that it's
+not all 120-core machines,
+I did this at home on my desktop,
+just to demonstrate that the conclusions
+are pretty universal.
+The atomic read at the
+top, that's just read.
+There are no writes.
+So I'm just reading from
+multiple threads atomically.
+The one right below it
+is one thread is writing,
+everybody else is reading.
+And way down, there are
+all the other options,
+like spin locks, mutexes,
+compare-and-swap, and so on.
+So it's pretty clear that
+atomic reads and atomic writes
+are by far outperforming whatever other
+synchronization mechanisms
+you may want to try.
+So what can we do with just atomic reads
+and just atomic writes?
+Well, we can do something like this.
+So we have this list,
+and let's say our write
+is we want to stick a new node into it.
+So our readers just start from the head
+and search in the list.
+Our writer, we have only one,
+comes in, creates new node.
+So far, nobody cares.
+It's not visible to anybody yet.
+Takes the, I'm going to
+replace the node at the head.
+So I'm going to change what
+the first node is, the value.
+I'm not going to go and actually write
+into the new node and change what's in it.
+I'm going to create a new
+node of my own in the writer.
+I'm going to point it to the same thing
+that the node I'm replacing points.
+I'm going to put new data into it.
+Okay, so far there is no race condition.
+There is no contention,
+because I haven't done
+anything shared yet.
+Now, I have atomically updated the head
+to point to the new node.
+I didn't do any compare-and-swap.
+I didn't do any exchange,
+because I'm the only writer, remember.
+There is no synchronization
+of writers yet.
+The writes are so infrequent that we have
+only one writer, and it's fine.
+I did atomic write into the head.
+And now anybody who starts
+scanning from the head
+will suddenly see,
+okay, list doesn't start
+from old node anymore.
+It starts from the new node.
+Well, the readers, as they search,
+will either see the old value
+or the new value of the node,
+which is normal for
+concurrent data structures.
+You kind of see the past
+and the future all at once.
+That's not unusual.
+But there are no race conditions in here.
+I avoided, basically,
+this is a well-defined program.
+There is no undefined behavior here.
+And all I had to do was
+atomic read and atomic write.
+Well, I didn't quite
+do it carefully enough.
+If you were in my talk on Monday,
+I told you that if you feel pressed enough
+to reach for atomics, you
+should reach all the way.
+So let's do it a little
+bit more carefully,
+look at what you actually need.
+You basically need an
+acquire barrier on the load
+so you make sure that any writes
+that were done before
+become visible to you.
+And what were the writes
+that you care about
+that were done before?
+Whatever value I put into the new node,
+when you get the pointer for the new node,
+you want to make sure that
+you see the new value.
+You wouldn't want to
+see uninitialized memory
+just because you didn't
+take the memory barrier.
+One memory barrier is never enough.
+There is always two.
+It's a cooperative game.
+So if there is an acquire
+on the reader side,
+there must be a release
+on the writer side.
+And the release is when
+I release the new node
+into the wild.
+So when I store the new
+value into the head,
+I have to release it.
+Again, this doesn't
+synchronize the writers.
+Okay, so let's look at what's
+happening here, kind of
+take it step by step.
+Well, the reader, there
+isn't really any steps.
+You just read the head and scan.
+On the writer, there are
+actually three separate actions.
+I can read the current data, what's there.
+I'm going to copy it to the
+new data, at least partially.
+I'm going to modify it.
+So I copied the next pointer,
+and I modified the value.
+I may or may not have used the old value
+to compute the new value.
+And then I updated the current data.
+I updated the head pointer, in this case.
+So read current data,
+copy it to the new data,
+update the current data, read-copy-update.
+That's what RCU stands for.
+It's actually very confusing terminology,
+because RCU, that protocol
+that I have just shown you,
+that scheme of read, copy, and update,
+isn't really what makes RCU RCU.
+It's kind of somewhat of a misnomer.
+In Java, they call this
+thing copy-on-write.
+In C++, we have the words copy and write,
+and they mean something
+entirely different.
+As far as I know, there is no universal,
+commonly-accepted term for this.
+I have seen the words publishing protocol,
+and that's what I am going to use.
+So publishing protocol
+refers to this protocol
+where I may read the
+old data if I need it,
+I'm going to copy it to the new data,
+I'm going to modify it, and then,
+in a single atomic transaction,
+I'm going to reveal it,
+publish it to the world.
+Now, more generally, it's
+not always a pointer.
+So in general, this publishing protocol
+involves the use of something
+I will call a root pointer.
+And it's not always actually a pointer.
+It could be, for example,
+an index into an array.
+But it's something that if you have it,
+it gives you access to
+the rest of the data.
+That root pointer must be atomic.
+Readers acquire it atomically,
+and then it gives them
+access to whatever data
+the root pointer reveals.
+Writers can do whatever
+they want on their own,
+prepare the new data, make it all ready,
+and then they atomically
+update the root pointer,
+revealing the data to the readers.
+That's, in general, the RCU protocol.
+We'll see in a moment
+another version of it.
+Some readers see the old
+data, some see the new data.
+That's not uncommon.
+Okay, let me show you a practical example.
+And that's actually an example
+that some of you may have done
+and some of you may have
+even done accidentally.
+The problem here, so
+let's look at the problem.
+I want an array-like or
+a vector-like container.
+I want it to grow.
+Grows are infrequent.
+So it's okay to lock the resize.
+I don't resize it very often.
+But indexing happens all the time,
+by many, many threads.
+So I definitely don't want to lock
+the square bracket operator.
+I also don't want to invalidate pointers
+or iterators, which is kind of,
+really it's not directly the same
+as saying I don't want to
+lock the square brackets,
+but it's related.
+So how do you make a growable container
+that doesn't invalidate
+pointers or iterators?
+Well, everybody knows how
+the basics are, right?
+Okay, on one thread first,
+just without threads.
+It's a block-allocated container.
+It's like a deck.
+So here is the simplest implementation.
+My data is stored in the
+blocks of fixed size.
+The container itself,
+the object, has a pointer
+to a reference block.
+The reference block,
+this block of memory over here,
+has pointers to the data blocks.
+The container has a pointer
+to the reference block
+and has a size.
+That's how many elements
+I actually have alive.
+Has capacity of other things, but
+we're interested in the size.
+So if you want to grow it,
+you just allocate another data block,
+add a pointer to the reference block,
+and you got it without moving any data.
+You didn't move any of the existing data.
+All your pointers are valid.
+Everything's fine.
+Okay, so resize adds one
+block, or maybe more blocks,
+if you're resizing by a lot.
+Old blocks never move.
+Old data never moves.
+Operator square bracket
+does need one indirection
+in order for you to get from the index,
+you have some index I, giving
+it the element number five.
+Well, first you have to figure
+out which data block it's in,
+which means you do the modular
+to get the index of the block,
+and then you do the
+remainder to get the position
+of the data in the block.
+If you take one thing away from this talk,
+please don't do this as written.
+Make the size of the block a power of two,
+and use bit arithmetic.
+I don't want to be responsible
+for proliferation of modular operators
+and like 100X slowdown of all the code
+that uses the decks.
+Okay, the same thing
+now, but with threads.
+Again, a writer is not
+multi-threaded, one writer.
+Publishes the new block.
+It's the same thing as
+publishing protocol.
+I prepared the new block,
+I put some data into it,
+and then I revealed it, published it,
+by storing the pointer in the reference,
+in the reference block,
+except that hasn't actually
+revealed it to anybody yet.
+It's just a preparation step.
+What actually reveals the existence
+of this data to the rest of the universe
+is updating the size.
+So size plays the role
+of the root pointer here.
+When I update the size, that is the signal
+that you can access that many elements.
+Until I update the size, you don't know
+whether it's safe for you to
+access these new elements.
+So you can only access as many elements
+as the size tells you are present.
+So the root pointer here isn't
+actually a pointer at all,
+and the thing that is a
+pointer, right next to it,
+isn't the root pointer.
+I'm still going to call
+it the root pointer,
+maybe a root token would
+be a more generic word.
+Basically, it's the thing
+that lets you access
+the data that is safe to access.
+So size here tells me
+what is safe to access.
+Operator square brackets is not locked.
+Now, notice that the readers,
+I'm assuming that the readers don't write
+into the square brackets,
+or if they do, they somehow
+synchronize on their own.
+For simplicity, let's say
+they don't write into it.
+So this doesn't synchronize two threads
+trying to write into the same element.
+It does synchronize one thread growing
+while another thread is reading
+the stuff that was
+there before the growth.
+Okay, so we keep growing
+and we keep growing.
+And what happens when the
+reference block is full,
+we don't have space for any more pointers
+to the data block?
+We do the read-copy-update.
+We allocate a new block that's bigger,
+copy the old pointers, add
+a new data block pointer,
+and we're done.
+And that still doesn't invalidate
+any pointers or iterators to the data,
+because data blocks haven't moved.
+We're still fine.
+One slight problem, what happens
+to the old reference block
+when we're done using it?
+Well, that's easy.
+When we're done using it, it's
+not being accessed anymore.
+We delete it.
+So now, well, we delete it.
+So what do the readers do?
+First, they split the
+index into the block index
+and the data index, not
+using the module operator
+as shown on the slides.
+Then they get the pointer
+for the data block
+using the block index.
+And then they get the data
+itself using the data index.
+What happens if the writer
+is going on at the same time?
+The reader is doing what I
+just had on the previous slide.
+I just abbreviated it on the left.
+The writer allocates
+a new reference block.
+That's fine.
+Copies the old reference block
+pointers to the new block,
+no problem.
+Stores the new, changes, atomically, p
+to point to the new reference block.
+Go for it.
+Deletes the old reference block.
+Now we have a problem, cause the reader
+may be in flight, in process of evaluating
+the square bracket operator,
+and it may be holding a pointer
+to the old reference
+block just as I delete it.
+Of course, the resize
+happens only once an hour,
+so probably won't happen to you.
+(laughing)
+Most likely, probably.
+At least not until you go
+present it to the customer.
+Okay.
+Well, now that we worked
+out through the problem,
+it's easy to see the requirement.
+The writer should not
+delete the reference block
+as long as there is at least one reader
+that can access it.
+Fortunately, the readers don't stay
+on the reference block for long.
+It's all encapsulated inside
+the square bracket operator.
+Once one square bracket
+operator finished evaluating,
+the reader will give up the
+pointer for the reference block.
+It's a local variable inside
+the square bracket operator.
+It's only alive for like a few nanoseconds
+out of the one hour between the resizes.
+What are the odds of you
+actually hitting that?
+You know, I actually had a container
+which had that bug.
+And the odds of hitting that were such
+that it didn't show up until the container
+reached one and a half
+terabyte in memory usage.
+And then I had to debug this
+on a program, cause working
+set was one and a half
+terabyte in just that container.
+And I couldn't reproduce
+it on anything smaller,
+because it wasn't happening often enough.
+So, soon after the resize, all the readers
+will finish evaluating the
+square bracket operator,
+and we can delete the reference block.
+How soon is soon?
+Well, that's what the rest of
+the talk is basically about.
+But the general point is
+it's always the delete
+that gives you the problem.
+Lock-free algorithms, ABA
+problem in the lock-free list,
+same thing.
+Without the delete, there's no problem.
+It's always the delete.
+Hazard pointers, same thing.
+If you didn't have
+delete, you wouldn't need
+to worry about the hazard pointers.
+Now, and why do we delete?
+Well, in general, because even if I could
+project on the walls and on the ceiling
+and on the floor and you
+could all read all my slides
+at the same time,
+eventually I would run out
+of space for projecting slides,
+and I would have to delete some slides.
+And some of you might
+still be reading them.
+I could try, be more efficient with memory
+and compressing the stuff,
+but eventually, when that hits the limit,
+so sooner or later, you will
+have to reclaim the memory,
+most of the time.
+The solution for that deck container,
+an acceptable solution for
+that deck-like container,
+is actually what?
+Not to reclaim the memory.
+If you do the calculation
+of how much memory
+you're using for the block of pointers
+compared to the data, you'll
+find that it's negligible.
+The easiest solution to that problem
+for that particular container,
+is to never delete old
+reference blocks, period.
+The memory overhead is negligible.
+You will never notice.
+If you choose the size of the
+data block sufficiently large.
+But that's not always possible.
+Usually it's not possible.
+So the problem, as I said,
+is not unique to the RCU.
+But the solution is, and that's
+what we're going to work on.
+Again, confusing terminology.
+The solution that is unique to the RCU
+is actually what makes RCUs RCUs.
+That solution has very little to do
+with reading, copying, or updating.
+But that's what makes it really an RCU.
+You can, if you want,
+use publishing protocol
+with atomic shared pointer.
+Reclaiming memory by atomic
+shared reference count
+and shared pointers, but
+using publishing protocol
+to reveal the memory.
+There is a way to do it.
+It will work.
+But it's not RCU.
+It uses the read, the copy, and
+update, but it's not an RCU.
+That's just how the name is.
+Okay, so what's the actual RCU?
+The key of the RCU is it uses
+this cooperative protocol,
+not so much to publish the new data,
+although it implies that you're
+not changing data in place.
+The RCU implies that you're
+not changing data in place,
+you're using the publishing protocol.
+You create a new copy, update
+it, and then publish it.
+That's a given.
+But that's not enough.
+Reclaiming memory has to be done
+using this cooperative handshake protocol.
+The reader must follow these steps.
+And that's on the reader.
+There is really no way to enforce it.
+You have to call RCU-read-lock,
+which is some function on your RCU system,
+to request access to the shared data.
+Either as a result of
+calling that function
+or right after, you can
+get this root pointer.
+You have to not use the old copy,
+which you got from the
+previous call of RCU-read-load.
+That's on you.
+That's the discipline that
+you have to commit to.
+And you have to not
+access that shared data
+by any other means except
+through that root pointer
+or root token, in general,
+which means we may have an
+old pointer for some data,
+and it gives you access
+to the shared data.
+Don't use it.
+When you call read-lock,
+you have to re-request access to the root
+and traverse from the
+root all the way down
+throughout the data to
+whatever you want to be.
+When you're done accessing shared data,
+you have to call RCU-read-unlock.
+At that point, you have to give up
+and promise to never use again
+that value of the root
+pointer that you got.
+If you want another access to shared data,
+you start from the beginning.
+You call read-lock, you
+again get the root pointer,
+which may or may not have changed,
+and you use it until you call read-unlock.
+You also promise to never
+access the shared data
+between the calls to unlock,
+outside of the lock-unlock.
+So between unlock and lock.
+I'll show you the picture
+on the next slide.
+The space between lock and unlock
+is commonly known as a critical section.
+So here it's a reader-side
+critical section.
+And what's not in the
+reader-side critical section
+is called the quiescent state.
+That's when the readers
+do not read shared data,
+in the quiescent state.
+Now, that's the readers.
+The writers also have their role to play.
+Again, remember as far as we're concerned,
+for RCU, there is only one writer.
+If I say writers, it
+means there is some sort
+of mutual exclusion that, like a baton.
+I'm the writer now.
+Okay, now you will be the writer.
+But one at a time.
+So the writer must do the following.
+It makes the old shared data inaccessible
+from the root as a part of
+its read, copy, and update.
+So when I did the update,
+it changed the root
+to point to the new shared data.
+The old data is no longer
+accessible from the root.
+It's not deleted.
+It's just like I pulled
+the node out of the list.
+I didn't delete the node.
+I just pulled it out of the list.
+If you're starting from
+the head of the list,
+you cannot find my new node.
+But if you had an iterator
+that was scanning the list,
+you could still find the
+node that I pulled out.
+At some point, the writer has to call,
+let's call it synchronize RCU.
+And what that would do is it would wait
+for all the readers who called
+read-lock before step one,
+so before I made my data hidden,
+all the readers who could see my data
+that is now hidden.
+It wasn't hidden for them yet.
+So I have to wait for
+them to call read-unlock.
+It's very important that
+I don't have to wait
+for all readers ever to stop reading,
+cause that may never happen.
+I just have to wait for all the readers
+that saw my hidden data
+before it became hidden.
+Well, let me show you on the picture.
+So here is my writer on the top.
+The timeline goes left to right.
+So I have my data one, and my
+pointer points to data one.
+And I'm preparing data two.
+And nobody knows about it.
+At some point I'm publishing my data two,
+and at the same time, this
+is an atomic transaction.
+So I'm hiding data one
+and revealing data two.
+And now I have to wait.
+So what's going on on the reader side?
+Well, let's start from the beginning.
+The readers all, I only show read-lock
+and read-unlock for one reader,
+but they all do this, okay?
+They all do this, I just
+don't put it in the picture.
+So the reader calls read-lock
+and gets the root pointer.
+And this is the beginning of the section.
+The pointer points to data
+one, so we'll call it p1.
+That's all you can get at this point.
+And you keep using it until you're done,
+and then you call read-unlock.
+Another reader thread also calls, gets p1,
+and another, I haven't changed.
+So all my readers at first get p1,
+because there isn't anything else.
+Now, I publish the new data
+where this vertical arrow is.
+Here, I publish the new data.
+But see, this reader here,
+when it acquired the root pointer,
+that was way back there.
+So you have to see past,
+present, and future
+all at the same time,
+cause this guy has p1
+as his root pointer.
+Now, this reader is in a quiescent state.
+It has nothing.
+So the real root pointer is now p2
+and has been p2 for a while.
+But one of the readers
+has p1, still uses it.
+I cannot delete.
+Cannot delete what p1 points to.
+I have to wait for all of the readers
+that acquired p1 to leave
+by calling RCU-read-unlock.
+Some of the readers will
+already be on the new version
+of data, and that's fine.
+But when the last one that
+still can see the data one
+leaves, unlocks, now it's
+safe to delete data one.
+I can delete it immediately,
+I can delete it later,
+that's my own problem, however
+I want to do reclamation.
+But now I can delete.
+So that's RCU protocol.
+Now let me show you the main
+idea of how the protocol works.
+And this is, you can implement
+it literally like this,
+or it can be very conceptual.
+So let me show you the idea,
+and then I'll talk about implementation.
+I'm going to count how many
+readers have currently p1.
+For now, let's say that it's
+just the reference count.
+So first reader called read-lock,
+and p1 was the current value of p.
+So I have one reader with p1.
+Second reader calls read-lock, two.
+Third reader, three.
+One of the readers exits
+the critical section,
+gives up its copy of p1, so two.
+But another reader comes in, so now three.
+And it goes up and down.
+At some point, I've
+changed my root pointer, p,
+to go from p1 to p2.
+Now I have two reference counts,
+because some readers
+are still sitting on p1,
+and the reference count
+is still two or one,
+and some readers are now
+starting to acquire p2,
+so that reference count goes up.
+So now I have two reference counts.
+And they may drop to zero at some point.
+Now, when p2, the current
+reference count, drops to zero,
+that's not special because it points
+to the current, live, visible data.
+I'm not interested in deleting it.
+It's the current data.
+So the fact that there is no readers
+doesn't mean anything.
+But when p1 reference count,
+the reference count of the
+old data drops to zero,
+now that's special.
+And the reason is, see
+the reference count of p2
+dropped to zero and
+then went back up to one
+because that data, any reader can see it,
+any reader can get it.
+The reference count of p1 dropped to zero,
+and it'll never go back up to one again.
+There is no way for you to get p1.
+There isn't actually any p1 in
+the system anywhere anymore.
+So now it's safe for me to delete it.
+Now, as I said, the implementation
+may or may not have a reference count.
+The implementation may have
+multiple reference counts.
+The implementation may not actually have
+a reference count at all.
+But there is a way, somewhere,
+to traverse some data structure
+inside the RCU system,
+count something or add up something,
+and figure out how many
+readers you currently have
+outstanding.
+So conceptually, there
+is a reference count.
+It could be distributed
+as a list of nodes.
+I have a node for every reader.
+How many nodes I have in the list,
+that's my reference count.
+That's one of the implementations.
+If you went to Ansel's talk on libguarded,
+he showed you every reader coming in
+was putting a node on the zombie list.
+There isn't a reference
+count in that system,
+but if you could, let's freeze the system
+and have a god's eyes,
+which I could look down
+on the entire system, I
+could count the entries
+in the zombie list.
+That would be the reference count.
+The function names vary.
+Question?
+No?
+Okay, so the function names can vary.
+The read-lock, read-unlock,
+and synchronize-RCU
+are the ones proposed for standardization.
+A very common set of names is RCU-enter,
+that's instead of read-lock,
+you enter the critical section,
+leave, you leave the critical section,
+and instead of synchronize-RCU,
+another one that is very common
+is wait-for-readers-to-leave,
+because that's what you do.
+You wait for readers to leave.
+You could have additional functions,
+and in fact most implementations,
+including the one proposed
+for standardization, do,
+but those are less universal.
+RCU has been used in Linux kernel,
+very extensively, for many years.
+Much less extensively in user space.
+Kernel does have several advantages.
+Basically, it knows when all readers go
+into quiescent space, it runs the threads.
+It knows how many threads there are,
+what are they doing,
+when are they running,
+when are they not running,
+and it doesn't need extra memory barriers,
+the ones that we had on our
+one of our early slides
+showing how to acquire data
+because the kernel has to make sure,
+when the readers aren't
+in the quiescent period,
+they are not running any instructions,
+which means something
+has to synchronize them.
+At this point, up to this point,
+nothing else on this thread is running.
+That's equivalent of a memory barrier.
+And that's good enough.
+It doesn't change the basic idea.
+But it's important to understand
+the implicit assumptions,
+what you can and cannot get away with.
+For example, if you look at
+the read-lock in the kernel,
+you would see that it actually
+does not have an acquire
+barrier, doesn't need one.
+It's freeloading on some other barrier.
+But it doesn't mean that
+entering the critical section
+does not require a barrier at all.
+It just means that they already had one,
+and they're basically
+taking advantage of it,
+which is a good thing.
+It makes your code faster.
+And they had to have that other barrier.
+So it's not wrong, it's
+just, if you're trying
+to understand it,
+you have to be aware of
+the implicit assumptions
+in the particular RCU protocol.
+It kind of does look a lot
+like garbage collection.
+And there is, again, some
+confusing terminology here
+because if you open a CS text
+and look up the definition,
+garbage collection is
+automatic memory reclamation.
+Actually, the word automatic is there.
+Garbage collection implies
+automatic garbage collection.
+Nonetheless, in practice, people talk
+about user-driven garbage collection.
+The simplest form of
+user-driven garbage collection
+that you find in practical talk is
+you have a memory pool,
+you allocate some memory,
+you create some objects, and then you,
+instead of deallocating all
+the objects one at a time,
+you blow away the whole memory pool.
+That's basically, you're declaring,
+as a user, all of these
+objects are now garbage.
+Please go reclaim.
+I don't know a better
+term than user-driven GC,
+even though it's kind of
+like saying round square.
+If anybody knows the correct term for
+reclamation that is triggered
+by user action, let me know.
+(man talking quietly)
+Not exactly the same, but
+anyway, you can come
+offline and talk to me.
+Okay, so
+the memory reclamation in RCU
+is kind of like user-driven
+garbage collection.
+There will be a user event
+that would trigger the reclamation.
+Okay.
+I have actually written a user-space RCU.
+Not going to show the code.
+It's messy, and the
+particular implementation
+isn't actually very interesting.
+It does use the reference count.
+I will talk you through the algorithm.
+Okay.
+But this is what I get.
+Read-only and RCU without any writes,
+so there is a possibility of the writes,
+but no writes are actually happening.
+The difference is just
+within the margin of error,
+so same speed.
+Now I'm going to turn on
+some small amount of writes.
+There is about one
+write per hundred reads.
+It's a little slower,
+but it's pretty good.
+I have another RCU algorithm.
+That's what it looks like.
+This is the one without
+writes, still the same.
+So why are there so many
+different RCU algorithms?
+Well, many different implementations,
+let me talk you in detail through one
+particular implementation algorithm,
+and then I'll show you
+kind of the variations
+you can do on the subject.
+So we'll learn the main melody
+and then the variations.
+So here is the idea.
+The writer will maintain a global integer
+that is called generation.
+Sometimes you can find the term epoch.
+It's monotonically increasing.
+All the data that you have belongs
+to a particular generation.
+The data that is currently live
+belongs to the current generation,
+which is the value that is stored
+in that integer right now.
+When the writer does an update
+and makes some data inaccessible,
+let's stick with our list.
+So I'm pulling a node out of the list,
+replacing it with a new node.
+I will put the old node in, let's say
+generally it's a garbage queue.
+In my case, it's just a
+list of nodes to delete.
+And it's another list.
+But in general, it's
+some queue of garbage.
+This stuff I can't delete just now,
+but I would like to.
+There is one of these garbage
+queues per generation.
+So when do I change generation?
+Whenever I want to.
+Whenever I feel like it.
+So I'm doing some number of updates.
+And then at some point I go, okay,
+you know what, I'm
+revving up the generation.
+All the new updates that come after that
+will have the next generation,
+which means they'll go on the other,
+on the next garbage queue.
+So generation zero has its garbage queue.
+Generation one has its
+garbage queue, and so on.
+Now,
+any reader that is currently beginning
+to access this list can only
+access the current generation.
+Cause they can't access anything
+that has been already
+put on the garbage queue,
+not accessible from the list anymore.
+But any reader that
+started accessing the list
+can keep accessing it long after some node
+became garbage.
+So what I need to know is
+how many readers started
+accessing the list
+in a particular generation,
+when all readers
+that have generation zero left,
+my garbage queue of generation
+zero can be collected
+because no reader that
+entered during generation one
+could see any of these nodes.
+Okay, so very similar,
+but now with this explicit generation.
+So I have generation N on the left.
+I'm preparing some new data.
+I'm publishing some new data.
+Notice that I didn't rev up generation
+at that very moment.
+I could, but I don't have to.
+These two acts are independent.
+I can publish as much data as I like
+within a current generation
+and then rev up the
+generation anytime I want.
+I could have one new piece of data
+per generation if I want or 100 or
+that's whatever I want.
+Okay, once I revved up the generation,
+I have to wait for readers to leave.
+How do I know when the readers leave?
+Well, remember my readers,
+how they were storing
+the pointer to the data.
+Well, they don't store the
+pointer to the data anymore.
+What they do store is the generation
+at which they entered
+the critical section,
+so when they called read-lock,
+I told them, okay,
+you're calling read-lock,
+current generation is generation N.
+Hold onto that N, you'll need it.
+When they're calling read-unlock,
+they're saying, I am a
+reader from generation N.
+On the writer side, I'm counting,
+okay, generation N has been
+superseded by N plus one.
+I have three readers from generation N.
+One just exited.
+Two just exited.
+Three just exited.
+Okay, go to town, collect garbage.
+So last reader from generation N exits.
+Now I can delete garbage.
+So the implementation, again,
+this is the slide code.
+You might ask me, okay,
+what was the difference
+between the algorithm
+one and algorithm two?
+Which slide code is this code for?
+The answer's actually both.
+The difference is in the little details
+that don't fit on the slide. (laughs)
+The skeleton is the same, but it's
+the variations that make it different.
+Okay, so my global atomic generation,
+I have an array of atomic reference counts
+for some maximum number of generations.
+Okay, what that is and how do I deal
+when I overfill the number of generations,
+again, that comes under
+the variation subject.
+So let's for now assume it's
+large enough, never happens.
+I have this opaque type called handle.
+And somewhere inside,
+there is a generation.
+And what the reader
+gets from the read-lock
+is that handle.
+And you can't really do anything with it
+other than you can
+surrender it to read-unlock.
+But that tells the writer that
+you're surrendering access
+to a particular generation.
+So read-lock increments
+the reference count
+on that generation
+and packages the handle with
+that current generation.
+And read-unlock extracts
+the reader's generation
+from the handle, decrements
+that reference count.
+That's all we do.
+Now, these are default
+operations on atomics,
+which means they're using
+sequential consistency.
+I told you on Monday, sequential
+consistency's expensive.
+If you have to use atomic,
+you should try to avoid it.
+And yes, in reality you will avoid it.
+The problem, why am I not showing you
+the exact memory barriers?
+Well, the actual reason is I can't.
+Synchronization protocols on
+multiple atomics are tricky,
+and which barriers you
+need to take exactly where
+depends on the very subtle details
+of actually how you synchronize.
+So typically, there will be one
+sequentially consistent
+access in this whole mess.
+Lamport algorithm relies on that.
+There's one acquire barrier,
+one sequential consistent,
+and one release.
+There are some synchronization protocols
+that use an additional atomic
+and get away with no sequential
+consistent memory access.
+They kind of fake it by a combination
+of release and acquire.
+It may or may not be more efficient.
+You have to measure these.
+But that's a lot more code
+than I can fit on the slide.
+So assume that the memory barriers
+are finely tuned to the particular
+synchronization protocol.
+But it would take me another hour
+to just explain one of those.
+So simplified slide
+code just uses atomics.
+What do the writers do?
+Well, the writers are very simple.
+Eventually you will call
+synchronize-RCU on the writer.
+So when that happens, I'm going to scan
+all the generations, stopping
+before the current one
+because I can't reclaim
+the current generation.
+And I'm going to look at reference counts.
+And if a reference count
+of a particular generation is not zero,
+I'm going to wait until it becomes zero.
+And if it's zero, I'm going to reclaim
+all the memory on the garbage queue.
+And then I'm going to move
+on to the next generation.
+You can't jump.
+If the reference count
+of generation zero is,
+so generation zero is still,
+there's some readers alive
+with generation zero.
+But the reference count of generation one
+has dropped to zero, well,
+you can't jump a generation.
+You have to collect them in order
+because remember, all the
+ones that were earlier
+can see everything that came after that.
+It's just all the ones that came later
+cannot see what was removed before.
+But all the ones that came first,
+they see everything that was there.
+Okay, so that's basically
+how synchronize-RCU can work.
+Okay, so all RCU implementations will have
+these three functions under some name,
+like the standard names or enter, leave,
+wait-for-readers-to-leave,
+or whatever you may call it.
+They'll have that.
+After that, you can get creative.
+So let me show you how you get creative.
+One thing you may want to do is
+you may want to minimize
+read-lock and read-unlock.
+Now, that's not the only
+trade-off you may want to make.
+For example, you went, I hope,
+to Ansel's talk yesterday
+to see his presentation of libguarded,
+very convenient library for
+encapsulating these things
+so you don't start seeing
+past, present, and future
+all at once in your head.
+He made a different choice.
+His read-unlock actually
+does the garbage collection,
+it reclaims the memory.
+So his read-unlock is not as
+cheap as it could have been.
+Maximum throughput of readers
+wasn't the design goal.
+He did the right thing
+for his design goal.
+Now, if I wanted maximum
+throughput of readers,
+I would do the read-unlock
+as efficient as possible.
+And I might impose some
+additional restrictions on it.
+So why would be the reader overhead?
+Well, you could make read-unlock heavy
+or you could make it garbage collect.
+Let's say you didn't do that.
+There's still overhead.
+You have to read the generation number,
+and in my schema you have to increment
+the reference count of the generation.
+That's read-modify-write on a shared data
+because all the readers
+are doing atomic increments
+on the shared data.
+And then I have to
+acquire-read the root pointer.
+You've seen my graph of performance
+of atomic operations before.
+Acquire-read, not so bad.
+The read generation number, not so bad.
+Read-modify-write, that's at least
+an order of magnitude
+slower, probably more.
+And the reason that's slower,
+it's a cache contention on the cache line
+that the reader is writing into,
+the reference count.
+Well, the problem is reference count
+is shared between all the readers.
+Here is one possible solution.
+It's not the only one, but
+I'll show you just this one.
+Each thread has an ID.
+Each thread has its own reference counter
+for that thread ID.
+If you go to the rather
+extreme measure of doing it,
+please pad it to the cache line.
+You don't want the false sharing here,
+to go to all this trouble and then
+die because your reference counts
+are in adjacent eight bytes.
+No, space them out by 64
+bytes, well, if you are on X86.
+Or whatever your cache line is.
+Well, you need consecutive
+reader thread IDs,
+zero, one, two, for this to work,
+which means you actually have to somehow
+register the threads with the RCU system.
+The RCU system has to know
+how many threads you have
+so it can allocate this
+array of reference counts.
+Well, if you don't have that,
+there is still, it's not quite as good,
+but don't despair completely.
+You can, for example, take
+your random large thread ID,
+hash it into an interval
+of, I don't know, 128
+or whatever, and use that hash
+to index the reference count.
+It would have to be atomic.
+You would have to have
+shared read-modify-writes.
+But you would have much fewer threads
+actually colliding because
+readers will be scattered
+across all the, if your hash is good,
+across all 128 reference counts randomly,
+so actual contention
+on the reference count
+would be much less common.
+That actually moves a lot
+of work onto the writer
+because now writer, instead
+of just accessing one
+reference count, has to access them all
+and add them all up.
+The good thing is, accessing
+multiple reference counts
+that change all the time,
+ooh, scary, not atomic.
+The good thing is the reference counts
+for the old generation only go down.
+They don't go up.
+So once they all reach zero, that's it.
+So okay, this one is zero.
+I don't need to come back to this,
+always will be zero.
+And this one is zero,
+and this one is zero.
+They're all zero.
+Okay, do I need to go
+back to the beginning
+and check the first one?
+No, I don't.
+And that's what makes
+this schema workable.
+On the readers, this is a design question,
+can you nest critical sections?
+Can you call read-lock inside read-lock?
+Very often, the answer is no.
+I can live without
+nested critical sections.
+You can actually simplify
+your life a little bit,
+you don't need a full reference count.
+You can just, for every reader,
+you can just know, is it in
+the critical section or not?
+So instead of having an
+actual reference count,
+you just have one,
+basically reference count
+for this reader is
+either one or zero then.
+Now,
+okay, so
+you can do that if you don't need
+nested critical sections.
+If you can't register threads,
+you can do the hashing of thread IDs.
+Some of the interesting things
+you can do on the writers,
+the big distinction between
+RCU implementations is
+if you read about them with
+deferred deletion and without.
+And what they're referring to is
+a very generic RCU implementation
+would have a callback, basically.
+This is how you delete this piece of data
+when you get to it.
+You enqueue this callback,
+so it's deferred.
+And when it's safe to
+do it, it gets called.
+So call-RCU is the common
+name of the function
+that enqueues it.
+So you could call RCU, you
+give it the piece of data
+and how to delete it, the functor.
+It doesn't actually delete it.
+It just enqueues it for future deletion.
+Big distinction on the writers,
+which actually is the difference
+between the two cases that I've shown you,
+the fast and the slow one,
+at least, under that workload
+they were fast and slow.
+It's not that one is always
+slower than the other.
+Granularity of updates versus
+granularity of cleanup.
+How many updates go into one generation?
+You don't always have strictly generation,
+you may not have an integer
+that is monotonically increasing,
+but you still have the
+equivalent of the generation.
+Like when you put nodes
+on the zombie list,
+that's your generation just rolled up.
+So granularity of updates versus
+granularity of the cleanup.
+Do you cleanup everything, like you wait
+and then you clean up all the garbage,
+and you wait until you can
+clean up all the garbage?
+That's one way.
+Another way is you can periodically ask,
+okay, do I have any generations
+that are not visible by any readers now?
+I don't want to wait, I just want to know
+if any of the readers happen
+to already left a generation.
+If yes, I'll reclaim
+that memory right now,
+with no waiting.
+If not, I'll keep piling up garbage.
+Of course, eventually
+you'll run out of memory,
+and then you have to wait.
+But you can do this for a while.
+Guard objects, where you basically
+have a root pointer for every datum,
+more overhead, but much
+less unclaimed garbage
+because you reclaim faster.
+So I've shown you these
+two plots separately.
+Now they're on the same plot.
+The difference between the fast RCU
+and the slow RCU that
+I was showing before,
+in my case, was one had short generations,
+one had long generations.
+That was all the difference.
+Okay, let's look at some performance
+just so you get a flavor for it.
+We're coming up on the end of it.
+So the baseline at the top,
+only reading, no synchronization.
+That's when I know that
+there are no writes.
+This is the ideal.
+I want my reads to be like that.
+The line that goes kind
+of almost parallel to it,
+let's see if I can get it,
+okay, this one here.
+That's my RCU.
+So there is about one write
+per hundred reads here.
+Lock-free is on the bottom,
+read-write locks start good
+and then they stop scaling.
+And libguarded is somewhere in the middle.
+As I said, high throughput
+wasn't the design goal,
+so don't take it as a criticism
+of that wonderful library.
+Non-blocking readers were the design goal,
+not high throughput on the readers.
+Okay, let me put it to a stress test.
+I'm now going to really
+crank up the writers.
+Now I have one thread doing writes
+at the maximum rate that
+that thread can sustain.
+And the readers.
+Well, so all the RCUs are going way down.
+The one that is optimized
+for maximum reader throughput
+basically holds its own as good as it can,
+but they're all suffering.
+Okay, well, let me
+skip this, cause I'm out of time.
+Okay, so one kind of final point,
+just because, again,
+it requires you to turn
+your head on sideways,
+what happens if the readers hold on
+to their generation or their handle
+or their lock for a very long time?
+Well, usually there is
+nothing you can do about it.
+There are some implementations
+where you can actually force reclaim.
+So what does it mean
+when you force reclaim?
+The writer decides to go and
+forcibly delete the memory.
+The readers will be left
+in an undefined state.
+Well, that's kind of bad, unless
+the readers can handle it.
+One scenario is where you don't
+actually delete the memory,
+meaning you don't
+release it to the system.
+You have your own memory block,
+and you just reuse it.
+And the readers can
+handle inconsistent data.
+They won't crash.
+they will get some result
+that they don't like,
+but they have a way of detecting that.
+So the other option is
+that the readers need
+consistent data, but they can verify.
+So, for example, this read-unlock,
+when I surrender the handle, I can ask,
+did the handle expire?
+Did the writer forcibly reclaim the memory
+of that generation?
+If the answer is yes, I
+have to drop everything
+that I have done in that critical section,
+reacquire the root pointer, and recompute
+because what I have done is garbage.
+Not in the same sense as the garbage.
+And actually, I once
+worked on an application
+where it was okay for
+the readers to crash.
+It wasn't threads.
+It was shared memory processes.
+And the system just restarted the process.
+They were all stateless, if it crashed,
+it got restarted, and that was fine
+in that particular application.
+Okay, so when should
+you consider using RCU?
+So kind of the landscape of RCU.
+To access it, how often
+do the updates happen,
+and how consistent view
+of your shared data
+do you expect?
+The RCU paradise is when
+updates almost never happen
+and you don't care if
+the data is inconsistent.
+If you need perfect consistency
+and updates are hammering
+your system all the time,
+it's not going to work.
+Somewhere in the middle, it's going
+to slowly lose efficiency,
+as I have shown you on these plots,
+and the ones optimized to
+sustain higher write speeds
+will lose efficiency not quite as bad
+as the ones that are not.
+So it affects the choice
+of your RCU algorithm.
+Okay.
+Just by way of comparing with some other
+popular mechanisms,
+hazard pointers do something
+very similar to RCU.
+They have different features in regard
+to how much memory, how much
+garbage is sitting unreclaimed.
+Their biggest problem isn't really that.
+Their biggest problem,
+they're hard to use.
+Not hard to write.
+Hazard pointer class
+isn't that hard to write,
+and somebody has already done it for you.
+They're hard to deploy in your algorithm,
+versus RCU is pretty easy.
+Identify your access
+as a shared data call,
+read-lock, read-unlock,
+and periodically involve
+garbage collection
+on the writer.
+Atomic shared pointer, easy as long as
+you have a way of handling
+circular references.
+But it's lock-free, but it's
+much slower than the RCUs
+cause it uses relatively
+expensive read-modify-write
+atomic instructions, and more than one.
+Questions?
+Yes?
+- [Man] In your model, so
+you have a root pointer,
+and you have an array of pointers
+to blocks of data.
+And when you want to
+start a new generation,
+do you need to make a brand new copy
+of the array of pointers to make
+parts of that inaccessible?
+- Okay, so the question is
+about my deck-like container.
+And let's say I didn't want to keep
+all the reference blocks forever.
+I actually wanted to reclaim memory
+using generational RCU.
+Okay, so how would I do it?
+What would be in each generation?
+Let's say I rev up the
+generation every time I
+have to change the reference block.
+That'd probably be a good decision
+because it doesn't happen very often.
+I have a lot of new data added before
+I have to change reference.
+So I rev up one reference
+block per generation.
+My readers would have to call read-lock
+and acquire the generation.
+So each of my reference blocks
+is now tagged by the generation.
+- [Man] What are you
+calling reference block?
+- Reference block is
+the block of pointers.
+- [Man] Okay, so the whole array.
+- Yeah, yeah, there is
+just one contiguous array
+of pointers.
+So there is an array of pointers,
+that's what I called reference block.
+It's a block of pointers.
+So that guy's tagged by the generation.
+And let's say I'm revving
+up generation every time
+I change that reference block.
+So read-lock gives you the generation
+of the current reference block.
+When the last reader
+surrenders that generation,
+the writer can delete the reference block
+of that generation.
+I would just have one
+reference block per generation.
+The last read-unlock with that generation
+either deletes it on the reader side
+or triggers the deletion
+on the writer's side,
+depending on whom you
+want to pay for that call.
+- [Man] Thank you.
+- Yes?
+- [Audience Member] So in
+your last performance chart,
+you showed that if there was a writer
+that was writing at maximum throughput,
+that then the performance suffered of RCU.
+- Yes.
+- [Audience Member] But
+your RCU implementation
+was still getting the best performance
+out of all the ones that you showed.
+But in the chart at the end,
+where you said in what use
+case should you use it,
+would that be some case,
+something besides RCU
+would be better?
+Is there some other?
+- Well, so in that case, first of all,
+as you saw, only one RCU
+implementation sustained it.
+The slower RCU, the libguarded,
+and the read-write locks
+were basically running
+at about the same performance here.
+In fact, read-write lock
+slightly outperformed
+libguarded.
+The minimum overhead RCU was the one
+that was still pulling ahead.
+And the price is it
+accumulates more garbage
+because that's basically
+how I gain performance,
+by batching deletes.
+Fundamentally, that's the trade-off.
+So with that trade-off,
+the longer you can keep it,
+if you didn't have to
+delete anything ever,
+you would actually go all
+the way back up to the top,
+almost, it would be within 15% of the top.
+So as long as you can sustain
+that trade-off of memory,
+you can keep the performance.
+When you have to throttle it down,
+you have basically one of two options.
+You can throttle updates.
+So I didn't talk about it,
+but another option is, on the writer side,
+you can actually throttle the updates.
+You can say, okay, too
+much garbage accumulated.
+The readers haven't left.
+You, writer, now switch from writing
+to collecting garbage.
+Oh, and by the way, you have to wait.
+That naturally throttles the updates.
+That may or may not be acceptable.
+Updates are piling up, you may
+not be able to throttle it.
+If you are, it's a solution.
+If you're not, you basically,
+now you have essentially a writer thread,
+a reclaiming thread, and
+then the synchronization
+of the two of them become contentious.
+Here, I just had one thread, still.
+Reclamation was in big batches,
+so it's actually cheap.
+But you cannot delay updates, let's say.
+You have to sustain all the writes.
+So your writer thread
+and your reclaimer thread
+are now separate.
+They are now in contention, because
+they are both running
+at maximum bandwidths.
+So now the whole thing
+slows down even further.
+Now, I don't know,
+the lock-free list would do it.
+Eventually it would be
+just as slow as RCUs.
+I don't think it would ever be faster.
+But you may have to reevaluate
+your design decision.
+You may have to give up
+sequential consistency somewhere,
+go for a statistical queue.
+If you're doing queuing, some event queue,
+and that's what you're after,
+you may have to basically give up
+sequential consistency on the queue
+and go for probabilistic queue.
+Those are faster, at the expense
+of sequential consistency.
+- [Audience Member] In
+the example you gave,
+there was a writer that
+had a high throughput,
+and you cared about consistency.
+You said you wouldn't be happy with RCU.
+But what would you be happy with?
+(talking quietly)
+- You are allowed to accumulate, so
+in this test, in the
+second line from the top,
+accumulates may be 20, 30%
+extra memory in this test.
+And that's the best I can
+do with that implementation.
+And it's also kind of spiky.
+It accumulates, and then
+it collects it in batches.
+If I needed even higher
+throughput of updates,
+also, my writer periodically
+pauses to do reclamation.
+It's dying it in small batches
+so I'm not holding
+updates for very long, but
+the writer actually has a second task
+of doing the reclamation,
+of calling the freeze.
+If that's not acceptable,
+if you need even higher
+throughput than that can deliver,
+it's going to be even slower.
+It's going to stress you even harder.
+- [Audience Member] Thanks.
+- Yeah, so eventually you
+can squeeze RCU out of
+usability, or make it so hard to write
+that by this point, it
+doesn't look like RCU anymore.
+It looks almost like a lock-free list
+or a hazard pointer.
+- [Man] Hi, I'm actually surprised to see
+that you have so much difference
+between the read-writer
+lock and your algorithm.
+And both need to pay the price
+for counting the readers.
+- Well, remember, these are
+p thread read-writer locks.
+These are not the best
+read-writer locks you can
+possibly come up with.
+- [Man] Okay.
+- So that's one.
+I have not tried, for example, on Monday,
+I have shown you the difference
+between POSIX mutex and my own spin lock,
+the best I know how to write.
+And it's more than an order of magnitude.
+I haven't done the same
+with the read-write locks.
+I probably could have.
+- [Man] And you would get similar?
+- I don't know what I would get.
+- [Man] All right, that
+answers the question.
+Thank you.
+Yeah, so it's against the POSIX.
+- So this is against the
+POSIX read-writer locks.
+Questions?
+Okay, well, you can also
+just find me offline.
+Thank you again for coming
+and for listening.
+I hope you got somewhat confused.
+(applause)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

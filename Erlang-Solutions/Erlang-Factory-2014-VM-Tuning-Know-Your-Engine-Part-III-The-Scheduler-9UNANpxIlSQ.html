@@ -1,0 +1,746 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Erlang Factory 2014 -- VM Tuning, Know Your Engine - Part III: The Scheduler | Coder Coacher - Coaching Coders</title><meta content="Erlang Factory 2014 -- VM Tuning, Know Your Engine - Part III: The Scheduler - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Erlang Factory 2014 -- VM Tuning, Know Your Engine - Part III: The Scheduler</b></h2><h5 class="post__date">2014-04-07</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/9UNANpxIlSQ" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">yeah so the title of this talk is Alan
+engine tuning but that's sort of a major
+title for a number of talks and we're
+not going to see much tuning today
+either it's just a third talk in a
+serious but if you come to Stockholm
+this summer I think we'll get to some
+tuning parts actually in the next talk
+in this series so today I'm going to
+talk about the scheduler but I'm going
+to talk a bit more high-level and give
+you a couple of more stories actually so
+imagine that you have a company that
+does some kind of online transaction
+processing and you're dealing with lots
+and lots of money and you have to handle
+transactions not extremely fast but
+within a certain time in the case of
+clora where I used to work we actually
+had 15 seconds to handle a transaction
+and that sounds like a huge amount of
+time you know the kind of transactions
+that we're talking about in the other
+talks here today with billions of
+transactions per second but our
+transactions were a bit more heavy it
+basically from no information at all
+given by the transaction coming in we
+have to make a credit decision and
+decide whether we trusted this person or
+this IP address that came into our
+system to actually give them credit for
+actually sometimes very large amount of
+money and this we had to do within 15
+seconds and we usually do it within 100
+milliseconds so we had built this system
+and we started with just being able to
+serve a few and scale the system and at
+this point about a year and a half ago
+we have
+many many transactions and everything
+was really nice and calm and the system
+was working fine and then one night BAM
+one of the nodes just went down and then
+a long search started for where did that
+slave go so it turned out that when you
+don't have much work to like on a calm
+night like this one the airing
+schedulers actually go to sleep so if
+they don't have anything to do they go
+to sleep and actually several of them go
+to sleep and you might end up with just
+one scheduler running and the last poor
+scheduler then try to do term to binary
+so reducing Nisa the fantastic database
+built into the language and Nisha has
+different types of table but one type of
+the tables it keeps in its tables and
+every now and then it dumps the whole
+table to disk so it writes a log to disk
+of changes but every now and then inside
+just to be on the safe side if we need
+to do restart we want to do it quick we
+write the whole table to disk now in our
+case we we had big tables and we had
+tables with big entries in them so we
+had entries one-line entries that were
+like 600 megabytes or something like
+this and then it had to write a number
+of rows that each was 600 megabytes so
+he tried to do a term to binder in a six
+hundred megabyte line of code dime of
+data and it turns out that term to
+binary takes what's called reductions
+we're going to come to that takes 20
+reductions
+it doesn't matter how big term you have
+it's 20 reductions and it's just going
+to run until it's finished so what
+happened was that this scheduler was
+running and then it went into dumping
+the table and it did a lot of term to
+binary and it didn't use any reductions
+so it got never got scheduled out the
+same process got to run for over a
+minute and you know what happens then
+that's my wife going for the kill heart
+goes to kill you
+so we're monitoring our system with
+heart so if they become unresponsive we
+kill them and they restart very nice
+thing if a restart is quick but in our
+case a restart is one and a half hour
+because we have these big tables that
+need to be reloaded so this was not
+really good design but in the beginning
+it was very nice that thought restarted
+the system but at this point heart was
+actually the killer of the system so it
+could probably have survived by us
+dumping this initiative and doing it for
+a long time and then finally finish and
+everything would have picked up but
+since there was only one scan we were
+running only one process running there
+were no one answering heart pings so
+that heart decided this note is dead I
+will kill it for real and just brought
+it out took some time to find that bug
+was quite an easy fix then we just
+bumped the reductions in each iteration
+in Mesa we'll get to that in a short
+while so about a year later we didn't
+have this really nice and calm night
+anymore
+but we had a constant problem of our
+transactions timing out all the time
+and then we decided to upgrade to our 15
+because new wear is better you know and
+our 15 there was only one thing that
+changed in the bytecode and that was
+that was one new instruction called line
+so this gives you line numbers in error
+messages what could possibly go wrong
+well something could possibly go wrong
+so we had this system running and we had
+it over 14 we upgraded to our 15 in a
+running system of course that's what you
+do when you run a line and then after a
+week weary compiled all the code and got
+that up to our 15 and got the new line
+instructions in and then then we had
+problems then everything was timing out
+all the time basically as soon as there
+was any load on the system it just went
+down didn't do anything so we turned out
+that we had this bright young programmer
+at some point that designed an API where
+you did a throw outside of the API and
+of course no one on the outside of the
+ETA I want to know you what to do with
+the throw that came from inside the
+thing so that thing just flew around a
+bit until it came to a top level catch
+that's all
+here's a throw that I don't know what to
+do let me do a stack trace on that one
+so we get a nice error message with line
+numbers and those track traces were
+quite big but also they happen 60,000
+times per second because this pattern
+was just not handled and all the time so
+suddenly we had 60,000 get stack traces
+per second that tried to for each
+element in the stack tried to find line
+number four that element in the stack
+and guess what
+how many reductions do you think this
+cost nothing yet stack trace that
+doesn't cost anything so any server that
+were any scheduler running a process
+that did get stack trace didn't reuse
+any reductions and could just keep on
+doing this and all our transactions
+we're throwing these exceptions all the
+time
+yeah so not a good thing just not doing
+the stack trace in in that place just
+fixed everything but it was not that
+easy to find that bug either okay that
+was the introduction so both those
+problems were actually huge problems in
+our code base but one part of the
+problem was also how the scheduler in
+airline works so this talk is about the
+idling runtime system how much time do I
+have when we did this start I have no
+idea till half past
+oh yeah so the airline runtime system we
+can look at it as a number of components
+so we have the beam interpreter the last
+talk that I gave in Stockholm was on the
+beam inter pares should have been there
+but you missed it
+there's the garbage collector I gave it
+talk about that here in San Francisco
+last year and some problems that you can
+end up with with binaries and our
+memories handled in the beam and there's
+other components like hyped an item code
+compiler and how I you is handled that
+I'm going to talk about later and then
+processes is such a central concept so
+I'm going to talk a little bit about
+process today and in every talk
+basically and then we're going to
+concentrate on the scheduler so
+processes conceptually it's just for
+memory areas and the pointer you have
+the stacked the heap a mailbox where you
+get your messages the process control
+book and then there's the pit that
+actually points to this process so if we
+look at the airline runtime system as
+memory areas instead in laid out in
+memory we have the runtime system code
+the C code we have the C stack which the
+emulator and the random system is
+running on we have lots of queues we
+have separate area for binaries and we
+have processes and then we have loaded
+beam code so processes for us now is
+just memory it's the process control
+book the message cube and then I lied a
+bit so there's not a stack and a heap
+because they are one memory growing
+together but if you're running hype and
+code there is another native stack
+instead so they're still for memory
+errors and in the process control block
+you have all the values that control a
+process like a pointer to the top of the
+heap the top of the stack where the heap
+ends and the stack ends and continuation
+pointer to see where you're going to
+keep on running next time and so on and
+then there are a couple of fields that
+are important for the scheduler so
+there's F calls which is the number of
+function calls that you are allowed to
+run until you have to yield there's the
+Reds which is a total number of
+reductions that you have done I'm going
+to talk a little more about what
+reduction is ooh
+so these to keep track of that you have
+the status it says if you're running or
+waiting or whatever you're doing you
+have next improve your pointer where you
+can point to other processes when you're
+in some kind of queue which you
+basically are all the time and then you
+have a priority and then there's lots
+and lots of more fields in this book
+so let's go back to the components and
+look a little bit being done
+so I'm classifying beam nowadays as a
+garbage collecting reduction counting
+non-preemptive directly threaded
+register virtual machine and I'm saying
+non-preemptive here so usually you have
+pre-emptive multitasking or cooperative
+multitasking so that's the two things
+that you can choose from usually so the
+beam well let's talk about a line and a
+line processes first a line processes
+are pre-emptive so as conceptually as a
+programmer you don't have to think about
+when you yield the process so if some
+other processes needs to run it will get
+to run at some point and your process
+will will yield at some point in the
+beam this is actually implemented in C
+and C is not preempted so the beam has
+to implement this preemption on the
+processes so it does this with something
+called reduction counting so the
+scheduler is non pre-emptive and
+reduction counting so what is a
+reduction well nobody knows but
+basically it's a short amount of work
+done by a process so every function call
+is counted as a reduction oh so when you
+enter a a new function beam checks have
+I used up all the reductions that were
+available for this process yes then it
+will have to yield otherwise it keeps on
+running and since there are no
+Luke construction airline the only way
+you can create a loop is by doing a tail
+call this is actually function call and
+this function call will be seen as a
+reduction count and check for whether
+you need to yield or not of course
+there's other ways the process can yield
+if you do receive and you have no
+messages in your inbox that matches or
+if you call some certain bits that needs
+to trap out and do some other work or a
+special actual yielding bit but the main
+thing is reduction counting and the
+whole the whole system for a scheduler
+is built on that reductions should
+always be used for any amount of a small
+amount of work in the in the process so
+then we come to the main topic of the
+talk the scheduler so first in a
+multi-core system you have to realize
+that there's actually one scheduler per
+core this is not set in stone but if you
+don't change any parameters when you
+start up your system and you're running
+a multi-core system then you get one
+scheduler per core and each scheduler is
+actually a thread in Si and they run in
+parallel so if you have a four core
+system you have four schedulers and you
+can run four processes in parallel if
+you have more processor than that they
+will sit in queues waiting to get to
+execute and these tubes are per
+scheduler
+yes so now we're going to look at the
+process state machines reduction a
+little bit more in detail how the queues
+are handled and timing wheels and then
+we'll come to some possible problems
+with this so this is the process state
+machine a process can be running it can
+be waiting runnable suspended exiting
+free or garbage collecting so when a
+scheduler is is running a process it's
+obviously in running also when it
+process doing garbage collection this is
+done in the same process is in the same
+scheduler it goes into the garbage
+collecting state does garbage collection
+comes back and keep on running
+then when the process dies it ends up in
+a state exiting and it cannot go away
+completely directly because there might
+be dependencies on memory errors that
+cannot be freed at once so there's a few
+steps before it actually disappears a
+process when it dies and then there's a
+suspended state that I just put there to
+get a lot of errors in arrows in there
+to confuse you a bit we're not going to
+talk about it
+you can suspend the process and then you
+can get it to resume but notice that if
+it's running and you suspend it it will
+not resume as running it will end up in
+some queue somewhere but the interesting
+parts are the running getting you
+receive going to waiting ending up in
+runnable to do a schedule or yield so in
+running we're counting reductions
+function calls also beef calls so here
+beef calls are getting better and better
+with every release to actually count a
+number of reductions that is closer to
+the amount of work they were doing but
+in the beginning it was usually like up
+and that's heavy that's 20 reductions
+and other beefs is just one reduction
+and so on so nowadays they actually most
+of them give a good number of reductions
+that are reduced each time the garbage
+collector uses a number of reduction
+proportional to the amount of garbage is
+handled so it gives a good amount
+estimate of the time that it's been
+using so when you get to zero reductions
+you yield and go to the runnable state
+if you do a beef trap or you get a B
+support you also end up in the runnable
+State the process can actually keep on
+running still but it's not allowed to
+but if you do receive and you have no
+matching messages in Inbox
+then you go down to the waiting State so
+if you end up in the runnable State
+there are actually three queues for
+processes on each scheduler and they are
+for the priorities of the process so we
+have max priority processes with its
+queue of processes high priority
+processes and then you have normal low
+in the same but each time you find a low
+priority process you just increase a
+counter and I think it's seven or eight
+times it will ignore I just think it
+will ignore it seven times and run it on
+Nate but I'm not sure so you ignore a
+low priority process the first times you
+see it and only peak normal processes
+and this Q is just whoa a first and a
+last pointer
+in a queue structure so the first
+pointer points to a process to a
+actually it's just a PCB of the process
+and in that piece we there's the next
+field as we saw earlier and this next
+field will be used to point to the next
+process in queue and to the next one and
+then there's a null Terminator at the
+end and then there's the last pointer to
+the last element in the queue so this is
+just a simple ordinary queue where you
+add things at the end and pick them out
+at the top and very easy both of these
+operations since you're the last pointer
+you just add it here when you add
+something and when you pick it out you
+pick it out from the top so as long as
+there are max priority tasks those will
+be run than the high priority and then
+normal and there's also port tasks which
+are things that needs to be run on ports
+and these are run in each iteration of
+the scheduled loop we'll come to that in
+a short while so there's basically four
+queues of things to be done
+in the scheduler oh now we can actually
+see what it says
+then if a process goes into sleep it
+goes into the waiting state and in a
+waiting State if you have a timeout on
+the process is a receive after 1000 then
+do something then you end up in this
+timing wheel so the timing wheel is just
+a big array and you have a current time
+says this is the time slot that we're at
+right now and when you put something
+into the timing wheel you calculate what
+slot in the time wheel it should end up
+in so if it's going to be 20
+milliseconds later I'm a lot taller than
+Chaura but how about the granularity of
+each slices but let's say 10
+milliseconds so if it's 20 milliseconds
+later you end up in a slot two slots
+away and if it's 65,000 5:56 times 10
+milliseconds plus 10 then you will end
+up in that slot but on the next
+iteration of the timing wheel so that
+the array is just one array but you can
+see it as a wheel that just goes on and
+on and in the data structure that store
+there you also keep track on what level
+of the wheel you're at so if you wrap it
+around a couple of times you get a
+higher number there and then when time
+is advanced and it checks whether
+something has timed out it goes through
+all the slots that has passed since it
+last time checked who's this pointer
+forward and for every timer
+that is on level zero it will make them
+up and put them in a runnable queue
+instead and timers are not only just
+processes you can it's actually a
+separate data structure and there are a
+couple of things that can treat timers
+so adding things to this bill will
+require a lock but in practice I haven't
+seen that that's a problem so one
+problem with with this scheme where we
+have processes of different priorities
+is that if you add lots and lots of
+processes of a high priority or a max
+priority you might get priority
+inversion or if you add a lot of
+processes with a low priority but you
+shouldn't be worried about this and you
+don't even really need to know about
+this and just don't mess with priorities
+and nothing will bad will happen to you
+so there's a C function called schedule
+in air l process dot c so how many of
+you have watched Lucas scheduler
+presentation the debonair that were
+composed okay a few of you yes so Lucas
+was sitting here he said it's quite
+short and not hard to understand if you
+know C yeah
+it's 560 lines of if deft C code
+it's I wish I had the minds of the
+people working at Wikipedia and that's
+all I can say so I haven't really
+understood this thing yet so I had to
+steal whatever Lucas said in his
+presentation basically changed it a
+little bit so no one noticed so it's
+actually not schedulers that call the
+emulator to run airline code but what's
+happen is that the emulator starts up
+and it's running in beam dot C and then
+it called process main and if you want
+to see Big C functions you can look at
+that one and then when a process need to
+yield and it need to find a new process
+to run then it calls schedule and
+schedule basically does a number of
+things first it updates the reduction
+counters and this sounds like a simple
+thing it's one reduction counter you
+know there's like seven variables that
+get updated with this reduction count in
+different views of it and then it checks
+whether any timers in the time you has
+triggered and then if this particular
+scheduler has been running for four
+million reductions since last time and
+iOS check was done or a balance check
+was done then it will do a balance check
+and we'll come a little bit to what the
+balance check is but basically it
+prepares how process will will make
+migrate and in the next step and this
+step is done every time in this loop it
+will use the information from the last
+time someone did a balance and and
+actually have a set of migration to do
+just follow a plan and
+and move one process from one scheduler
+to another or a port and then it will do
+some internal work free up memory or
+handle code loading and things like this
+and then there's a global variable so
+this function calls variable is global
+to all schedulers so when this one goes
+above 4,000 reductions then it will
+check for IU and update the time so it
+will try to not update a time unless it
+it needs to but if you have two
+schedulers and you run two schedulers
+and they get to run for two thousand
+reductions that means that every time
+both of them have run for two thousand
+reductions one of them or the total has
+been 4,000 reductions so actually for
+every 2,000 reductions you will do a
+check io in time so to speak but this is
+to keep it from the way it was when you
+add the only one scheduler you did 4,000
+reductions amount of work before you
+check the schedule set for IO and you
+the same amount of work but you do it in
+less time you do it in in so as the time
+divided there of the number of
+schedulers you have so this is actually
+done quite often and then it will
+execute a port and if it sees that it's
+not getting the finish with with the
+port it will actually execute many port
+tasks for 2,000 reductions and then when
+it returns it will actually have found
+out which process to schedule next and
+return that process back to the emulator
+which then actually runs airline code
+so every four million reductions
+there's the load balancing code and if
+you want to see scary heart understand C
+code they go no further this is
+fantastic code I hope that I will
+decipher it and put something in the
+book that I'm writing that can explain
+what's done but don't bet on it
+I'll talk to Rick and people but we'll
+see so basically the plan is to move
+processes to lower number schedulers so
+as long as a scalar is not overloaded
+you want to move as many processes as
+possible to it so that you run as few
+schedulers as possible mostly to get
+data locality but also you could reduce
+CPU usage if you want to I'm not sure
+anyone tries to use that but possibly
+done in some projects but basically if
+you get things running on a model
+process you get more data locality and
+things might work better but if you see
+that some process is some scheduler is
+overloaded it will start moving away
+processes from that scheduler now as we
+saw earlier if you using bits or even
+worse
+sniffs that are not counting the number
+of reductions in the right way then you
+might end up with starvation because you
+might have just one scheduler running
+all your processes and then that scalar
+is doing a lot of work for very few
+reductions and then we get to the bad
+places so there's a solution
+nowadays you can add
+Plus SFW I plus number of milliseconds
+like 500 or 50 or whatever you want to
+actually wake up sleeping schedulers if
+you use this flag there is a separate
+thread that monitor things and if it
+sees that scatters or sleeping butters
+actually work to be done it will wake
+that skelter up and then that scatter
+will start stealing work from the other
+process so what happens when you go down
+to one scheduler is that there's no and
+that scanner is locked in to work
+there's no other scheduler to actually
+start stealing work from from that
+scheduler so with that flag you get a
+more stable system in this way yeah so
+there's a number of problems with the
+reduction count mechanism so bifs
+uses an arbitrary amount of reductions
+and return doesn't use any reductions
+and NIF's uses an arbitrary amount of
+reduction so beefed uses a arbitrary
+amount of reduction should you be
+worried yes do you need to know about
+this yes and what can you do well fix
+the Biff yay that's the way to go help
+out please
+so if you can't do that you have to use
+small data sets and there's a function
+called a line bump reductions so if you
+know that you're doing a beef call
+that's actually using more resources
+then it's going to account for you can
+do a bump reductions with some number
+afterwards so for example if you do term
+two binary in earlier version of a line
+before it was fixed then you can do a
+bump reductions with the size of the
+binary for example afterwards and then
+you get the number that's more in line
+with what what's actually happened so
+you can actually see this
+nowadays with a nice function called
+adding system monitor which now takes a
+long scheduled argument so you can
+monitor for long schedule things and
+then give the number of milliseconds
+that you think is long so in this case I
+said 10 so if one scheduled run takes
+more than 10 seconds we will get the
+monitor event so
+whoof
+if we for example call list sequence
+with a huge number it turns out that it
+goes into something that takes a long
+time and we get a long scheduled event
+so if we do it for reasonable numbers
+it's not a problem but if you do it for
+a big number and also as I said function
+calls are counted as reductions but
+returns are not so we have this linked
+return function here which just counts
+down to zero and it does this not tail
+recursively but recursively and all its
+way back it adds one to the thing so
+this is not a function call this will be
+in line operation in the beam and it
+will not count as a reduction so if you
+do call long schedule with a big number
+it will actually not count reductions
+and you will get a long schedule on this
+the plus in line with possibly but you
+could probably make something else that
+just returns for a long time so return
+does not use should you be worried no do
+you need to know about it probably not
+use tail recursion and don't have
+insanely long cold chains and this you
+do normally so it's not a problem well
+in that case what was it four million
+and I think that was sort of the border
+in my case for the ten milliseconds
+thing to trigger
+niffs should you be worried yes do you
+need to know about it yes what can you
+do it on to sniffs please if you sniffs
+make sure that they can yield some time
+in the NIF and that they're using
+reductions in accordance with the amount
+of work they do or wait for dirty
+schedulers that are supposed to come in
+are 17 and then yeah all is fine
+okay so there's usually one schedule a
+pack or you have several prioritize run
+queues preemption is done by reduction
+counting it's not perfect and the load
+balancer will try to minimize the number
+of active schedulers so that can be good
+or in some cases bad questions
+have I had the chance to play with the
+dirty skaters at all no yes I mean
+should be
+runnable or you shouldn't even go out
+there I think yes
+I'm confused now but I'm sure you're
+yeah so if if you're not actually having
+a timeout but you have zero then then it
+it doesn't I don't think it even leaves
+the coast to reschedule or it just keeps
+on running in the in the beam pretty
+sure about it but yes you can easily
+look at the source code very fine
+okay yes
+so its first of all it's it's hard for
+them to actually end up in the same slot
+usually it's a big typing wheel and I
+you have sixty five thousand of them but
+of course there's the the lock on the
+timing wheel so so actually adding
+things to the timing wheel and it can
+become a problem but I haven't seen it
+myself but and I tried to stress it but
+I did manage to do it but theoretically
+it should be a problem so if you can
+come up with an example I would be happy
+to see
+yes so there's a nice feature now that
+you can do the lock profiling and if you
+recompile your random system with look
+profiling on and then run your
+benchmarks or your test Suites or
+whatever you will get many interesting
+results so very nice tool that I hope to
+be able to present more about in a later
+talk
+so how are a synchronous treads handled
+with regard to reductions so there
+they're not so that they are just see
+processes running at doing their work
+and for each a synchronous tread you
+have a action a synchronous thread that
+is running on the side and it's not
+affecting all the other schedulers in no
+no unless there's a bug in something
+that's done in them no it's not supposed
+to do that
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

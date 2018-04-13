@@ -1,0 +1,1571 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Understanding Java GC and What You Can Do About It | Coder Coacher - Coaching Coders</title><meta content="Understanding Java GC and What You Can Do About It - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Learning-Library/">Oracle Learning Library</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Understanding Java GC and What You Can Do About It</b></h2><h5 class="post__date">2013-01-30</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/3lX1kc4yjg4" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so hi everyone my name is guilt and I'm
+the CTO of Azul systems and hopefully
+you're in the right talk what we're
+going to cover in this talk is pretty
+simple it's an educational talk about
+garbage collection it's not a talk about
+how to tune the collector it's it's a
+talk that is intended to get you to
+understand how this machine that is a
+garbage collector in general works and
+hopefully with that knowledge you can
+use your own brain to figure out what to
+do and how to play with the various
+settings or configurations or issues you
+might run into you'll learn a bunch of
+things and I like to tell people you
+know bebe careful with what you do with
+this because the first thing people like
+to do is start experimentation and
+that's fine in the lab but but don't
+don't conclude things too fast from here
+and taking them into production and
+since it is only make a garbage
+collector that we're really really proud
+of I promise I won't be telling you
+about how great debt collector is until
+the very end of this talk part of it is
+because I want you to understand all the
+terminology so you can really understand
+why are collectors as good as it is but
+but this is not a commercial pitch of
+our product is to be clear it's a little
+echoey on on sound here is this is is
+this working ok sorry ok ok because I
+can hear myself from all directions here
+ok so a little bit about me as i said i
+miss ETO of Azul systems and I've really
+been working on garbage collection for a
+little over a decade now really looking
+at different approaches or approaches
+there a counter trend or counter to how
+the rest of Industry seem to approach
+garbage collection at least in a
+commercial sense here's some evidence of
+me working in the garbage collection
+this is this is a real picture in my
+kitchen in 2004 and that is a trash
+compactor it's compaction was not
+working the way I wanted it was pausing
+so I took over the garbage collection
+booking and then it really did get stuck
+but it was a great opportunity for a
+picture but on a serious note you know I
+I had actually built collectors both the
+pause lists and ce4 algorithms which are
+published and peer review papers are
+ones that I've created along with some
+other people at azul and I've built a
+lot of other things not just garbage
+collectors JVMs and general operating
+systems device drivers firewalls and
+networking equipment and big java
+management systems for millions of
+subscribers so I've played around with a
+lot of parts of the overall stuck java
+building JVMs came to me as a result of
+the others so a little about azul before
+we get into the beef of the talk that is
+all we have one mission and that's to
+build scalable virtual machines and we
+basically have had the approach of doing
+whatever it takes to make that happen
+for about a decade and whatever it takes
+included some very interesting and
+sometimes seemingly crazy things like
+building our own hardware building our
+instruction sets building your own chips
+this is a schematic of a 700 of a 768
+gigabyte machine with 864 symmetric
+cores in it we actually build and ship
+things like this and we delivered three
+generations of Vega which is this
+architecture but about four years ago we
+looked at the hardware roadmap for
+commodity servers and concluded that we
+don't have to build our own hardware
+anymore because the stuff we used to
+need custom hardware for is now
+available is going to be available on
+commodity hardware and as of about a
+year and a half ago we are focused
+primarily on software our product is
+called Xing is the JVM that's focused on
+linux x86 and delivers a lot of what we
+used to need custom hardware for you
+know eight years ago to deliver now
+we're known for garbage collection we're
+known for elastic memories and
+virtualization tricks but most people
+associate it with the big JVMs or not
+pausing in you know our products pretty
+much do that but across a wide Specter
+okay so how are we going to do this talk
+we're going to cover some vente mendel's
+and key mechanisms of GC I'm going to
+talk about terminology and metrics with
+specific terms and try to define some of
+them will then look at using those terms
+to classify actual current commercial
+collectors you can get your hands on so
+you can understand what their mechanisms
+actually do I'll get into a problem i
+call the application memory wall problem
+or simply put why stop the world is a
+big problem and then talk about our
+beautiful sea for collector there's
+actually a solution to that problem
+towards that so before I get into that I
+like to ask audiences this size a
+question almost always just how big is
+your heap size and I'm not asking you
+what your application does just how big
+is the heap size in your application so
+how many of you have more than half a
+gigabyte of heap okay a lot of you most
+of you okay how about more than a
+gigabyte still more than two you can
+keep your hands up in wheelie no might
+just drop them when they're done more
+than 20 k a little fewer but still a lot
+more than 4 gigabytes look around okay
+and you just it's not just people
+getting tired more than 10 gigabytes
+you're in for your courageous souls more
+than 21 to 45 more than 50 whoo we have
+a winner oh no two of them it's a tie 30
+it's a demonstration and let me show you
+how how how good this could controller
+works see right there that's where you
+guys were that's an educated guess I've
+been doing this for more than two years
+and they the audience always falls into
+this bucket you know vast majority is
+there
+and there are some courageous souls that
+have more than that I'll get back to why
+this is very important about 20 minutes
+from now but keep this in mind so why
+should people care about how garbage
+collectors work or understanding a
+little about how it works not just this
+invisible gift you get from a jvm i like
+to use an example a real world example
+and i call this the story of the good
+little architect and it's a real thing
+that we've run into and exemplifies why
+understanding GC is important an
+architect being a good architect is
+first and foremost dependent on your
+ability to make other people do what you
+decide to do actually impose an
+architecture on a project on a team if
+all you know is how to do things right
+but you don't get other people to do
+them you're not an architect you're a
+philosopher and that's the key quality
+of good architect needs to have and you
+know you'll see the work throughout the
+project not just in their code and early
+in jewels pause less GC world in time
+this is six or seven years ago we ran
+into an actual application that had 18
+second pauses which for us was unheard
+of so we investigated to see what this
+application does and we found that every
+time our collector ran it dealt with
+tens of millions of finalized errs of
+objects being finalized in every GC
+cycle and we were doing finalization as
+to stop the world operation at the time
+so since then we've stopped doing that
+and we could handle even those who
+currently but we're trying to figure out
+where this comes from because it's very
+rare to see that kind of volume so we
+looked at the code and we found out that
+every single class written in this
+project over a period of two years
+somebody gets it already had a finalizer
+now can you guess what the finalizer did
+well here's what it did it put nulls in
+all the fields and I did it to help the
+garbage collector along to make it not
+have to change these pointers that have
+things in a
+and this was imposed on the entire
+project we saw every single class they
+wrote had this it was architecture now
+it's a little funny if you understand
+how garbage collectors work it's sad
+maybe but the thing is this is exactly
+the right architecture for a c++
+application when you're right in C++ you
+need to be very and you have a large
+project you have religious destructors
+going around cleaning up and making sure
+things are closed and and that links are
+broken between things and if if you have
+a circular linked list something breaks
+it apart and these things are really
+needed so it's exactly the right thing
+for a C++ architect to do but when that
+C++ architect moves to a Java project
+they should learn a little about how the
+collectors work because this is exactly
+the wrong thing to do in a garbage
+collected environment it's the worst
+thing the garbage collection could have
+done to it as opposed to something that
+helps it along so hopefully that
+examples explains why this stock exists
+or at least some of why you should care
+so when I look at what people think
+garbage collectors do or how they do
+them I find it most of what people seem
+to know is actually wrong and it's often
+wrong in a good way or in a bad way or
+now often garbage collection does better
+than you think and these are examples of
+much better for example GC is extremely
+efficient I'll get to exactly what that
+means in a few slides but garbage
+collection is super efficient it is more
+efficient than Malick it's more
+efficient than any other form of
+allocating memory that is not in a stack
+and you'll see the math for this in this
+talk okay in addition dead objects cost
+us nothing to look at in all the fast
+collectors that exist in all the JVM
+today there are no cycles spent on dead
+matter at all that's an important thing
+that most people don't get right up
+front a third one is garbage collection
+doesn't need help to find that objects
+it will absolutely find everything that
+is that and not reachable every time no
+ifs or buts
+there are no linked lists that can hide
+from it it doesn't have to reference
+count anything at least not in JVMs of
+precise collectors so these are all good
+qualities and most people don't
+necessarily think the collectors are
+that good and they are all this good
+this is not specific to one collector
+however the reverse is also true there
+are a lot of things that collectors do
+that are much worse than you think and
+for example most people believe that
+they can tune a JVM so it won't pause a
+lot and unfortunately most jvms you will
+absolutely see a one-second pods per
+live gigabyte roughly something on that
+order and all you can do is change the
+win and the how often but not the if so
+that's one thing and the one is garbage
+collection will find dead stuff but it
+won't stop you from leaking memory if
+you keep retaining things memory will
+grow so it does eliminate an entire
+class of memory leak bugs but not all
+memory leak bugs and then the last one
+which unfortunately I see quite a bit of
+is that when you do tune the collector
+and you've taken the bad thing and tuned
+it and tune it until you had a working
+test that passed the requirements and
+criteria most likely you then solve the
+problem you just swept it under the rug
+I often see people have a criteria for a
+one-hour test run ramping certain users
+pausing only so much or having a certain
+percentile first time they run it it
+doesn't work so they tune it still
+doesn't work after three days of tuning
+they got it to work but they really did
+is move the bad thing to minute 61 it's
+pushing it to the future that happens a
+lot and unfortunately this is a common
+artifact of how garbage collectors are
+tuned it does not occur in non garbage
+collected environments which is why it's
+a specific problem to GC so that's some
+of the general things about it I like to
+say that trying to solve GC problems in
+application architecture is something
+that's doable but iffy it's hard it's
+dangerous you need a lot of experience
+and they could go badly wrong
+the thing to keep in mind when you're
+designing your application for a garbage
+collected environment thinking of how to
+control your allocation rate your heap
+size your morphing or lifetime of
+objects remember you're not the only one
+writing code there and most likely in
+Java you're leveraging a lot of other
+people's code some of them work with you
+some of them work for other companies
+and not all of them are going to write
+code the way you decided to so if you're
+going to leverage other people's code
+you just have to live with their
+allocation behaviors you don't have that
+much control over it you do have certain
+things you can do and these are all
+example techniques of ways of working
+around GC limitations circumventing tum
+dealing with them and none of these are
+wrong per se each one of them has a use
+but almost inevitably if you use any of
+these techniques you're building a
+garbage collector and unless it's a very
+simple problem you probably don't have
+the 10 years of investment that the GC
+and the JVM has behind it so you might
+run into problems ok so that was
+introduction and some background let's
+talk terminology and why do we need
+terminology because the words matter and
+we need to agree on what they are who
+here knows what a concurrent garbage
+collector is ok good number of you how
+about apparel garbage collector fewer
+than concurrent so this is a common
+situation i run into because the words
+are very similar so we need to define
+them a concurrent collector as a
+collector that does its work without
+stopping your application while the
+application is running concurrent with
+the application a peril garbage
+collector is simply a collector that can
+use more than one thread to do its job
+these two things have nothing to do with
+each other they're not interchangeable
+you could be concurrent and not parallel
+parallel not concurrent you could be
+both or neither this is what the words
+mean
+and the reason for this confusion is
+partly because the words in English mean
+very similar things and when they get
+translated they mean very similar things
+and partly because if you go 30 years
+back in academic papers you'll find
+papers talking about panel collection as
+what we today so they call concurrent
+collection so there is confusing written
+material on the subject to but this is
+what everybody in the GC world means in
+the last ten years at least when they
+talk about collectors so let's define
+some more turns stop the world you've
+heard this lot i'm sure you've
+experienced it a lot probably they stop
+the world collector is the opposite of a
+concurrent collector something has to be
+totally stuffed for the collector to
+work oh it's the application can't move
+incremental usually associated with stop
+the world an incremental collector is a
+collector that can do its job in parts
+stop the world parts most of the time
+but not monolithic parts so for example
+you can have a monolithic piece of work
+like what a copying collector might do
+move everything from here to there and
+you can't stop them in the middle so
+that's one big monolithic stop the world
+or you could find a way to increment
+through it do a little bit of work get
+to a place where it's safe to let the
+application run then do a little more
+work and so on so incremental usually
+means slicing up to stop the world into
+smaller pieces and there's some
+interesting incremental collectors out
+there now last word which is really
+important to explain is the word mostly
+mostly means exactly what you would
+think it means but you need to look at
+how it's being used in describing
+collectors and algorithms mostly means
+not always mostly means sometimes this
+won't happen there won't hold and that's
+what it means when otherwise it wouldn't
+say mostly so mostly concurrent means
+sometimes it will stop the world mostly
+incremental means sometimes it will be
+monolithic it's it's it's a nice escape
+way of saying the opposite of what
+you're saying
+some more definitions precise versus
+conservative collectors and you all live
+in a world of precise collectors if
+you're programming in Java a
+conservative collector is a collector
+that's not quite sure where all the
+pointers are there may be pointers in
+places it doesn't know about there may
+be things on the stack that it doesn't
+know if they're a pointer or an integer
+that looks like a pointer that happens
+to have a value and when a conservative
+collector collects garbage it needs to
+treat things that are actually not
+objects as objects because they might be
+and it also has a serious limitation
+because it can't move objects around if
+an object needs to be moved and you need
+to change all the pointers to the object
+if you see an integer that happens to
+have the same value as that pointer it's
+not a good idea to change it to a
+different number that would be a bad
+thing or if you don't know where some
+pointers are and you didn't change them
+you end up with a dangling pointer to a
+bad location can precise collectors or
+the opposite of this it's a collector
+that knows exactly where every single
+reference is in the world and whether or
+not it is a reference at the time that
+it needs to do garbage collection work
+you have to be a precise collector to
+move objects you need precise
+information at least about the objects
+that you're moving and every precise
+collector gets support not just from the
+collector knowingness but most of the
+work involved in this is actually the
+compilers the JIT compilers need to
+produce information about every code
+point you might be stopped at and where
+every reference is on every register in
+every stack location at that code point
+that's a lot of information information
+normal compilers simply don't produce so
+when you leave here thank the JIT
+compiler writers because they produced a
+lot of information that lets precise you
+see happen all the commercial jvms you
+can get your hands on today our precise
+collection JPM's okay so it's a category
+that's that's common to all of them and
+predictably every single one of them has
+a moving collector it will move objects
+from place a to place p at least once in
+the
+the GPL so I talked about this
+preciseness well the preciseness is not
+there all the time it's there you know
+if I have a running thread that's moving
+around and a collector that's running
+concurrently with it that's a moving
+target it doesn't have information about
+everything all the time so the places at
+which we have information or something
+we call safe points a garbage collector
+set point is a point or range of
+execution in the thread where we know
+where all the references are where an
+external thread can actually look at
+this thing and find every reference and
+follow it or manipulate it or change it
+safely that's a GC safe point there are
+other types of safe points not just GC
+and I often will switch and talk about
+both the same way but an example of a
+non GC safe point is that the
+optimization safe point that's the safe
+point where you need more than the
+information about the references you may
+need to know things like we're all the
+variables are so you can change
+representations of your stack of things
+like that when we say bring any thread
+to a safe point we mean get it to that
+point and don't let it executes past
+that point now that sounds like
+nitpicking because that sounds a lot
+like let's stop it there right but very
+importantly there are running threads a
+lot of them often that would be at a
+safe point but consuming a lot of CPU
+and a Jane I call is a great example of
+that every time you call native code
+through J&amp;amp;I you're crossing into a safe
+point the entry to the J and I we know
+what all the references are now Jen I
+could run for an hour it can invert a
+big matrix but it doesn't modify any
+references or change their locations
+until it gets back up to the Java side
+so it's at a safe point and what the
+collectors do is just stop it from
+getting back not stop it from running so
+being in a safe point does not mean
+being idle it just means not progressing
+past the point you need safe points to
+be frequent if
+not frequent and one thread might take
+10 seconds to get there safe point if
+we're trying to get to what we call a
+global safe point everybody will be
+waiting and that guy still didn't come
+and you get a big pause in network then
+in that pot as a result when we talk
+about a global safe point that's the
+system bringing every thread to a safe
+point that's usually your stop the world
+cause and collectors will do that in
+various points or phases in their work
+so we covered some terms let's look at
+what's common to all these collectors
+there are three things that all precise
+collectors do first one is fine all the
+live stuff the second one is deal with
+the dead stuff and the third one is move
+objects around every collector in every
+JVM does all three of these things none
+of them avoid them examples mark sweep
+compact commonly used in all generation
+collectors map 12 12 these mark is fine
+the live stuff sweepers deal with the
+dead stuff and put in a free list
+compact is move it together so there's
+room as you have run on lon running
+programs but copying collectors often
+used in young generations are another
+example of these three things a copying
+collector will move all the objects from
+a from space to a to space just pick all
+of them everything you can reach and
+move them over and when it's done the
+from space is empty that's an example of
+doing all three things in one pass it
+finds all the live stuff it deals with
+the dead stuff by freeing into our from
+space and it moves every object so all
+precise collectors do these let's get
+into a little bit of detail and some
+intuition into what the work means what
+the work load looks like for its
+collector the mark phase when collectors
+that have marks is pretty simple we
+start from something we call the roots
+static variables threads and we scan all
+the reference we find in them and paint
+them kind of follow through every
+reference and mark that's a lie that's
+that's alive and then when we look at an
+object we reach it we look at all the
+reference in it and we mark all those
+and we basically follow and paint
+everything we can reach through all the
+references that we get to from the roots
+at the end of a mark casse everything
+that's a line will be marked alive and
+if it's not marked alive it was not
+reachable from the roots so we can
+collect it it's it's that simple this is
+why circular linked lists are not a
+problem for collectors if you can't
+reach it it doesn't matter how its
+constructed and if you can reach it it's
+not garbage the work involved in doing
+this is linear to the live set to how
+much data is alive not to the size of
+the heap you can grow the heap as much
+as you want the same number of objects
+the same number of references same
+amount of work it's not going to change
+sweep is even simpler than Mark you scan
+the entire heap from start to end you
+look at those mark does Mark alive or
+not things and you take all the dead
+stuff and manage it somehow usually in
+free lists so you keep you basically
+have a list of these empty holes in the
+heap and that's all sweep it does find
+the dead stuff and put it in recyclable
+areas this work is generally linear to
+the size of the heap not to the live set
+it doesn't matter how much you have a
+lime it matters how big the heap is
+because you're going to sweep every part
+of it okay compact but why this compact
+exists over time if you run long enough
+with variable sized objects you'll get
+Swiss cheese holes in your heat and in
+what will happen is you get objects of
+different size allocated and collected
+and I'll get and collected and in those
+realists that you have have empty spaces
+in them that they're tracking but over
+you may not have an empty space big
+enough for an object that comes in you
+can have a heap that's 90% empty but I'm
+trying to locate a ten kilobyte object
+array of some sort and there's just no
+10 kilo byte hole in this thing it's
+it's gone a lot of small holes in it
+compaction deals with the fragmentation
+of memory by moving objects together and
+creating longer contiguous regions it's
+an absolute necessity to compact in any
+long-running application unless you have
+a fixed set of object sizes that never
+changes and remember anybody here
+process XML you don't control your
+object sizes okay you have variable size
+objects you will get Swiss cheese over
+time there's nothing you can do about it
+so compaction is necessary in compaction
+we have two main things one is we
+relocate objects we move them to a new
+location that's the easy part the second
+part is what we call the remap which is
+finding every single reference in the
+heap that might point to this object and
+fixing it to point to the new location
+you move one objects there may be three
+billion things that point to it you need
+to cover every one of them so the remap
+is the hard part the reason the remap
+exists is why we usually compact a lot
+of things at the same time because we
+may we're going to scan all the
+references that might hit it anyway we
+may as well scan it on behalf of a lot
+of moved objects compaction work is
+linear to the live set as complex as
+scary as it is it's only linear to the
+live set you only visit all the live
+references and all the live objects you
+don't have to deal with the empty stuff
+and if the heap grows the compaction
+work doesn't grow with it okay so that
+was the marks we've compact phases let's
+look at copying collectors copying
+collectors are simpler they start with a
+from space and they move everything to
+to space I cover that before at the
+beginning everything's in the front
+space everything points through from
+space we start with the roots we take
+every object we find we move it to the
+to space and everything we find inside
+of it when we grab all the objects that
+they point to and move into the new
+space at the end everything's in the to
+space and everything points to through
+space with a single pass
+complexity its linear to live set ok so
+we covered some basic mechanisms here
+let's look at their qualities a copying
+collector has an interesting downside
+when it's standing on its own you need
+twice the heap size to be reliable
+because when you're starting a copying
+collector you have no idea how much dead
+stuff there is or there isn't so you
+need as much room and you've just filled
+up this thing you don't know if it's
+empty at all you need as much room in
+the to space as you have in the front
+space otherwise you could get stuck and
+not be able to complete it's an
+interesting limitation a mark compact
+collected typically has a similar
+limitation but it's not quite as bad
+because it needs that much memory in
+order to reliably compact the entire
+heap in one pass but if it doesn't have
+all that space if you just stop
+somewhere in the middle copying
+collectors tend to be monolithic it's
+all or nothing mark sweep compacts which
+is you know not just mark and move but
+sweep and backed in place can compact in
+the same space so they need only as much
+memory as 1x plus a little bit to make
+it to work which makes them more
+efficient in memory and both copy and
+Mark compact are linear only to the live
+set mark sweep compact is also linear to
+the heap size and so larger heaps make
+those slower or bigger you may be able
+to avoid some compaction or variants
+that do mark sweep and sometimes compact
+we'll cover some of those and I already
+talked about the copying being
+monolithic you just check on time and
+see how we're doing here okay so last
+little mechanism before we go into some
+more interesting stuff generational
+collection who here knows what
+generational collection is good part of
+you so generational collection is based
+on a simple observation called the week
+generational hypothesis
+it's the observation that most things we
+allocate die pretty quickly they die
+young that's not the same as saying that
+most objects are young or die young most
+live objects are actually old but most
+of what we allocate die is almost
+immediately and we use this operation to
+create efficiency in garbage collectors
+so if we could somehow focus our
+collection effort only on things that
+were recently allocated in this
+statement is true that most of that is
+just dead stuff then we could apply a
+collector that is linear to the live set
+and get a lot of heap size back for it
+so for example if my young generation is
+only 1% alive and I use a copying
+collector its linear only to that one
+percent not the other hundred then it'll
+be very efficient we only have to copy
+the life stuff we get you know copy a
+little bit of life stuff we get a lot of
+dead stuff back and we never even look
+at it when I said before we don't spend
+any cycles looking at that matter the
+copying collector doesn't look back at
+the from space at all it just moves the
+youth of life stuff away and boom we've
+got gigabytes of empty memory so that's
+a very effective way of gaining
+efficiency and we can only do that if we
+deal with the exceptions to it so some
+things will survive there and will stay
+alive and we have to move them out of
+that area or that assumption will stop
+being true so we have to focus our
+collection only on the stuff that is
+sparse only on the stuff that will tend
+to be dead and young and if something
+isn't that like some stuff I read up and
+put in a cache and it's lasting for a
+while we have to move it elsewhere
+promote it into what we call the old
+generation of it and that has to happen
+or the entire thing won't work so
+there's efficiency that comes out of
+this it's usually an order of magnitude
+plus 10x 20x better efficiency on
+garbage collection from this simple
+trick it's been around for about 30
+years so every JVM uses that it's almost
+a necessity if you're going to run on
+commercial servers these days when you
+look at how this thing works how do we
+do this trick of collecting only the
+young generation we use something called
+a remembrance set remembered set is
+basically a way of tracking all the
+references into the young generations
+that are not in the young generation
+things that point in there from other
+parts of the heat and usually it's a do
+generation system so basically the
+remembers that tracks all the places in
+the old generation that our roots for
+the young generation we treat them as
+roots we start marking or copying from
+them and then we get to focus only on
+the young stuff and not look at the old
+stuff until we collect that part the
+remembered set is critical without this
+you can do generational collection the
+other cool thing about generational
+collection is that 2x annoying behavior
+of a copying collector is no longer
+needed if we use a copying collective
+for the young generation but a mark
+sweep compact with all generation we
+could just overflow to the old
+generation if we have that rare case
+where there's not enough room in a 24
+the front anyone here tune survival
+ratios that's what you're playing with
+right you're hoping that the two is big
+enough and if it's not it just goes to
+just prematurely promote it to the old
+generation it doesn't crash it's a good
+news I mean otherwise you would need a
+survivor space as big as the Eden to
+survive usually I said I won't tell you
+how to tune collectors here but a
+trade-off that's very important in young
+generation and generational collection
+is to keep the object lifetime and
+survival behavior right you want to have
+things survive in the young generation
+more than once more than allocated
+immediately go old if they happen to be
+alive when we hit the young generation
+and that's because at the point where we
+collected the young Gen there's a whole
+bunch of stuff that was just now
+allocated it's going to die in a few
+milliseconds it's just unlucky enough
+that we collected now so you tend to
+want to let them live at least a cycle
+so that they'll hide out in and they'll
+die there and you want
+too much but on the other hand if you
+let them live too long hundreds or
+thousands of times in there then the
+whole assumption that that thing is
+sparse will go away and will have old
+objects twenty-five thirty percent of it
+will be alive the efficiency will go out
+the window so you need to get it in that
+range luckily that's not a hard thing
+it's pretty easy to get the young
+generation size right for these things
+it's not super sensitive so how does
+this rumor it's that thing work I told
+you what it's for how do we track it so
+we basically need to track every
+reference that we store outside of the
+young generation that might point into
+the young generation and a common way to
+do that is something called card
+markings that the only way but it's
+practically the way most commercial
+collectors work and card marking works
+by saying for every heap address or
+range of heap addresses we have
+something that says there's a root in
+there or may be able to in there so
+every time I store reference there also
+mark a place there that says in that
+word or in that 512 byte range there's
+something you need to scan that as a
+root see if it points it to the young
+generation we use a right barrier a
+right barrier that means every time we
+store reference into the heap we also do
+this card mark and the JIT compilers
+omit that right barrier on every java
+store it's actually two stores right now
+they're variations of this hotspot
+typically uses what's called a blind
+right barrier it's a pure store of a one
+there if I stored there but there are
+variations of precise and conditional
+ones that say only star one if it's a
+pointer from the altar than you or only
+store one if it's not already a one and
+there's actually a flag for tuning of
+that in hotspot so that's how that thing
+works typically so putting these
+together let's look at what the combos
+look like most commercial systems most
+commercial gbms have are generational
+most of them will have a young
+generation that is a copying collector
+and most of the time it's going to be a
+monolithic stop the world
+pin collector by now you should
+understand every word on these on this
+slide okay I i define them i believe the
+old generation is usually a variant of
+mark sweep compact or more compact and
+it could be any of these combos could be
+generation so it could be stopped the
+world of concurrent and mostly
+concurrent or incremental stop the world
+are mostly incremental stop the world
+okay I'm not going to define all these
+terms tell you that the mutator is you
+guys you guys sit there and mutate the
+heap so the collector actually has to
+deal with that and monolithic stop the
+world is an important definition we
+covered a bunch of the others here but
+later if you look at these slides these
+are all important terms to understand in
+garbage collection here's some important
+metrics to understand in garbage
+collection again I want to find all of
+them but someone's to highlight
+allocation rate how fast you allocate
+objects pretty intuitive but our
+location rate is typically linear to
+your work right not knowing what your
+application does I can guess that if
+it's allocating 100 megabytes a second
+when you're doing a hundred transactions
+per second or probably do 200 megabytes
+a second when you're doing 200
+transactions per second so how fast you
+go and how fast you allocate are
+strongly tied to each other let me
+tension right that's a little less
+intuitive that's not how fast you make
+objects is how fast you touch pointers
+how fast you're modifying where things
+point and storing on top of them so we
+have to deal with them and that too is
+almost perfectly linear to your work
+double the work double the mutation rate
+if your collector is sensitive to these
+metrics that's an important thing to
+understand because the collector might
+work perfectly well or within certain
+SLI parameters as long as allocation
+rate is not beyond X or as long as
+mutation rate is not beyond X and it
+will work perfectly well until it just
+stops working perfectly well if you go
+one percent above that point so finding
+that breaking point and the point of
+sensitivity is important marking time in
+compaction time are also important terms
+because they tend to dumb in
+eight something's wrong with the clicker
+they tend to dominate pause time if poss
+time exists so let's talk about some
+trade-offs and this is the here's how
+the machine works and you can deduce
+from that what flags to set trading cpu
+and throughput and in memory so I'll
+give you a couple intuitive limits to
+understand how memory and CPU on GC
+works both of them are easy to
+understand the first one is that if I
+had a gigabyte of life stuff in one bite
+of dead stuff it doesn't matter what
+collector i use and what algorithm I
+used every time i allocate a bite I need
+to find that bite in a gigabyte it's a
+lot of work so it's going to spend a lot
+of CPU doing that and GC will be all you
+do and you're looking at a gigabyte to
+get one bite you're not going to be
+doing much work that's an intuitive
+point its extreme thrashing the other
+intuitive point is that if I had
+infinite memory I would never have to
+garbage collected so I won't be spending
+any cpu on that right and between the
+two there's an almost perfect one over X
+line graphically it looks something like
+this here's your life set you have to
+have at least that to work there's an
+almost perfect one over X line that
+reduces the amount of CPU you spend on
+garbage collection as the empty memory
+grill across if we're the same life set
+increasing the heap size increasing the
+heap size increases the efficiency of
+garbage collection to an arbitrarily
+small number remember I told you this is
+the most efficient way you could do
+allocation allocation in a contiguous
+region for garbage collection which most
+collectors do and simply a bump of a
+register pointer forward that's all it
+does there's no smaller amount of work
+you could possibly do well it actually
+checks to see if it's past the point and
+it bumps it so it's three instructions
+but that's faster than any malloc or any
+free list or any other mechanism could
+possibly do now what do we pay for that
+every once in a while we have to go
+collect the memory and that's going to
+be work but we can control how much that
+work is empty memory buys you efficiency
+with garbage collectors an empty memory
+is a cheap resource
+especially these days so that's how
+efficiency in collectors work now
+looking at it a little more what we're
+saying is empty memory and cpu power
+basically interchangeable here not for
+your application for the collector
+unfortunately I can't give you that for
+your application in a way to understand
+that is this a bark both copy and mark
+compact collectors are perfectly linear
+to the live set right they recover all
+the empty memory in in that but the
+amount of work they do is kind of fixed
+by the live set and if i increase the
+empty memory i reduce the frequency of
+how open often i have to do a fixed
+amount of work that's why the efficiency
+is there so copy n mark impacts have
+this perfect doubling of efficiency
+every time you double the empty what did
+what do we control with this as I said
+it's all about efficiency so we control
+how much work we do we also get to
+control how frequently pauses happen if
+they do happen so doubling the empty
+people half the frequency of pauses but
+we don't control the size of the pauses
+with this okay the size of a pause is
+not getting any better when we increase
+the empty heap it's just how many cycles
+we do for allocated bite that gets
+better in fact in a mark sweep compact
+the pauses will grow because part of the
+work is linear to the sweep to the heap
+size and will get larger pauses it'll
+still get more efficient not in a
+perfect one over X slightly less than
+that but I'll still be more efficient
+with you this is the reason most people
+don't apply this tool because above a
+certain size the pot size is going to
+kill you you're going to be very very
+efficient but you can't handle the
+positive like a crash so that's why you
+don't go all the way with that often but
+it is a very handy tool doubling the
+young Gen size is a very effective way
+of reducing GC percentage so we talked
+about pauses a little let's talk about
+some techniques to deal with them so far
+we've talked about very simple
+mechanisms
+but what if we're doing all this stuff
+while the collector while the
+application is actually running so let's
+look at concurrent marking concurrent
+marking is you know I'm trying to figure
+out what's alive while you're changing
+what's alive and there's a classic race
+we call the concurrent marking race that
+goes something like this the collector
+is marking painting what's alive while
+this is going on your application is
+taking a reference the collector hasn't
+seen yet copying it and putting in an
+object the collectors already visited
+any racing that reference changing into
+something else putting it all in it now
+if it did this and the collector kept
+marking and didn't notice this happened
+at the end of the mark phase this object
+would not have been marked live the
+collector would think it's dead and
+really bad things would happen so every
+concurrent marker has to cover this case
+it has to make it impossible for you to
+move that around and for it not to
+notice there are a few techniques for
+doing this the most common one and
+current commercial collectors is a
+multipass marking technique and it goes
+something like this the collectors doing
+the marking you're doing the mutation
+and while you're mutating for everything
+you change there's a tracking
+information going on something that
+tells us that got changed so the
+collector finishes its market goes back
+to the beginning and says let's visit
+all those things that got changed and
+could do that concurrently while you're
+running but that means you're making
+more changes and eventually you're
+hoping this list gets small to the point
+where you're willing to do a very small
+stop the world pause and just catch up
+with it ok that's a mostly concurrent
+multipass marker this works it works
+pretty well except that it's sensitive
+to mutation rate highly sensitive to
+mutation right double your three foot
+there's twice the number of these things
+ready at some point you may be mutating
+faster than the collector can reskin and
+you'll fall behind or some are maybe it
+can scan that fast but it's taking long
+enough that you've run out of
+t memory so what's the point of being
+concurrent if any of you are using the
+CMS collector you've seen this happen if
+you've ever seen the message concurrent
+load failure happen or this is one of
+the reasons point but this is an
+effective technique it not doing
+perfectly stop the world market another
+interesting technique is not concurrent
+but incremental compaction so we look at
+the compaction it's a big thing every
+time we move an object with the scan the
+whole heap that's a big mess can we do
+it with a smaller pause or smaller part
+pauses and the way incremental
+compaction works is that we look at
+regions and we carry these remembered
+sets where every region knows what other
+regions pointed to it not just evolved
+in you and the collector looks for sets
+where here's a region that only has 23
+other regions pointing to it so if I
+move objects in this around and
+compacted I don't don't have to scan the
+whole heap I just have to scan 23
+regions and here's another region that
+has another 20 and these 20 in these 23
+actually overlap so I could do work for
+both together and the collector looks
+for these sets of regions where it can
+do the compaction and the remapping work
+in a contained pause in some target
+number and if it can find it it'll do it
+and then do a good job it does have a
+few downsides one of them is n square
+complexity when when you grow the heap
+the number of regions grows and the
+number of regions pointing into anyone
+regions grill statistically that's where
+your n square comes from you can combat
+that by making bigger regions that hurts
+the pause time granularity or you can
+compat it by allowing for bigger
+positives but if you want constant pause
+you're going to have an N square
+complexity problem there are other
+issues with popular objects if one
+region has a if a region has one object
+in it that half the heat points to
+doesn't matter what the other objects
+have been there and you could get stuck
+with the whole heap having a popular
+object in every region and the heap
+could be ninety-nine point nine percent
+empty but you still can't compact it
+without
+full pot but this is a good filter in
+fact filters are what we've been doing
+for about 15 years I call this delaying
+the inevitable this is the classic way
+of building better and better collectors
+over time what we do is we try to avoid
+the hard thing by pushing it at the
+future and putting a filter and head of
+it generation collection is a very
+effective way of avoiding all Jen pauses
+then with indulging we can try not to
+compact them and recycle them in place
+but eventually fragmentation will force
+us to compact and if we compact we could
+try and do that incrementally but
+eventually we're going to have to deal
+with the popular objects all these are
+moving problems to be more rare in the
+future very effective ways of getting
+efficiency and reduced occurrence of
+pauses but not reducing pot size so
+let's classify the collectors we're here
+at the classification point and I just
+need to check on my time sort of okay
+typical collectors I've already said
+this this is how they're going to fall
+into categories so let's start with the
+simplest most common collector used in
+java hotspot parallel GC collector the
+reason it's the most common one used is
+because if you're running on a server
+and you say nothing this is what you get
+it's a default collector it is a
+monolithic stop the world copying you
+Jen simple and it's a monolithic stop
+the world mark sweep compact all chin
+I'll stop and let that sink for a second
+the next one which has been around now
+for a little while it's used in
+production on a lot of servers is the
+concurrent mark sweep GC also known as
+CMS so this is a mostly concurrent
+collector that's very popular these days
+so remember i said what mostly means
+right here's the classification of the
+young generation for this mostly
+concurrent collector it's a monolithic
+stop the world copying nugent very much
+like peril the word concurrent only
+applies to all joined in this collector
+in elgin waverly mostly concurrent non
+compacting all gen that uses a mostly
+concurrent market it's that multipass
+marking scheme
+the boat works pretty well up to a
+three-foot point it has a concurrent
+sweeper but since it doesn't compact it
+has to fall back to something which is a
+full stop the wall GC on about 12
+different possible reasons that's the
+biggest part of the mostly sometimes
+it's not and will fall back to a full GC
+another popular collector well
+experimental recently turned into
+production collector but we talked about
+it a lot is the garbage first collector
+g one g c and by the way this
+classification actually holds exactly
+the same for the j9 balanced collector
+from my understanding of it at least but
+here i could actually read the code so i
+know what it does precisely it is a
+monolithic stop the world copying newgen
+it has a mostly concurrent all gen
+marker similar but not quite the same as
+CMS it has a stop the world mostly
+incremental compacting all ghin this is
+a quote from the design criteria for
+this collector it's to avoid as much as
+possible doing a full GC that means it
+does a fool you see that's its fall back
+okay so that's how you classify these
+now with that I'm going to switch
+quickly to the problem that I was
+talking about before and that's that
+stop the world garbage collection is
+becoming a serious issue and remember
+that i asked you guys this question and
+got some polling results right well
+what's the problem with this how many of
+you programmed to servers a lot of you
+well this is a server
+that's the 5,000 our server from Dell or
+a ten-thousand-dollar server from Dell
+and most of you the vast majority of you
+following a category of using somewhere
+we need two to four percent of a
+modern-day cheap commodity server that
+is a problem right it's a problem in
+many ways not just your problem it's an
+industry problem and you know today's
+servers are just powerful abundant in
+memory of bunton and cpu and our
+individual application instances seem to
+be tiny parts of that and we often have
+rationalization of why that is but it's
+just an observation but that's what's
+going on our application instances for
+whatever reason are having a hard time
+making good use of cheap hardware and
+that problem is growing fast at Moore's
+law rights it's not a slow problem now I
+often raise this point and people ask me
+the obvious question of come on four gig
+is a lot of memory who needs more than
+that in my answer is you know this
+questions been asked and answered many
+times over history some people made a
+lot of money after answering it wrong
+but but generally intuitively this does
+not last okay so is there a right number
+we're right now arguing whether were you
+know six gig yeah it just moves and
+invite alike guild Bill Gates says he
+never said that so that's the actual
+quote from him but the actual target
+here moves there's a point in time where
+it's right now this number and then that
+number and it moves at about 50 to 100 x
+a decade which is pretty fast looking at
+over history I like to track something I
+call the tiny app history tiny apps are
+those things that you buildin if you
+broke them into pieces you'd be
+embarrassed to tell your family about or
+your friends I track tiny app history
+over time over my memory and it used to
+be a hundred K than it was 10 meg then
+it was one gig around
+era and these are the servers we put
+them in and usually if an app can be
+handled by a computer that's cheap and
+easy to get it's kind of silly to break
+into 200 pieces if I took a 1 kilobyte
+array and wanted to sort it and I said
+that I did that by spreading it onto a
+dupe farm with a thousand nodes in and
+got in and reduced it back that would be
+interesting but not something to be
+proud of now if it was a petabyte right
+now that would be necessary so it just
+moves over time well here we are in 2012
+a quarter terabyte server costs less
+than 10,000 are less than any server on
+there what should the tiny app sighs be
+that people are not embarrassed to talk
+about it should be around 100 gig but a
+lot of you were not embarrassed at all
+to talk about you know or gig six gig
+five gig and that's okay because you're
+doing the only thing that works the
+memory wall looks like this about a
+decade ago the ability of Java to handle
+large heaps stopped happening and people
+stopped growing the heaps with them and
+the thing that's actually causing this
+is garbage collection it's pauses in
+garbage collection so at some point we
+don't like to build apps to pause for
+three minutes at a time so we don't do
+that we stop at the point where people
+are unhappy but still live with it which
+is a few seconds and most JVMs will stop
+for several seconds at a time that the
+heap sizes that you stopped at which is
+why it happens and the root cause for
+this is this link between ski on
+responsiveness that's causing that and
+just checking on time yep so um GC is
+responsible point but a lot of things in
+GC are not responsible point it's not
+about efficiency it's not about the size
+of the little things it's not about the
+frequency of them it's about the fact
+that bad things happen and customers or
+bosses will see them so we just don't
+like to build broken systems and that's
+what's keeping us at small memory sizes
+it's tiny percentiles of overall system
+sighs so um we can look at the nun
+monolithic stop the word problems that
+are causing this and how to deal with
+them so here's the most common way we
+deal with them it's very
+effective I'm and it's surprising how
+often that happens so let me explain how
+this works you run a test you say 40
+minutes is enough and there's no pause
+in it if you ran it a little longer you
+would have seen a couple glitches and
+you say that's a measurement error right
+and then you know you look at a day and
+it looks like this and people are
+calling you at night right so anyways
+this just say you know yeah I know it
+happens it happens to everybody I'll
+deal with it later this is another cool
+way to deal with it creative language we
+rename terms to make the problem sound
+good this is an actual quote from an
+actual JVMs guarantee we will guarantee
+a worst case of 5 milliseconds
+ninety-nine percent of the time this is
+actual marketing material one percent of
+an hour is 36 seconds I can pause for 36
+seconds but guarantee 5 millisecond
+worst-case response time 99% of a thing
+that's an honest statement and just
+rename the problem mostly that's a
+common way of dealing with the problem
+there are other things like when you set
+goals for projects saying that you know
+you want it to be fairly consistent not
+consistent fairly consistent it's okay
+sometimes that consistent or you know
+typical pauses will be in the few
+milliseconds or tens of milliseconds a
+means some pauses will be a lot bigger
+than tens of milliseconds that's what
+they're saying there but it sounds nice
+right now there's actual other ways to
+do it and that's to measure stuff I've
+actually put a public domain tool called
+J hiccup up on our website and it
+produces charts like this for any JVM in
+any application it basically documents
+the in continuity of execution of your
+jvm fact that the JVM when doing nothing
+was not doing anything so if your app
+was actually trying to do something it
+would have seen worse response times the
+knees and you can run this as a java
+agent along with your app to see what's
+happening you can go to our website
+see what that's like but how do we get
+past these what can we do technically to
+solve them I've got only about three
+more minutes I'll run really fast we
+need to solve this link between stop the
+world stuff and scale and we need to
+eliminate stop the world fallbacks well
+here are the three things that seem to
+be hard to do concurrent compact a
+concurrent marking that is robust that
+runs at any rate that you allocate and
+we fake needs to happen for you not to
+fall back you need two concurrent
+compaction at least in parts and you
+need to be able to do young generation
+stuff that doesn't stop the world
+because the only reason those don't
+bother you right now is your heaps are
+tiny if you had 100 Gig heap your young
+Jen would have a 2 gigabyte live set to
+promote that would look like today's
+biggest pot all three of these have to
+be solved when we want to solve them and
+you know or we won't get past this stuff
+and that's just saying the same thing so
+let's classify it another collector
+remember i told you i'm going to do that
+and now I'm you know I apologize that
+I'm going to tell you how great our
+stuff is but using classification right
+we have a concurrent guaranteed single
+pass marker doesn't matter how fast you
+mutate how fast you allocate this will
+finish marking concurrently in one pass
+without stopping the world key quality
+has a concurrent compactor it can move
+objects around and it can remap
+references without having to stop your
+application at all okay it has a
+concurrent compacting all generation
+that's the combination of those two but
+it also has a concurrent compacting
+young generation it is not a stop the
+walled young so even at hundreds of
+gigabytes of heap and young Jin's that
+are only two percent of that it will
+still work very concurrently most
+importantly it has zero stomp the world
+fallback code the code simply doesn't
+exist to stop the world is a fallback
+that's the primary quality now this is
+not the only way to solve this problem
+there's probably seven other academic
+algorithms out there that could possibly
+do this this is the only commercial one
+that exists
+right now so that's what thing does and
+I'm not going to get into these because
+there's a full paper about them we don't
+have the time but let's look at the
+benefits so this is an academic paper
+thing so it's got a reverse logarithmic
+graph in it but the upper right is a
+good part and what you're seeing there
+is the worst-case response time getting
+smaller as you go up against heap size
+this is for a given workload allocates
+about a gigabyte a second looks at about
+two and a half gigabytes of life set
+what you're seeing here is that c4 is a
+collector reaches a plateau heard it
+very quickly and stays there at that
+couple 10 20 million second worst case
+other collectors get worse as heap size
+grows and you should by now understand
+why that is because the worst case grows
+with it this Green Line is actually see
+form with generational collection
+disabled not sure why generational
+collection is effective we get to do the
+same work we get to reach the same
+stability on a lot less memory because
+we're a lot more efficient for zing the
+only reason we have a generational
+collector is this because our pauses are
+no different but we get to be more
+efficient in CPU and speed and
+everything else another way to look at
+the benefits is what it does to
+application behavior and tuning so I
+told you I want to teach you how to do
+this all right and I won't teach you why
+that flag is exactly the opposite of
+that flag because yeah it's a different
+application but I will teach you how to
+tune is in this is how you tunes in now
+thats was replaced about three hour 31
+our talks I've heard in the last couple
+days on how to tune g1 and how to tune
+CMS you don't have a lot of tuning to do
+because there's one big currency use
+empty memory there's no downside to
+using it there's all the upside and
+efficiency and higher location rate
+that's sustainable because of the math I
+showed you before so you can just use
+that as a big stick and it's cheap
+another way to look at it is what does
+it too for application behavior well
+sustainable throughput is different than
+unsustainable
+okay this is a really fast car but not a
+sustainable way of driving it so you
+know the way I look at that is how many
+users can I run in a box without
+breaking my SLA it's not how many users
+going to run in a box and this is an
+example of running you know some number
+of users in a box and zing running 17
+times as many users in the box because
+we cheat we get to use 50 gigabytes of
+memory instead of three gigabytes of
+memory because we don't pause and the
+machine has them so another point and
+the last way to look at it is I told you
+about Jessica this is charles nutter
+explaining to the world why we built it
+and honestly that's probably the reason
+why we built it but it looks something
+like this zing is on the left CMS is on
+the right can you see pictorially how
+much better we are probably not let me
+highlight the numbers that's a 14-second
+pause that's a 20 milli second hiccup or
+normalize it looks like this that's the
+result of using a concurrent collector
+on a real application so that's pretty
+much the summary of the content for the
+collector the one additional thing to
+look at is when you're looking at low
+latency application trading applications
+places where all jen has been tuned to
+happen once a day and we restart at
+night you can actually take these
+collectors down to the handful of
+milling second worst case and make them
+work pretty well so if you're interested
+in that and last before we go we put up
+an open source project initiative where
+people can using for development and
+test and open source projects for free
+so if people are interested you know our
+booth is now closed but you can come to
+our website so that's it sorry for
+running a minute over
+if I think we might have some room for
+Q&amp;amp;A if people are interested and we'll
+see when they kick us out this will be
+posted online they already took the
+slides so it should be there
+I'm not absolutely sure yeah exactly oh
+yeah I give them the slides they'll go
+along with the talk somewhere</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

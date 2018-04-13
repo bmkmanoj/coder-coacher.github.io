@@ -1,0 +1,713 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2015: Travis Gockel “completion T : Improving the future T with monads&quot; | Coder Coacher - Coaching Coders</title><meta content="CppCon 2015: Travis Gockel “completion T : Improving the future T with monads&quot; - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2015: Travis Gockel “completion T : Improving the future T with monads&quot;</b></h2><h5 class="post__date">2015-10-12</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/yOtb508xQuM" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">good morning I'm Travis Gokul and I work
+for SolidFire as a C++ pirate that is my
+official job title it actually says that
+in the org chart which is pretty cool
+and today I'm going to talk about
+completions which are our internal
+implementation of futures there an
+alternative to futures and I feel may
+work better I only realized last
+yesterday that I had a half an hour to
+talk instead of an hour so the last half
+of this presentation is in the extra
+i'll be posting the slides somewhere so
+i'm not going to get to on any of the
+extra parts so first things first who is
+SolidFire what we do we re distributed
+all flash block storage vendor and what
+that means is we take a bunch of
+computers we networked them together and
+then we present them to users as a bunch
+of hard drives people connect to us over
+I skazhi and we're kind of a
+high-performance solution because we ran
+all SSD vendor you have to be because
+we're a storage vendor things like data
+loss and unavailability are one hundred
+percent unacceptable for our users our
+users are cloud service providers if
+they have down time that cost them a lot
+of money so even in the cases where say
+a network card fails or a hard drive
+fails or whatever we have to keep
+running no matter what we deploy as an
+appliance and what that means is there's
+no administrator that comes along and
+babies the cluster as it goes through
+time it has to be a self-maintaining
+entity and we deploy in environments we
+don't control so we don't have control
+of the power we don't have control of
+the network we don't actually have
+control of the heat and we have to make
+our software and our hardware respond to
+this in really really good ways I guess
+the best ways that we can but we have a
+pretty small engineering team at least
+in my opinion we have 40 C++ developers
+or slightly less than so that means the
+efficiency of our developers is really
+critical and we're also hiring and what
+that means is when new developers come
+on board we have to make sure that they
+can come up to speed pretty quickly so
+the language we use can't be completely
+foreign to them so here's just kind of
+busy
+Apple of one of the algorithms we've
+looked at this is how we do read so a
+request for a volume and offset and a
+certain amount of data comes in we hit
+the metadata we figure out some internal
+IDs for that sometimes that data is in
+the cache and then we can serve that
+immediately sometimes it isn't and when
+it isn't which is I guess most of the
+time we have to fetch the Associated
+chunks over the network and then in the
+end we take all this data we combine it
+back together respond to the user so
+there's a lot of algorithms in our
+system that are fan out scatter gather
+collect return so in this case for reads
+the user-visible latency is the worst
+case of our responders so what that
+means is we're extremely sensitive to
+latency so whenever I talk about oh
+that's slow i typically mean in the case
+of latency not throughput all right so
+since I'm presenting an alternative to
+future I feel like I have to justify why
+the original future is not good enough
+for us so first things first what is the
+goal of future in reality the future is
+a mechanism for communicating some sort
+of a provider which is a promise to some
+sort of receiver so it's a very low
+level construct that says okay I provide
+you values that you shall receive later
+and I receive them somewhere else and in
+reality this is supposed to make
+concurrent programming easier to deal
+with so here's kind of the important
+functions that are part of future the
+first and most important one is gift and
+what get does is if the future has a
+value it returns you the value or it
+throws an exception if it doesn't have a
+value yet then it blocks until you
+actually get the value there's valid to
+check for validity there's wait to wait
+for it to actually be complete then
+there's a wait for wait until those
+don't really matter the last and most
+interesting one is probably share which
+allows you to do something and then fan
+out so regular future is a one-time use
+thing what a shared future is it allows
+you to have n amount of receivers from a
+particular future
+so how do i use this I'll go through the
+very classic example of I want to read
+multiple things so here I want to read
+location X and location Y so I use async
+to start off a read of X and then I read
+Y on my own thread and then of course
+the end I tell my first future I want to
+get so block until it's done and then
+takes a two and then kind of combine
+them into one thing the problem with
+this is it's really only sort of
+asynchronous so the issue is if you're
+doing say hundreds of thousands of reads
+per second then blocking a thread to
+wait on something as simple and
+fundamental as an i/o is absolutely
+preposterous so futures don't really
+work for this use case and when you're
+talking about a network storage solution
+the majority of your operations turn out
+to be io type things so really what I
+think is wrong with with future is that
+get and weight are actually the only two
+ways currently to interact with them and
+really these two functions should never
+be used by anyone ever except for unit
+tests so then is coming to us at some
+point in the not too distant future
+hopefully and what then does is it
+provides you an ability to chain the
+next step of an operation for a future
+so I take then and I say hey I'm going
+to give you this function so here I'm
+taking X which takes in its going to
+call thing and return me an integer
+later and then i'm going to say x dot
+then take this future and return to you
+the cast it to a double which isn't a
+very interesting operation but it's an
+operation so what happens and inside of
+this lambda expression is this future is
+guaranteed not to block so when I say f
+not get I know because I'm called
+through the context of it then that this
+will never ever block which is kind of
+neat but I thing
+that's pretty awkward and the reason why
+that's awkward is when we talk to talk
+about aggregation so imagine I have a
+vector of future integers called all
+tasks and the proposal that says then
+has this other function which is nice
+called win all and the idea behind when
+all is well I am given a future of the
+things that I give you and i'm going to
+move those things over and by the time
+all of those things are done I'm going
+to be given back a vector of my future
+integers where I can call get on them
+and none of them will block ever which
+is very cool the problem is future is a
+multi-threaded construct and the problem
+is it has to deal with locking so while
+I know and the standards committee knows
+that future get I will not block in the
+context of then the compiler does not
+know that so it means it can't optimize
+it it means it has to take a lock on if
+you really want to check me on this add
+up the values and a vector of integers
+and also compare that to the time it
+takes to add a vector of future integers
+it's just slower another problem i have
+is somewhat philosophical so in theory
+these two pieces of code kind of do the
+same thing so the one on the left side
+kind of looks like an insane person
+wrote it you look through we're trying
+we're catching everything just to wreath
+row it we're not doing anything now if
+you looked at these two pieces of code
+obviously the one on the right is the
+preferred modern C++ approach to these
+sort of things and really it's the good
+C++ approach for forever but I would
+argue that the chaining of vin
+operations is the same as the code on
+the left almost except we're doing it
+through futures so if you look through
+thenns we're repeatedly getting the next
+step of this operation and if my first
+step of this operation through then I'm
+repeatedly re throwing an exception
+throughout my entire chain and if my
+chain is significantly long then I'm
+wasting a lot of time throwing andrey
+throwing the same exception over and
+over and over again when in reality had
+I written that code in a synchronous
+manner it would have been a lot faster
+alright so I would argue that the real
+problem with future is that it's trying
+to combine two ideas there's the
+asynchronous communication aspect and
+then there's the reporting of errors so
+one could argue that an error is also a
+type of value but that way we deal with
+them is quite different so there's this
+convenient mechanism that someone has
+proposed called expected which allows
+you to take an exception and kind of act
+like it's a value so if you've ever
+worked with optional an optional can
+have a value or it can have none and you
+can do stuff with it and expected can
+either have a value or can have an
+exception and very similar to the way
+future works get will either return you
+a value or we'll throw the exception
+there's some debate on exactly what the
+semantics there should be but for now
+I'm going to treat it as if it works
+that way and then there's status which
+returns a boolean true if it has a value
+false if it has an exception and then
+there are these two other functions
+called map and catch error which are
+best demonstrated through example so I
+first call this function foo and it's
+going to return to me an expected
+integer and at this point I don't know
+nor do I care if that was completed in
+exception or completed in value so the
+next step I'm going to say X dot map and
+in this case if X was completed with a
+successful value then I will call the
+lambda expression if X was completed
+with an exception then my expected
+double will just take that exception and
+kind of move it over catch error has the
+exact opposite semantics so catch error
+says hey if you have a value I'm just
+going to return you that same value and
+if you have an exception then I'm going
+to apply some transformation on it and
+you can do all sorts of things in this
+case I'm just saying you know what if
+there's an exception of any kind just
+make that value zero then later I'm
+going to cast them both to a string and
+then get my value and print it out to
+see out all right so now that I've
+covered all the bases I can finally talk
+about what a completion is so completion
+is a class that kind of looks like a
+weird amalgamation of the expected and
+future so probably there aren't a lot of
+interesting functions on here if you
+already kind of assume what map and
+catch error do the only weird one here I
+guess there are a couple weird ones one
+is on complete which doesn't return
+anything so I'll cover what exactly that
+means and the other one is disabled and
+I'll talk about that later so the things
+that you might notice are missing are
+get and wait and of course the reason
+they're not included is done on purpose
+you should never call get and wait but
+we can't include them if we want to be
+compatible with STD future and I'll
+actually show that in a bit another
+thing we lack is overloads for the
+reference type and void so if you look
+at the implementation of future the
+standard says you must overload it for
+reference types and void well it turns
+out if you just let your expected
+implementation deal with that then it's
+not a big deal you don't have to kind of
+do all this weird overloading or
+implement your code twice or do anything
+funny you just get to use the expected
+all right so to jump pretty quickly into
+the implementation um we have this thing
+called the completion data and if you
+know how futures are implemented they're
+done basically via the same way where
+you've got kind of this shared piece of
+data that both you are promised and your
+future have references to in our case
+the probably most interesting part is
+this spin mutex at the top so instead of
+having a regular mutex since our quantum
+of work since we know that get and
+weight are never used our quantum of
+work is very small so it's kind of a get
+in make your changes really fast and get
+out as fast as possible so it turns out
+that a spin mutex is way faster for this
+sort of thing
+cuz you're not doing that many
+operations in here the status is for
+status tracking uh there's an optional
+value because you start off without one
+and then of course there's a callback
+which we'll get to later we only support
+move semantics on callbacks which is the
+nice thing about being a modern shop and
+then there's this last bit called
+reference tracking data which is
+essentially an intrusive shared pointer
+alright so the completion status kind of
+goes through a number of these state
+transitions you start off with no value
+so you start off with no value and if
+you disable it then you go into the
+disabled state as you might expect if a
+promise is destroyed without setting a
+value your completion is broken I'll get
+into what exactly that means in a bit if
+you do a chaining operation like map or
+catch exception or then or on complete
+then you go into the has callback state
+if you set a value before you set a call
+back then you have a value and then
+going from has value to complete or has
+call back to complete is kind of the
+opposite of how you go from no value to
+either has call back row has value so
+there's kind of a simple state diagram
+for the things that we can go through oh
+and you can also go from has call back
+to Broken worry about that later so then
+is kind of the the most important
+function that we kind of think of it
+actually is mostly equivalent to STD
+future then except instead of like STD
+future where you pass in a future we
+give you an expected T the semantics are
+exactly identical except it's
+ridiculously faster and by ridiculously
+faster I mean we don't have to take a
+lock we just forward it directly to you
+because well at this point we can
+guarantee through the type system not
+through some weird semantics that you
+will never have any contention on this
+expected value so if you have a value so
+if you call then and you have a value we
+will call
+funk immediately if there is no value we
+store funk for some later use in all
+other cases there's an error and
+depending on how you've configured it it
+can either be a logic error or it can
+just crash immediately so another kind
+of sibling function to then is on
+complete and uncomplete is actually how
+then is implemented except the key to on
+complete is it does not return a value
+so if you look at the flow of data the
+last step in your process you probably
+don't actually want to take a value back
+so the last step of your process so if
+you think about vins and you're chaining
+a bunch of operations together the last
+one is where you are no longer chaining
+anything so this kind of allows us to do
+fire-and-forget so in a lot of cases
+we're firing and forgetting and we say
+okay when you're done just don't
+allocate another completion data for me
+so this saves us a lot of small block
+allocations which is nice so there's
+also map which is very very similar to
+then except it's only called in the
+cases where there is a failure so this
+actually improves speed a ridiculous
+amount so it's very easy to check this
+by always throwing inside of your then
+so imagine if you have a map function
+that is implemented simply in terms of
+then and you always throw on this speeds
+up the system and unfortunately I can't
+give you good benchmarks because any
+trivial benchmark is basically me
+pulling the wool over your eyes so I'm
+just not going to do that so catch error
+has the exact opposite semantics of them
+or sorry of map so we can also implement
+get and we implement get by saying okay
+we're going to just make a promise of an
+expected T and we're going to set on
+complete to set our value and we're
+going to move our expected into that and
+in the end we're going to return
+promises futures
+get get so this is really awkward
+looking but what that's doing is we're
+grabbing the future we're grabbing it's
+expected t and then we're grabbing the
+expected T's get to give our completion
+get the same semantics as future get and
+i realize that i usually get a lot but
+that's okay the key here is that we only
+incur the slow mutex call for the cases
+that somebody actually asks for this
+slow get call which is very powerful we
+can actually do the same thing with wait
+except we have to do some internal
+tricks because just like a future a
+completion can only be fired once so we
+have to make sure that if you implement
+wait we don't actually destroy your
+future alright so the other side of
+things so how do we actually provide
+values just like with a regular promise
+we use completion promise and what this
+does is it gives you the delivery of
+values to our completion okay great it
+shares the completion data just like a
+standard future implementation so it has
+one function that is different from
+standard future and of course the title
+and off the screen on this function
+called complete where you give it an
+expected value and it simply checks hey
+if you have a call back please call that
+call back immediately if there is no
+value storing the value from later
+retrieval if there's this Abe if the
+completion status says it is disabled
+just do nothing so drop that on the
+floor don't call anything call it a day
+all other cases are an error of some
+sort we can also be compatible with this
+standard promise so by saying set value
+we just call complete with make expected
+and when we set an exception we complete
+with make unexpected so kind of gives
+the same semantics and makes completion
+promise a drop-in replacement for STD
+promise so as a refresher on the
+transitions we're going from no value to
+either disabled you can break if you
+destroy your promise you can set your
+callback on the next chain
+or you can set values and give it a
+value for later retrieval cool all right
+so let's talk about edge cases so first
+things first broken promises these are
+kind of a big deal so when your
+completion promise is destroyed without
+setting a value what should you do there
+are a few options one of course is to do
+absolutely nothing simply continue on
+your merry way and cause a deadlock
+somewhere else because if somebody is
+depending on your future somehow getting
+completed well either we're going to
+cause a deadlock somewhere or we're just
+going to have this task that's kind of
+in the ether of stuff that well may or
+may not ever get completed so somebody
+asked for something we've abandoned that
+task the completion never gets delivered
+maybe that's okay you're probably going
+to memory leak so you generally don't
+want to do this in our case we do not
+allow this state but originally we had
+kind of a configuration option to allow
+you to do absolutely nothing on broken
+promises turned out wasn't a good idea
+another option would be to deliver an
+exception say a broken promise exception
+to that completion when you destroy your
+promise of course the issue with this is
+when we deliver it that starts
+triggering a chain of actions so you go
+to the next step you go to the next step
+the issue is you can end up blocking in
+the disruptor and that's probably a
+problem that's generally frowned upon
+another option is to throw but that's
+even more frowned upon in modern code so
+we went with this last option which is
+just panic if you destroy your
+completion promise without setting a
+value we panic week or the product the
+idea is we want to catch these in house
+as fast as possible it's actually turned
+out to be a great solution so another
+option are so another edge case is this
+this
+able function that I kind of told you
+about earlier so if you think of this
+diagram on the left as a series of steps
+so you're trying to accomplish your your
+program is trying to accomplish tasks a
+through H and it has this dependency
+order so you start off with h and then
+you chain be and then you chain see to
+that and e to depend on both B and C etc
+etc and so on down the chain so the
+question is what should happen if you
+disable F R sorry if you disable H what
+should happen so age is kind of at the
+bottom of the chain and maybe the user
+canceled their request for their data
+reads so we no longer care about it it's
+okay for us to cancel f if and only if f
+has no side effects but it turns out
+it's really hard to know if f has side
+effects c++ lacks the introspection that
+you'd need and really even if it did
+have it you probably wouldn't care about
+if it had side effects or not so we
+allow for an up in solution for this
+problem I'll cover that in the kind of
+next slide so another thing that you
+could do is you could disable see so if
+you disable see what should happen to d
+e and f well our solution that is to
+only allow disabling for Leafs so if you
+say disable see we mark it as yes you no
+longer care about see if it had a side
+effect you don't care about it anymore
+whatever no big deal so maybe if you go
+back and you cancel EDF G&amp;amp;H yeah you'll
+eventually canceled see but frankly
+that's a really really unlikely scenario
+so the real question is is disabling
+even useful I'm not sure maybe maybe
+this low-level construct of completions
+shouldn't really deal with any more than
+a basic disabling construct so maybe if
+we want disabling we should use
+something else like a flow graph but so
+the way we deal with you picking up the
+kind of if your function has
+FX is we have these continuation traits
+which really hack the idea of is pure on
+top of some function and we have this
+little thing where you can say pure funk
+and it wraps it in a structure that thus
+figures out hey this thing has no side
+effects so you're explicitly picking up
+yes this is a thing with no side effects
+maybe in the future we could pick up
+pure function automatically there's
+absolutely no way to do that in GCC
+right now but well that I know of so but
+maybe we could and that is it any
+questions so some of your optimizations
+are really intriguing have you proposed
+you any of this stuff to the standards
+committee no I lack the appropriate
+standard ease to do so I would be really
+helpful at somebody who was like well
+versed and that could maybe help me
+because this is some this is something
+that we've found is like really really
+handy and like really powerful for us
+but I don't know how to push that
+forward so I can help you with that the
+first step is to have a paper that
+describes the the problem that you're
+solving the solution why you think that
+solution is good and it doesn't need to
+have the standard ease in it at all what
+you're the first paper is this is a
+problem we can and should solve and once
+you get some to that people will be
+available to help you do the standard
+ease so you know do the first paper
+that's on your own and then people will
+be available to help you with the rest
+of it actually this looks a look look
+like the completion token from a co
+where it's actually proposed there's
+part of the executors proposal so why do
+you think this one would be useful in
+to the completion tool yeah so I
+actually stole some ideas from
+completion token that's why it kind of
+looks like that yeah the problem that I
+kind of had with the SEO completion
+token is it and maybe this is just a
+lack of understanding on my part is it
+seemed to only work in the context of an
+entire Ezio thing and I couldn't really
+extract it out okay I mean that that was
+kind of my I couldn't figure out how to
+rip it out and just have it work on its
+own sort of i think that might be true
+for boost azo but not for the execute
+the proposal ah yeah because I wonder if
+ya so in boost SEO the problem is so all
+of this I'd say completions were kind of
+made we started them in like twenty ten
+so there was no extra thing it was just
+kind of like a thing we threw together
+and we're like this helps a lot and the
+second thing is while you said never use
+get over it well of course I disagree
+with that one and if you don't want to
+use get away just don't use future yeah
+sure well I mean we cannot I don't win
+around that but yeah I guess it should
+have said never use these with little
+asterisk it can be helpful sometimes
+well the point is future is not really
+for this asynchronous i/o ting and I
+completely agree that futures not made
+for that and it doesn't work very well
+as over it but far the things it's
+pretty useful and then it's actually
+useful to have the gate that is blocking
+and you just using it and the search far
+as the question I have is in one of your
+slides I actually saw stood function yes
+it's why they use that because that uses
+memory allocation and it's pretty
+expensive probably more expensive than
+any mutex or something like that so
+while you're using that one yeah so the
+reason why that is used
+is because I I wanted to shorten it for
+this slide that yeah yeah you'll see it
+around but yeah I wanted to shorten it
+for for the slides in reality the clever
+implementer will do something way better
+than this you know there's there's all
+sorts of stuff that are just like you
+would never like a value in a callback
+can never exist at the same time so why
+should they have separate space you know
+just stuff like that you were talking
+about the uncomplete which is kind of
+like a throwaway value you start some
+threats which does some things and then
+it just goes into thin air though where
+do you store this completion object
+which contains all the data yeah so G
+and H are kind of in this case where you
+would use on complete so you know
+they're the last step in the chain
+there's nobody who it will depend on
+these values and when I'm say composing
+something I happen to know that I no
+longer care about any of these values
+anymore so GNA it basically those are
+the use cases for them so to answer your
+to actually answer your question they
+are stored as part of the callbacks to
+basically ed and n so since you've said
+this is my next step on complete knows
+so well it's easier to point it f as an
+example here when I say f on complete
+part of binding that on complete is
+creating this callback to kind of finish
+kind of the next passing of data so it's
+basically just shared pointers so to use
+this we have to store either a bc e d or
+f somewhere and just keep it you know
+program forever
+no typically by the time they're
+executed so imagine you're along the
+chain and you're executing be right now
+well B because b is being executed right
+now it's kind of pinned in memory so it
+has eventually references for everything
+down the chains you don't actually have
+to deal with any good yeah you don't
+have to deal with any like explicit
+storing it'll just kind of work so do
+you mention that this looks like boost
+ezio completion tokens which I've never
+experienced or heard of so I was
+wondering are there other precedents or
+similar things out they do you think or
+similar this other than obviously like
+future in the concurrency ds's stuff are
+there other influences that we should
+look at to understand this better uh I
+mean I'd say look at that it's a lot of
+the ideas for this are in other concern
+cts proposals yeah SEOs it's basically a
+blend of has your own future the as you
+go token and that yeah and then some
+things I stole from early as well all
+right I am on time it's cool thanks</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

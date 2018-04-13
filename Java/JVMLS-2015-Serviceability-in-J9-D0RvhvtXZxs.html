@@ -1,0 +1,1105 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>JVMLS 2015 - Serviceability in J9 | Coder Coacher - Coaching Coders</title><meta content="JVMLS 2015 - Serviceability in J9 - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Java/">Java</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>JVMLS 2015 - Serviceability in J9</b></h2><h5 class="post__date">2015-08-10</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/D0RvhvtXZxs" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">they decided to put them two regions
+together so here comes another Norwegian
+presentation I don't have any in a
+region landscape pictures in my slide so
+here's my background picture and we'll
+get started my name is Baron Mordo and I
+work for IBM the j9 vm team same team as
+dan who presented earlier my past
+projects I i work for i work with the
+team for two years and I've worked a
+little bit on some of the days are 29 2
+s on method handles and on lambda and
+now I work mostly on the Valhalla
+project and today's topic that I will
+cover is debuggable runtimes this thing
+don't trust me so back to the Bugaboo
+law runtimes so when I found it very
+useful when I develop to be able to
+effectively debug my run time
+implementing just implementing a
+prototype and it didn't go as I expected
+instead of digging through my code again
+i can actually use the debugging
+features that are already in the JVM to
+figure out where I'd wear what I did
+wrong of course there's also defects
+they come in all the time to solve a
+defect I would mostly work on a DM
+defect but we also do triage work where
+which component does this defect
+actually belong to is that a jit issue
+is the garbage collector issue or
+whatever and it's good nice to have
+tools for that too where you can say or
+we can very quickly figure out where is
+where does this bug actually reside so
+yeah so the point there is into
+instrument your jvm so that you can
+avoid recompilation where you even just
+to activate some build flags for a
+couple of reasons one thing is that
+really recompiling can actually hide
+your issue so you thought
+you see you see a problem you just need
+to activate some some debugging tools
+and you recompile and suddenly it
+doesn't show up anymore or it's actually
+deployed production system so you don't
+want to tell your customer says oh I
+have a problem and you're like okay can
+you stop everything you're doing and
+here's the new VM and I jvm I just want
+you to run that and watch the world
+break again so that I can fix it for you
+so obviously it's valuable to have good
+instrumented a debuggable runtime so
+what do I want you to take away from
+this presentation I want you to get a
+structured understanding of the features
+of a debug of our own time so this is
+not hey we did something new or that
+kind of like new development
+presentation it's what have we done over
+several years and where are we some some
+points about where we are now because
+this thing is I will talk about this
+it's not that actually actually hard to
+build a run time to build the language
+runtime build an interpreter you throw
+it together it might not be able to do
+everything but the thing is it needs to
+be serviceable if you want anyone to use
+it needs to be serviceable that doesn't
+like frost they might mean pushing it to
+a customer it might mean you using it
+within your own company nobody's going
+to use it if the moment you hit a bug
+you can't help them so what i will do in
+this presentation I will look at some
+debugging practices basically the
+theoretical approach to what should you
+do when you debug then we will translate
+those into debugging features what
+should your jvm or any language runtime
+be able to do from a debugging
+perspective and then I will talk a
+little bit or maybe a lot about the j9
+solutions that basically how the
+implementations of those those features
+into j9 so what do we do as debuggers
+it's definitely not an exact science and
+it's different for me any kind of system
+and it's not it doesn't only apply to
+software either debug your hardware as
+well right I forgot the book i want to
+show you but anyway i had this this book
+given to me by David Ragan's he is
+basically an attempt to provide a ginger
+and some generic guidelines for
+debugging and he made a list of nine
+points I won't go through them all but
+some interesting points first he said
+you have to understand the system way
+too many bugs are caused by insufficient
+knowledge or incorrect incorrect
+assumptions by incorrect assumptions
+about how it was supposed to work you
+need to be able to make it fail as an if
+an issue if you know about an issue you
+need to be able to make it up here on
+demand quit thinking and look so you can
+make a many theories about what the
+issue might be but there could be code
+and data that tells you that actually
+you can just forget about this theory it
+has that's not it so quit thinking and
+look dividing conquer so basically
+confirm whether behavior is correct at a
+certain time or when you exclude certain
+features and the list goes on and yeah
+and they're all good points but the
+really four of these that i believe
+depend on some degree of system support
+so those are the ones i will branch out
+from here so make it fail you
+intermittent failures you keep you
+running it but if it's intermittent you
+have no idea when it's going to appear
+again right so you you need some way of
+increasing the failure rate or
+decreasing it or make you go away it's
+also valid quit thinking and look stop
+making up theories look at the data and
+you cry it requires that there's data to
+look at and there's a practical way to
+look at the data divide and conquer
+you need to be target specific so when
+you run it again you need to neither
+need to confirm that the issue is here
+or be able to confirm that the issue is
+not here and changing one thing at a
+time is a fourth one here you should
+avoid being just say okay let's turn it
+go into debug mode suddenly you have to
+change your entire JVM and you have no
+idea and maybe the issue went away right
+and you have no idea which diva feature
+actually turned it out i have made it
+made it go away so keeping those points
+in mind what do they translate into so I
+translate those four points in 24
+features of debug ability not a
+one-to-one mapping but here we go tuning
+being able to change jvm behavior
+without changing the JVM that means
+being able to turn optimizations on and
+off changing policies algorithms the
+environment you run in or in order to
+provoke bugs or just make the bug
+disappear next point is state what did
+the application look at a specific time
+right that could be the time of a crash
+it could be time with a break point it
+could be a time of some other event like
+you're an exception was thrown okay what
+did it look like then you have history
+if you think about the way we probably
+all did it us students but maybe a bit
+into career as well print deaths
+everywhere right you just see like what
+happened what happened what happened and
+then okay next one didn't happen okay I
+know where I am of course there are more
+sophisticated ways of doing that there's
+also the way of doing history with
+multiple state snapshots and the
+trade-off there of course is that yes
+you can you can do that you can say give
+me a give me a state give me a state
+give me a state sample rate is insanely
+low and demand of data is really really
+high so you end up with a trade-off
+between how much data how often and then
+there's analysis which really is about
+understanding the state data
+information and it really so that kind
+of turns it into a next or you could
+argue this an extension of state but I
+want to differ a sham differentiate
+between obtaining state and reading
+state so that's why it's the fourth
+point so these four points is what we
+look at going forward so let's connect
+them back to the practices tuning is
+about being able to change one thing at
+a time is about being able to make it
+fail and it's about being able to make
+it to be being able to divide and
+conquer so really change one thing at a
+time so that you can make it fail so
+that you can divide and conquer history
+is about being able to quit sink and
+thinking a look is about providing you
+with data right same thing goes for
+state and actually same thing is true
+for analysis they're quite closely
+connected yeah so far so where are we
+we're back where we with the agenda so
+far we looked at the practices we turn
+them into features so now let's look at
+the j 9 solutions so each feature has an
+implementation in the j9 JVM and most of
+this information is available online if
+you go if you google the IBM Knowledge
+Center you'll find most of the stuff but
+let's get started with tuning what have
+we done in j9 to be able to tune the JVM
+is tuning not just switching right you
+don't want to just say be able to switch
+on and off we're talking about tuning
+knobs where you have a min min setting
+and max setting might be on and off but
+there's a lot of room in between and
+there are a lot of noms so really you
+want a lot of resolution and each of
+these dimensions how many knobs how much
+resolution for a knob so you can focus
+your search so let's look at how we have
+like what we've done in the jet and the
+GC and the JN and in the vm to be able
+to tune
+in the JIT first one is really just that
+get on off which is exactly the kind of
+switch I was talking about on the last
+slide instead of a knob but it gives a
+lot of power and dividing conquer
+because if I get it if I get a defect in
+and then the first thing I would
+probably do is just like okay let's run
+this without the jet and see what
+happens oh I went away did guys this
+this one is yours and gone I don't have
+to see it again anyway the same thing
+goes for quick start and aot which I
+mean they're kind of our yeah you can do
+the same thing that we just turn it off
+but really at that point this becomes a
+dipped jit job but they can keep going
+you can change the invocation threshold
+right so you have a number of vacations
+yeah you want to see before you did
+something but then you have no idea of
+when it actually happened to be able to
+control when this actually happened well
+I can set the invocation Thresh will 20
+and say I want you to always I don't
+want you to run it interpret it ever or
+said it really high so you never see it
+but that's the same as turning it off
+you can force Delta most Asian level so
+basically we have these levels that cold
+hot or cold warm hot very hot and all
+that we can force it to say I want you
+to so if you combine these I wanted you
+to compile as like never an interpreter
+go straight to the jet and I want you to
+run it as hot so that mean that way you
+can focus say I see this bug i only see
+it every now and then I never see I
+never seen in the method every time or I
+don't see it in the same method every
+time so I suspect I might have something
+to do with the optimization level i'm
+running out so you say okay i want to
+run it always did it always hot oh look
+like it doesn't happen on any other
+level so okay i can focus the search
+into their limit file basically being
+able to say I only want you to compile
+these methods we make a file with a list
+of methods and then say from line 10 to
+20 I only want you to do these methods
+rest of them leave them interpreted or
+being able to say I don't want you to
+compile compile the specific method and
+also changing the number of compilation
+threads moving on to GC of course
+there's a well one thing to say about
+the GC first error about the jet jet
+features are generally designed for
+debugging right you don't want
+necessarily the users to to keep
+changing your the weighted it behaves
+the GCE is kind of in the other
+direction where most of these features
+are actually designed for exactly that
+the user should tweak because the how
+the GC should work differs from
+application to application but it
+doesn't mean we can't use them for
+debugging right for example to the
+policy being able to switch to policy so
+that for the same reason as a user do it
+right but say i do i see this garbage
+collection problem when i run one
+garbage collection policy versus another
+right being able to change the size of
+your heap right is a it's a good thing
+to do because you get you get your out
+of memory was the out of memory because
+you actually have a problem or is it
+because your heap just wasn't big enough
+right same thing as with the JIT you can
+change the number of threads that run so
+you can see is this a problem because
+I'm running parallel work or yeah we
+also have an awesome options for
+provoking dangling pointers to say at
+this point we have had like it's a
+likely point where I could end up with
+invalid pointers I want you to run a
+full GC at this point so that I can
+hopefully find those in my debugging
+setting and not out in the field turn to
+vm similar to the GC in the way that the
+most and most of the options are
+actually designed for you to be used by
+the user but can still be used for the
+bugging purposes one thing is when you
+run compressed references if you're not
+familiar with it is when we restoring
+references to objects classes through
+ed's and monitors as 32-bit bit values
+on 64-bit machines or 64-bit vm so that
+we can use half the size of the for the
+references and we just store them below
+the four gig line but then being able to
+change the size of that area below the
+four gig line and not there like because
+if you basically end up with two heaps
+right so to change the heap size of that
+area specifically can also tell you a
+lot about or being able to turn
+compressed references on or off again a
+divide and conquer problem stack initial
+size increments I think how you how much
+you incremented a specific to Java third
+or always OS threads being able to tweak
+these things can also tell you a lot
+about a lot about your problem and of
+course like I guess I could have
+mentioned that or the point is that all
+of these are available as command-line
+options right so you don't you don't
+have to go in and change some file and
+recompile in and see what happens the
+point is to be able to quickly change
+JVM behavior without changing the JVM we
+have different optimizations that happen
+but in order to do performance analysis
+we want to be able to deactivate or
+activate some non deterministic factors
+so there are some of those about
+spinning and scheduling tasks threads so
+this got very j9 specific most of these
+apply to us because of how we've done
+things and might not apply to other JVM
+implementations but the point was to
+illustrate the level of detail required
+in order to change one thing at a time
+focus your search that way so that you
+can make it fail find your problem and
+thus divide and conquer and again modify
+the JVM behavior without modifying the
+JVM move up the history
+so the two points I want to talk about
+for history one thing is where did your
+data come from you have you need some
+way of you need to instrument your jvm
+to give you that history data and for
+long live allocated for long live
+applications collection becomes a
+problem right you you produce a lot of
+history when your when your jvm runs the
+same instance for so maybe several
+months and then that constant writing
+can also get expensive even if it's not
+long-lived and so basically your
+collection has to be efficient and
+cost-effective so let's look at those
+sources first one thing I already
+mentioned was to multiple consecutive
+states and just look at the difference
+between them which can which is very
+expensive has a really low sample rate
+and tons of data that you probably maybe
+didn't even need so is there a better
+way another thing is health center
+basically leaves you live as a yeah it's
+for our JVM we basically are able to
+feed out live information about how many
+threads you're running how much memory
+using cpu such and all of that stuff but
+that is more well first of all what
+happens when your application like if it
+crashes right or when the JVM crashes
+when not a great further but if your jvm
+crashes why what happens well what
+happens is that the feed of data stops
+and you have nothing to go on so it's
+really great for looking at your
+applications but not for looking at the
+JVM itself and this whole thing is about
+making into JVM serviceable not
+necessarily other applications so then
+we have tracing specifically JVM
+internal trace points there are some
+other kinds of tri spawns as well
+application trace points which is
+basically an API where we allow users to
+register trace points so they can use
+the same mechanism that we have for
+trace points for their trace points and
+also java method tres tres points which
+are basically I
+want to know when I enter java method
+and want to exit gel method which can be
+very useful to align with the JVM trace
+points so you can see what JVM behavior
+maps to my java behavior so staying on
+the JVM topic let's look at those
+internal JVM trace points so as I
+mentioned definitely not free right
+you're constantly registering trace
+points and when you have like I think in
+our JVM at the moment is about seven
+thousand unique trace points that fire
+at different places least from the data
+I've found so what we want to be able to
+do is to control which trace points are
+active so we have we can do that by we
+have assigned them levels so we can say
+we're basically zero is most important
+and nine is least important so it
+becomes it becomes this accumulative
+thing where you say I want level five
+and it only activates trace points
+between they have level between 0 and 5
+of course then we have to determine this
+when we write the trays points we right
+into our code directly enter JVM code we
+had to determine at that point what
+level do we want this trace point to
+have we can also do x component for
+example in our port library or in our
+memory management I only want the trace
+points from one of those also individual
+IDs for each trace point being able to
+say I only want these specific try to
+trace points from the port library so
+just a quick example of what JB I'm
+tracing could look like because there's
+a lot of talk about what it is but not
+you don't have to or how it could be but
+not what it actually looks like so
+basically we just we put in the
+timestamp the thread idea the trace
+ideal of which is the trace point where
+the idea talked on the previous slide
+event is did i enter a code block today
+exit a code block or it was some other
+event that i keep in track up and then
+is a data section so
+the data section is the one that is
+designed to visual few stray each trace
+point so you give it a format string and
+then you input your data into it so in
+this case I just took an example of when
+we look up a Java Java method so what we
+see here first is a week okay look only
+getting this these trace points I now
+know from this which method i was
+looking up which class asked for it
+where i can find the name and signature
+of the one I'm looking for where we
+started a look up what kind of search
+method or algorithm I'm using visible
+whatever is involved in visibility of
+the modifiers and what they actually the
+result of the visibility check was and
+in the end what method did I get back
+and all this I mean this information is
+it could be valuable on its own but it's
+also it can help me improve debugging in
+when I use the native debugger I can I
+can use all of these like I can look in
+the look at my trace points and find out
+oh I want to look at one of these
+classes I want to look at one of these
+methods or whatever I want to look at
+and also use another debuggers in our
+JVM debugger debugger wish I would get
+to later and then we have the collection
+that I mentioned earlier which is
+important because yeah we don't want
+something that wasn't supposed to be
+noticeable suddenly become very
+noticeable because your collection
+you're collecting way too much history
+so we have our memory buffers as we have
+trace trace buffers we put the data from
+our trace points and it's not only one
+stream of trace points it's every thread
+will need their own unless you want to
+put in some kind of concurrency control
+you need each thread to have their own
+buffer and you don't probably don't want
+to do is introduce that concurrency
+mechanism because again you don't want
+to notice this feature and it could slow
+it down so how can we keep the memory
+usage down
+yeah first yes it's per thread and we
+want to keep the memory usage down and
+we when you think about it when an error
+occurs what do you actually need do you
+really need all the data like all the
+history from when you started
+application because if you think about
+it this way how long can your jvm stay
+in a crop state without crashing
+probably not for a very long time at
+least as a some assumption on making so
+then you can that means you can wrap
+your buffers so you can reuse the same
+memory over and over again so the most
+only the most recent which is also the
+most relevant history is the only
+history you have and also means that the
+buffer size is known always because you
+set this you can specify how much memory
+what you want to use and it's just going
+to keep wrapping through it so I have
+some more information on outputting this
+like the outperformance of this of the
+history but some of that information
+also classes States so i will first move
+on to state and then get back to the
+output so looking at state so it's a
+snapshot of the process at a certain
+time and i want to talk about the
+formats of like our different formats
+that we provide and also when and how
+you can get these snapshots so looking
+at formats we have our java core which
+from what i see is similar to hot spots
+HS underscore under the underscore PID
+something which is a human readable file
+yeah so human readable file and in the
+java core i didn't see that in the hot
+spot version but it's possible in the
+sense that what we have done is added a
+line code for every line so you can
+actually easily find every line of a
+certain type for example you want to see
+all the memory segments that were
+allocated and you just search for the
+code for memory side
+so there you go so that means you can
+change the format means you can change
+the format of the actual data but the
+actual line but as long as the code
+states of same you can still find them
+platform independent kind of follows
+from the human readable point is its
+text and what information is in it a lot
+of useful information what happened why
+did I end up with this Java core did did
+I heck II did I segfault did I did
+actually asked for this one or yeah the
+JVM version very useful in the
+divide-and-conquer world when you want
+to see when you run when we run our
+tests and you say okay it failed here
+yesterday it didn't what code went in
+right so then you end your java core you
+can easily see the version of it you can
+see the use arguments that were used
+when you run that specifically one so we
+back to the tuning you can see the
+specific tuning that applied at in the
+fail state and not what is different
+when it didn't fail system variables a
+lot of time what can happen is the user
+didn't realize that he had something in
+an environment variable like IBM job
+options which is basically a way of
+putting something in system variables so
+that our environment variables so that I
+have it apply as user arguments or the
+command line options for the JVM they
+forgot one was in there and they can't
+understand the behavior that question
+yeah so yeah I get what you're saying I
+i I'm not sure about the actual that
+that list of actual codes it codes is a
+published list that these you can expect
+but the point is that the point is that
+just because someone added a space and
+you didn't expect that when your part
+like if you look at how the hotspot file
+looks it's completely formatted just for
+readability and the point here is is
+more formatted also for possibilities so
+that you can see a line and you see the
+code and I don't know whether you can
+expect that code to always be the same
+but at least it's not going to be a
+simple thing as someone change the space
+further out and suddenly your parser
+doesn't work right yes
+some see memory users / JVM component of
+component is a very useful feature
+you're looking at you gettin out of
+memory right and you can actually go
+into java core and say okay i just want
+to do a quick check like which component
+actually used all my memory and it shows
+you okay the vm used this much to get
+used this motion and the GC used as much
+and then you can follow them in from
+there see like what did the JCL use
+and/or yeah the different components
+what what where did the memory go at
+list of memory allocations useful yeah
+just being able then you have your code
+like your line code where you can say
+give me memory segments and there you go
+but yeah all the memory allocations are
+in there so you can see the start
+address and address and different things
+there get the thread stacks lock
+information and all loaded classes per
+class loader so a lot of information
+really quickly very useful first stop
+for quit thinking and look so queer
+think you can look I kind of split it up
+into having data to look at on having a
+way of looking at the data here you kind
+of have both right you get a lot of data
+and is in a readable format so system
+core I mean it's an always feature but
+we have added some value has already
+mentioned dan mentioned a little bit
+about it but I'll talk about a bit later
+we've added some value that will we'll
+get back to and we also support the heap
+dump format for memory analysis so
+getting to how do we get this and that
+applies both the state and history we
+have our dump agents it's come a command
+option for our JVM command option where
+you can say I want a certain kind of
+dump a certain type when something at
+certain triggers so first it types
+so a stacking consular just output
+directly to your consoles are like very
+limited in some basic information about
+the thread states system java and heap
+are the ones i already mentioned on the
+previous slide and get is a diagnosed
+that's diagnostic data for the jet and
+snap is those history of those trace
+buffers i talked about it's basically
+take a snapshot off of the history
+buffer the trace buffer so that you can
+see okay what was the history at this
+point in time so each dump agent is then
+triggered by a configurable event so we
+have got a bunch of events you can say i
+wanted at a segfault i wanted that when
+you start up shut down I mean could
+filter these because I want to if I want
+to do some free sample I want something
+for everyone state information at the
+time when an exception was thrown or not
+only when it was thrown if I was if it
+wasn't caught I want a dump of some kind
+of some kind of state dump and you can
+filter these liked exception what which
+exception if you put it on throne and
+you can get it on every time an
+exception is thrown you're going to get
+a quite a bit of data that you really
+didn't need but like if you look at you
+can actually specify multiple of these
+so a set of could then be that you want
+a heap dump on every GC and every full
+GC and if you get a no other memory and
+I want a system core if I seg fault and
+I want to Java core when the GOM shuts
+down and you started with that option
+and like you will get your information
+when you need it you didn't need to
+restart again and get everything to
+happen over a try to get this error to
+occur over again you run into you run
+with damp agents activated that will
+give you the information you need just
+if you look at the bottom of the type
+list there it's not really related to
+state or
+history but it's an interesting thing
+where we can run a command line tool as
+a type when a certain event occur so you
+can at vm start up you can say i want to
+run a how run a profiler when it starts
+or start health health center when i
+start through the JVM okay so summing up
+those tracing basically all over the JVM
+a trace bones can be activated
+deactivated the data stored in trace
+buffers and buffer snapshots are
+available through dump agents we have
+some few other state formats ranging
+from basic thread info output to console
+and two possible files or human readable
+file system course and we have the dump
+agents that will provide us those
+snapshots and to target by events like
+exceptions and signals so any questions
+okay going to move on well then at last
+point we've got so we will look at state
+analysis so this is where we turn core
+data into information so differentiating
+between those two and that's again an
+old to be able to quit thinking and
+actually look at the data a to topic at
+two directions on this one and I
+mentioned our other we added some value
+to the system core so i will give you a
+little bit of detail about what we
+actually did there and how it helped us
+build a great debugging tool which is a
+JVM aware debugger and i want to show
+you how social tool can be valuable so
+not dynamic dumped reader by the way
+direct dump reader is to what then was
+talking about earlier where we have
+actually got the point of hair first we
+actually we embedded a structure blob
+into the process image so we said take
+basically the problem that has been
+discussed quite a bit today
+about taking headers for taking the
+headers from our JVM implementation
+extracting the information about the
+structure of internal information about
+the internal JVM structures and then we
+load those into we load those into the
+process image so that if we end up with
+a system core the information about the
+structures is actually in the core so
+when we get a core dump we can open it
+and pull it back out so we have Java
+code that can read that structure blob
+and create a model of what the JVM
+looked like at the time of the crash and
+then we have java algorithms that can
+walk the knows how to walk those
+structures so we can do a stack walk
+like a java stock walk in yeah we have a
+great dinner I think Jeremy I don't see
+him anymore but oh there go you
+mentioned this about Google does
+something like that with the basically
+informing gdb about how to walk the Java
+stack okay yeah so it's it yeah so it's
+similar to that but it has a little bit
+more to it one thing ever i want to
+mention mention though is that I don't
+want to trivialize the complexity of
+maintaining the structure information
+that I mean some of it is yeah yeah okay
+so it definitely is definitely a problem
+that when you or is something to be
+aware of that even though i'm talking
+about these features as hey look that
+this thing we did you should probably do
+it too if you want to have a serviceable
+vm it's not necessarily just oh yeah
+sure do it it takes some effort but but
+it's a great tool it's the point so with
+this knowledge we get this really
+powerful with debugging tool that i have
+kind of hinted at a few times but first
+let's look at the native debuggers what
+they actually and the difference between
+a debugger and what i'm talking about
+now so you have native debuggers like
+gdb where you can explore system core
+you would yeah usually you require some
+source code and you require some debug
+symbols and you kinda have to match your
+source code version to make sure you get
+that right and then at that point given
+this or and by the way it's going to be
+platform specific as well so given this
+I you can start flooring exploring to
+JDM if you understand that completes
+like you have done to spend understand
+the structure the structure of it and
+know what to look for a little bit on
+the understanding the system part and
+you can and also it's a little bit it's
+dependent on being able to find a
+suitable starting point usually that's
+not necessarily problem to find but you
+have your sitting there with a core and
+you need to know quite a bit in order to
+get started so if you look at ddr
+interactive or JDM for you which is a
+tool i've been talking about so ddr
+chrome comes with this api which we
+expose through an executable that we
+ship and that's statham view so the /
+cuz of that structure blob that i
+mentioned that is inside the core dump
+we don't require any source code or
+debug symbols to do though some certain
+operations and we know a lot about the
+internal structure shape of the JVM just
+from the core file itself and in the
+spirit of Java it's backwards compatible
+so cross version so that you we have
+version information
+so you can read and which way is that
+you can read older course on your JVMs
+is also cross platforms that can read a
+Linux core on a Windows machine or using
+the Windows executable and something
+else that is in the Java spare a despair
+of Java extensible so because this is
+written in Java we're able to or not
+only because but I mean a nice feature
+of it being written in Java is that we
+can easily extend it so our service team
+they are able to write their own debug
+extensions on top of this tool for
+example one of them rota just a quick
+check that he can run a quick command
+where he says is this class I have a
+reference to a class is that class in
+the in the shared shared class cash so
+it's just a quick check but it will tell
+you a lot about oh it wasn't ok so that
+is that's not the problem right so we
+also have the common errors that can
+some common errors can maybe we found
+programmatically so if it's a known
+issue you can program it out and say I'm
+just going to run this on the core and
+check if that's the issue one example of
+that is about a year ago I was assigned
+a defect and we seem to be when we did
+some shared memory we had overlap
+overlapping segments so suddenly it was
+a start at the end of one segment was
+later than the start of another one and
+we're trying to figure out what was
+going on there turned out to be a Linux
+bug which was fixed later but point is
+there that it's very easy then to use
+this tool just say can you give me all
+there's this command already for saying
+give me all allocated like give me the
+oldest a memory segments you have
+allocated and then just run a quick scan
+on it to make sure there's no overlap so
+if we got more bugs in where they say
+this is something wrong with my memory
+or something oh I just crashed
+it takes five seconds to run this tool
+and say oh yeah that's does linux bagus
+your linux version so i could say a lot
+more about ddr and I think already did
+say quite a bit about ddr but let's take
+a look at it instead and before I
+actually look at it I'm just going to
+mention that these commands are not
+published not supported they are for
+internal j9 use so basically the same as
+what the disclaimer said don't trust me
+on this so let's just start quickly with
+something similar to DD be sin for
+thread and yeah suitable so we get some
+quick info we get the address of address
+of the java thread or the vm thread some
+thread ID and a name of it but also we
+get these suggestions that's actually
+the highlighting was supposed to have
+math to solve the suggestions j9 vm
+thread you see it has ! mark in front
+it's actually a command it tells me and
+if you want to explore this further
+here's the command you should probably
+use for it the the day 9 vm thread
+command would be similar to just it's
+kind of similar to dtp sprint where you
+know the structure of the shape of that
+thing so you just say print this address
+as this type not that interesting for
+this but and another cool thing is being
+able to say the stack just give me this
+stack for this thread and it also i'll
+do as we talked about who knows how to
+read the java the java stack because ddr
+note yeah if ddr knows how to read the
+stack and yeah this is a very minimal
+stack so it doesn't contain that much
+information but it does give me another
+suggestions do suggestion do you want to
+look at the method so yeah sure let's
+look at the method so I get this method
+output and it and it keeps giving me
+suggestions like do you want to look at
+the constant pool near the Jane on
+constable or do you want to look at the
+byte codes for this
+yeah they won't look at the bike goes
+for this method which is a really nice
+feature especially when you have like
+when you modify the bike cause when you
+load them right so you can look at you
+take take to Jabba p output and tells
+you in our case for example yeah here's
+a method handle invoke or invoke exact
+and that's not true when we load our
+bike codes we modify those by codes to
+be custom byte codes so then I can see
+all of those modifications because I can
+go in here and look at what what's do my
+back goes look at at runtime already
+getting a bit of repetitive going
+through these just stepping down
+stepping down but let's just pick a
+different starting point and see out of
+other ways of doing this DDR supports
+class.forname so i can do a run a class
+for name on a class and this guy stick
+ace test and then of course suggest you
+can look at this class if you want say i
+want to know did a hot swap this class
+did i ever did i do any class
+transformation and oh turns out yeah we
+keep this field replaced class yes we
+did actually change it seems it seems to
+have been replaced so useful information
+when i'm debugging just knowing that Oh
+probably reason why that cash I was
+keeping on some information in this
+class reason why doesn't apply it
+doesn't seem to apply anymore is because
+oh it's not the same class anymore just
+one more and we have some analysis
+commands as well say customer they find
+this stuck job application and there's
+no obvious problems in the Java code at
+least according to them so they consider
+contacting our service team and instead
+of doing that first at least they run
+the deadlock comment they just load that
+core that they got from that hung JVM
+and they just run deadlock dead look
+says actually there seems to be a dead
+locked loop between thread five and six
+okay following that look at okay we see
+it's red five and six let's get the
+threads okay and then we look at the
+stack for each of those who realized off
+that's where that's where our dead
+because it's in some yeah is in some
+customer code and it's easy easy to find
+these deadlox deadlock is of course just
+an example of one of these analysis
+command you could come as you could run
+but very easy to extend because you have
+all the information about the internal
+workings or not yeah the internal shapes
+and algorithms in the day in the JVM you
+can easily run extensions that makes it
+very debacle so conclusion I think it's
+time for that we want to be able to
+build a debuggable runtime we found some
+weed base it on some debugging practices
+that we believe needed some system
+support in order to be to work properly
+turn those into the bugging features to
+cover it completely say have we covered
+all the practices so we've covered all
+the practices which features and then we
+looked at these Jaina implementations we
+have the trace points the core dumps to
+dump agents to get those we have ddr for
+analysis and we have a bunch of command
+line options for tuning and in case it
+was the only question about that still
+don't trust me any questions yes
+most of it was I was only talking about
+the DDR yeah so DDR it is it has
+published command most of the ones I
+used here we're not deadlock is so
+that's something that's why use the the
+customer story for that one so most of
+these are not published there is a tool
+that we now ship which is ID de which
+can be installed as in the Eclipse
+plugin that has similar commands I don't
+think the output will look exactly the
+same so they're they're not published as
+this they're published this is what we
+use internally but they might be
+published as under similar names an idd
+which uses the same actually is based on
+JW and uses ddr yes tuning tuning flags
+in regression tests
+yeah so I believe the answer is yes at
+least n is nodding I'm not sure I can
+point specifically like where we would
+do that but definitely just for for the
+way it are then do you want to say
+anything about it
+yeah I was going to say that but I
+wasn't sure if dad wanted me to okay hey
+another question let's see just so yeah
+it's kind of part of that whole
+discussion that has been going on today
+where they were what was that it
+requires that that whole question we
+talked about today about how do i take
+my headers from my native JVM code and
+turn it into something i can read in
+java right so we have we have a
+mechanism for it so we but it's the
+reason why it doesn't necessarily apply
+to what we've been talking about here
+today is that this mechanism no we can
+is limited to our JVM right we can tell
+it we can make a lot of assumptions that
+wouldn't apply to the whole space of all
+code that we would like to be able to
+interact with right so we have code that
+knows how to read those headers and has
+sufficient knowledge about the JVM to be
+able to turn that into a straw some
+structure information then at when we
+start JVM we take that structure
+information and we load it into our
+process image and then if i run a dump
+agent later on there to get a core file
+that core file is then a complete that's
+my complete memory including that shape
+information then when i start ddr
+interactive or je t'aime view when i
+load this core dump I know where to look
+for this shape information which means I
+can explore my core in terms of in the
+context of that shape information is
+that
+yeah and knows the shape of example what
+we call internally an object a Jane an
+object or Jane on class and knows the
+structure what those looks like what
+those would look like and then we'll be
+able to use that information and say
+well if you're saying that there is an
+object at this location then i can give
+you that data in terms of what an object
+looks like right so the java code knows
+how to read the information about what
+like the information we load it into the
+core they started from the headers that
+from that from the JVM we processed it
+and turn into something we can read
+using Java code and then the Java code
+is instrumented to know or we probably
+program that to know how to use that
+information to run this algorithms I
+think Brian wants to end this well yeah
+I don't want to take up a whole brain
+but I was just remind people that were
+we haven't right next and so you can
+sort of yeah instead of longview or not
+okay well</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

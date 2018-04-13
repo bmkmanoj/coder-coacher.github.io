@@ -1,0 +1,2240 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Tony Van Eerd “An Interesting Lock-free Queue - Part 2 of N” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Tony Van Eerd “An Interesting Lock-free Queue - Part 2 of N” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Tony Van Eerd “An Interesting Lock-free Queue - Part 2 of N”</b></h2><h5 class="post__date">2017-10-28</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/HP2InVqgBFM" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">At one point in time,
+this talk, which is now
+part two of N, or part 2.4
+or so, 'cause I've given
+various versions of
+this, but it started as
+part one, was an overly
+complicated lock-free queue,
+got simpler along the way, which was good.
+Started getting more
+complicated, I don't know,
+we're somewhere in the middle.
+Oh.
+Before I even start anything,
+I always let people know.
+This is the stuff I really
+work on, take a bunch
+of projectors, and you turn
+them into one projector.
+Do it on ...
+Flight simulators, do
+it on great cars, that's
+a great car.
+Car looks like that, so
+we project on it, gives
+it color.
+And this was a, wow, this
+was the short version of my,
+I have more examples now than last time.
+And that's basically what we're doing,
+is doing magic.
+That's like a giant building
+that's been, projection mapped.
+Cool stuff like that.
+Anyhow, I'm not talking
+about any of that, so,
+someday.
+Someday, maybe I'll give a talk on it.
+Guide to threaded coding.
+Stop sharing.
+This is, forget, you know,
+in kindergarten, you learned
+to share, you know, don't do that.
+If you have to share,
+okay, we'll use locks.
+And one I added recently,
+'cause people keep,
+I forget that people forget.
+Don't call unknown code
+while holding a lock.
+That includes a virtual
+function, or any, you know,
+call back, which is anytime you write a
+kind of a signal slot
+observer thing, you will
+like, have a list of
+observers, and you'll lock
+that list, and you'll
+iterate over the list,
+and then one of those guys
+will grab another lock
+and you'll dead lock.
+So don't do that.
+And then, you should measure
+your code, and measure
+your code again, 'cause the
+first time you measured,
+it was wrong.
+It's guaranteed.
+When you try to measure your
+performance of anything.
+Then, you change your algorithm,
+then you go back to one.
+And most likely, changing your algorithm
+involves share less, share less data.
+You'll notice that that
+algorithm loops forever,
+and you never get to lock-free.
+Lock-free is the last thing you wanna do.
+If you do somehow decide
+that you can't get
+any more performance, or I should mention,
+lock-free is also really
+good for, you know, you don't
+get dead locks, it's more
+robust, if a thread dies,
+that's okay.
+Even if someone does stupid things like
+killing a thread, which
+you should never do,
+a lock-free algorithm
+could deal with that.
+But, if you do get down to the lock-free,
+don't forget to measure
+again, because there's no
+guarantee that the lock-free algorithm is
+any faster than just grabbing a lock.
+So, basically, don't share, and use locks.
+- [Man In Audience] Are we done?
+Almost.
+You take my joke away, actually.
+Rules of lock-free coding.
+What's the first rule of lock-free coding?
+(audience mumbles)
+Don't talk about lock-free
+coding, now, we're done.
+Break that rule.
+I'll say guide to coding,
+while I have a room
+full of people who are
+stuck listening to me,
+so I'll take this opportunity.
+Macros are evil.
+Has nothing to do with my talk either, but
+I just thought I would
+put that in any chance
+I get.
+John Lykos is allowed to use macros.
+He's the exception.
+He gets mad if I say, don't use them.
+In my slides, I'm not gonna
+write a compare exchange
+weak or compare exchange
+strong, 'cause that
+is was too many letters,
+I am gonna write CAS,
+'cause before, we had
+standard compare exchange,
+that's, that's the way I used to spell it.
+And also, my slides are
+gonna have code just crammed
+right in, and that's not
+usually my coding style,
+but it's gotta fit on the slides.
+So.
+Anyhow, we're gonna talk
+about this MPMC queue,
+which means multi-producer
+multi-consumer queue.
+So, you have multiple threads pushing data
+into the queue, John, you
+just missed the comment, man,
+just talking about you.
+It's good, it's okay, man.
+And we have multiple threads
+pulling items out of the queue.
+And ...
+What would probably be a much better idea,
+is to have separate
+queues, and have mostly
+single thread per queue,
+instead of, and maybe
+a little bit of sharing when necessary,
+but this kind of queue, where
+everything's going through
+one queue, what's that queue look like?
+That queue looks like a bottle neck.
+So, you probably don't
+want to put everything
+through a single queue, but also ...
+A queue is some sharing
+and whatnot, is kind of
+a multi-thread,
+multi-producer, multi-consumer
+queue, so maybe you, we
+make this queue and then
+we use it, with other queues,
+and kind of spread out
+the sharing, and try
+not to share everything
+all through one queue.
+Avoid the bottle neck.
+Anyhow, this, just burn
+this diagram in your head,
+'cause every slide's gonna
+have a version of this diagram
+on it.
+I gave this talk a
+couple of years ago here,
+and I did the first version
+of this, and we only
+got so far, so I'm just
+gonna do like five slides
+of where we were, 'cause I don't remember
+and you don't remember where we were.
+But basically, we have
+a queue that has a head
+and a tail, it's like, every queue does.
+But what, how is this queue implemented?
+So, you could implement a
+queue a million different ways,
+you could use a link list inside of there,
+something like that, but
+who would ever do that?
+This queue is going to
+be a contiguous queue.
+Right?
+So there's, this is kind of theory queue,
+this is real, real memory address queue.
+And it's gonna have a buffer of things,
+a head and a tail, something like that.
+And it's going to be a
+circular queue, such that
+the head is now over there and the tail is
+on the other side.
+And our first compromise
+is, it's not a queue
+of Ts, it's a queue of integers.
+Because that's a lot easier to deal with.
+And ...
+This'll be like one of many compromises,
+which I like to call a comptomisation.
+Because it's a compromise
+for the sake of optimization.
+Which is obviously a real word,
+if you look it up in Google.
+You'll see the &quot;indistinct
+uthany, houndaty
+&quot;without comptomising the
+histotic ptofile of the
+&quot;existing tetminus.&quot;
+Tetminus, yeah.
+I just like to make fun of Google whenever
+I get a chance.
+Their first result was, Did
+you mean compromisation?
+And there is one actual
+use of comptomisation
+in, low frequency radiation,
+something something something.
+So.
+So, this, worst part was,
+this is the same joke
+from two years ago,
+and you can still find,
+not exactly the same things are found, but
+you get the same answers as
+like second third answer.
+So, someone needs to work on their OCR.
+Anyhow.
+Just to avoid people
+bringing it up, there's this
+idea of false sharing, where,
+if I have head and tail,
+and I want to eventually make those atomic
+and do atomic operations on
+them, an atomic operation
+on head, might interfere
+with an operation on tail,
+because they're side by side memory.
+So, what we probably do, is
+put some space between them
+so they're not on the same cache line.
+And now, just forget I
+said that, so, just pretend
+that I did that, and if necessary, pretend
+that I did that inside the queue.
+And you can think about
+later whether it's necessary
+to do it in the queue,
+and how could we avoid
+doing it in the queue?
+So, the first weird thing
+about this queue I had,
+you know, that we started
+last year, was that
+the head and tail don't
+point to the actual head
+and the actual tail.
+They point, they tend to point somewhere
+behind the head and tail, and they're just
+kind of headish and tailish.
+They're nearby.
+And the idea is that you
+get the tail, and then
+you go looking for the head, knowing that
+it's near.
+Where you are.
+And you just find, you see
+some x's, for when tail
+is trying to look ahead, it sees an x, oh,
+there's data there,
+oh, there's data there,
+oh, here's the first one
+without data, that must
+be the real tail.
+And head does the same
+thing, it's sitting somewhere
+on non-data and has to find the real data.
+So of course, what do I mean by non-data?
+I've got x's in there,
+I have to have something
+in those blanks, right?
+Well, let's put zeros
+in those blanks, that's
+another comptomisation, you can have
+any numbers in this queue, except zeros.
+Everyone's okay with that?
+Who, zeros, I mean, who wants a zero?
+As you can imagine, if you
+wanna start putting pointers
+in here someday, no pointers, you know,
+special case.
+So, that's another comptomisation.
+And, we have this other problem, though.
+Look at tail there, it's
+trying to find the first
+non-data, and if tail
+is so far behind that
+the queue has, you know ...
+There is some queue
+here, some other threads
+running along, tail didn't get updated,
+because for some reason, tail is allowed
+to not update.
+The whole queue can
+fly by, and tail is now
+so far behind that it
+looks down, and says,
+oh, there's the first non-zero.
+Whoops, that's the wrong
+non-zero, 'cause tail is
+supposed to be on the other side, right?
+What are we going to do about that?
+We need to tell the difference
+between that zero over there
+and this zero over here.
+- [Man In Audience] Negative zero.
+Negative zero, that could be a good one.
+How about we just use one?
+So, we'll just take
+another comptomisation,
+we got, 'cause zero and one, you know,
+who uses one?
+That's not worthwhile,
+it doesn't do anything.
+You multiply by one,
+that did nothing, right?
+Don't need a one.
+And then of course, we're fine now, right?
+Until the queue starts
+going around, and now
+we get ones and ones, and
+we have the same problem
+as having zeros and zeros, so yeah, let's
+start using twos.
+(audience laughs)
+Yeah.
+So, on one hand, you could say, I'm going
+to, you know, keep going
+up the thing, I'm going
+to take away half your numbers.
+That sounds like a lot.
+But look at it the other
+way, I'm just taking
+a single bit.
+What's one bit, right?
+You didn't need that bit.
+So yeah, how big is that optimization,
+that comptomisation?
+It's a compromise, but, well ...
+At this point, optimization
+means, works or not?
+So, any optimization goes
+from not working to working
+is a good optimization.
+So, there we have the
+black is real numbers,
+and the red is not real numbers, so yeah,
+imagine that the red
+numbers are negative and
+the real numbers are positive,
+or if you don't wanna
+be a signist, you can
+have all negative numbers
+in your queue, and I will
+put all positive numbers
+in my encoding of the queue,
+or something like that.
+Take your pick.
+So yeah, it's only one bit.
+And last time, I'm sure we all remember,
+last time I showed this queue.
+I had this other
+comptomization, where I put the
+the, kind of like this
+generation count inside the tail
+variable, so I kind of
+just stuffed it in there,
+maybe make the tail
+variable a little extra big
+or whatever, just stuff
+that data in there.
+And, oh yeah, right, so this
+is kinda where we left off,
+last time, and last
+time, I gave this talk,
+it was all about walking
+through the forest, 'cause
+I used to do this, I used
+to work at Blackberry,
+and behind the building was a forest that
+I would take walks, and all my
+work on lock-free programming
+is done in my head while
+walking, because, if you have
+a lock-free problem that
+has more than a couple
+of variables that you
+can't keep in your head,
+you're not gonna get it right.
+So you might as well do it in your head.
+I hardly ever put it on
+white boards or anything,
+it's just, you need to be able to think of
+all the states, you need
+to keep it all in your head
+anyhow, so ...
+And it's also like, you
+know, you're dropping
+off the kids somewhere,
+you're like, okay, I've got
+five minutes.
+What are you doing, dad?
+Oh, I'm working.
+Except for don't do
+lock-free at work, so, it's,
+I guess it's a hobby, it's
+kind of a weird hobby.
+So anyhow, I used to take
+these walks, and I did
+these walks through the
+woods so many times,
+and then one time, I turned
+around, and noticed that
+there's a poison ivy sign.
+It's like, after, at the end of my walk,
+I turned back, and it's
+like, oh, poison ivy.
+Which is kind of a good, you know ...
+Analogy to lock-free programming.
+So you just stay on
+the path, and you avoid
+poison ivy.
+And then, and then, you know,
+that was the rim buildings
+actually, the Blackberry
+buildings, this is where
+we left the story last time, and that's
+kind of the end of the
+review, and that's kind of
+where we left off.
+And now, we're going to
+take a deeper, darker path
+through the forest, I guess.
+So that's kind of the end of the review.
+So, we've got head,
+looking for the real head,
+we've got tail looking for the real tail.
+See what my notes actually say.
+And, this one's, because
+it's wrapped around,
+you can like, head is actually going to
+the far side, and tail has
+to go all the way around
+to find the real tail.
+Here's an unfortunate, same
+problem, first data found
+is real head.
+It's like, nope.
+Same sort of problem we
+had with tail, thing is,
+last time I showed this cube, I never got
+to dealing, doing
+anything with head, it was
+all about tail, so it
+seems like we have somewhat
+the same problem.
+So, we're gonna have the
+same kind of, we need
+to tell the difference
+between the x's over there
+and the x's over here.
+Right?
+So we need to find, not
+just the first data,
+we need to find the first data
+of the correct generation.
+So now, our queue is actually gonna have
+a generation thing that we keep track of,
+and we're gonna have
+to do this again, we're
+gonna have fives and fours.
+And now, I've compromised,
+not just, I'm not
+taking away half your numbers now,
+like, I'm not just saying,
+when there's no data, I have
+a number, and now I'm
+saying, when there is data,
+I have a number, so I'm
+not taking one bit anymore,
+I'm taking half your bits.
+So, is this kind of a big, not worthwhile
+comptomisation?
+Well, I'm gonna say that
+usually, I can take two ints,
+and so now my buffer is full of two ints.
+And you know, make this
+little entry structure,
+it has data in it, has the generation,
+and I'm just gonna say, you
+can lock-free that, right?
+64 bits, probably ...
+You can still do lock-free
+operations, if you got
+a system where you need ...
+You know, bigger system,
+well, maybe you have bigger
+lock-free things, you could
+maybe, a lot of systems,
+you can do at least,
+maybe not 128, but you can
+do 96, so you could have 64 bits of data,
+and 32 bits of count,
+or something like that.
+If you have a tiny system,
+where you've only got
+like 16 bit pointers
+or something like that,
+well, I'd bet you probably
+don't have big queues then,
+either.
+Right?
+So.
+So, is this a comptomisation?
+Oh, no, we still have
+this other comptomisation,
+we still have zero.
+I still need to know, not
+only what generation of data
+is it, but is the data zero or non-data?
+Which I could just as easily
+hide inside the number
+or the data, but
+conceptually, it's just easier
+for me to think, generation is generation,
+data is there or not.
+So.
+So now, we have ...
+Tails looking for the first zero data of
+the correct generation,
+and head is looking
+for the first non-zero data
+of the correct generation.
+So, tail instead of, if
+generation, you know,
+we're kind of thinking we're
+on generation four here,
+so tail starts here, and
+won't stop on this zero,
+it'll go around, increment
+itself, like, have to assume
+that when we wrap, we up the generation,
+and it gets over here
+and I'll find zero five,
+and it'll be the first zero five and tail
+will be happy.
+And head will do something
+similar, and find the,
+it'll skip past, it'll
+be looking for x four,
+and it'll skip past the x five.
+And then it should find, each
+should find the right place.
+So ...
+I should probably do all
+my slides in the weird
+cases where like, we're
+wrapping around everything,
+just to keep your brain
+working, but I tend
+to make my slides look like this,
+where it's all nice and
+contiguous, and it's kind of
+a simpler case.
+So this is, you know, tail
+is looking for that tail,
+which is just beyond it,
+and head is looking for
+the head, which is just beyond it.
+And this is a problem
+we ran into last time,
+where you're pulling
+data out of the queue,
+which is Pac-Man eating
+the, wonk wonk wonk ...
+He's eating the things out of the queue,
+and you get to this
+point where you're going
+to eat the last item in the queue, right?
+And then after that, you're
+going to move head forward,
+and head and tail will
+be in the same spot,
+and then you start
+worrying about, shouldn't
+I keep head less than tail?
+And that was actually a
+huge problem last time
+I gave this talk, and there's like all
+these ugly ways of making
+head less than tail.
+But now, that I have, you know,
+I've put this extra generation
+count inside the queue,
+head is now looking for
+exactly, not just a piece
+of data, and the last
+piece of data was looking
+for x four.
+Head can come along, find x four,
+update like, take that x
+out and leave a zero five,
+and now it gets to zero four,
+and head can actually see,
+whoa, wait a second.
+There is no data.
+It doesn't have to look at where tail is
+to figure out that the queue is empty.
+It can see by the queue that it's looking
+for data of x and four,
+and there is none, 'cause
+you already ran to a zero four, and ...
+You know, you have to
+trust me that if you see
+a zero four, the rest are zero fours and
+there's no x four.
+So now, the good part
+about this is that head
+can see what's going on
+without comparing itself
+to tail.
+And the queue is empty, and
+the head and tail we don't
+worry about, 'cause it's
+not a problem anymore.
+And we had this case in the general case
+before I put the extra number in, we had
+this problem with, same
+problem, when it got full,
+you can see where tail is, you can see
+where head is, right?
+There's one spot where
+the next item's gonna go,
+that's what tail is pointing to, and head
+is pointing to the first entry.
+Soon as you put that one last place in,
+and now you look at a queue
+that just has x's in it,
+you once again no longer
+know, where's the beginning
+and where's the end?
+So, now that I've put this
+numbering system inside,
+I can see that it went
+from five down to four,
+I know where the queue is full
+and where the starting end
+of the queue is.
+Right, so.
+The head is looking for
+x four, it can find it.
+Tail is pinky, you have to know the names
+of the ghosts, right?
+It's important for the talk.
+Pinky is looking for a
+zero four to find the tail,
+he finds, he can look
+around, he'll find nothing,
+even if he looks through the whole thing,
+he realizes, wait, there's
+no room for zero four.
+So, they can both independently
+tell that the queue
+is full.
+Oh yeah, tail will probably
+go off, come back around
+as zero five, still looking
+for a zero four somewhere,
+because tail is looking,
+if tail sees a zero four,
+it thinks that's, or an x four, it thinks
+that somewhere along
+the way, there'll still
+be zero fours, so it looks
+forward, and it looks forward,
+wraps around, it updates itself to saying,
+I'm looking for a zero five now.
+And it will get back
+to a four and go, whoa,
+wait a second, I'm on
+a generation, I've gone
+around, I'm on a generation behind, so ...
+Yes?
+- [Man In Audience] So, it's in the thing,
+cording would take care of
+itself, but I didn't need
+a head and a tail coordinate.
+You're so many slides ahead.
+(audience laughs)
+The question is, why do you
+need a head and tail pointer?
+So, this is, let me go
+a couple of slides and
+I will answer that even better.
+Queue is full.
+So, this is, yeah, one
+slide, you're at least
+one slide ahead of me.
+So, is this the comptomization?
+And my answer is no,
+this is an awesomization.
+That we put the numbering in here, because
+exactly what he's saying
+is, all the information
+is in the queue.
+Head and tail can be
+anything, you can just
+look at the queue, walk through the queue
+and find the right answer.
+Head and tail are just more,
+they're not comptomization,
+they're just optimizations.
+It's like, you probably
+wanna start looking from
+where you left off.
+And also, particularly the
+generation, because you
+could actually do this
+starting at generation zero
+at the beginning of the
+queue, and just start looking,
+and wrap the queue until you
+get to the right generation,
+but that seems kind of ...
+You can also, we can get into
+a big discussion of like,
+how can I, look at the
+front of the queue or
+the back of the queue and
+know what generation it is,
+do I have to look at both to find the back
+of the queue, to know
+what the generation is?
+Like, oh, I see a five,
+I see a four, but when
+I see the five and I go look at the four,
+it's no longer a five,
+you can't see both ends
+at the same time.
+There's lots of things you can do.
+And I constantly play
+around with which ones
+I like the best.
+But that is the crux of this whole queue,
+is that ...
+Everything you need to
+know is in the queue, not
+in the data structure
+that's maintaining it.
+So, we should do some atomicization.
+'Cause right now, I have integers.
+So, because the data,
+the important information
+is in the queue, the queue
+itself has to be atomic.
+Right?
+And not just atomic,
+it's gonna be atomic with
+some sequentially consistent,
+or acquire release
+or something, it's gonna have
+some important memory ordering
+on those, because that's
+where the real information is.
+And like I said, I'm gonna
+assume that that is small
+enough to make it atomic,
+and still be lock-free.
+And then, the head and tailish,
+I'm going to use a laxtomic,
+which is some word I made up.
+What is a laxtomic?
+It is, well, who's seen
+Herb's Atomic Weapons
+of Mass Destruction?
+It's actually just called
+Atomic Weapons, but ...
+Yes, so, he says, you
+should never, ever use
+relaxed atomics.
+And I completely agree.
+So, that laxatomic up there, is a class
+where you derive from
+atomic and change all
+the functions to be relaxed.
+(audience laughs)
+Yeah.
+'Cause why not, right?
+The purpose of this talk
+is to convince you not
+to do atomic operations.
+So, is that okay?
+I'm tempted to say, you
+know, just argue right here,
+hand waving, that's okay, because
+like I said, head and tail
+are hints, they're not the real data, so
+using relaxed atomics and
+getting, you know, this answer
+that has no dependencies
+on other information,
+it's like, there's no real
+information in head and tail,
+it's just like, look at the queue to get
+the real information.
+So, I'm going to claim
+roughly that that's okay
+to make those all relaxed.
+And to kind of explain
+that a little further,
+in normal, if there's anything
+like normal lock-free,
+you know, you have some data,
+it's got an x, you set it,
+it's got a y, you set it, and then you set
+a flag, saying hey, this data is ready.
+Right?
+And on the flag, you set,
+you use a memory order.
+Probably, you should just
+use sequential consistent,
+but maybe you use memory order release,
+because that's typically what you use when
+you're publishing some data.
+I've wrote some data, I
+tell people that I wrote
+the data, so I publish it.
+On the other side, you look,
+hey, is there some data
+ready?
+You do an acquire, because
+you're going to acquire
+some data, and then you can read x and y.
+And the whole thing is that
+the release on this side means,
+what's the meaning of release?
+And you can read like this
+huge thing in the standard,
+release means, before means before.
+So, if I have two lines of
+code before the release,
+those two lines of code
+are before the release.
+Of course, you're probably
+thinking, isn't that
+always true, right?
+Isn't that how code works?
+It's like, no, code does
+not work like that at all.
+In normal code, that x,
+setting x, could've drifted
+down below the setting of
+the ready or, you know,
+there's no real ordering
+on a single thread,
+and the standard and your
+processor both assume
+that there's only one thread in the world.
+It's kind of funny that
+the processor assumes that
+since it knows that
+there's another processor
+sitting beside it, and
+it has multiple threads
+inside the processor,
+but nonetheless, they go,
+well, 99% of the time,
+you want me to assume
+that there's only one thread,
+and most of this stuff
+isn't really ordered,
+because from your one thread,
+you can't tell.
+And if it didn't do that,
+processors would be like
+literally 100 times slower.
+So.
+It's a great thing that a
+processor goes, I'm just
+gonna write these in
+whatever order I want,
+it's a great thing, 99%
+of the time, and the 1%
+of the time, you say, wait a second.
+I really mean these
+must happen before that,
+you use a release, and on
+the other side, you say,
+I can't read this data x
+before I check that it's ready.
+There's also an if statement
+in there that has some logic,
+but you know, think of
+like speculative execution,
+and other strange things.
+You wanna say, look, this
+has to happen after that,
+and you use an acquire.
+So, if you put relaxed in
+there, this would all break.
+Because of that, this
+the ready flag, isn't
+a thing of its own, it's a thing that has
+relationship with other data.
+That's the important part.
+The ready flag will be
+completely consistent
+on its own, it'll always
+have the right value,
+but it won't guarantee the other values,
+unless you use the right memory orders.
+So, the question is, what other data does,
+what, not what data does
+head and tail rely on,
+what data relies on head and tail?
+And it turns out there's
+none, 'cause all the data
+really relies on the queue,
+that's why I can make
+these relaxed.
+They're just hints.
+So, we make, those two
+are, these relaxed atomics,
+and I'm gonna stop calling
+them headish and tailish,
+which, I now think that
+was a mistake, I should,
+all my slides should
+say headish and tailish,
+because otherwise you forget.
+And I'm a big guy on proper
+naming, the proper naming
+for these variables is
+headish and tailish.
+To remind you every time
+you see them, that they're
+the, they're not really head and tail.
+But I wasn't gonna go
+through 100, 200 slides
+and fix that.
+Someday I will.
+So then, the next question is,
+I have this generation count,
+should it be atomic,
+relaxed atomic, you know,
+what is it?
+And I'm gonna say, same thing.
+The generation count
+that's inside the queue,
+that's in every entry, that's
+gotta be a strong atomic
+in the entry, but the
+generation of what generation
+are head and tail in, that can be relaxed.
+So same thing, it's a hint.
+Now, we might have a
+situation, where head and tail
+are communicating through
+generation, maybe there's
+a dependency between
+those three variables.
+So that's something we
+have to watch out for,
+but right now, I'm gonna
+say, they could be relaxed.
+So that's our class.
+So, what does push look like?
+And often in these talks,
+I go like, one line
+at a time, and I build up the function.
+Now, here's the function.
+But it's very small function, so why not?
+You load up some, your
+variables into temporaries,
+you got a temporary generation
+count, and temporary tail.
+And then, all you're doing,
+is walking, like I said,
+you're just gonna walk through the queue,
+with that, is zero, to find
+a zero, and it's not just,
+is it zero, but is it zero
+of the correct generation?
+Right?
+And because that's a relaxed
+atomic, on most platforms,
+that is free, that's
+just like not even doing
+an atomic, you're just, you're
+searching through a queue
+for an integer.
+It's like, whoa, that's
+pretty fast, right?
+It's very close to the same, right?
+And then, if we don't
+find it, we increment.
+Like in that, the first while loop there.
+And our increment just has
+to make sure, if it goes
+off the end, it comes
+back to the beginning,
+updates the generation.
+And then, if we do finally get there,
+let's see, I actually had slides for this.
+Blah blah blah, like I was just saying.
+We walk through, we increment.
+That one's not zero yet.
+So we increment again.
+This one is zero, and like,
+great, we come down here.
+And now, even though we just saw that this
+was a zero, on this
+next line of code, what
+is the number in there?
+Well, we have no idea,
+'cause it's multiple threads,
+so, someone else could've
+changed its value,
+so when we get to this
+point, we have to do another
+atomic operation, we have
+to re-read that value,
+and say, hey, this was
+zero just a second ago,
+a zero four, is it still a zero four?
+And now, we're going to do it with a CAS,
+because it's like, if
+it's still a zero four,
+then I want to put x there, right?
+So we do a CAS on it and
+we've, entries are ...
+Is our new, what we wanna put in there,
+whatever value came into the
+function, we're pretending
+it's a, I guess we don't know what it is,
+some value.
+Generation is gonna be four,
+and this is not relaxed.
+So, we put our P in there, for
+Pinky, and we're all happy,
+right?
+Or, whoa.
+Michael warned me about this.
+Pinky, or, we came here, we
+went to put a value there,
+and we found a C in there, for Clyde.
+Told you you had to know your characters.
+And if that happens, the while loop will
+you know, the CAS will
+fail, it's why it's in red.
+We jump back up to the loop,
+and then we just go over
+again, we just like,
+okay, go back to finding
+a zero.
+And this is the fundamental
+nature of lock-free programming,
+and the actual, the
+term, lock-free, is that
+you only fail when someone
+else came around and did
+something that succeeded.
+In this case, Clyde.
+A CAS loop is what I tend
+to call these things,
+a CAS loop, will reloop
+on progress, right?
+Someone made progress,
+so you fail and you loop
+around again.
+A spin lock loops on
+progress, if another thread
+is making progress.
+It also loops if the other
+thread's doing nothing,
+'cause it's just waiting for a flag to
+tell me that other thread is
+done, but that other thread
+got, got ...
+Shut off by the schedule
+or something, a spin loop,
+a spin lock will still just wait.
+No one's making progress.
+A CAS loop will only
+loop back if someone else
+did something.
+That's lock-free, right?
+If you look at Herlihy's
+definition, it'll say, a thread
+made progress, guaranteed.
+Either you made progress, or
+someone else made progress.
+Someone got in your way, 'cause
+they were making progress.
+Not 'cause they just stole
+a variable and told you
+to wait.
+So.
+We will, again, see that
+there's a value there now,
+we will increment.
+Look at the value, we got a zero,
+and then we have to do this
+one more time, and then
+maybe this time, we succeed,
+and now we're happy.
+Are we happy?
+- [Man In Audience] When do
+we increase the generation?
+When do we increase the generation?
+Of, in the variable?
+That's, like not in the
+queue, not inside the queue,
+but the generation variable in the ...
+- [Man In Audience] Yeah, like
+if you had looped over now.
+Also, when do we increment tail?
+'Cause I've been, and so far,
+I've been incrementing temp.
+So.
+Exactly.
+(audience chuckles)
+(mumbling from audience)
+It will increment the
+temporary generation of
+the thing locking around,
+but the, the real thing
+that tracks the generation
+at the end of the day
+isn't being incremented yet.
+So that's one question,
+is, we haven't incremented
+tail or generation.
+Turns out, this would still work, because
+we had always started zero,
+and we would go through
+five times to, you know,
+or whatever we had to do,
+or 100 times.
+The best part about that, yeah.
+You know what the scary
+part about that is?
+If you wrote test for this and
+you forgot to increment ...
+Those tests would probably
+all pass and those tests
+would probably be small enough that you
+would never notice
+that, every time you add
+more to the queue, just
+gets a little slower.
+Every generation, the
+queue's a little slower,
+and you're like, I don't
+know what's going on,
+just a little bit slower.
+So.
+So, here's the thing.
+There's that question, of,
+we didn't update some stuff,
+but there's also those other questions,
+like, what about this case?
+Right?
+We just did one case.
+It was a simple case of
+being, you know, inside
+the x's when we started.
+Here's the case where
+we're inside the zeros
+already, but it's a zero
+five, we're looking for
+a zero four.
+Wow, I'm jumping back and forth, sorry.
+Maybe I don't even know what I was trying
+to say, there, because
+I I think I said ...
+Okay, I'm just gonna go on.
+I will get back to that,
+I know there's more slides
+for that.
+That question, should we
+update generation of tail?
+So, let's say yes.
+Let's just say we magically
+update those variables
+for now.
+And now, I wanted to mention,
+what about this case?
+What about when it's
+wrapped around, and we gotta
+get to the other end?
+And I'm gonna go fast,
+because I was told I'm already
+a half hour in.
+It's going to correctly
+see the is zero is fail,
+it'll correctly, hopefully,
+do the wrap around
+in the increment.
+It comes around, it
+lands in the right spot,
+yay, it still works.
+Here's another example,
+what about if I write
+on the edge, it's always
+a good question to check
+that there's no x before
+the first entry, but
+it's way on the other
+end, and I'm gonna claim,
+yes, it will find the ...
+The right spot, as well.
+'Cause temp starts at zero again.
+It gets to the right spot.
+But then, what about this case?
+You've got nothing in the
+queue, there's no x's,
+and I'm going to claim that,
+whoa, what happened here?
+Oh.
+The empty case, sorry,
+empty case works right away,
+just like bam, you can
+find that really quickly.
+How about this case, where
+tail is past the real tail,
+right?
+The real spot we're
+looking for is that zero,
+first zero four, but we're
+already past zero four,
+and now, we come into the code, and go,
+let's look for zero four.
+What happens?
+I think you already saw
+me put an x on the screen.
+- [Man In Audience] It doesn't work.
+It doesn't work.
+Hm?
+Anyone?
+It appears not to work,
+because we come into
+this while loop, and we'll
+search for zero, we'll
+find that zero four, and
+it's the wrong zero four.
+The question is, how
+did we get to this state
+where tail is ahead of the real tail?
+This is when the one guy, Sebastian,
+one second in, he's
+like, that can't happen.
+Just, instantaneously,
+he's like, that's wrong,
+it can't happen.
+Can't have tail pass the real tail.
+And I am including, that is an invariant.
+Tail, with the right
+generation, will never be ahead
+of the real tail with
+the right generation.
+You can have them
+pointing past each other,
+but not with the right generation.
+So.
+Oh, my claim why this works, is because
+the temp always increments past ...
+The tail variable is
+here, temp goes forward,
+and then you set the
+real tail based on temp.
+So, real tail's always
+lagging behind, there's no
+decrements in the code anywhere.
+It's kind of part of it.
+You have to think about
+multiple threads, what
+each thread's doing, but
+you kind of get this feeling
+of, it's always going
+forward, and they go forward
+even when they wrap around,
+they still go forward.
+Man, I gotta remember
+why I highlight things.
+Ah, that's where it gets written ...
+Into, ah, just gonna skip that.
+That's where generation
+gets written, so, it's,
+it's also ahead of tail being written,
+'cause update isn't being called yet.
+Then update happens before the rest.
+- [Man In Audience] Updates,
+updates tail and generation
+at the same time?
+Like one atomic (mumbles) or ...
+No.
+'Cause once again, tail and
+generation are just hints.
+So I'm going to, that's a
+good question, actually.
+I'm gonna solve that later anyhow, so.
+I'm gonna, I feel I
+have to go quickly here.
+How far behind can tail actually be, like,
+can tail be at zero three
+and we don't have any threes
+at all?
+Gonna claim yes, it can happen, it happens
+if that whole do while
+loop, happens a lot by
+a lot of threads, so the
+queue gets full of things,
+and we never, no thread gets to update.
+So, the queue can get
+really full, and tail
+is miles behind, it can
+be like ten generations
+behind, probably not,
+but it could, and that
+will be a case where it's gonna be like,
+over ...
+Over looping, which you
+could optimize by looking
+at how far behind you are.
+But.
+So, you know, is there
+invariant that generation's
+at least four?
+There isn't, and it doesn't
+have to be, it doesn't matter.
+So, I'm going to claim
+this case is fine, because
+it never happens that
+tail is on the wrong side.
+Oh, this is another edge case
+that, you know, tail's on the
+wrong side, it's all empty,
+and I'm gonna say ...
+Oh, that's the, actually,
+the same thing, where
+that can't happen
+because of the invariant,
+so we're good.
+This case ...
+And, oh, I think I know
+what I'm, I changed ...
+Just going over the edge cases again.
+Ah.
+Right.
+This is the last edge case.
+Of course, I leave the last edge case for,
+the good edge case, for last.
+The queue is full.
+Tail is looking for zero four.
+We're at x five.
+We'll go, well ...
+We'll go along looking, I
+thought I had more slides
+for that.
+We go along looking for x zero
+four, and we don't find it,
+so we'll go loop around,
+now we start looking
+for zero five, we won't
+find it, then we look
+for zero six, then we'll
+look for zero seven,
+then we'll just go on forever, looking for
+that value.
+Eventually, we'll wrap
+the integer, overflow
+the integer, and then
+we'll start, you know,
+maybe at some, you know, this is
+another one where this code
+could just keep running.
+Because sometime, there'll
+be a zero in the buffer,
+and at some time, you
+will wrap your integer
+enough that you will find that zero.
+Probably not what you want.
+So, I'm gonna stick a
+little bit of code in there,
+that says, if the entry
+that I'm looking at
+is a lower generation
+than I'm looking for, then
+I know that I'm done.
+Like, so I will start
+looking for zero four,
+and I'll start looking
+for zero five, and I get
+to here, back to four again, I go, whoa,
+I'm going backwards in
+time now, so I must be done
+and I know that the queue
+is full, so I return
+queue's full, or I ...
+Do a, depends on how you wanna do it,
+but let's just say I return, queue's full.
+You could try to do a
+wait until it's not full
+and things like that.
+And the best part about
+that is, you return
+the queue is full, you
+don't return the queue is,
+is full, you return, the queue was full.
+And that might not even
+have been true either,
+but it's like, it looked full to you ...
+And it was full for like
+just a split moment,
+it's, from the outside, you
+can't tell the difference
+of whether it was ever really full or not.
+I can tell you it was full
+and you will believe me.
+That is ...
+That's often the case, right?
+(audience members mumbling)
+It may not, yeah, but
+it looked full to me,
+so I'm gonna return the
+it was full, and you
+can't tell that I'm lying.
+(audience chuckles)
+So it's ...
+Yeah.
+I mean, even if it was truly full, as soon
+as I start to do the return, it might not
+be full anymore, so, what's
+the difference, right?
+This happens all the time
+in lock-free programming,
+it's like ...
+So, I changed the code now.
+So in theory, I have to
+recheck all those cases,
+all those edge cases,
+right, 'cause you made
+a change of code.
+And I've been, this is me, rechecking all
+those edge cases.
+And then, we get to this
+point of, if you recall
+this slide of updating
+generation and tail.
+It's actually gonna look like this, I have
+to pass the old tail and
+the old generation in.
+And then, update is
+going to look like this.
+It's going to, 'cause we were ...
+Because we were right
+there and we wrote the P,
+once we get into update,
+we have to increment
+one more time, because
+we wanna put the new tail
+there, and we're going to CAS, because,
+at some point, old tail was
+there, tail started there,
+we've moved temp along,
+and now, we wanna know,
+has tail changed, since we last saw it?
+So that we can update
+it, or did someone else
+already update it for us?
+'cause at this point, the
+queue looks like this.
+Right, the whole queue
+might've changed, tail could be
+somewhere else now.
+It could look like this now, we don't,
+we don't know what it looks like.
+Whoa, ahh!
+That's a great way to do it.
+We all know what slide
+number I was on, right?
+(audience chuckles)
+Ooh, are we here?
+Okay, we're here, we're trying to update,
+we don't know what the queue looks like.
+Could've looked like
+this, where the real tail
+is right there, so, if it looks like this,
+and the real tail is
+right there, and we go to
+update tail ...
+To over there, then we've
+broken that invariant
+I just talked about, we'll have tail past
+the dotted line where
+the real tail should be
+so we really don't wanna do that, right?
+We'll break our invariant.
+And I say, that can't happen.
+Because ...
+We had fours there.
+And now, I'm saying, oh,
+what happens if it looks
+like this now, if those zero fours ...
+Once you've got fours
+with data, you'll never
+get zero fours again in those spots.
+They will at least be
+fives or something bigger.
+So I'll never get this case where ...
+I put that ...
+That, I'll never get the
+case where tail is behind
+where I last thought it was.
+So, you won't, you will
+never see it looking
+with these fives and fours like that.
+However, you will see this.
+Sixes and fives, 'cause,
+you know, it's gone around.
+So now, I look at tail
+in the CAS loop there.
+I look at old tail, and
+I say, yep, it's pointing
+at the exact same location
+it used to point at,
+so I will now update it,
+to the other location,
+were temp is, that's what the CAS loop,
+the CAS instruction will do.
+And I have now broken
+my invariant just like
+a whole loop later, and
+you probably will rarely
+find that, because ...
+Because it's another case
+that you'd have to do
+a lot of testing before you ran into it.
+This is an ABA problem.
+Let me explain that.
+So, here is A, where you've
+got old tail and tail,
+and we're looking at the value of tail.
+Compared to the value
+of old tail, and we go,
+okay, they're both on
+at, and you know, entry
+seven or eight or whatever
+number it's at, right?
+They're right there,
+pointing at that cell.
+And then we go along and we do some work.
+And that's B, and there's
+some state of the machine,
+and we don't know what it is.
+And then we decide, okay, we're here now,
+we want to update tail to temp.
+And tail, you go, tail
+hasn't moved, it's at
+the exact same spot old tail was.
+So I can do that update.
+Problem is that the old A and the new A
+aren't the same color, one
+is purple, one is blue.
+Obviously.
+So ...
+We need to take the purple
+and blue and code it
+into tail and old tail.
+Because we've lost that
+bit of information,
+things look the same, but
+they're not really the same.
+So, we just stuff it in there, and you
+can either imagine
+stuffing it in there, like
+put the number beside,
+like, cram two integers
+together, or, you can also just think of
+tail and old tail don't
+have, like, they just
+always increment forever, and eventually,
+you need to worry about wrapping around,
+but we're not gonna worry
+about that right now.
+Which are essentially equivalent things.
+Either old tail never
+gets past, you know, 16,
+or whatever the size of your queue is, and
+it just goes back to zero.
+Or it just goes on
+forever, and if it goes on
+forever, then you'll have
+to do the mod whenever
+you access the buffer, right?
+So, equivalent ways of thinking about it.
+So now, when we try to
+see if tail has changed,
+and check like, has the
+world changed on us,
+we can see whether it has changed or not,
+whether, in this case, it is the same.
+And in this case, we'll
+look at tail and old tail,
+and we actually see
+that they're different,
+because we've added that
+extra bit of data to them.
+So the CAS will fail, and we won't update
+tail, and we won't have
+broken our invariance.
+And then, generation, has a similar thing,
+it's like, what generation are we on now?
+I don't know, we were on
+generation four a second
+ago, but the whole world
+changes between every line
+of code.
+And I'm gonna say that generation count,
+the temporary generation
+count, just has this tendency
+to always increment.
+So, what we can do is, say, as long as we,
+the generation we wanna
+set it to, as long as
+it's greater than whatever
+generation it currently is,
+update it, even if it's
+changed, someone ...
+Inky might've come here
+and changed generation
+from two to three, but I
+think it should be five,
+I don't look, or, if
+it's two, make it five,
+I look, if it's anything less that five,
+make it five.
+'Cause, why not?
+Let's get up to the most recent.
+And I'm gonna claim this
+all keeps our invariance
+in check.
+And that is all that code for push.
+Now I'm gonna, I have
+to figure out how much
+to do in the next 15 minutes.
+There's some interesting
+things about that, even.
+Oh, one question is, how many ...
+Relaxed versus non-relaxed
+operations are there?
+Ends up being, like three or four relaxed
+operations and one non-relaxed.
+Which is pretty good.
+There is a problem, of course, that ...
+There's really no such
+thing as relaxed CAS.
+On most, on like, x86 or anything.
+Because it has to do,
+it's an if statement,
+it's not just, oh, I'm
+just setting this variable
+or something, it's going to be as slow
+as a non-relaxed CAS.
+So.
+That's not as optimal as you would like.
+So, the next question is, that same thing,
+do I even have to, for some of that, like,
+the generation, should I even check
+if the generation's
+changed, or should I just
+set it?
+Just like.
+It might, I might be
+behind, but the chances
+of me, doesn't matter if I set it behind.
+I'm probably ahead, so just set it, don't
+even check if you're ahead or not.
+Just assume you're the last guy, there's
+a lot of little optimizations you can do.
+Because we assume that
+these are just hints.
+Ah.
+Okay, at least we can get to pop.
+Same sort of thing, head is looking for
+the first non-zero data,
+instead of look for zero data.
+Of the correct generation.
+And if the push code looks like this,
+the pop code looks like
+that, and hopefully,
+that looks very similar.
+And basically putting red
+every line that's different,
+right?
+You're looking for data instead of zeros.
+Instead of checking for
+this less than thing
+we're gonna check for equal zero, and we
+can find out that it's empty, or equal,
+if the generations are
+equal, we know it's empty.
+And well, we're gonna be updating head,
+returning some data, and we have a,
+very important, we an
+acquire operation instead
+of a release operation.
+And ...
+I have this one problem,
+that I keep talking
+about this generation thing,
+and I have ...
+Head needs a generation,
+and tail needs a generation,
+and in this example, those
+are different generations.
+So now I've got two generation counts,
+and once you've got that, it's like,
+why don't I just put head
+and head generation into
+a struct and tail, tail
+generation into a struct.
+So I made this struct
+called, gen I, for something
+that would fit on slides,
+it's generation plus integer.
+And it is now the same
+struct as the entry itself,
+they're all three generation, an integer
+plus a generation count.
+And you know, you can assume
+that operator less than
+equals default, is a C++ feature.
+It's not.
+So this turns out to be all the code.
+And it all fits on one slide.
+Surprisingly.
+So, that's why this is a
+simply lock-free queue.
+And all you need to do, is look at all
+these different states, and
+check that every single line
+of code is valid for any
+one state, and when you go
+to the second line of
+code, check every state
+to see if it's valid.
+And of course, the first
+question is, is this all
+the states?
+Or are there more states that I'm not
+putting up here?
+Or are there actually less states?
+This state, right, how
+is this any different
+than these two?
+Because the algorithm only sees one entry
+at a time, so that state
+ingredient is really
+a combination of those
+other two states in yellow.
+The algorithm can't see the whole queue,
+it sees one entry in the queue.
+So, in a sense, there's
+actually not this many states.
+And what you really wanna do, is look at
+the entry you're looking
+at, 'cause this is,
+every diagram I have looks like this,
+every diagram should
+really look like that.
+That's all you can see when you're code,
+right, you just, I can
+only see what's here now.
+You make, the whole
+thing is a, you build up
+a few assumptions or some
+invariants, so it's like,
+if I see this, I know
+something else, but all
+I can see is one thing at a time.
+So, for that x four, it can be
+any one of those kind of
+configurations, except for
+maybe fives or whatever, but same idea.
+And you know, when you're ...
+You know, the next, from
+this step to the next step,
+you could be in a different
+state, in the next step,
+you could be in a different state.
+And every step of the
+way, you have to check
+what state you're in.
+And you could do it
+this way, and just look
+at those values, and
+say, well, if I'm looking
+for a zero four, if I
+find a zero four stop,
+if I find an x four, there's
+a little fork in the road,
+and if I find a five or an
+x five, I just keep going.
+So that narrows down all
+the states that we have
+to deal with.
+And, have to remember
+what this piece is about.
+Yeah, this is that ...
+When you find out that ...
+The queue is full, you would
+actually, I don't update
+head and tail there, I don't
+update tail when I should,
+I can search the whole thing and find out
+it's full, and I just
+leave, instead of like,
+at least telling people what
+the last thing I saw was,
+but small problem.
+So this is what lock-free
+programming looks like.
+(audience chuckles)
+Have all the code in your
+head, have all the states
+in your head, and do the code.
+I'm really close to
+being out of time, so ...
+That's the part about updating tail.
+This is, this is like
+the real half of the talk
+that I can never get to.
+Next time.
+I claim these are some
+of the invariants that
+we're trying to maintain in this queue.
+Tail is always less than
+real tail, head is always
+less than the real head.
+That it's actually is,
+circularly contiguous,
+like, that I didn't end up putting a hole
+in there somewhere, 'cause
+then everything would break.
+That the entry generation
+is always like five, four,
+there's only ever two
+generations in there,
+it's always higher, then lower.
+Tail only increases and
+it adds data, and then,
+head only increases when
+there is data, so that
+should be able, for me,
+to prove that head is less
+than tail, but I don't
+really care if head is less
+than tail, 'cause it no
+longer becomes a problem.
+And ordering your nt's.
+Something that is hiding
+in here as, what guarantees
+do you have on, I have
+a thread that put in,
+one, two, three, into this queue in order,
+what order do they get pulled out of?
+They might get pulled out of any order,
+in a normal, you have to
+assume that, if I'm having
+multi-threaded in, and multi-threaded out,
+you didn't care what order I put those in,
+because they're coning
+out in whatever order,
+and they're getting
+processed in whatever order.
+On the other hand, maybe
+I write this queue that
+is multi-threaded,
+multi-producer, multi-consumer.
+But, you happen to use it
+in a single threaded case.
+Then, you're like, hey, I
+know I put one, two, three
+in an order, why didn't
+they come out in order?
+Like, that would be, if
+you only have one thread
+or whatever, you could see this now.
+So, my queue actually
+tries to guarantee that.
+For a single thread that put in A one,
+A one, A two, A three.
+You could see that that
+thread comes out in order.
+Even if you had multiple
+thread-ins and one thread-out,
+you would see A one,
+some other stuff, A two,
+some other stuff, A three.
+That comes down to, also, what are the,
+and I didn't explain what
+the semantics I'm going for,
+that kinda ties in what
+invariance are you trying
+to maintain?
+And ...
+In theory, I would try
+to prove something like
+range, is circularly contiguous.
+Which, in ten seconds, I will do.
+Which means, did I write
+it in the right spot?
+So ...
+Zero, we start zero, we walk through this.
+And I will write it in the right spot.
+Oh, awesome.
+Zero case works.
+It's always good to know
+that the first case works.
+Then, we assume that we've gotten so far,
+is this proof by induction?
+It's like, okay, now we have
+some things in the queue,
+now we just have to prove
+that the rest of it works.
+This relies on some of
+these other things that
+I've yet to prove, right?
+So this proof can go on for about an hour,
+of how do you prove lock-free code?
+And, it's very much one step at a time.
+And things like, how do
+I know that real tail,
+like, we've kind of talked
+about, but it's like,
+you have to look at, well, it gets set by,
+temp gets set there, it came from here and
+it came from up there, you
+have to trace backwards,
+where did this data come from?
+Is it always increasing,
+does it ever decrease?
+And, when I'm walking through all this ...
+I ran into this case of ...
+Like I said before, I
+was like, tail will never
+get set ...
+Until after everything else, 'cause it's,
+it's, the update happens last, right?
+But this code is actually relying on,
+am I quite at the right spot?
+Yes.
+Could this ever happen?
+Can line one happen before line two?
+And you're like, that
+can't happen, because like,
+line two is basically an if statement,
+and how do you go into
+the if statement, like,
+you know, it's if this,
+you'll fall out ...
+How do you go into an if
+statement, and do something
+before the if statement, right?
+But at the same time, I'm like, well ...
+I don't have an acquire,
+I don't have a before,
+I don't have an after means after, here.
+I've only got a release.
+Everything before happens
+before, but I don't,
+other than the logic of an if statement,
+which, you have to start
+to think about when
+you're doing lock-free
+programming, I don't have anything
+that says, well, it's, we also
+don't do speculative right,
+so, the chances of
+something being written ...
+Going upwards, but ...
+You do have this, I have
+this ordering, between
+these two variables, and the code is ...
+This is where some information
+passes between threads.
+Some other thread is
+setting, might be setting
+the buffer, with this release,
+and I have an ordering
+relationship, where tail
+is saying, well, I know
+the buffer is set, so I will
+know that I will never see
+zero four, and problems
+like that, so at least
+technically, I feel there's
+a relationship between
+these lines of code, right?
+Like, I'm worried that
+all those x's will happen
+later than the setting
+the tail, and it'll get
+out of order.
+At least there's a logical
+relationship, even if
+it doesn't happen in a
+current processor, or
+there's no, there's no
+compilers that optimize it
+or whatever.
+But technically, I think I
+need an acquire release there.
+And ...
+We could spend a whole
+bunch of time to decide,
+to you need a acquire release there?
+Or do you just go, I'm gonna
+put acquire release there.
+'Cause ...
+'Cause it's safer.
+So, leave that as a question
+for the, we could, you know
+go read the standard word
+for word, try to decide
+how that works.
+This is what makes me worry about it.
+That simple as, you know,
+simple line of code there,
+read the value at some address.
+That's two separate loads, right?
+You have to load what's
+the value of the pointer,
+then, what is the value at the pointer?
+Can those two lines at
+the bottom be re-ordered
+by the CPU?
+And of course, you're like,
+how could it be re-ordered
+by the CPU, the second line has to know
+what the first line gave as a result.
+Of course, on an alpha
+processor, those two lines
+can be re-ordered.
+In the memory.
+And, I could spend some
+time, if I had more time,
+I'm trying to explain how
+in the world can something
+like that happen, but
+you have to imagine that
+it, one way of imagining it is,
+it's already read pointer
+before, and it's just gonna
+use that same way, it's like,
+oh, I've already got that
+in the cache, or I've already got that in,
+I just read it two
+seconds ago, why would I
+re-read it when I'm
+the only thread around?
+So, it, it can, it can,
+in effect, re-order
+those instructions, and
+that's, my question would be,
+does anyone here understand
+memory order consume?
+And I guarantee you, no,
+because the committee
+doesn't understand memory order consume,
+and we've like, put a comment,
+in the standard saying,
+don't use this right now, we're still
+figuring it out.
+So, that's what this
+is all about, so that's
+what makes me wonder about,
+you know, I don't think
+those lines cam be changed,
+but then I'm starting
+to like, uh, I start questioning myself.
+And that is, I managed to get to the end.
+Looking back, we did push.
+Awesome.
+And pop.
+That's like, how far can you get?
+That's a lot for a lock-free.
+And we started talking about invariance,
+so I'd like to talk more
+about the invariance later.
+And I'd like to point out this thing.
+Someone did this project,
+called the Ptolemy Project,
+where they wrote a
+kernel and an OS and all
+that stuff at Berkeley, and
+they said, let's make this
+the, you know, the best ...
+Best practices possible,
+we will do design reviews,
+code reviews, nightly
+builds, regression test,
+code coverage, 100% code coverage.
+Reviews of the concurrency,
+they brought in
+concurrency experts to review
+this code in the kernel,
+and it ran for four years
+and then it dead-locked.
+Right?
+So the whole idea of like,
+do I test lock-free code?
+Yes, you need to test it.
+Do I guarantee that
+those tests tell me that
+it's right?
+No, I don't guarantee those tests at all.
+- [Man In Audience] So
+then, you don't really
+need to do the ...
+Well ...
+It guarantees that it
+won't, you know, you won't
+have a problem as often as if you didn't
+run the tests.
+It, really comes, 'cause you
+know, for a lot of industry,
+you look at this and you say,
+bug once every four years?
+I can live with that.
+Like maybe that's, you know, if it's,
+if it's like a medical device, maybe you
+make a different choice, but
+if it's my phone, my phone's
+not gonna run for four years straight, so,
+you know, who cares?
+But it does, this is
+also here to scare you,
+that's the point of the slide.
+And looking head, I
+have a queue that looks
+like that, when it gets really full,
+my goal is to put a marker
+in there, and allocate
+another queue that's twice the size.
+That is why, the goal
+of this queue is to be
+a growing and shrinking,
+mostly contiguous,
+multi-producer, multi-consumer
+lock-free queue.
+I think that's a lock-free
+queue that grows forever,
+is a queue, of any kind
+that grows forever,
+is a bad idea.
+It means you have a
+problem in your system.
+But it's the most complicated
+queue I could think of,
+so I thought I'd write it.
+And the plan is to have
+this other side buffer here
+that only has to be like,
+a 32 numbers to track,
+is anybody using, are those
+new queues that you've
+constructed, are they
+still in use, or have they
+become empty?
+So the idea would be,
+of course, this is still
+circular, you go here,
+then you go up there,
+then you come back to here,
+and then you look around.
+And then at some point, if
+one of those gets empty,
+you remove it again, but
+someone might be in there,
+looking around for something.
+And so you have to have
+reference counts and all
+of these other things.
+So, this is why this is
+called part two of n.
+This queue, this is my
+next five years of talks.
+And I wanna get, not just
+ints, but structures,
+some day, we will have
+structures in this queue.
+And then we're getting
+out of the woods, we're
+at the end of the thing.
+That is the code, I think I'm done.
+I went fast, sorry, and
+if there's questions,
+we don't have much time,
+but I will stay around
+and talk about this stuff
+as long as you want.
+But I am gonna say, that is my last slide.
+Thank you.
+(audience applauds)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

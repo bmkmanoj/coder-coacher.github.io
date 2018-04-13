@@ -1,0 +1,1297 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Rethinking the Language Runtime for Scale by Christopher Meiklejohn | Coder Coacher - Coaching Coders</title><meta content="Rethinking the Language Runtime for Scale by Christopher Meiklejohn - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Rethinking the Language Runtime for Scale by Christopher Meiklejohn</b></h2><h5 class="post__date">2016-09-29</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/SXT_fVJOkD0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">um so uh yeah my name is christopher
+michael john i'm going to be talking
+about this work that I do on this
+programming language that's part of my
+PhD research called last and this
+language is designed for large scale
+computing that's not necessarily
+high-throughput but operates while
+clients are offline you have a lot of
+divergence you need to deal with
+resolving concurrent updates and so I'm
+super excited so that if you've seen my
+talks before which you probably have I'm
+going to do a little bit of an intro
+it's always the same so I apologize for
+those that are repeat repeat attendees
+to my talks but then we'll have a bunch
+of new stuff at the end that talks about
+experiments that we did with distributed
+rolling oh I will just say I'm super
+excited to be here uh is Costas in this
+room no um well a tu SI two years ago I
+presented the first version of this work
+which was based on a paper I at the
+Erlang workshop and man he gave me a lot
+of heat so I'm proud to be back because
+our system runs a lot better than I did
+then it ran it five nodes would react
+core then and so we've done a lot to
+change that and so super excited okay so
+we'll get right into it so I'm going to
+do an overview of the language before I
+start talking about the things that we
+did around scaling a runtime system to a
+large number of clients so I you know in
+a distributed system sometimes you have
+two replicas of an object will say this
+is a register and the way it works is
+that with a register you can set a value
+you can get the current value and so if
+i set the value to 1 on replica a and
+then I asynchronously send a message to
+say here's the value of replicas one and
+I do this without any coordination when
+I then go to perform two updates that
+happen concurrently I setting the value
+to 2 and 3 respectively without
+coordination I end up with this problem
+as problem is is that when I am writing
+this program ahead of time I don't know
+what the result of this is going to be
+it could be anything the scheduler could
+give me any number of arbitrary
+interleaving zuv these messages and
+these things could be delayed reordered
+whatever and I don't know what the value
+is going to be and so this makes
+programming difficult and traditionally
+the way we solve this if you know if you
+if you're a concurrent programmer or or
+distributed systems programmer
+traditionally we use synchronization to
+solve this so we get everybody to agree
+on an order
+these events are going to be observed in
+and having this order allows us to
+eliminate accidental non-determinism in
+the system so you may more you know you
+may know this is its more common name as
+race conditions as one example right and
+so you might have these different
+interleaving so the scheduler and
+sometimes you get to sometimes you get
+three you don't know so what do you do
+well normally you'll just like wrap this
+thing up with a lock or you can use a
+monitor which is kind of like the
+synchronized keyword in Java or you use
+a mutex or a semaphore or whatever if
+you're running this then a distributed
+computing environment maybe use the
+paxos leader election algorithm maybe
+use raft whatever the idea is that you
+want to have something that's going to
+enforce this total order of events so
+you can reason about how to write code
+right and so on a sequential processor
+with sequential execution with single
+thread we don't have to think about this
+and so where my work comes in is that
+I'm trying to solve large-scale
+programming for mobile apps that go
+offline we worked with rovio
+entertainment where we're talking to
+some new game companies now and we with
+Internet of Things if you're having if
+you happen to use shared data so we have
+some examples of this as well and so the
+problem here is that you can't use an
+approach like Paxos if you have clients
+that need to operate when they're
+offline you can't get consensus on you
+know get a leader and then have that
+leader sequence all the operations if
+you can't talk to the leader and so
+these domains it's really difficult and
+so what we want to do is we want to try
+to design systems that have weak
+synchronization or very little
+synchronization required to achieve
+correctness right but we can't really
+build anything if we have no
+synchronization right and so we can
+think of like a MapReduce job where we
+don't do any reduce we only do a map
+well sure that's embarrassing Lee
+parallel we don't need synchronization
+for that right except maybe to get some
+a priori I cluster configuration and so
+the kind of sweet spot we're trying to
+hit is this thing that's referred to in
+the literature as strong eventual
+consistency and what this is is a
+correctness criteria that says
+regardless of ordering it's eventually
+consistent there's no order get ordering
+guarantees at all as long as I observe
+all the updates in the system and you
+know all the replicas observe all the
+updates in the system you'll get the
+same result regardless of reordering
+regardless of replay regardless of
+network anomalies
+and so um the only requirement you have
+to build a system with SEC is that you
+have replicated replica communication so
+transitively you have to deliver all the
+updates to everybody and what's great
+about this property is that it's it can
+tolerate reordering of messages which is
+a reality we have to deal with on
+unreliable that works and it can
+tolerate duplication of messages which
+is nice if you have to replay events
+because you don't know if you delivered
+something and so to give you a trivial
+example of how we could fulfill this
+property if we go back to our previous
+example we can trivially fulfill this
+property if we're dealing with just
+natural numbers by using the max
+function and kind of the mathematical
+properties that allow this to happen is
+that max is monotonic and you kind of
+over these naturals you can form a semi
+lattice and because of all this great
+math and all this stuff that you
+shouldn't have to know about as a
+programmer regardless of how I reorder
+any of the arrows in this execution I
+will get the same result regardless and
+so you know we don't have to go into the
+details of all that stuff you shouldn't
+have to know how any of that works as a
+programmer that's that's our job as
+researchers to build abstractions around
+this stuff so you can just get the
+benefits of it and so if we were to
+define a criteria on how we could use
+strong eventual consistency to build a
+certain class of systems systems that
+need to operate while offline systems
+that need to tolerate these unreliable
+networks then we could define it in
+three sections and so the first one we
+could say is that well we need data
+structures that can be concurrently
+modified without locking that will get
+the same result and so that's kind of
+the first component is eliminating
+accidental non determinism on the data
+structure level the second thing is that
+we'd like to have a programming language
+where we can transparently distribute
+these data structures and regardless of
+the inner leavings the program will have
+the same output if it runs on one
+machine or 10 machines right and so we
+want to build a language now this
+language campy is expressive as a
+language like C for instance because
+there's a bunch of things you can't do
+safely without coordination and so what
+we're trying to do is build a minimal
+subset language where you can express
+only computations that are safe they are
+transparently able to be distributed and
+they produce the same results regardless
+and finally you would imagine that you
+know to do to gain these nice properties
+we have to make a trade-off here that
+trade-offs usually in time and space and
+so one of the challenge
+we have to deal with is how do we
+efficiently distribute this data across
+the network and most of the rest of the
+talk once i get through the basic primer
+on one and two is going to be focused
+around how we do number three and so
+though you know crd T's you've probably
+heard it it's been a bit this conference
+a lot already and so crdt is our kind of
+the base work the previous work that we
+build upon and what see our duties are
+that they're just a subset of you know
+their abstract data structures their
+abstract data types that have a API
+that's similar to you know a sequential
+data type they come in all these
+varieties but there are certain things
+that you can't model with crdt so that
+the scope is kind of limited and the
+ones that our work focuses around or
+mainly sets counters registers flags and
+maps and and sometimes graphs and what
+these objects give you is a they they
+fulfill the strong eventual consistency
+property they fulfill this convergence
+property on an object basis so
+individual objects know composition
+individual objects that are modified
+independently and to kind of give you an
+intuition of how this works so I'm going
+to show you a very inefficient crdt but
+it's good for demonstration if I need it
+to model a set where I could add things
+and remove things in a way that it was
+always safe under any arbitrary
+interleaving what I need to do is I need
+to model the set as a series of triples
+represented here in the bottom section
+where I have the element that's been
+added to the set and some unique
+identifier is that represent every time
+it's been added and every time it's been
+removed and so what I do is I can make
+this modification at AI generate this
+little unique little a and i can send
+the message and that says well a added
+one to the set with unique constant a
+i'm using a here for simplicity now
+what's egos to add i went see ghosts add
+one to the set here it generates a
+different identifiers and then if c goes
+to remove before it's ian a's editions
+then c can only remove the additions
+it's seen and so c can only remove its
+own edition because those messages from
+a haven't arrived yet they arrive in the
+future and so this allows us to build a
+CRT t that allows us to add and remove
+elements we have this nice arbitration
+on winning and wit but towards winning
+under concurrent additions and when we
+merge all this together by performing
+pairwise set unions at the end we see
+that will
+one is still in the set because it was
+added and removed by sea but it was also
+concurrently added by a and C was never
+able to remove a's addition and so this
+would go ahead gives us this property on
+a per object basis and so you can
+imagine that we model counters this way
+we can model sets this way we can model
+up flags this wave flags are billions
+and we can model all sorts of things
+this way so now the challenge here is
+that once I have these set
+representations that are both expensive
+and have all of this metadata I can't
+just read the value of it and then
+change some other crdt because now I've
+lost this causal relationship knowing
+that these updates cause this other
+update and so to solve this what we do
+is we try to build a system that
+provides a programming abstraction
+around this so you program just like
+your programming in haskell or your
+programming in Erlang or whatever and we
+transparently do all of these
+behind-the-scenes metadata things so you
+can think this is monadic in a way right
+and so the language that we have is a
+minimal language just on sets right now
+it's called laughs it's a kind of a
+functional programming model that's
+implemented as a library and Erlang and
+you can think of it is a language where
+the only data structures you have to
+work with our crdt and so we have this
+safe base that we build upon we have
+this language that only allows us to
+work with co DTS and then everything is
+really nice and safe and so this allows
+us to write entire computer programs
+that they can't do everything you know
+that that like you could in Erlang but
+the things that they can do they can do
+a hundred percent safe and so you know
+the dsl we have an erlang looks roughly
+like this we can create a set we can add
+elements to the set and we can create
+another set and then we can map between
+the sets or something and so you have
+operations like map and filter and fold
+and product Union intersection and so
+its expressive enough that we can
+provide a minimal subset of sequel so
+you can actually write programs in
+sequel today in mm and so finally we
+have to think about so now we've seen we
+have this programming model it's really
+safe because it doesn't do a ton but it
+does you know enough to express some
+class of programs now we have data
+structures that are really safe but
+they're expensive because they store a
+bunch of metadata and so we need an
+efficient runtime system for
+disseminating all this data and so the
+runtime system that we have here is
+called is this a work in progress
+the system is called selective hearing
+and kind of the observation here says
+well if I don't need to order all of the
+events I can use very efficient ways of
+disseminating state I can use gossip
+protocols I can flood the network I can
+build optimized broadcast trees if I
+don't need ordering I can do things in a
+much more efficient way than if I needed
+to deliver all of the events in order
+and make sure everybody sees them in the
+same order at the same time and so by
+weakening that we can take advantage of
+protocols that have been used for like
+video dissemination in networks like
+protocols like thicket for disseminating
+video between peers in a peer-to-peer
+manner we can take advantage of all
+these protocols that are optimized for
+very fast dissemination and so this is a
+really nice you know you can kind of see
+the benefit here this is really nice it
+pairs very well because we have a
+programming model that's safe and it
+doesn't require ordering and so we can
+use a language and so we can use a
+protocol where we don't have ordering to
+get very efficient dissemination now
+that's not the only trick here though
+because if you're trying to build a
+runtime system for 20,000 notes or
+10,000 knows it's a target number it's
+our ambitious target number we're not
+there yet we're not even close yet but
+we're getting there uh you can't have
+you cannot target other processes by
+name you can't have a global register
+you sure you can you can build a global
+registry with the DHT that's totally
+possible but is that the programming
+model you want where you have to
+identify people by name and say here's a
+message I'm trying to send to you and so
+what we're trying to do is look at this
+in a different way where maybe it's
+better to build a model where it's kind
+of a publish-subscribe thing I have some
+information about a computer program
+that's running and you may have another
+computer program running and you care
+about some information in common and so
+maybe we can use a pub subsystem to
+broadcast this maybe we can do this very
+efficiently if we don't have to have
+ordering and so what we're trying to do
+with this is is build a framework that
+we can explore alternative ways of
+building systems where they're safe and
+they can be highly efficient now to give
+you an idea of how we structure this in
+terms of our line code or a prototype
+the way last works and the way the
+runtime execute today is it's composed
+of the run type systems composed of
+three three kind of three separate
+components here the first is a
+membership component
+says while a distributed application is
+running I need to know all of the
+members in the cluster that are running
+this program right now and so the
+membership protocol the membership layer
+of our system is used to track this
+information and maintain it now once we
+have this membership overlay this forms
+a structured overlay Network once we
+have this overlay we can optimize that
+overlay by building broadcast trees
+through it like computing a spanning
+tree we can do all sorts of
+optimizations and those optimizations
+should be configurable based on if your
+network can support it right because we
+are targeting mobile so we're targeting
+systems that have high churn you don't
+know who's going to be in the cluster
+from one moment to the next you need to
+support all of these things and so
+finally once we have all the nodes in
+the cluster and we have a way to
+optimize this this network that we've
+built of nodes we need a way to
+automatically discover new nodes as they
+come on the network right and so this is
+kind of what facilities like EPMD do for
+us and so most of our experiments are
+running mezzos most of all of our work
+is done in May zoe's because we find
+mezzos pretty easy to work with for the
+most part and so we've built an auto
+discovery system based on mezzos but you
+know depending on just the domain urine
+you may have to use a different
+component here and so to give you a
+diagram of what this looks like it looks
+roughly like this we have our membership
+overlay and our broadcast overlay which
+is optional we build this network as
+network as a series of nodes and let's
+say the dotted lines represent the you
+know the overlay Network and then the
+solid lines represented optimization we
+found so a path through the network that
+allows us to deliver the messages to all
+the notes efficiently now we have a
+logical abstraction here that says well
+the last system is going to treat a
+mobile phone the same way as a DHD so
+this allows us to have a unified
+programming interface and defer they
+defer the responsibilities of durability
+persistence and replication to the
+underlying layer we say yes you may have
+a DHT maybe 40 nodes but we're going to
+treat those as one logical note in the
+system to give us a unified view from
+the programming level so we don't treat
+these nodes differently and then we
+slide in a little programming layer
+there that we work with and so this is
+how we can this is kind of the basis of
+how we have begun thinking about a
+highly scalable runtime so I'm going to
+give you an example application that
+we've been working with before I talk
+about our
+evaluation at scale and so we have this
+thing this ad counter you pricing me
+present it I've done it for about two
+years and the idea here is that we want
+to have a mobile game that's going to
+display ads wallets offline and these
+advertisements are going to be counters
+that track the number of times they've
+been shown and the criteria here is the
+system has to be one hundred percent
+available it has to operate what clients
+are offline or partitioned but we can
+never lose an ad and so we have to keep
+track of those increments that are done
+and then periodically synchronize it
+back now occasionally the server is
+going to say this ad shouldn't be
+displayed anymore and it's going to send
+that information down to the client and
+so the model that we're thinking about
+here is that the server has some state
+the mobile devices are going to cash
+that state operate on it locally and
+then come back online and synchronize
+that back with the server now that's
+challenging because with shared state
+there's going to be conflicts and we
+need to solve these this is what the
+crdt property gives us and so the
+application looks roughly like this you
+can express this whole thing in sequel
+and it basically just says we have a
+bunch of ads and we you know we inner
+join them with contracts to know which
+adds we can display but the most
+important part is that the ads get
+copied down to the client during some
+exchange while the clients online and
+periodically those clients will while
+they're online will synchronize back
+with the centralized server to say
+here's the current counts the
+advertisement server will keep track of
+this and then it will say stop
+displaying that out it's been splayed
+too many times so this is the workflow
+and so it's very similar to a web
+program where you know your browser
+might catch some object for a little bit
+you operate on it locally and send it
+back this model is very familiar m and
+so this is the application that we're
+going to use to talk about the work that
+we've done on trying to get this system
+to get the system robust and so I'm
+going to talk about an initial
+evaluation that we first performed with
+this system in February of 2016 we did
+this for a conference shop submission to
+a workshop at euro sis and we're
+rejected and rightly so and so we're
+going to talk about what what happened
+okay and so I I don't know everybody's
+background of the room so we'll do a
+quick little background on on
+distributed Erlang and so distributed
+Erlang is a transparent distribution
+facility this allows you to spawn
+processes on other nodes it allows you
+to kind of work with these processes
+something
+messages on other nodes and all sorts of
+things like this so it's kind of
+transparent distribution for actors um
+and there are some known scalability
+limitations that have been documented at
+various academic venues but it's unclear
+where are those limitations actually lie
+so we knew that we were getting into a
+situation we knew that we were getting
+into trouble initially and even if you
+haven't looked at any of this academic
+literature or attended any of the EU
+seas where it's been discussed there's
+kind of two core problems that should be
+fairly straight forward to reason about
+and so the first one is that with single
+connections between nodes which is the
+default you clearly can run into head of
+line blocking problems this was a
+problem when i worked at bachelor
+technologies on react this is a very big
+problem if you have large objects you
+can backup transfer between a bunch of
+processes talking on this between the
+same notes now the second problem is
+full membership which if you're not
+familiar with the academic work in the
+area you may think of less as less of a
+problem right or not realize this is a
+problem so full membership is
+problematic because full membership
+means that every node knows about every
+other node in the cluster and will
+potentially heartbeat this right and so
+we've known that this is a scalability
+problem at least in the academic sense
+for years and there's a ton of work in
+this basically the solution is you take
+two approaches you have every node only
+know about a subset or if you want to
+maintain full membership which is
+actually the easiest one to reason about
+from a debugging a real system point of
+view you have to find a way to do more
+accurate failure detection and so if
+you're familiar with the console system
+console uses a swim protocol and so the
+swim protocol says well I want to know
+about everybody I don't want to deal
+with partial views because partial views
+are difficult and so what swim proposes
+is a alternative heartbeat strategy and
+so the challenge here is that sure I can
+have full membership and I can have
+2,000 nodes but how fast can you
+heartbeat 2000 notes and so just slow
+longer that interval takes the more of
+the less efficient your application will
+be because it will be spending so much
+time sending two nodes that are down now
+the second component of distributed
+Erlang are you probably familiar with is
+the Erlang Court mapper Damon if you
+don't know what this is it's kind of
+like old school or PC style port mapper
+it's it's basically I run on our own
+work so i can do dynamic i can map to
+services that have dynamic port
+configuration this is a problem if you
+want to run things virtualized with
+bridge networking because you can't
+always use the same port and so you need
+to dynamically allocate ports you need
+to have a way to discover those randomly
+allocated ports and so we knew that this
+was going to be a problem as well when
+running experiments so when I say
+experiment what do I mean well I mean
+that I want to take that advertisement
+counter as one example and I want to
+configure this and I want to run it in a
+bunch of different scenarios with
+different numbers of clients with
+different synchronization intervals with
+different types of CR DTS and I want all
+of this information to be configurable
+at runtime and so our system has there
+literally every option that you can
+configure is configurable we have
+environment launching scripts that will
+have a hundred variables that can
+configure everything is configured and
+we make it somewhat efficient by an
+extreme extremely heavy use of mochi
+global for those of you who know mochi
+global a membership for our initial
+experiments were done using regular
+distributed or language EPMD and for
+state dissemination we just had two
+nodes periodically exchange state with
+each other based on some interval that
+we configured at an orchestrate the
+experiment we wrapped all of our code in
+May zoe's and docker so we have docker
+images that have EP we have standalone
+EPMD docker image we have a last docker
+image we put all these things in
+Marathon we ran all this on mezzos we
+ran all this in AWS to ensure we only
+ran one EPMD per node we placed a
+hostname unique constraint on the mezzos
+slave and this allowed us to only launch
+one EPMD and make it a a requirement of
+the last container to run and so there
+was this kind of dependency that
+prevented one from starting before the
+other last connected to the local APM DS
+and a local EPM DS got clustered through
+this service discovery thing we made
+called sprinter so that was just our
+notes could find each other in this maze
+O's cluster because you know you get
+dynamic ip's and dynamic ports and so
+what we thought would be an ideal
+experiment is what the academics want
+what we thought would be an ideal
+experiment where we thought would be
+able to achieve is that I wanted the
+ability to run a four node mezzos
+sir on my machine with my Erlang app
+running with distributed Erlang and I
+wanted to simulate a higher load count
+by having threads do the work and then
+what I wanted to do is when I move to
+the cloud I wanted to lower the thread
+concurrency and increase the note count
+so I could design one piece of code and
+just toggle some switches when I went
+from my computer this little crappy
+macbook that has no ram in no hard drive
+space to running an AWS where i have
+plentiful resources that i can buy with
+20 so much money we have as academics
+and what we quickly learned is that uh
+this this does not work at all it does
+not work at all and so one was that the
+transferring between the AWS environment
+and running locally required so much
+custom configuration to adapt the
+environments that it slowly became a
+burden and we just said screw it we'll
+run an AWS exclusively nobody can work
+offline which is unfortunate for grad
+students with limited money the other
+thing that we ran into was that if you
+are running a test with five Erlang
+virtual machines or ten Erlang virtual
+machines you can have a single test
+runner orchestrate that whole test it
+can wait for all the events to be sent
+it can you know it can wait for the
+events to be delivered it can wait for
+the events to be processing and shut the
+test down and generate some graph ah I
+we click we found out that this
+obviously doesn't work at all and so
+this is a bottleneck because events just
+get immediately dispatched to the
+mailbox and then they would be processed
+all at once that's not a realistic
+workload that's not how systems in the
+real world work the second process the
+second problem was this is unrealistic
+this is completely unrealistic right in
+so many ways this is unrealistic if you
+think about Amdahl's law if you're
+trying to test a 500 node cluster and
+you have a single machine orchestrating
+the test you're not going to run any
+faster than that single machine and so
+why even test at 500 notes so we thought
+we had we had a step back and completely
+change our approach to testing in terms
+of last too expensive too much cpu is
+required to gigs of memory required we
+spent weeks remotely debugging in amazon
+with observer with logging logging
+literally everything process mailbox
+sizes most expensive processes ever
+thing we also found that this thread
+concurrency to node ratio was wrong a
+hundred threads will contend for shared
+resources like you know the network and
+so uh basically it meant that when we
+were testing locally we were testing a
+completely different thing than when we
+were testing on Amazon because this
+thread concurrency thing is not it's not
+a right mapping and what we would find
+is that evaluations locally would show
+these like results that were like oh my
+god that's so impressive then we'd run
+an Amazon and we would see like results
+that were like well we processed I
+forget what it was at one point we were
+processing like two messages or second
+or something because of some network
+delay with some sort of other thing that
+was racing for some driver or something
+it was abysmal and so yeah doesn't work
+EPMD another problem EPMD would go down
+another container would race to start it
+up that task would get restarted because
+it ran out of memory because the mailbox
+got too big because it wasn't processing
+messages fast enough that would crash
+EPMD would start in another container
+just these these like cascading failures
+across containers because you just have
+q's upon cues that just back up crash
+nodes the notes come out they race to
+start they get a different IP then they
+join the cluster then you deliver all
+these messages you overload a queue this
+is a nightmare and and I you know also
+oom killer mazes will just kill these
+things if you violate the see groups
+with the oom killer and then you know
+how do you do bug that so it's like a
+note goes away it was running slow why
+was it running slow I don't know because
+there's no logs because the Loom killer
+killed the container and so after we got
+everything working what did we discover
+well we discovered that in 90 seconds we
+would ship 5 gigs of state for for
+cluster of five notes if you're building
+a mobile centered programming language
+you can't send five gigs worth of data
+in 90 seconds to each device not
+happening even when we applied
+incremental optimizations which involve
+buffering updates for known devices
+based on what they've seen we got a
+thirty percent reduction doesn't work
+and finally unbounded queues are on are
+the bane of debugging it is unbelievable
+they are it's it's Tower
+and so what we decided well we got to
+re-architect everything and so this is
+work that's still going on to this day
+so we've been working on this since
+februari we burn about two thousand
+dollars a thousand to two thousand
+dollars on Amazon a month even though we
+have optimized the experiments so much
+that you can run one command you can run
+one command and fall asleep and wake up
+and it will run all the experiments it
+oh shut down the cluster everything we
+have automated all of this you can build
+a clot you can deploy an entire cluster
+once amazon allocates you the resources
+you can deploy a cluster in about 40
+seconds it will download everything from
+an integration brands compile it all
+everything cluster the whole thing and
+even with that we're still burning
+thousands of dollars to run these
+experiments and so what was the first
+thing we learned well we learned we
+wanted to get rid of distributed Erlang
+it was too hard to debug we weren't
+taking advantage of it and so we decided
+we wanted to take a step back and
+rewrite membership from the ground up
+tcp all custom code all in Erlang we
+initially built it with EPMD to get the
+abstractions correct we're then going to
+adapt all of our code to use the new
+membership service this membership
+service would be configurable at runtime
+and then once we don't have you PMD
+anymore we need a way for notes to know
+about each other and so we had to write
+a custom service discovery system which
+we did so I'm going to talk about the
+first and the third because the second
+one is just kind of grunt work that we
+did all right so I'm going to present a
+new library that we've been working on
+this is open all of us is open source
+where we're funded by an EU project and
+a university so you can use all this
+code if you are interested the first
+thing was we built a library called
+partisan which is a membership service
+library it is completely pluggable it is
+runtime configuration of different
+topologies it has four different
+implementations currently that you can
+operate so at runtime you can specify
+you want full membership using
+distributed Erlang which is our kind of
+reference architecture full membership
+with TCP which would ditch distributed
+Erlang none of the notes would connect
+to each other at all and do everything
+via TCP and then to TCP based models for
+membership one that forces the servers
+into a client-server topology so a hub
+and spoke model where you can have an
+arbitrary number of servers and clients
+and then a peer-to-peer
+highly scalable model built on the
+hyper-v protocol which is slowly
+becoming our own in addition to this the
+code isn't completely separated in the
+repos yet but we also built a
+visualization tool that allows you to
+visualize the entire cluster and
+visually inspect the topology to ensure
+it's correct which has been very nice
+for debugging the full membership
+service obviously works the way you
+would expect it to nodes have full
+visibility into all members of the
+cluster failure detection is performed
+by interval-based heart beating and has
+limited scalability obviously as we
+discussed before because of the way this
+has to work but this served as a
+reference architecture for us to get the
+abstraction write and read a test suite
+that we could later use against the
+other implementations the client-server
+model has servers tag themselves as
+either a client or server they will
+heartbeat the nodes they are aware of it
+has limited scalability because it's a
+server and with a bunch of clients uh-uh
+and finally we only use this for a
+reference architecture for papers to
+show that our system is better than
+client-server and so but it's nice to
+have this model because it's nice to see
+your application work on different
+topologies finally the one that we've
+been working the most on which is the
+default protocol for partisan is high
+power view partial view protocol so
+waste product all works is that you have
+a fixed number of members in the cluster
+you know about and then you know about
+potentially up to log and other members
+of the cluster that you use as
+replacements for when you can't talk to
+the parties in the primary you maintain
+active TCP connections to those members
+and what you do is you use that for
+failure detection so if the TCP
+connection goes down you consider the
+node failed unless it contacts you again
+and academically this protocol has been
+scaled to 10,000 nodes above in
+evaluations but the problem is is that
+the protocol is probabilistic which
+means that under certain situations you
+can end up with nodes that are
+disconnected and need to rejoin now once
+we have all these members once we scale
+up to all of these members I what do we
+have to do to get these nodes talking to
+each other and so we built a small
+system for integration with mezzos
+called sprinter and sprinter is pretty
+straightforward it it just kind of reads
+information out of mazes
+metadata this is made of specific
+obviously the name is marathon inspired
+and what it does is it just finds all
+the running instances and and gets them
+clustered together and it uses partisans
+configuration to determine how to
+cluster than it's properly now you must
+imagine that if you're trying to run a
+valuation at a thousand nodes or
+something you have to be able to debug
+this stuff and figure out what's going
+on and so what's printer will do is
+periodically archive all of its results
+to s3 so all of the local membership
+views on all of the nodes 2 s 3 and then
+elected node will pull that down and
+build a graph this is how the
+visualization works and what we do with
+this graph is we can perform all sorts
+of analysis so we can verify nice
+properties like if I know about a node
+that node knows about me which verifies
+symmetry which increases fault tolerance
+and partition problems we can identify
+nodes that have been completely isolated
+from the cluster by performing graph
+analysis and we can trigger all sorts of
+alerts while the system is running and
+so this is a nice property to have but
+as you can imagine it adds coordination
+s3 and so this is mainly used for
+debugging so we know that everything is
+working while we're trying to test this
+stuff because testing this stuff is very
+very difficult to do so if we move to
+the next evaluation which is uh what's
+in progress now so a lot of this is in
+product like like you know i do people i
+think in portugal working on it as i'm
+giving the talk we wanted to kind of do
+this whole thing again but we wanted to
+do it all on amazon we wanted to have in
+a push button I've masters students that
+are working in my group they don't need
+to know how Amazon works they need to
+have one button to deploy our system and
+test it and that's exactly what we want
+we wanted to do this all at runtime we
+wanted to be able to change the
+application at runtime that we use maybe
+it's the ad counter maybe it's this
+other thing who knows once we ran the
+experiment we wanted the ability to
+repeat multiple experiments in a row and
+aggregate their results together and we
+wanted everything to be automated
+through good gnuplot so everything once
+it runs auto generates plots for
+everything and we wanted this as a
+requirement and finally the other big
+requirement is that we need to we need
+to minimize coordination again like I
+said you can't have a single thing run
+this whole test because it slows it down
+you're testing that one thing you're
+testing the coordination point you're
+not testing the system
+so how did we do the orchestration and
+so along the way we decide we came up
+with this thing I don't know what the
+name is the name I came up with
+yesterday was a workflow crdt I don't
+know what I call this really but we came
+up with a novel new data structure that
+is asynchronously propagated through the
+system that effectively enforces a lock
+step workflow so we'll say I will
+disseminate through the cluster using
+the normal stuff and I will say when to
+move to the next phase one of the phases
+we have to do phases we have to do are
+we need to have nodes generate their own
+events so if you have a single node in
+the system generating the events it will
+not generate them fast enough to exhaust
+your system to benchmark it properly and
+so we needed to have every note of the
+system have its own workflow sorry own
+workload synthetic workload it generated
+its own events and this stimulates like
+somebody doing a mobile phone right like
+people are generating their own events
+at their own intervals once all the
+events were generated we needed to wait
+for the cluster to converge so we needed
+to wait for all the notes to see all the
+events and so we disseminate this
+workflow structure around and every node
+when it sees all the events that goes
+yeah i know that's done I know that's
+done and all the nodes need to know is a
+description of the workflow to determine
+this finally what we have to do is once
+we have convergence and all the nodes
+have made all this nice log data we have
+to aggregate all that log data together
+and so this is our centralized point s3
+again we use everything is uploaded to
+s3 finally once everything is uploaded
+we have the node shut down so the next
+experiment can automatically start and
+this is nice we run these things we go
+to sleep and that's what this external
+monitoring system does and so I will
+kind of wrap up I want to leave some
+time for questions so will kind of get
+to what we learned and so what did we
+learn from doing all this stuff so at
+least when it comes to last we learned
+that a single node orchestration is very
+bad you need to get rid of these nodes
+because they slow down your entire
+system additionally a partial views are
+important a lot of optimizations around
+building differentials
+to synchronize state better if you need
+to do that causally which is the way to
+get the least garbage you have to only
+be talking to a subset of the members if
+you want to enforce some notion of
+delivery guarantees like causal delivery
+maybe not total order but calls of
+delivery you need to only know a subset
+of the members the system gets a lot
+easier to run at scale when you don't
+have to know about everybody in the
+system and you only can work with a
+portion of them the challenge here again
+is the probabilistic protocol how do you
+ensure that you can build a system where
+this is possible and so I think the
+results have paid off at least in terms
+of memory and CPU because as I said at
+the beginning of this talk in February
+our system required two gigs per vm to
+run and we are now down to 75 Meg per
+instance and so when you don't have to
+maintain this whole membership list we
+don't have to do all this heart beating
+you can track very little state you can
+build a map of just your peers you talk
+to and incrementally send data to them
+not have to worry about full state
+fallback you get a very lot of nice
+properties when you start kind of making
+your system kind of more layered and
+think about each component as components
+that need to be optimized but also
+thought about like holistically in the
+guarantees that you can provide in terms
+of this partisan library that I'm
+presenting today fast churn isolates
+notes if you are joining to the cluster
+super fast you can run into a race
+condition where two nodes will get a one
+node will get disconnected from all of
+its peers at the same time because some
+shuffle gets reordered or something so
+you have to be able to deal with this
+now this is fine for us because we're
+building things for mobile devices and
+you're expecting mobile devices again
+disconnected all the time right it's in
+your pocket you're walking around it's
+moving all this stuff never mind
+Subway's planes whatever I the second
+thing we learned is man a lot of
+protocols assume FIFO delivery across
+all connections you'll ever have between
+two peers not just one and so this is a
+thing that's not made clear and some of
+the literature and so you have to be
+aware of this because if you need to
+enforce this guarantee you need to start
+adding a knowledge means you need to
+start adding sequence numbers you need
+to start adding a lot of information to
+make this work
+finally when you want to build a system
+where you layer components together all
+of the components you're layering need
+to have the same system model is this
+true absolutely not these papers have
+all sorts of different system models and
+you have to be very careful because some
+paper that's written for a crash top
+model is not necessarily compatible with
+a paper that's written for a fail stop
+model because that model assumes that
+you'll never make an arid state you can
+reliably detect failures and things like
+this so when you're composing these
+systems you may have to make a bunch of
+changes to make them work together and
+so we have one student who has been very
+student of mine to do somebody else's
+that's working with me and has has spent
+a month on partisan just solving some
+problems related to these three things
+so we built the whole prototype and then
+to solve a few of the race conditions at
+stake in one to two months for just
+those and so finally why do you make
+this easier well one thing that we
+learned is if you can make your
+membership system pluggable you can
+debug the components independently so
+what we can say is that oh this last
+application doesn't work okay i'll
+change it to client server i know client
+server works now i can switch it back to
+peer-to-peer oh now i know the problems
+in peer-to-peer so if you build a
+layered system where you can swap out
+components you can debug things very
+very nice the visualization is really
+great here so what do we have today so
+today do we have 10,000 nodes no do I
+have to the end of the year to get it
+absolutely that's they e that's what
+your tax dollars are going to my EU
+project which is effectively going to
+Amazon in in Dublin so so yeah so what
+do we have we have reproducibility for
+every run out of the ones that we've
+done at three hundred notes so we're on
+309 clusters without a problem which is
+very nice which is our latest result we
+have run 500 note clusters but you run
+into partition problems so sometimes the
+runs won't complete because some nodes
+will get permanently partitioned and
+can't get rejoined we have the same
+behavior at a thousand notes but we do
+not run into any problems with the
+application at those number of nodes yet
+and so I think that's pretty impressive
+because we haven't really seen or I
+haven't seen anybody do that with
+distrel yet at least across the internet
+it's harder to run larger evaluations
+because
+this stuff is expensive as hell to run
+on Amazon Amazon is probably the least
+cost effective cloud computing
+environment you could ever run into you
+pay for everything and there are limits
+on everything we tried starting more
+than 25 notes I to wait two days for
+Amazon to increase my limits what are we
+at we can get 190 nodes on amazon now so
+we can get a lot of resources that gives
+us I forget what some like insane amount
+of memory and computing course and it's
+paid off because according to the
+evaluation now we have a hundred x
+improvement in state reduction so we are
+much more efficient into 780 state and
+we can do this at 300 nodes and what you
+have evaluations to prove it but I
+cannot show you those just today but if
+you wait a month and contact me you'll
+be able to see more so finally the
+takeaways what are the takeaways
+visualizations are important if you can
+look at how the system is running if you
+no other system is running you'll be
+able to scale things you'll know where
+the bottlenecks are it's important to
+build these things ahead of time to
+control changes make your changes do
+your changes in a principled way as part
+of our small little team we do not
+accept a PR that changes a core
+functionality without graphs you have to
+draw graphs you have to draw graphs you
+have to back it up you have to say
+exactly why it's changed you have to it
+has to be empirical whole way through
+now you might say how the hell do you
+get people to draw graphs well you
+automate the hell out of everything we
+have everything automated the graph
+generation is automated all you have to
+do is be online and be able to talk to
+s3 everything is automatic and we spent
+about two months doing this a little
+story about this I had a grad student
+from google Summer of Code actually an
+undergrad from google Summer of Code he
+worked on a project on deforestation
+dynamic deforestation for the paper he
+wrote this whole thing I said let's
+submit a paper the deadlines in one week
+let's work on it he said how am I gonna
+get graphs with the infrastructure we
+built in four hours he had graphs
+demonstrating the entire thing and we
+saw there was a 30-percent state
+reduction we submitted the paper to a
+conference workshop so what am I saying
+make your word testable you're going to
+run this stuff in the cloud you need
+visualizations you need stuff you need
+to be able to identify where the
+components are you need to have
+reproducibility and you need to have
+graphs and so that is my message
+and hopefully next time I see you next
+year we'll have 10,000 notes so thank
+you very much so we have two minutes for
+questions
+yep that's a good question so the
+question is how does this compare to the
+other efforts on scaling distributor
+lying so I feel that our effort is
+largely orthogonal I'm because we get to
+take advantage of a lot of unique
+properties that our language provides
+now I you know it's built for different
+things i mean i've been following the
+work around the DHT approach the DHT
+approach is great if you have to scale a
+registry where you want to target nodes
+by names so if you need to support
+something like global you want to target
+nodes by names and you want to have a
+like you know log and worst I'm routing
+then that is the correct approach I
+don't believe that I believe that while
+that will scale in a distributed sense i
+think that the pro I'm not sold on the
+programming model because I think that
+when you do if you do hit a note that's
+20,000 nodes you're not going to be able
+to start naming processes you just can't
+do it and so fundamentally something has
+to change around the programming model
+and so this you know pub/sub is one idea
+that's very interesting if it can be
+more tightly integrated with the
+language yeah non byzantine everybody
+loves everybody yes no um we we have a
+there is a there is a group in ANOVA in
+Lisbon that is that is working on
+security we are not working on security
+they are and so I can't comment on on
+their work but we are looking at it it's
+just not my group because I'm focused
+around this stuff at least for now so
+yeah we assume everybody is one big
+happy family what well I mean for this
+point in the work absolutely but yeah I
+mean you Burt uber RT has the story
+about that problem but ok thank you ok
+thanks
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

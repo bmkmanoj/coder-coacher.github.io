@@ -1,0 +1,702 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Rewriting GitHub Pages with Riak Core, Riak KV, and Webmachine: Jesse Newland | Coder Coacher - Coaching Coders</title><meta content="Rewriting GitHub Pages with Riak Core, Riak KV, and Webmachine: Jesse Newland - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Rewriting GitHub Pages with Riak Core, Riak KV, and Webmachine: Jesse Newland</b></h2><h5 class="post__date">2012-06-05</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/CIQnleQPtZA" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">everybody I'm Jessie I do ops at github
+I really a kind of a new bit Erlang but
+I've been figuring stuff out for the
+past year or so and it's gone pretty
+well so I talk today is about github
+pages and the work I've been doing to
+re-implement it on essentially on react
+and a little web machine resource on top
+of that so what is pages first I just
+want to go and give it a little overview
+of what exactly this thing does so at
+its core github pages is just simple
+static file hosting but it's run the
+static files or whatever a run through
+Jekyll which is a really kind of neat
+processor that can take textile and mark
+down input and runs it through liquid
+templates and generates HTML from that
+so essentially github pages makes it so
+that you can add a gh-pages branch to
+any github repo and that will get
+processed through Jekyll and then served
+over HTTP and lets you do things like
+make a little sexy project page for your
+open source project and show people what
+it is and it also lets you if you have a
+user github com repo in your account
+that lets you make a user page it's just
+you know user type github com and you
+can use that to make a silly little blog
+or you can use that to twitter has a
+really cool and where they kind of
+showcase all of their open source
+software that actually is hosted on
+github pages and uses the github API to
+load all their repos and show them and
+show the ones with recent activity it's
+kind of RAD it also has custom demand
+support so like if you throw a cname
+file in the root of your repo with a
+different domain name that will be the
+vivid like the request for your username
+github com will be redirected at that
+domain and if you point it at the right
+place you can serve all of your files at
+that demand so you can use this to host
+you know basically whatever you can
+generate with Jekyll or static HTML so
+that all being said so what's wrong with
+pages now the primary problem is it's
+very slow and it's been going down a
+bunch so I came on a good up about I
+guess about nine months ago and I I'm
+doing aab so i would get alerts for this
+thing and wanted to fix it because it
+would wake me up that's not good and i
+started digging into it I realized it
+was actually just one node that has a
+giant ext3 file system that has gigs and
+gigs and gigs of HTML on it and it's i/o
+bound which is any ops person's worst
+nightmare it's also been going down a
+bunch and because it's one huge file
+system with tons of files on it if it
+ever goes down and needs a filesystem
+check you just kind of sit and hang out
+and wait for a filesystem check and
+that's not not fun at all it's one node
+so it's not highly available in any
+fashion so if there's anything to have
+to move around the box or do anything
+weird like that there's not really much
+I can do to do it without downtime so
+obviously there's lots of fix let's
+throw it all and start over right maybe
+not we've had to scale it vertically a
+couple times in the time frame I've been
+working on a bunch of other stuff and
+have just recently kind of gotten back
+on this so we've scaled it vertically
+but it's time to we're getting to a
+point where that's even on the
+vertically scaled stuff it's getting a
+little hairy so I want to distribute it
+and make it not suck make it something
+that I don't have to deal with every
+three months or so so I started thinking
+about it top down and thinking about the
+required functions of the service and
+what can power each of the functions so
+there's four things that pages does when
+you really think about it we have to
+grab content from get have to run the
+content through Jekyll we have to write
+it somewhere and we have to serve it out
+over HTTP so it currently powers that
+there's a ruby q a job that grabs a
+content to the git repo another job that
+runs everything through Jekyll that's
+all written to that giant filesystem and
+it's all served by engine X that's great
+but the custom domain and redirect
+support uses this really gross pages or
+engine X map config thing where you can
+like map
+you essentially just create a hash map
+for a dictionary inside of the engine X
+config and we use that for all the
+domains that maps into a path and that's
+a 57,000 line config file that's so
+introd X has some really weird stuff
+when you have a 57,000 line config file
+mostly it just takes a really long time
+to restart and it's not the Internet's
+has nice like master you know it kills
+all the processes that are serving the
+existing requests and flips around
+that's pretty sane but it just does that
+really really slowly now and it makes it
+really hard to understand if it's
+working correctly so I started thinking
+about the individual you know the parts
+of this and I think that number one and
+number two are fine and Ruby right now
+they're things that our dev team is
+going to maintain so I'm going to kind
+of stick with that but for the data
+store I want to replace the use of the
+file system as a database essentially in
+that crazy engine X thing as a as an
+application server essentially at this
+point so we can use react to store the
+data really easily but we can and we can
+use some parts of react to serve the
+data it has a HTTP API but there's a lot
+of stuff that we'd have to change about
+that to make it work we need of course
+everything to be read-only we need
+transactional builds so if you have a
+huge like repo that has a bunch of
+movies in it and you push a new version
+of your page you don't want to see half
+of the old site and half of the new site
+while you're looking at it essentially
+you don't want to push up the new site
+and then flip everything over when it's
+done and it's correct we need to support
+do all the see names and redirect
+support and we also need to kind of
+emulate the directory index support of
+normal web servers where I have to fall
+back or whatever and do index.html
+index.htm for those people that are
+still using like microsoft frontpage or
+whatever and people and custom 404 dot
+HTML supports so if you drop a 404 dot
+HTML in the root of your repo will serve
+that if we don't have the object instead
+of serving our default for or four so
+those are all things that we'd have to
+essentially those are the features above
+just basic HTTP serving of objects that
+we'd have to implement and web machine
+actually fits really well there we could
+just all
+those things can be implemented in one
+little simple web machine resource that
+sits on top of kb so before i get into
+details about how this works i wanted to
+talk about why i didn't choose another
+solution and one that was kind of you
+know talked about a lot internally
+people that that weren't thinking about
+it the way I was I guess we're
+suggesting kind of a traditional like
+you know you can scale out serving of
+static files by just having a big slow
+file server and then you can put you
+know a server in front of that and have
+a bunch of caching proxies in another
+layer of caching proxies and that's
+legitimate and that's one way to do it
+but then you still have that giant file
+system and that's the giant file systems
+are something that is primarily an ops
+person they they're a pain in my ass
+they get in the way of things are tough
+to move around and I don't want to do
+with that the discussion generally we're
+kind of like this when I was talking to
+people about this like it's fine you'll
+just you know but oh wait when you add
+another server you have to move stuff
+around and oh but ok you can char them
+and then I rage and tell them that they
+should they're partitioning things and
+then they say you can just are saying
+stuff around when you add new partitions
+it's fine it'll be ok you can I mean
+when you're doing something like this
+this you know you can say that you're
+growing a system organically or you can
+also say that you're building a
+distributed system ass first and that's
+I don't want to manage another one of
+those so I do ops low-maintenance
+resilient systems make lazy system men's
+love you and I was just explaining that
+we have reacted another place our
+infrastructure and when I need to move
+one of the nodes around I just take it
+offline and I move it around and I bring
+it back up and I make sure it's in the
+ring and all the transfers are done I
+don't have to sit there and wait on a
+slow filesystem check or arsenic
+partitions of data around that that's
+more of the operational approach that I
+like that's why i implemented this on
+top of react so how many of you guys are
+familiar with rack and assuming a lot
+good cool so react is a dynamo inspired
+distributed data store with no single
+point of failure boom so let's talk
+about the schema design we're going to
+use to store this data
+it's pretty simple there's two buckets
+posts and pages that's really all there
+is that's all that's necessary so in the
+host bucket we store data that's
+addressed by the HTTP host header of the
+request it's coming in the value of the
+object there contains a map of repose
+and their current sha we use the Shah of
+a repo the shop head of a repo when it's
+built as kind of a key that we use for
+the transactional build support so we
+can and we use that as a prefix in the
+pages bucket also if you have a redirect
+we store that in there as well and that
+that allows us to know short-circuit
+redirect requests really quickly before
+it hits the pages bucket and we use the
+react secondary indexes stuff to have a
+user ID index that we use essentially
+only for GC that's not for use for any
+request response data we use that after
+a build happens to clean up all the old
+data it's hanging out that can be slowed
+or slower than request-response stuff
+and that's fine so the data in there
+looks something like this like forge a
+new zealand github com I have just for
+an example I have two repos here one
+that is my main user repo and a shot for
+that I'm just using short jaws as a to
+make this easier and not wrap and I have
+another repo called pages maybe and that
+Shaw is stored there so in the other
+bucket we have the other buckets called
+pages and the key for that is
+essentially just a shot and a URI the
+Shaw's unique identifier that lets us
+kind of prefix and map everything based
+on what repo it is and also support
+transactional builds so if you increment
+you know if you create if you have a
+repo and you push something to it all of
+the old data will stay there while the
+new stuff is being written the new stuff
+is written and then we write to the
+sides bucket to change the shots or
+everything the new deploys happen
+transactionally essentially same thing
+we have an index on repo ID so we can do
+GC later to clean stuff up and the
+contents of that are just the contents
+of whatever we're going to serve out
+with HTTP it's pretty straightforward
+so the data structures mapped out how do
+we get the data in here so we have a
+little a little rescue job that
+processes things after Jekyll is done
+with it that uses the react Reba client
+reach files disk ride syriac updates the
+site's object in the bucket with the new
+shot and GCS old stuff thats hanging out
+and that's Ruby so I'm not really gonna
+talk about that much but how does the
+day to get out the data you know before
+I kind of talk about the web machine
+stuff I want to think about it just from
+the HTTP level just want to go through
+like the request response and look at
+the HTTP and react operations first to
+understand this so if a browser
+requested this awesome Velociraptor Jeff
+I have in my blog that would result in
+to react operations essentially we grab
+the key from the host bucket that will
+look it up and grab the proper shah and
+then we'll request will prefix the key
+with that and request that from the
+pages bucket if I was doing a sub repo I
+guess a non-user repo we'd pull the
+first kind of path prefix out of the URI
+and look up in the site's bucket for
+anything that had prefix of pages and
+grab that shot instead and serve that so
+what about see names those kind of have
+to work differently because they don't
+know we have to look up the shot
+differently for those so if you had if
+there was an example github com repo
+that had a cname file in it that said
+that example.com was the canonical
+denied domain instead of storing the
+repo to sha map here we'd store the
+redirect just a redirect key that has
+the new host that we should use and in
+that in that object weed store the same
+kind of map that we would in the
+original place so the conversation I
+guess would look something like this you
+grab example that github com we'd
+short-circuit any requests to the to the
+pages bucket because we would find there
+was a redirect object and a host bucket
+we'd send a 3-1 back to the browser and
+the browser would re
+request the example calm bucket and
+everything would go to the right place
+so we have to represent this a should be
+behavior on top of the data stored and
+react so we can use a little web machine
+resource to do that how many of you guys
+are familiar with web machine and
+implemented some stuff in it web machine
+is so damn cool it is HTTP nerdery to
+that degree and I that's very much my
+style if you haven't seen this even what
+run through it and looked at the
+decision core code and search through
+here for be 17 or whatever it's it's
+pretty cool I recommend reading the code
+if you haven't so to flow through web
+machine you essentially just create a
+little you export a bunch of functions
+that represent decisions in that
+decision tree that i just showed so
+let's take a quick little tour here
+through some of these decisions in the
+pages code and what they actually figure
+out so the first thing is service
+available my current implementation this
+is pretty lame it just grabs a local
+area client make sure it can do that and
+then checks an app config variable that
+I can use to turn it off if we need
+maintenance and that's actually kind of
+legible these slides will be online it's
+really not that good I'm a newbie bitter
+laying by the way so we'll see how that
+goes um then we have the malformed
+request stuff we essentially have to
+decide if the request is valid and I
+take this this is the opportunity where
+I go through and parsed HTTP host header
+and the URI and make sure we can't
+organize it properly and you can really
+easily swipe a bunch of stuff from the
+react web machine utilities to do that
+and it all just catch the exception
+there and say that it's not a that it's
+a malformed request if that ever
+happened contenttype negotiation is next
+this is where we have to emulate instead
+of how I guess react HTTP stuff works by
+default where you specify the content
+type we doing to writing stuff in we
+want instead
+browsers style kind of my magic crap
+that Apache a ninja next to where we're
+guessing the content types we're sending
+back from the extension on the URI
+because that's how it works now and we
+need to maintain compatibility there so
+we just this is a you know it's really
+simple we just use the mochi web mine
+from extension stuff and assume that for
+things that are at the root they're
+probably text HTML and I actually this
+is not what's actually in there because
+we have a bunch of special cases for
+people that are hosting like Android
+builds and stuff on pages so there's a
+big list of extra crap that goes in here
+but that's the easy part and then the
+critical part of the HTTP decision tree
+does the resource that has been
+requested it actually exists so this is
+where first step here we hit the host
+bucket to see if there is any page data
+for this HTTP host at all if there isn't
+we don't have to make any other requests
+at all if there is data in the host
+bucket if it has a sha or a redirect we
+stash that and then if there's not we
+sent or if there's not anything in the
+host bucket all we just in a 404 so the
+redirect stuff just stashes the redirect
+on the context that of the web machine
+resource and if we find a sha we move
+down to this kind of page data exists
+called it actually looks into react and
+figures out where the data is if we're
+headed down the redirect path well we
+this is pretty straightforward because
+the we have to specify that the resource
+previously existed and that the resource
+has moved permanently we don't really
+support any kind of temporary redirects
+to move permanently is always correct if
+you're there so we just return the the
+proper URI we use the same URI of course
+we just switch out the host that's the
+only thing that could ever change in a
+redirect in this system and page data
+exists is really the meat of all the
+code that hits the pages bucket and
+right now it does some really really
+gross stuff where it essentially builds
+a list
+all of the you are is that it may need
+to check for the subject to emulate in
+directory index support and our custom
+404 stuff and that's kind of a big list
+so if you grab this uri we would check
+all of these keys in order to see if
+they were there and that's kind of gross
+and that's a blocker for at least i'm
+going to instead do that on right do
+that same kind of support when i'm
+reading you know reading all the data in
+ruby take a look at all the objects
+determine what should be the proper
+index for the path and write it to the
+right place instead of doing this sun
+read but really I mean that's that
+that's really all the all that's
+necessary to implement all the pages
+business logic on top of react I started
+down this path and then I had stopped I
+had got distracted with a bunch of other
+stuff and I came back to it and started
+doing this presentation and realized
+that you know this is really not a lot
+of code and this is really a pretty cool
+pattern for having you know having the
+same same vm power both the little tiny
+piece of business logic on top of a big
+chunk of stored data if you don't have
+to do a lot of processing on the data
+when it goes in like for this we run
+everything through Jekyll and then we
+write it out essentially as is I'm gonna
+have to do a little bit of processing on
+it to do that directory index support
+but the the logic that has to happen
+when it's coming out of react is
+actually really straightforward and
+really simple and this is a pattern that
+I'm trying to kind of encourage
+internally at github we have a lot of
+places that use things like retta's for
+things they shouldn't and we have single
+points of failure all over the place and
+as we're doing a big data center
+migration weirdy single point of failure
+everything we possibly can and this is a
+great place to do that if someone has to
+implement a little tiny API with some
+logic around it on top of a piece of
+data a little tiny piece of data they
+can do that with a you know if I can
+help some of our developers understand
+the foundations and basic things about
+Erlang and basics of react and how to
+write a simple web machinery
+source this is something that we could
+roll out a lot more places and I'd like
+to I feel like the the vast majority of
+the work i actually did on this was kind
+of getting the boot the build tool chain
+set up getting hot code you know hot
+code stuff and rebar we're doing that
+was way that was way more actual time
+than actually writing the simple web
+machine resource so if i can get this
+kind of pattern in front of some of our
+developers i'm interested to see what
+comes up so in production this is
+internet sits in front of this we mount
+this web machine resource at pages and
+we proxy we kind of hide everything else
+that's not at that path and proxy
+everything to it and that's it we
+internets listen on the public interface
+the react stuff listens on the private
+interface and we can communicate it our
+writer rescue job can communicate with
+it that way and everything else only
+sees the stuff that's at pages or /
+pages which is the web machinery source
+and as I said you know I'm a lazy ops
+guy this is a really really simple
+system to support there's all the data
+in react this little tiny resource on
+top of it engine X and that's it and I
+have all the same performance
+characteristics as reactive kind of
+predictable in a predictable scalability
+path and I think it's uh I'm probably
+really stoked to get this out and I
+think it's something that the pattern
+might be really useful down the road for
+us internally another benefit of this is
+that now that we have a dynamic server
+sitting in front of all this data we can
+do way more than we could when it was
+just engine X so we've been playing
+around with some ideas after seeing Joe
+Williams talk yesterday there's a lot of
+metrics that I can do with this data now
+that or with these requests that I
+really couldn't do with just a simple
+HTTP server sitting there it'd be pretty
+easy to write the internal metrics can
+grab out of Folsom into our graph I'd
+store and then write some public stuff
+maybe it's in just like hit logs or
+whatever into something like gauges so
+we could provide people with an
+interface to get stats for their github
+project page with
+doing anything on their end at all you
+could just be right there in the repo
+I've also been playing with lager and
+first of logging I really don't want you
+know I don't need to do like Apache
+style logging for everything there's no
+real need for that here but one of the
+things that I was doing in development
+I've added this little logger thing that
+lets me trace requests for an individual
+host name so i can turn off and on
+logging and actually see stuff that's
+interesting instead of just seeing this
+giant spew of HTTP requests that are
+happening and a more intelligent server
+in front of this data lets us do some
+interesting stuff with HTTP caching
+where we've been talking about a lot of
+stuff where we could use the get shah of
+head are not even of head but like the
+get shot of each individual object that
+was that's a part of the page as the
+e-tag for that object when you store it
+in the database so that even after a new
+page bill there's no need to reload the
+things that haven't changed if you make
+a request or you won't have to get the
+header again or anything like that it
+should be kind of nice and you know
+having this ability means that we can do
+a lot more things with it and I have no
+idea what what will be next here so
+essentially we're getting really close
+to shipping this out for a private beta
+it's live serving some stuff right now
+but it's not serving anything that's
+super critical so it's kind of
+definitely in beta mode but if any of
+your interested in playing around with
+this we're planning on open sourcing the
+server when we're done with it or at
+least some parts of it so if you're
+interested I can move any of your github
+pages over to this if you'd like and you
+can kind of flip them on and off with
+DNS they'll still be on the old stuff
+too and I can if you want to look at my
+crappy airline code i can probably get
+you access to it before we open source
+it or whatever so just hit me up on my
+misspelled twitter name so if you're
+interested in any of this crap and if
+you're interested in ops and and ruby
+and any of that stuff i'd definitely
+looking for four people at github that
+can kind of help us merge our
+asked first distributed system into
+something that makes sense there's a lot
+of a lot of work being done there so
+thanks everyone any questions about
+anything well the current the current
+implementation has that ridiculous
+fallback crap which means the worst case
+you're looking for a 404 is really bad
+but that's going to be that's going to
+fix and how we're going to write stuff
+into it now and to be honest there's not
+a lot that can be much worse than that I
+owe bound vm that was there for a while
+so it's I think that you know was
+talking with someone about this and the
+performance isn't as good as Internet's
+on a stack file server for sure but we
+confront it with even friendly furniture
+in front of the cash there and and not
+have the file file system problem that
+we would have had before and as an ops
+guy i would but i'm more interested in
+predictable performance than vast
+performance i guess for this this
+product i wanted to work consistently
+and not have and be able to handle and
+be able to increase load if that your
+increase their capacity we have easily
+instead of just throwing a bunch of
+hardware at it and if we hit a limit
+have to do all this work to move it past
+that level that's interesting replacing
+the Ruby build stuff with some react
+pre-commit hooks that's interesting we
+have a lot of that stuff that's been in
+production and working for some time in
+Ruby and I want to do as much as I can
+to maintain feature compatibility with
+the old version of pages I don't want I
+don't want anyone to know that doesn't
+read our blog that github pages just
+switched over to a different system so I
+want that if it's it's there now and
+it's working and not touching it means
+it will work exactly the same way and
+that part works really well so I think
+I'm probably going to not touch that for
+a good while it'll probably eventually
+happen but
+anything else yes
+web machine and is that sort of an
+exercise that beginning erlang
+programmer koopa should be using as sort
+of the gateway frog to the rest of
+I think it's I think it's a really
+interesting gateway drug I think it um I
+don't it doesn't it doesn't get you a
+lot of the the real kind of the OTP
+features may be like you can you can sit
+in a web machine resource and not
+understand anything about OTP and just
+think about it and functional style and
+that's the that's the hurdle you could
+get over with one web machine resource I
+think it's a great gateway drug for like
+web programmers out there that they're
+you know I guess I I kind of grew into
+programming via being that where I'd you
+know just figured out what I needed to
+do to make a website and figure out what
+I need to do to make it dynamic and then
+all of a sudden I'm writing software
+surprise so I think that that be a good
+way I think there's a lot of developers
+out there that function that way and
+that may be a good way to like you know
+shove them towards shove them towards
+Erlang I really you know prior to this
+most of my headed pretty cool training
+from Erlang solutions did some react or
+kind of experimentation with a queue
+system that but really didn't have a lot
+of brunette production or laying
+experience before this at all I've read
+a lot of the react code though mmm cool
+yeah um i really don't so much i think
+that that was a that part of the title
+was a mistake I think I met kv or maybe
+I said kv your I don't know cool thank
+y'all</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

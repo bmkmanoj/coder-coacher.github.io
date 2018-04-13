@@ -1,0 +1,1477 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>GOTO 2014 • x86 Internals for Fun &amp; Profit • Matt Godbolt | Coder Coacher - Coaching Coders</title><meta content="GOTO 2014 • x86 Internals for Fun &amp; Profit • Matt Godbolt - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/GOTO-Conferences/">GOTO Conferences</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>GOTO 2014 • x86 Internals for Fun &amp; Profit • Matt Godbolt</b></h2><h5 class="post__date">2014-08-11</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/hgcNM-6wr34" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">today I'm going to be talking about what
+goes on inside the Intel processors that
+drive many if not all of our servers
+laptops and desktops and I'll be taught
+of going into the details a little bit
+so you'll hopefully forgive me if I get
+into the weeds with some assembly on the
+screen but before we go too far on I
+have an admission my talk is called x86
+for fun and profit
+and my intention originally was to come
+up with some really strong indicators
+about how you could optimize your code
+how you can profile your code how
+understanding the internals of the
+machine can give you some insight into
+improving your code but there is so much
+to cover and it's so interesting I just
+wanted to cover the things that I think
+are interesting and hopefully along the
+way we will pick up some little unusual
+behavior indicators that we can look for
+and some optimization object
+opportunities but mostly this stuff is
+just really interesting and if nothing
+else I want you to go away from the end
+of this talk and have a fresh
+appreciation for what on earth the Intel
+and AMD engineers have been able to do
+behind the x86 facade that they give us
+and indeed have some kind of sympathy
+for those people among us who write
+compilers and jits and who are trying to
+sort of reverse engineer and take
+advantage of all this fantastic
+power in front of us so Intel are
+famously tight-lipped on what goes on
+beyond the x86 instruction set
+they have about seven or eight feet
+thick of manuals that you can get that
+have all manner of implement in detail
+on the individual op codes the byte
+codes how the system management stuff
+works and all that stuff but they don't
+actually tell you how it works inside
+mainly because I believe they don't want
+to tip the wink to their competitors
+fair enough they also don't want us to
+take too much advantage of the internals
+of a chip as they may change from from
+processor revision to processor revision
+but thankfully there are some people out
+there who are crazy enough to make it
+their hobby or pastime to try and
+reverse engineer as much as possible
+about what goes on underneath and this
+talk wouldn't been possible without a
+lot of
+help from a guy potentially guy called
+Agron of fog who is at the University of
+Denmark I think and he has made it his
+life's work to sit down and write test
+case after test case after test case and
+to use all of the internal management
+counters that are inside the chip and
+somehow try and derive what is going on
+under the hood so a lot of this comes
+from what he said and some other people
+who have looked into this and done
+experiments and some of my own
+experiments as well but mostly I'm
+standing on the shoulders of these other
+guys have come before me so this is
+about as much detail as Intel are
+prepared to give you about what goes on
+inside this diagram over here we're
+gonna be talking about the top half and
+the bottom half the top half here is the
+in order standard one instruction after
+another part of the processor and the
+bottom part is where the interesting
+stuff happens where everything gets out
+of order and we're going to talk about
+the pipeline what the branch predictor
+is what register renaming is and why
+it's important how that out of order
+execution happens and a little bit on
+caching I'm I may have missed sold that
+a little bit in the the abstract of this
+talk I did say that I would be going
+into caching as well but again that's
+like probably another hours talk and its
+own so we're just going to sort of graze
+that a little bit maybe if I if they
+invite me back next year we can talk
+about that then so there is going to be
+some assembly on the screen as I've said
+and before before we go too far I just
+give a quick overview of the assembly
+structure so that we're talking about
+the same kind of thing there are two
+competing ways of showing Intel assembly
+there's the AT&amp;amp;T format and then there's
+the Intel format I've picked the Intel
+one for these slides because it just
+makes more sense to me having come from
+ARM processors way back when and that is
+where the destination is on the left
+hand side of the two things so an
+instruction generally looks something a
+bit like op where up is like load or add
+or subtract or or exclusive or or shift
+destination and source and those
+destination and those sources can be one
+of three things they can be a register
+one of the racks or RBX or RCX as i've
+written here there are eight
+architectural registers that came from
+the 32-bit era when AMD came up with the
+extensions from the 64-bit version of
+the
+assessors they added in another eight
+registers which they were much more
+sensibly named ra through our 15 rather
+new strange esoteric names there are
+also these multimedia instructions that
+have grown out of the revisions of the
+MMX instruction set from way back when
+these are not general-purpose registers
+they are usually hold impact integers or
+packed floating-point values and they
+can be operated on in parallel for like
+multiplies and shifts and things but
+they can't be used generally for like
+indexing unlike the other registers also
+you can talk about subsections of
+registers so as I said the 64-bit
+register RA X it has a 32 bit
+counterpart EAX and a 16-bit count about
+ax and then a H and al which refer to
+the second from bottom and the bottom
+eight bits respectively which all of
+which hark back to the legacy of the
+8088 that still pervades even today's
+desktop and server machines for the most
+part the instruction stream of your
+original IBM 8e will run happily
+unmolested relatively unmolested on an
+appropriate operating system on a modern
+intel chip which has a number of
+interesting side effects the fact that
+we have this 30 plus year backward
+compatibility in the instruction stream
+we're going onto that a bit later on so
+as I said it can be one of three things
+it could be a register it can be a
+memory operand anyone who's come from
+like the Cisco so the risk world as I
+did will be absolutely staggered to
+realize that on the x86 a memory operand
+can be an absolute memory address mem
+plus a register plus another register
+times one to four or eight and that's a
+single operand that's one kind of part
+of an instruction it's a pretty
+complicated set of indexing or it can
+indeed be a constant so those three
+things are register memory or constant
+so I've got an example at the bottom
+here this is one instruction
+it's an ADD D word pointer array RB X
+plus 4 times ID X comma DX and what this
+really is is read from array index by
+the B register plus 4 times the D
+register add da register to that value
+and then write it back all is one single
+instruction that's pretty complicated
+and that's where the C
+in sis comes from to sort of put it into
+context and to give us an example as we
+flow down the pipeline I've got a very
+simple example here which is a
+element-wise gave me the maximum value
+of each element on the left-hand side
+we've got the C code and on the
+right-hand side we've got one of the
+many potential compiled versions of that
+code and I'm gonna go through the
+instruction by instruction just so that
+we can kind of be on the same page about
+what's going on here so we've got a
+65,000 entry array we go through each
+one individually if y is greater than
+the x element then we write the Y
+element into the X element and we're
+done obviously there are much better
+ways of actually doing this in
+real-world code but this is like a
+relatively simplistic example so let's
+take the first instruction there that
+saw EI x EI x this is a very roundabout
+way of setting the EAX register to zero
+we have the compilers decided that the
+EAX register is going to be where it's
+going to keep the loop counter and why
+is it using saw ax e ax you may ask well
+it's pretty easy to prove to yourself
+that if you take any number and
+exclusive-or it with itself you end up
+with 0 so why is the compiler done this
+well the answer is the opcodes that
+translate into that zouri a XCX
+are 2 bytes long to move the equivalent
+value with a constant value of 0 would
+require more bytes so the compiler has
+picked a smaller representation of the
+same functionally the same instruction
+in order to minimize the amount of code
+cache that's needed you'll also notice
+if you look a little bit further down
+that later on it's using our ax but it's
+soaring EAX there are various different
+complicated rules about which parts of
+the registers get updated by which types
+of instructions but when AMD came up
+with the 64-bit extensions for the Intel
+instruction set they decided that if you
+were to write to the 32-bit register you
+automatically clear the top 32 bits
+which has a really convenient side
+effect here of us using a smaller
+encoding of Zoar eax EAX which is just 2
+bytes long but clearing the whole 64
+bits here if it was all rax come a rax
+it would require a few more opcode bytes
+so moving on to the next instruction we
+have a read this is one of those index
+reads it's not quite as complicated as
+the one that has the x one two four or
+eight that we saw in the first slide
+we're going to be reading here from our
+si plus r ax and by convention the a the
+a bi is that our si is the second
+parameter to this function which
+corresponds to the pointer of the wire
+array so we're going to read that out
+calculating the address of this
+particular element by adding the element
+index to it and read it into this X mm
+zero register this is just reading one
+double precision number out the next two
+instructions here are a comparison which
+is comparing that value directly with
+the memory address of the X of I so we
+haven't had to read the X of I value out
+in order to do the comparison we can
+just have a compare which acts directly
+on memory and if the value is below
+we're jumping to the label to here which
+skips the next instruction this is the
+equivalent of failing the if condition
+and moving on and not doing the the
+update that's about to happen
+this part then is the update we're
+assuming that Y I was greater than X of
+I we're just reading writing out that
+value of x mmm 0 into the address of the
+of X I and then we're skipping to the
+next element in the array and you'll
+notice here the compiler is decided
+rather than using that one x 1 x 2 x 4
+Maite multiplet there x 8 indexing trick
+it's just multiplied the loop counter by
+8 throughout so it's adding 8 each time
+we're counting in memory addresses
+instead of actual I values and
+commensurately we're going to be
+comparing the end of the array here with
+eight times the 65,000 that I go in
+there and then if we haven't reached the
+end of it we go back to the beginning
+otherwise we're done so hopefully that's
+got to got us on the same page when it
+comes to assembly so the Intel pipeline
+is a very long and complicated beast and
+I'm going to talk about groups of the
+things that go on down the pipeline but
+first of all what is the pipeline I
+think probably most of us know that
+modern processes are pipelines
+why well it's probably never been the
+case that an instruction could complete
+in a single cycle even back in the old
+old days of much much
+simpler instructions much much slower
+clock speeds and so there has always
+been a partition of work and in the
+original processes the original 8-bit
+processors certainly that I worked with
+the 6502 and the z80 each instruction
+would take five or more cycles to
+complete and the the instruction would
+be fetch the byte that you can cause the
+opcode fetch the operands do the process
+write the results back and then we'd
+move on to the next instruction so it
+would be taken four or five cycles each
+go then people realize that while while
+we were decoding one instruction we
+could be fetching the next one and while
+we're executing the instruction we could
+be decoding the previous one in fetching
+the next one again so by pipelining we
+can increase the throughput in a
+production line style which is great so
+now every clock tick a new instruction
+comes into the front of the pipeline and
+one instruction leaves the end of the
+pipelining is completed so every clock
+ticks something useful happens we
+haven't changed how long it takes to
+execute a single instruction it's still
+four or five cycles but every tick we're
+getting one more thing out and that's
+very much the approach to the production
+line takes when you look at like car
+building if you were here for jezus talk
+yesterday and he was showing up all of
+the sort of pipelining stuff and the the
+work that Toyota have done in order to
+optimize their pipeline forward it made
+me think of this as well but the problem
+is that when you're making cars one car
+is not dependent on a previous car that
+was made which is not true for
+instructions the instruction stream
+necessarily has inter instruction
+dependencies if you're doing a multiply
+and the multiply takes five or six
+cycles then you want to use the result
+of that multiply in the next instruction
+well if your pipeline you're kind of out
+of luck until the multiply is completed
+and you have to then you can start the
+next instruction so what we typically
+happen is the pipeline would stall at
+that point and the next instruction that
+needed the result of the multiply would
+have to wait until the multiplied finish
+which kind of is a shame we're using up
+our pipeline bandwidth there or losing
+bandwidth more sort of more
+problematically is the fact that our
+stream of instructions coming in is not
+a linear stream
+within that stream or a branches which
+may be conditionally and so anytime the
+code jumps around and starts needing
+execution from a different part of the
+program we basically have to start again
+that we get to the point where the
+branch happens if the branch is taken
+we're like well okay unfortunately all
+the work that's coming down the
+production line is wrong we need to
+start again and so it goes back to the
+beginning we start from the beginning of
+the production line but at the new
+address so what can we do about that
+well we can make a guess that's the
+simplest thing how about if somehow we
+could look into the future and decide
+well what is it really that we're doing
+what actually is the sequence of
+instructions that are coming down it's
+not just address one followed by address
+to a followed by address three let's
+have some kind of prediction logic well
+we need a crystal ball to work out that
+really there is no good answer for this
+but there are some really good
+heuristics which is what exactly what
+when the branch predictor has so the
+branch predictor this happens right at
+the beginning of the pipeline oops
+before we've even fetched a byte of RAM
+we are guessing where that byte of RAM
+needs to come from
+we need to predict if it's a branch if
+there's a branch coming up where it goes
+and if it's a conditional branch we need
+to work out well is it going to be taken
+this time or not so we have a little
+cash and that cash is called the branch
+target buffer and in that cache we store
+every branch instruction that we've seen
+recently we saw where that branch
+instruction goes and in the case of
+conditional branches we keep some kind
+of state that tells us gives us a
+prediction about whether or not that
+branch will be taken the next time we
+see it the simplest state we could keep
+is literally have we taken it again
+recently so one way that's done is with
+a two-bit saturating counter we just say
+every time we take a branch we move one
+stage to the right here
+every time we don't take a branch we
+move one stage to the left and then if
+we're in the green patch here of weakly
+taken or strongly taken we say well
+let's assume we're taking it again and
+if we're in a red patch we just say no
+let's carry on with its ignore this
+branch let's just keep on streaming from
+memory in in memory order this is great
+this is a really simple thing to do but
+it's not very accurate if you think
+about what branches patterns really look
+like you've got loops we're going to go
+over the same piece of code multiple
+times and which case this probably could
+work quite well you know every time you
+reach the bottom of a loop there's a
+branch the back to the top and if you've
+got like a hundred iterations of a loop
+then it's going to be right most of the
+time and then you're going to mispredict
+at the end maybe that's fine but if
+you've got any other more complicated
+intered branch dependencies then you're
+basically out of luck this stuff is not
+good enough we need to take into a
+council of the history of what this
+branch has done before maybe we need to
+look at what other branches are doing in
+the system and try and add them into the
+mix and see if we can't guess based on
+that that kind of fingerprint of what
+the program is up to so one thing we can
+do is keep track of what happens given
+the history of a particular branch so
+for each branch in that BTB that little
+cache we're going to keep in this
+instance I put four just because it's
+easy four bits of what happened the last
+four times we saw this branch and then
+we're going to use that to index into a
+table of given the fact that we've seen
+two branches taken and then two branches
+not taken in this sequence that gives us
+an index three we go over look in the
+history table what happened the last
+time we saw this pattern of branches
+being taken oh we took a branch let's
+predict that we did that and then
+obviously as we come round in the
+execution it actually makes the decision
+about whether we took the branch or we
+didn't take the branch we update our
+table and over time we learn given this
+pattern this is what happens that's cool
+but there's a problem
+that's only four bits of history that's
+the four times we've previously seen
+this project that's not much state
+programs are much more complicated than
+that it doesn't scale at all the table
+of counters you saw on the right hand
+side in the previous slide is two bits
+per entry but it goes up with two to the
+N so if we add eight bits if we want to
+do eight bits of history and take into
+account of the previous eight branches
+of this potat instances of seeing this
+previous branch then we need 256 lots of
+two bits and that just
+even that we want to have a cache of
+many Biddy branches that's just not
+going to stick out very well
+there is some circuitry in certainly
+some of the older Intel processors that
+have a separate sort of guess about for
+for loop behavior where they keep track
+of the number of times the branch is
+encountered and taken every single time
+except one which kind of cow covers the
+case of having something which goes
+through like 50 times and it doesn't get
+taken 50 times doesn't get taken 50
+times it doesn't get taken well that's
+probably a loop of 50 that's we're going
+to see a time and time again but um it's
+difficult to determine whether or not
+something is really a loop or whether or
+not it's just a condition that's often
+true so there's only limited limited
+mileage and taking that kind of approach
+what Intel have done in their most
+recent generation of hardware is to take
+a global view of the branch prediction
+problem they take 32 bits of global
+history that is not a any particular
+branch's pattern history but any branch
+any conditional branch we've seen
+recently the 32 most recent branches
+what we'll be doing in those cases and
+instead of having 4 gigabytes worth of
+branch prediction table for those 32
+bits we hash that into a smaller but
+shared pattern table so we can have
+quite a big table of these patterns but
+we have to accept that there are going
+to be collisions we still use a per
+branch table for the destination of any
+one particular branch what does that
+look like it looks something like this
+so now we've got 32 bits of what on
+earth have we done recently in terms of
+branching we take that we take the
+branch address of this particular branch
+we're trying to predict we smoosh them
+together with this hash here and then we
+go into this table we're given this kind
+of program state this is what we did
+before and this is really cool except
+that this global history table has no
+idea whether or not it's really this
+branch that we're looking at any two
+branches that hash to the same element
+we just use whatever's in their branch
+table the history table excuse me and
+that means that you can get into
+situations where branches fight over the
+same slot in the buffer and we miss miss
+predict a lot of the time
+and there are ways around that which as
+far as I can tell aren't actually
+happening on modern intel chips but
+certainly other other architectures then
+also have like a another predictor sort
+of a meta predictor per branch which
+just says how often did I predict this
+branch correctly and every time we write
+we move one to the right and we say okay
+we'll do what the branch table thing
+says and every time we get it wrong we
+move it to the left and then we say well
+do the opposite of what the branch table
+thing does so if you have two branches
+that have opposite behavior that land in
+the same slot at least we can handle
+that situation but as I say there's no
+strong indication that Intel are doing
+this they say that they aren't also we
+don't know how big this history table is
+on the sandy bridges so your guess is as
+good as ours really but assuming that
+you know these are only two bit each I'm
+guessing they use quite a few bits of
+history but first of all does this
+actually matter before we go too far
+down this thing arrears we haven't even
+got into the first stage of the pipeline
+proper yet we're just still trying to
+work out where the heck we're going to
+get the instructions from is it
+important well here is a bit of Python
+code Python obviously is an interpreted
+language and is full of internal
+branches inside its own interpreter and
+so it would be interesting to see
+whether or not we can even see the
+results of the branch predictor at this
+level and so this example is going to
+run over an array and it's going to sum
+up the total of the array and it's also
+going to count the number of elements
+that were below some threshold 128 in
+this case and it's going to sum up those
+guys and then at the end we return like
+the average of the entire array and the
+average of the ones that were below 128
+if you feed in a big old array of values
+into this each between 0 and 256 this is
+what happens if that set of values is
+completely random between 1 0 and 255
+256 sorry it takes 129 a seconds per
+element but if you sort that same input
+value so same input set before you pass
+it into the of them it only takes 94 906
+11 and 98 excuse me
+I think I should do drinks with this 94
+is a new seconds an element that's a
+speed-up of 8% that's not bad now how
+can I be sure that its branch prediction
+that's helping it well why would branch
+prediction help here I should say first
+well in the sorted case of course the
+first half of the array this if
+statement will be true will always go
+into the numb clipped and the clip total
+plus equals one so somewhere one other
+branch is one of the many branches
+inside the interpreter will always be
+not taken as it doesn't skip over the if
+statement so we run through the first
+half of the array and we hit the foot
+hook the first value that's 128 and at
+that point the prediction is wrong
+hopefully though within the next 2 2 or
+3 iterations we would have learned that
+actually this is now the new the new the
+new world order is that we're gonna be
+taking this branch every time and we
+then predict correctly from then onwards
+so it seems like branch prediction
+getting the branch prediction right here
+would be useful whereas in the random
+case of course the branch predictor is
+going to be trying to infer a pattern
+for this since this if statement we're
+in fact no pattern exists at all there
+are a variety of tools that you can run
+and I ran one called perf which is I
+thoroughly recommend for this kind of
+investigation and if you run with them
+without the sorted data you can see that
+the same number of instructions are
+taken the same number of CPU retired
+instructions that go through the system
+the same number of branches are
+encountered encountered but the branch
+prediction rate is vastly different
+between the two so it's not any other
+artifact as far as I can tell although
+it is still surprising to me that in an
+interpreted language it still can matter
+what you can do about this I don't know
+in a practical sense for this particular
+toy example anyway ok
+so I've made a reasonable case for why a
+branch predictor is worthwhile what
+happens once we predicted where the
+program flow is going well the results
+of the branch predictor are a stream of
+instruction addresses this is like where
+we want to be fetching from and that
+moves on to the first stage which is
+this fetching and pre decoding stage
+the future is responsible from reading
+the instruction stream it's responsible
+for doing the TLB lookups the the
+virtual to physical address translation
+and for streaming in blocks of
+instructions the instructions look
+something like this
+the fetcher reads them in sixteen byte
+chunks and it has an interesting thing
+to do first up so later on down the
+pipeline we want to unlock as much
+parallelism as possible and that means
+that we want to do actually more than
+one instruction at a time if that's at
+all feasible but because of the long and
+tortured history of the the x86
+architecture we're kind of left with
+this strange format of op codes which no
+rational being would have come up with
+so if you look at like RISC instructions
+nowadays they're usually fixed size it's
+very easy to see where each instruction
+is but in an intel sequence there's no
+obvious way at all to determine where
+the bytes are we're sorry where the
+instructions are inside that byte stream
+this is what the fetcher does it fetches
+it and it looks out for the beginning of
+each instruction which is an amazing
+achievement if you think about it in 1
+or 2 clock cycles
+it's a somehow scan this list of
+instructions decoded where the beginning
+of each instruction maybe and somehow
+done that in parallel because
+necessarily the beginning of one
+instruction follows on from the end of
+the previous instruction there's a
+dependency from each one carried along
+so the only way I can think they're
+doing is somehow like parallel decoding
+all 16 possible places in the
+instruction stream where instructions
+may be and then somehow filtering out
+the ones that don't make sense but
+whatever is it's an amazing achievement
+and so this instruction stream here this
+this sequence of bytes is actually the
+first few instructions of the example I
+showed you earlier there's that two
+bytes or eax EAX and you can see we've
+pulled out four instructions here and
+then we've got the F 200 F which I
+haven't put down here so at the
+beginning of the next instruction in the
+stream which will sort of be prepend it
+to the beginning of the next fetch in
+the next cycle
+I've consistently out there and I've
+gotten sorry okay so we've got our four
+oh yes sorry at that point here the the
+pre decoder doesn't know what these
+instructions are only knows where they
+lie in the sequence of bytes there's
+that's all they can do and they're given
+the amount of time that they have to do
+this but those bytes then flow on as a
+sequence of bytes and offsets where the
+instructions may start in the stream
+onto the decoding stage which is where
+finally the Intel engineers have sort of
+admitted defeat of this really
+complicated Byzantine instruction
+sequence and have decided that they want
+something more pure inside so at this
+point the SIS constructions that come
+through are converted into a sort of
+internal risk now Intel don't publicly
+excuse me until don't publish the format
+of this internal risk there are some
+sort of literature about where the
+execution units use the various types of
+micro operations so in micro operations
+is what they call this this this risk
+set and within those micro operations
+the more complicated instructions like
+the read-modify-write instruction I had
+on the first slide the load from a
+complicated memory address add to it and
+store it back actually devolve into the
+three instructions that any normal
+person would have written in a RISC
+world that's a really important thing to
+do because later on down the line we're
+going to be able to break those parts of
+the instruction up and schedule them
+differently so that if parts of the chip
+are busy like if the multiplier is busy
+we can still do the load part of a load
+instruction which modern has a
+multiplier component to it we can
+potentially have a if is it yes sorry
+that's probably good enough example
+sorry so breaking the instruction into
+pieces does help because we can schedule
+the individual parts around and we have
+a lot more fidelity later on for for
+paralyzing things that wouldn't
+otherwise be paralyzed if we just
+naively kept them as atomic instructions
+that we wrote to start with the decoders
+here can handle up to four instructions
+in a single cycle which is impressive so
+those four instructions I showed you in
+the previous slide will come through
+into the decode stage and they will be
+turned into micro operations in one
+cycle those
+there's some complexity to do with the
+different decoders the first decoder for
+example is a capable of decoding
+absolutely any kind of instruction and
+generating any number of micro
+operations whereas the other three
+decoders that there are there in
+parallel can only do the simpler
+instruction so there is some kind of
+mileage into very carefully scheduling
+your instructions into a particular
+pattern to allow them to flow through as
+fast as possible on the newer processes
+that's less important because of the
+micro cache which I'll talk about in a
+second but you'll see if you ever go
+into the deep deep depths of like GCC's
+internal instruction scheduler it tries
+it's best to move things around to fit
+this kind of pattern and indeed actually
+is a sort of an aside note if you if you
+open one of the better places to sort of
+see the documentation for this for the
+reverse engineering of what goes on
+inside is to look inside the bowels of
+the compiler as as there are some
+automata inside the compiler that tried
+to predict what the processor does
+internally and schedule instructions to
+fit in with the the predicted flow so we
+have these four decoders and they output
+these micro operations to other things
+take part at this point we have micro
+fusion which is the name for taking two
+micro operations and kind of treating
+them as one although we've carefully
+devolved them into different pieces that
+takes up a lot of bandwidth if you
+imagine we've got like a stream of
+instructions coming in we're kind of
+expanding out the number of operations
+so we've got a sort of fan out of thing
+going fan out thing going on and that
+obviously consumes resources on the chip
+so for the very common operations like
+stores which require an address
+calculation as well as the actual store
+well they don't need any more temporary
+space there are two separate pieces of
+work one is to calculate the address and
+one of them is to do the store but
+wouldn't it be nice just to sort of
+treat them as one atomic unit as they
+flow down the pipeline and but just
+schedule those two bits differently so
+that's what micro fusion is it's taking
+two my crops and kind of bundling them
+together as a sort of tupple of things
+to do together and then we've got more
+importantly macro fusion which is where
+the converse happens rather than
+multiple micro operations being
+generated from a single input
+instruction we take two input
+instructions and we can drink generate
+only one micro operation an example of
+this is the compare followed by a branch
+it's so common that we would want to
+like compare our loop counter with some
+value
+and then branch if not equal or
+decrement a a value and in branch if
+it's not zero those kind of things which
+most most instruction sets instruction
+sets actually have a decrement and jump
+if not zero kind of feel to them x86
+dozen but at this point if you have two
+instructions one after another that have
+this pattern it will be turned into a
+single micro operation so we kind of
+gain claw back a little bit of this
+fan-out that we were getting from from
+further down in the Sandy Bridge and
+above there is something called a micro
+operation cash at this point too so
+we've already the clock has already
+ticked like six or seven times to get to
+this point and so an awful lot of
+valuable work has been done it will be
+useful to hang on to that intermediate
+results especially if times we're going
+to be revisiting this code in short
+order
+so the micro-operation cache stores the
+results of the decoded operations at
+this point there are about 1,500 entries
+and it's very complicated sort of cache
+that doesn't map to a normal like Urim
+memory cache in in the way that you
+would probably think but if you just
+think of it as a something which can
+hold a smallish loop in it's useful to
+but the reason that this is useful is
+that when we do a branch later on if we
+discover that we've been going the wrong
+way down the pipeline but the
+destination of that branch is inside the
+microbe cache we don't have to go all
+the way to the front of the pipeline we
+can sort of short-circuit and start at
+the micro rob cache and only from then
+onwards do we need to to start
+reprocessing instructions which reduces
+the latency of a mispredicted branch so
+although we've invested all this time
+earlier trying to work out which way the
+branch is going if we get it wrong the
+micro-operation cache can save us a bit
+of time recovering from that as I've
+said my Intel don't give an awful lot of
+examples of what their micro operation
+for one looks like so I've kind of on
+the left hand side here given an example
+of the code again and on the right hand
+side I've invented my own sort of format
+for what these micro operations might
+look like
+when the convention I've got here is
+that one line of text is one micro
+operation so the the things I want to
+sort of point out in this stream are
+that compare instruction which compares
+with memory is to micro operations
+there's a sort of temporary value an
+unnamed temporary that's read out and
+then the comparison happens as a second
+separate micro operation and then there
+at the bottom of the loop what we've
+lost in that one extra micro operation
+we kind of claw back here because the
+compare followed by the jump maps to a
+single micro operation which is the
+macro fusion but even this isn't really
+what happened so at this point this
+mental model that we might have of
+putting the code side-by-side is not
+what the processor is seeing at this
+point because what the process is really
+seeing of course is a sequence of
+instructions flowing linearly down in
+predicted program order the branch
+predictor has done its magic we have the
+fetcher is just fetch whatever it's been
+told to fetch and this is what's flowing
+down so I've kind of tried to capture
+this on this slide here where on the
+right the left hand side I've kind of
+put the address to give you some idea
+and to sort of highlight what I mean
+here take this this comparison here this
+is one of the comparisons around the if
+X is greater than Y and in this instance
+I've just arbitrarily decided that the
+branch predictor has predicted that this
+particular one is going to be taken so
+rather than the next instruction being
+the Nordics 14 which would be the next
+address of the instruction i said hey we
+think this one's going to go to 19 go to
+19 now and so that's the next thing
+that's going to be in the pipeline
+similarly here this is the loop at the
+bottom where we've done the compare and
+if not equal and obviously for the vast
+majority of cases that's going to be
+taken as for everyone except one
+iteration that is going to be the case
+so we hope that the predictor is guessed
+that so again the next instruction will
+be back at the top of the loop and then
+down here for just just for comparison
+this one has been predicted not taken so
+rather than being the hex 19 address of
+the next of the go-to it's the next
+address linearly in memory at hex 14 now
+of course this honor of underlines what
+happens when the branch actually gets to
+be executed and that is the branch unit
+has to say well which way did it really
+go and was I right and if I'm not right
+what do I do well we've already said
+about
+we're gonna be flushing the pipeline but
+how does that happen we'll talk about
+that in a second
+okay so we've decoded our stream of
+instructions we're about six seven eight
+clock cycles depending on your model
+down those down the the pipeline and we
+hit this thing called the renamer the
+renamer sort of takes another risk view
+and somehow morphs the x86 instruction
+set to fit that so the x86 only has
+these eight or sixteen in 64-bit mode
+registers that we can talk about
+ignoring the xmm registers for now but
+if you look at any risk chip there are
+hundreds if not thousands of available
+registers why is that well if you want
+to separate our independent instruction
+flows and have parallelism inter
+instruction parallelism you need to be
+not stomping on your registers the same
+time if you use the same register twice
+well you have to wait for the previous
+usage to finish before you can reuse it
+to do something else it used to be the
+case that registers took up lots of the
+real estate if you look at like old
+circuit diagrams or other old
+dies of like the 6502 for example
+there's a great project where people
+have been taking the top of 6502 s and
+scanning them with high resolution
+cameras and in like literally backing
+out where every single transistor is but
+they can draw any sort of diagrams of
+where everything is you can see that the
+registers are actually a substantial
+blob of of the the dye that's no longer
+the case compared to like the caches
+that are on there and all of the
+complicated logic the registers are a
+tiny proportion so having only be able
+to encode 16 in the format even with all
+the extensions that are in there is kind
+of a limitation for this so the renamer
+does on-the-fly dependency analysis and
+turns your code into single static
+assignment mode sorry form and then
+makes up intimate intermediate temporary
+values and Maps them into a sort of a
+suite of a hundred or more instructions
+as sorry excuse me a hundred or more
+registers so we don't need we are no
+longer beholden to the sixteen registers
+that came
+in we can use these intermediate values
+throughout and these intermediate an
+example that's pretty the best thing to
+do here so here on the left hand side
+I've got a slightly different example
+we've got a routine which takes two
+values and increments two different
+Global's and quite reasonably here is a
+piece of code that the compiler could've
+output which is read the global a into
+EAX add X to the first parameter and
+store it out and then the same again for
+B notice it's using EAX again twice
+pretty sensible but if that read takes a
+long time and I think we all know that
+accessing memory usually is pretty slow
+then well it's clear and obvious that
+these two instructions after it which
+depend on the value can't run that's
+fine but we've used EAX in the next
+block of code what happens if global B
+is in the cache already what a mess if
+we were to if we'd have used a different
+register here maybe this could have been
+scheduled but we've used Dax we can't do
+it it's going to be stomped over by
+whatever this instruction stream is
+doing so the renamer takes a look at
+this puts it into SSA form and comes up
+with something which looks a little bit
+like this again there's no kind of
+documented format for this so I've kind
+of used as a suffix on each register to
+sort of indicate the new name that each
+register has so rather than EI X on the
+left-hand side we've got EE X sub 1 and
+then we add EI X 1 to EDI 1 and we write
+the result to a new temporary
+intermediate register called EDI 2 and
+that's the thing that we write back out
+again and then critically down in this
+second blob we have determined that this
+value of EI X is completely independent
+of the previous value of EI X we might
+as well have used another register we
+could have done we just couldn't have
+encoded it or the ABI forced us to use a
+particular named architectural register
+and but at this level inside the chip we
+can make a new one we can just say hey
+let's call this EI X sub two and now the
+Orb sorry and now those two pieces of
+code are independent of each other and
+can run together in parallel or one can
+go in front of the other and we unlock
+parallelism which would otherwise would
+have been
+prevented the way that it is achieved is
+look the renamer keeps track of which of
+these intermediate temporary registers
+contains the current version of any of
+the named architectural registers this
+is the register alias table and it maps
+into either a reorder buffer which is
+like a temporary scratched base of all
+of these micro operations that have yet
+to be executed or have executed but
+haven't finished completed yet or it
+maps into the permanent register file
+which is like the canonical place where
+the real EAX and the real edx live
+interestingly up right up until the
+Sandy Bridge all that is complicated
+sort of internal logic where all these
+these various things are being shuffled
+around and predicted or whatever was not
+the bottleneck the actual bottom that
+was this PRF read here so if if you've
+modified a register recently it's going
+to be living in one of these temporary
+variables that are inside this this
+100-plus array of intermediate results
+but if you haven't modified a register
+reason recently it's in the real
+register file over in the permanent
+register file and at this stage as we
+leave the renamer any instruction that
+needs like the real EAX and the real EAX
+isn't in the in the real debuff already
+we have to read from the permanent
+register file and put it in there but
+there are only three read ports on the
+register file which means that anytime
+you needed more than three registers
+that hadn't been modified recently you
+would take multiple clock cycles to read
+them and now that sounds like a lot
+three registers every single clock cycle
+except that by now we've devolved our
+instructions in the stream of micro ops
+each micro op has up to three operands
+and we're trying to do four of them at
+once so we can easily contrive 12 and
+that means we're going to take four
+clock ticks just to move into the next
+stage so thankfully on Sandy Bridge and
+above they've fixed this and you will no
+longer see this as being a problem I'm
+assuming you guys are on sandwiches of
+courses
+the other thing that renamer is smart
+enough to do is understand these funny
+little things like this is or ei XCX we
+did earlier so naively if you were just
+tracking like the value of each or
+rather whether or not a register was
+dependent on a previous incarnation of
+that register this is all ei XCX looks
+like it's dependent on the previous
+value of EI X and it's not the renamed
+is smart enough to know that this means
+give me a new EI x put the value 0 in it
+and move on with your life and in fact
+in the newer thing
+the newer chips like the Ivy Bridge and
+newer at that point the micro operation
+actually falls out the pipeline we don't
+need to do any more work the work is
+done just by allocating a new empty slot
+that has a zero value in it for some of
+the instructions as well ones that like
+compare not with yourself which for the
+xmm registers sets it all to ones that
+also can happen on the ivy bridges at
+this point and into register moves so
+oftentimes again to fit the ABI where
+we're moving values between registers
+just to make sure that things are in the
+e es aisle the EDI register ready to
+call a subroutine well all that is it's
+just an accounting update if we think
+that the most recent value of EDI is in
+slot 7 well that's what we need to
+record ok it's in slot 7 now and again
+the note the move itself doesn't have to
+happen so a lot of the instructions can
+be peeled out a lot of the sort of like
+in-between instructions the moves and
+the shifts sorry the moves and the
+exclusive ORS with self can actually
+disappear out the instruction stream at
+this point and we just update our tables
+so the reorder buffer is this temporary
+scratch space of these hundred odd in
+process my crops and their operands the
+reorder buffer holds the state it knows
+what the micro operation is it knows the
+inputs and in the case of micro
+operations that don't have their values
+ready it knows which other operations is
+waiting on and it snoops the results of
+completing instructions so as as a
+dependent instruction completes its
+broadcast across like an internal bus
+and any micro operation that's waiting
+for those results can now read it in
+store it and become ready to run this is
+also the stage where that permanent
+register read happens
+and at this point the micro-operations
+remain in the buffer until the very last
+stage of the pipeline okay we're nearly
+at the point now where we're going to
+get into the magic territory of actually
+executing these instructions and for the
+first time we're going to go out of
+order the reservation stations just like
+the last step this is where some kind of
+scheduling algorithm which again is very
+very vaguely described in the literature
+is responsible for working out which of
+the micro operations are going to go to
+which parts of the chip to actually be
+executed there are six execution ports
+and each execution port can only do a
+subset of instructions there's a lot of
+overlap between them but there is there
+also like unique areas that can only do
+one particular kind of instruction and
+that looks oh we're here yes so we've
+we've actually going to talk about what
+which parts do what now we've just done
+the top part here which is the inorder
+part of the queue and now we're into the
+scheduling domain down here and it's
+worth talking about these ports here so
+we've got the six ports a this is sorry
+there's Sandy Bridge there's six ports
+the first three ports on here which are
+oxymoronic lead zero one and five they
+all have an ALU attached to them so you
+can all do the simple operations of move
+if they haven't already been renamed out
+of existence they can do shifts they can
+do all they can do exclusive or they can
+do comparisons and what this means is
+that in any one tick if there are three
+simple operations ready they can all
+start executing that means that we've
+now started to do three things at once
+it's great if you're doing loads or
+stores you can be using these ports over
+here ports 2 3 &amp;amp; 4 we've got to load
+ports and one store port so you can see
+that this sort of a bit of contention
+there in terms of the number of these
+things going on there's an extra thing
+about the stores as I've said the
+indexing modes are really complicated we
+can have like this base address plus two
+registers with one of them being
+multiplied by a constant value power to
+constant for four reasons I don't fully
+understand on at least on Sandy Bridge
+this fourth port the store port doesn't
+have the logic the circuitry to do that
+address calculation and so whenever you
+do a store it's not just the case that
+you have two loaders in one store so
+there's a
+disparity between them every time you do
+a store it has to borrow one of the load
+units just to do the address calculation
+and that's an example of those those
+fused micro-operations where a store is
+both the address calculation and the
+load but it kind of borrows two ports at
+once even though it's only one actual
+slot in the reorder buffer other things
+to note here is that once we get into
+the more complicated instructions like
+floating point multiplies and adds
+various shuffles there are only one or
+maybe two units that can do that work
+which limits the amount of those we can
+do at once yes six units that's yes we
+have yes six units they're mostly
+pipeline themselves so that means that
+each each units they're multiplying it
+may take six units six clock cycles to
+complete but we can start a new multiply
+every single cycle so although the
+individual results of one multiply
+aren't ready until the sixth tick we can
+start a new one each each clock cycle
+this means that the issue rates down
+here are up to three of cycle that's
+what I was saying with those ALUs with
+the fact that we have three ALU units
+means that every single click click
+clock we can start a three of those guys
+we can only start one floating-point
+multiply every clock cycle which is a
+shame in this instance I'm also only
+talking about like the scalar multiplies
+that can happen the if you're starting
+to use the X mmm instructions to do like
+multiple floating floating points in
+parallel where you've like have four or
+more packed into the xmm registers only
+one of those can start each go but
+they're like four independent multiplies
+or eight depending on the width of your
+registers there's another sort of
+component as well as the throughput
+issue of like how many we can start each
+tick we have the dependency between
+instructions so for logic ops and moves
+if you start a move or a an exclusive or
+the results already on the next tick so
+the next instruction depends upon that
+could start the very next cycle for
+integer multiplies at three four
+floating-point multiplies as I said that
+sort of five ish six for square roots
+1024 for divide and remainder we're
+looking anywhere between 24 and 84 it
+depends on
+actual data you're using and the really
+key thing about this is that that is not
+pipelined the we can only issue we can
+only have one integer divide going on at
+once so in stark contrast to those
+multipliers that are going on where we
+can have 301 at a time but you know one
+one every single cycle a divide or a
+remainder is going to take 80 cycles to
+get the result and we can't be doing any
+other divides the remainders so all of
+your hash tables that you've written
+where you're using like the modulus with
+a prime number size of table maybe you
+should consider looking at using a more
+complicated hashing function which uses
+multiplies exclusive ORS moves shifts
+which can all be computed a lot quicker
+and then just ending with like power of
+two to fit into a power to size table
+rather than waiting for 80 cycles for
+your divide em you know having a higher
+quality hash function might be a better
+trade-off anyway I'm starting to run out
+of time um this is my quick date dip
+into the excuse for why I can't have 4
+gigabytes of cache Ram why is it take 3
+to 250 cycles to access Ram on the
+left-hand side here I have one bit of
+static Ram that such as you'd find in
+your cache on the right hand side I have
+one bit of DRAM now it's pretty clear
+that the left-hand side is much more
+complicated than the right-hand side but
+why is that bad well on the left-hand
+side we have a pure logic device this is
+a discrete component we can be at 0 or 1
+out of this at all times but it requires
+constant power it requires 6 transistors
+and a bunch of complicated overlapping
+wires which make it very very difficult
+to lay this out in a high density way on
+a chip
+I don't know how Intel do it but you
+look on the die and there's these
+beautiful areas which are clearly the
+cache of the same thing over and over
+again but somehow they've been able to
+get that done but but it's power-hungry
+it means it heats up it's a problem for
+for heat dissipation um but it's a logic
+device which is great on the right hand
+side we have something which is an
+analog component
+this capacitor down here stores some
+very small number of electrons to store
+whether there's a zero or one there
+which means we don't need to pay
+powering it when we're not in accessing
+it we can turn the power off and it'll
+be there except then it drains away over
+time so we have to keep occasionally
+topping it up which reduces our memory
+bandwidth we just have to keep using
+that just to keep topping it up but more
+importantly every time we read from this
+isn't analog to digital conversion which
+takes time so the why would we even do
+this well obviously we don't need power
+all the time that's great
+these are very very much simpler we can
+lay out these out a much higher density
+which is why your DRAM cells are much
+much much more tightly packed and you
+can have your gigabytes of RAM and
+obviously the other part to this is that
+the the DRAM is usually physically
+separated from the chip rather than
+being on die as such this propagation
+delays it just takes a while the
+unfortunate laws of physics are against
+this electrons don't move anywhere near
+the speed of light and they're going to
+move quite a long way from the RAM chip
+to get onto the processor so that's kind
+of my apology for why we can't have lots
+of cache Ram there's some example
+timings here and I think we've we all
+know that there it's better to keep
+things in the a level caches the the
+lower level cache it caches we will
+blast through this last couple of bits
+here so the last thing that happens is
+when the instruction has completed it
+broadcasts its result which frees up any
+of the micro operations that are waiting
+to be scheduled they become ready to run
+if they are in which case the scheduler
+will pick them up the next tick we've
+got some complicated things to restore
+forwarding which I've got time to talk
+about now and the last stage is this
+retirement stage which is where some of
+the better magic happens so in the
+retirement stage so far we have kind of
+each instruction that's been flown down
+the pipeline has been a transaction that
+is yet to commit although we may have
+read from memory any rights that we've
+done I've sort of holed up in a storing
+buffer that hasn't yet made it out why
+is this important well we've we
+reordered everything along the way what
+happens if we've got one that a branch
+is wrong but what happens if it took us
+a while to find that out we'd already
+started doing some of the work that was
+the other side of that branch we need to
+undo that work and the way that it's
+done is by just not committing the
+instruction basically blowing away that
+transaction
+the instruction started and not writing
+back to the permanent register file not
+allowing the store to actually flow out
+to the outside of the chip by not
+allowing the instruction to retire
+similarly exceptions like / zeros mean
+it may be the case that I divide the
+values for a divide won't known of up up
+front and so instructors beyond the
+divide have already finished in
+completed but the divide by zero has to
+happen with the old value of those
+operands and there is a this kind of
+this is starting to become exposed to
+the programming model list this whole
+idea of having these sort of
+transactional instructions where so for
+example has well has this software
+transactional memory model where you can
+ask to be notified if if various parts
+of RAM are accessed while you're running
+and abort and a set of instructions so
+that an atomic operation from your point
+of view doesn't require a lock it just
+means the transaction being rolled back
+I've since discovered this is not
+actually done by effectively like the
+same logic as the branch prediction it's
+probably done in the cache level but
+there is talk in the sky lake which is
+like two more revisions up of them
+exposing this instruction level
+transaction to us as programmers okay
+we've reached the end there's an awful
+lot of stuff that's going on under the
+hood and I don't think I have time for
+questions judging from the time but
+thank you very much for your time when
+there's there's some example resources
+up there thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

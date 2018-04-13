@@ -1,0 +1,1345 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Scaling Event Sourcing for Netflix Downloads | Coder Coacher - Coaching Coders</title><meta content="Scaling Event Sourcing for Netflix Downloads - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/InfoQ/">InfoQ</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Scaling Event Sourcing for Netflix Downloads</b></h2><h5 class="post__date">2017-09-12</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/rsSld8NycCU" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">I'm gonna start with a raise of hands
+cuz why not it's fun how many people
+here have used the new Netflix download
+feature that's a nice show of hands all
+right keep your hands up please
+alright so those of you who use the
+feature how many of you have you
+experienced a downloads limitation error
+ah all right
+hands down thank you so the reason I'm
+asking that is today we're going to talk
+about the service that backs the
+download feature that validates whether
+you can actually download content based
+on the new business restrictions that
+came with downloads so Who am I
+my name is Philip Avery I'm a senior
+software engineer at Netflix I was the
+project tech need lead and one of the
+engineers on the Downloads license
+accounting project this is my colleague
+Robert Ritter
+he was the event sourcing system
+architect on the event sourcing project
+so to start with let's go back in time
+back to November 2016 this is a lovely
+picture of us sitting in the war room on
+the day that downloads was released
+there's Robert there's myself sitting in
+the front row waiting nervously as
+within minutes of this photo all around
+the world press releases we're going to
+go out to Fame Netflix customers you can
+now download content onto your device
+awesome scary the reason why it's scary
+is here's us watching to see our license
+validation service come online and take
+traffic for the first time ever so the
+way Netflix wanted to release this
+service the feature was that they wanted
+customers to experience the ability to
+download everywhere globally at once for
+us that meant no rollout testing no
+global testing not even friends and
+family testing everyone experience at
+the same time our service was about to
+take traffic for the first time ever no
+pressure so what I'm going to talk about
+today is why we needed this new download
+service let's talk about the problem
+statement secondly we're going to give a
+bit of an event sourcing over
+for those of you who are new to event
+sourcing before deep diving into how we
+implemented the architecture for our
+event sourcing system finally we're
+going to come back out of this and talk
+about what it was like as an engineer
+after release of this service to
+continuously work on it and iterate on
+the business requirements so to start
+with I'm going to give you an overview
+of what the streaming playback lifecycle
+is I'm going to do this so that we can
+then compare it to the downloads and you
+can see how the requirements are
+different so when you press play on your
+device and you go to streams and content
+the first thing you're going to get is a
+playback context this gives you the
+metadata for your playback it gives you
+the URLs that you need for streaming it
+gives you information such as the
+language that you're going to be using
+after you've got that you can go and get
+the license the license allows you to
+decrypt the encrypted content on the
+flyer and buff it up then as you play
+we're going to generate session events
+that get sent up to our server these
+tell us how the playback experience is
+going for you then when you press stop
+we get a couple events telling us that
+the license has been closed and that
+you've now closed the session so how
+does this compare to downloads it's
+pretty similar to start with you press
+download again we generate that playback
+context with that metadata then we also
+generate a license but now the license
+is slightly different in the downloads
+case that license can be persisted on
+the device and used over and over again
+in streaming it gives used once and then
+it's gone now you can use it over and
+over again and then you can actually
+download the entire encrypted content
+and store it on the device once you have
+these you can now start the life cycle
+and that life cycle can now laughte
+a year so you can have content on your
+device and it can stay on your device
+for a year you can press play repeatedly
+every time you press play wegend gonna
+generate session events again and then
+the next time you come online we're
+gonna send them up to the server so we
+can still see how your playback
+experience is like and then at some
+point in the future about 30 days after
+that initial download that license
+you've got is going to expire you can
+then potentially renew that license
+which means the exploration is extended
+for another 30 days or so
+the ability to renew that is actually
+dependent on some of the business
+requirements going to talk about in a
+second then lastly when you finish with
+the content and you delete it off your
+device we get a signal telling us that
+you've released the license it's no
+longer being used and you can
+potentially free up another slot to
+download more content alright so now
+that we've talked about what the life
+cycle is and how the differents are
+between the downloads and light and
+streaming we have different business
+requirements which are there for the
+Downloads life cycle we have different
+business requirements that are Netflix
+clients as well as studio requirements
+so let's go through some of these one of
+the climate's we have is that you're
+only allowed to have a certain number of
+devices at any point in time with
+downloads on them this means we need to
+keep track of what devices a customer
+currently has and what downloads are on
+that device secondly you're only
+potentially allowed to have a certain
+number of downloads per studio category
+and that number can change depending on
+the studio arm negotiations
+thirdly this one's interesting over the
+course of a year you might only be able
+to download or watch a certain piece of
+content twice in the year so we need to
+keep track over that year of what
+content you've watched how many times
+you've watched it and if there's any
+restrictions in place potentially have
+an a validation error that occurs on the
+third time so we now have this life
+cycle of a year which we need to keep
+track of the customers state for a year
+with a streaming example we didn't have
+to keep track of the customers history
+we're a stateless service all the
+information we needed to process the
+request was given to us in the request
+now we need to actually have this state
+recorded
+we need a new stateful service the
+licensed accounting service so let's
+talk about some of the requirements that
+we needed from this service first and
+foremost for us was flexibility those
+business requirements I just mentioned
+when we first started designing this
+project we did no idea what they were
+gonna be there was still under
+negotiation so all we know is we needed
+to design something for use cases that
+were coming and it needed to be flexible
+to account for them
+additionally even after release we still
+had further business requirements that
+were going to come out so this needs to
+be an iterative flexible design secondly
+it needs to be debuggable so as I said
+we could have a year's worth of data we
+could have a customer come in and said I
+just got a validation error that said I
+can't download this because I've hit my
+download limit for something that
+happened three months in the past we
+need to be able to look back three
+months and say at that point in time
+what happened that caused this error and
+the customers saying it's incorrect
+where's the bug in our system that's
+being countered by that three months ago
+issue third needs to be reliable we're a
+Tier one service if we go down
+Netflix goes down let's not do that so
+how can we make this reliable and fault
+tolerant so that we're not going to
+bring down the service fourth goes
+without saying when Netflix we need to
+be scalable we needed to scale from that
+very first day to potentially tens of
+millions of users around the world so
+how do we account for that so let's deep
+dive into each of these flexibility how
+can we make our service and our domain
+model flexible so when we first looked
+at this we we definitely looked into
+relational database models we have
+experience on the team with using
+relational databases but we wanted to
+actually abstract away from the database
+so we didn't have to directly interact
+with the database to provide this
+flexibility we didn't want to have to
+have the migration tools and we didn't
+want to have to add new columns etc to
+bring in new changes to the domain model
+for the new business requirements what
+we wanted to do was have all of those
+changes possible in the application
+layer in our in our case the java
+application layer so one way of doing
+this was to use the document model in
+the document model using versioning on
+the object itself we could then
+serialize the object start to the
+database bring it back make changes as
+needed create new objects as needed and
+we get our flexibility right perfect
+what are we losing debug ability every
+time you make those changes
+you're mutating the data and you've lost
+the history of why that mutation
+occurred you've lost the state change
+event sourcing gives us that it gives us
+an immutable transactional history of
+every single state change that has
+happened over the history of the
+customer you can then take those events
+and you can replay them and you can form
+your domain model at the current state
+and if you version the events and your
+version the domain model you can make it
+flexible you can add new fields for
+ongoing events you can create new events
+which are going to affect the current
+domain model Roberts going to talk about
+that they later sir
+we will dive into that so we've got the
+debug ability reliability we achieved
+these through fullbacks which are
+default customer behavior in the case of
+outage I'm going to deep dive on this in
+a bit as well and finally scalability
+how did we achieve that so our service
+was chief scalability through the use of
+a tolling we called Scryer which is
+predictive scaling and I will dive into
+that a little bit later and then
+inherently through the use of event
+sourcing so I'm gonna hand over to
+Robert now who's going to talk about how
+we apply this as well as what it is all
+right so before I deep dive into event
+sourcing what I want to do is give a
+general overview of the pattern for
+those of you who aren't familiar with it
+so if you think about the way we
+traditionally work at the database we'll
+send our query out to a data store or
+get back some values what we'll do is
+we'll write those values into the main
+model and we'll use that for the rest of
+our processor now with this the main
+model represents is the current state of
+your object at that moment of time you
+did your query as people said what we
+don't have are the events that got us to
+this final life State that's just as
+important in some situations so it comes
+event sourcing I have a little visual
+aid here to help me out to explain it in
+a high-level what you actually see on
+the screen here is some frosting in
+different colors look at the leftmost
+color and it's this cream color this is
+an initial state of the frosting this is
+how it gets delivered to the bakery and
+you know cream is great and all but we
+want to have fun with it so we want to
+add some food dyes to make it red blue
+whatever the customer wants
+so my example we can think of the domain
+model being a simple frosting object and
+as one property as the color and the
+goal that maker is to change that
+property to the color that is dictated
+by the order so in this example she has
+an order calls for a purple cake so we
+need to make this into a purple frosting
+so she has a system that she works with
+she goes up to a and she has two inputs
+that she puts into it one being the
+initial state of what she's working with
+here we have the cream frosting the
+second being a command that dictates
+what do we want this frosting to be
+after it's been processed so we feed
+those two inputs to our command handler
+which in this example is the system and
+the command Heather knows how to change
+the state of this domain model yeah so
+given the make purple command it's smart
+enough to know that in order to move
+from this initial state of cream to
+purple we need to do two things it's
+gonna shoot out two events first you're
+gonna add red then you're gonna add blue
+these events are then given to the event
+handler in our example the event handler
+simply the Baker because she's the only
+that's gonna be applying the events to
+our domain model
+she takes the first event as it saw her
+current domain model and it's red now
+this wasn't where we wanted to be we
+wanted to make purple but we still have
+one more event left so we're gonna apply
+that on top of it and that gets us to
+purple so what I'm going to do is I'm
+going to change the terminology on you
+I'm no longer going to say domain model
+I'm going to start using the term
+aggregate now an aggregate is a domain
+model the difference between the two is
+that you can decompose an aggregate to
+the events that got you to this final
+eye state so in this example this purple
+frosting here can be decomposed to two
+events the add red and the add blue
+events if you always start with the same
+initial state this cream color and apply
+those two events on top of it you will
+always get to this purple frosting
+aggregate now going back to the commands
+command is a part of the nomenclature
+you'll see when you start researching
+events or saying it's a little
+unfortunate it's called a command
+because the command kind of implies that
+you have the authority to move from one
+state to another but that's not the case
+in event sourcing in a command it's
+really more of a wish I wish to get to
+this desire
+here in this example you'll see that the
+two inputs are my current state which is
+purple frosting and I input a make red
+commit command Haller notice well the
+only way I can really make red out of
+purple is by extracting the blue and we
+know a baker doesn't have the ability to
+extract colors only to add colors so the
+command Haller is going to deny this
+request so even though you give it a
+command you need to be able to still
+fell safely and this is a good example
+of where the state doesn't change and no
+new events are created now I'm going to
+pull out a little bit here's a
+high-level overview of the components
+you had seen a typical event sourcing
+application what I want to focus on in
+the beginning are the two pairs in the
+middle of the aggregate service and the
+aggregate repository now these always
+come in pairs for every aggregate that
+you support in your system you're gonna
+have a service in a repository sown in a
+grits mean in pairs of these I also
+notice that for every component it's
+directly dependent on the one that's to
+the right of it
+so what we're going to do is we're going
+to start with the event store and then
+we're going to work our way left to kind
+of give a better overview of how all of
+these play together and what they're
+individual rows are in a vent sourcing
+so let's start with the event story this
+is your database the implementation is
+up to you
+you'll be whatever you want just depends
+on what your business requirements are
+do you prefer scalability deeper
+consistency there's just a lot of
+factors you have to wait until you
+eventually get to the implementation
+that you're going to run with but at the
+end of the day the event source
+basically you're just going to take a
+row ID and send you back a list of
+events and these events are what you're
+going to replay on top of an aggregate
+to move its state incrementally until
+you get to that last finalized State one
+thing I do want to know is all events on
+a single row do not necessarily apply to
+just one aggregate you're gonna have the
+events applied to multiple aggregates
+and we do that by signing it an
+aggregate ID so for every distinct
+aggregate ID you have in your list of
+events there's gonna be that many
+aggregates and here's an example of to
+aggregate IDs a great idea one being the
+blue color an aggregate ID to being a
+pink color when we process these this is
+going to result in two two aggregates
+for us
+process with now something has to query
+the event store to get this data that's
+where the repository comes in the
+repository takes queries in your domain
+jargon and translates it to the
+appropriate statement to send out to
+your event store so whether it's SQL or
+CQ o is going to go ahead and just
+translate it and say hey give me all the
+events that I'm asking for so in this
+example the repository is asking for all
+the events in a highlighted row the
+event stores happy to oblige and will
+return the events we just zoomed in on
+this will give the repository of the
+events in memory and it's going to start
+buckets heisting them by their aggregate
+ID so as I mentioned before this
+actually maps to two aggregates so the
+repository is going to start placing
+them into their buckets we start with e1
+which has an a great idea 1e2 has the
+same aggregate ID so we're gonna place
+it in that bucket
+now we 3 has its own a different
+aggregate ID so we create a new bucket
+and we place it there now we have no
+more distinct that great ID so we're
+just going to let the repository finish
+up bucket eyes in these events once
+they're placed in their appropriate
+buckets we create two uninitialized
+aggregates and we're going to start
+applying these events on top of it and
+for every event that we play on top of
+it it moves the state forward in time
+until we stink exhausted all our events
+and we get to the final eye state of our
+aggregates I here a repository also has
+the ability to update the state of an
+aggregate and it does that by accepting
+two inputs your current aggregate and
+the command you wish to apply to it
+command haller knows in order to get to
+our desired state we need to apply these
+events to it so in this generic example
+the command handler gave us two events
+it says in order to fulfill your command
+just run these on top of your current
+state repository we'll add those events
+to our aggregate that's in memory and
+now our in-memory aggregate is updated
+so anybody who has a reference to this
+now has the new values it'll also send
+the events out to datastore
+so here we're telling the event store to
+append these two events to the row ID
+that we had queried earlier so now when
+we zoom in on it
+you'll see that I 8 and 9 are now at the
+end of this list
+so when we go back and we query for this
+row ID we're going to get that new state
+that we changed to because of the
+command and finally we have the
+aggregate service this is the public
+facing API that your customers are going
+to work with so when you package your
+library and you ship it out to them this
+is going to be the layer they're going
+to interact with the aggregate services
+business aware it knows what your
+business rules are so we can reject the
+requests of your customers trying to do
+something they shouldn't be doing in our
+example subscription plans or the number
+of times you can download a certain
+title similar like the repository or a
+repository can reject a request because
+of an invalid state change service has
+the same capability but for a different
+reason
+just more business validation in this
+example we ask the repository for all
+the aggregates for a specific customer
+and a repository respondent with 2
+aggregates at this point the service can
+just think of them as the main models
+because it doesn't necessarily care
+about the events that got it there so
+it's going to look at the size of the
+list I came back let's go look at the
+values of the aggregates and it's going
+to make business decisions based off
+that all right so now I'm going to talk
+about to our grits that we actually use
+in our system today we have a licensed
+aggregate we have a downloaded aggregate
+license I recreate those any time we
+hand your device the license we need to
+keep track of it as Pippo said before we
+used to just hand out licenses and
+forget about it but now we want to know
+exactly how many do you have at any time
+because that's important for our
+business validation so well create the
+license I agree when your device is done
+downloading it will notify us with an
+event when we get that event will create
+a downloaded aggregate and we'll save
+that off this allows us to be able to
+reject a request if a specific title has
+been downloaded too many times
+all right so walking through the example
+here when you hit download on your
+device it's going to need a license in
+order to play that media so it's going
+to hit our car license end point it's
+going to afford that request to our
+license service it's gonna ask the
+license service for a license and if
+it's successful it's going to return
+it's going to respond back with a
+license to get
+device in this example we have our
+customer being Baily and she wants to
+download Glo Season one Episode one not
+a licensed service as I said before it's
+business aware and it knows there's only
+so many times you can download this
+title oh it's actually gonna do it's
+gonna defer that to the downloaded
+service it's gonna ask the downloaded
+service is Bailey allowed to download
+this title again downloaded service exit
+from there
+that's a repository for this customer
+and tadow combination give me all the
+aggregates that exist in our event store
+and only do it for the past year because
+our limits are usually based download
+repository goes does its thing returns
+back to downloaded aggregates each
+aggregate represents a time that Bailey
+downloaded this specific title so we see
+that she downloaded it February 15th and
+she also downloaded it May 25th the
+downloaded service is now going to do
+the business validation it knows that
+the yearly limit is 3 for this title and
+it's going to look at the size of the
+list that came back which is 2 so now
+we're going to respond back true to our
+license service we're Intel a licensed
+service you have to go ahead to give her
+a license she has one more slot left
+available licensed services then going
+to create an uninitialized license i
+argue because a new license means a new
+license aggregate and it's going to also
+hand the license repository a command to
+get it to an initialized state and the
+commands going to create it's going to
+have some properties of what we want to
+apply on top of the guy aggregate
+repository takes the two inputs passes
+it on to the command handler command
+heller knows what events need to happen
+in order to get to this initialized
+state in this case it creates a license
+created event and it has a customer ID
+set with the title that she downloaded
+and when she downloaded it this event is
+then handed to the event handler along
+with our uninitialized aggregate event
+handler it's going to replay it on top
+of the aggregate and now we have an
+initialized aggregate tells us the
+customer ID the title when any expires
+we typically have a 30-day window of how
+long you are you able to use a license
+so here we have July 27th that's the
+expiration date and whether or not
+released basically did you delete it off
+your device which means it's
+longer active it's false because we're
+about to send this to you and you're
+gonna use it as soon as you get it and
+then finally the license repository will
+save this event to the event story so
+the next time we want to update this
+license I regret we will a so events or
+for all the events that's associated
+with it in this case there's only one so
+now we know that we would have a license
+area that is still active when we quarry
+for it and then finally the license
+repository tell us a license service
+that the aggregate was created
+successfully the license service then
+goes out to our DRM servers gets a
+license and then passes that back to the
+device so what device has this license
+we have to work keeping track of it now
+quickly going back to the is allowed
+question we could have done this with
+just the license aggregate we didn't
+need to have a downloaded aggregate in
+order to do that the license service
+would ask the license repository give me
+all the licenses that Bailey has had in
+the past year and with whatever I get
+back I'm going to filter out that's how
+the licenses I have to do with titles
+that I'm not interested in right now so
+as you can imagine the vast majority of
+these licenses are going to be filtered
+out and then whatever I have left I'm
+going to use that as my sighs I don't
+know compare it to my yearly limits now
+this is a very expensive operation think
+about what this implies you have to read
+every event that Bailey has ever done
+within the last year map them to license
+aggregates send them to the service and
+the service is going to probably just
+discard about 90 to 95 percent of them
+just to get to this final answer
+so what we did was we created this
+downloaded aggregate to quickly answer
+this new query we needed to support so
+for anybody who's familiar with
+denormalization
+this should be very familiar to you
+because it's pretty much the same thing
+if we have a new query that you need to
+support look at your aggregates can you
+support it if you can can you do it
+efficiently if not go ahead create a new
+aggregate just to support that query
+it's okay we've done that before and it
+works great alright so now I'm going to
+deep dive into our of our events store
+implementation we ended up going with
+Cassandra give a quick overview on
+Cassandra you have three different types
+of columns in Cassandra first being the
+partition key
+hache of these values is going to tell
+you which node in your cluster your data
+is going to live on next because the
+clustering columns because many rows can
+map to the same partition key we want to
+be able to group them by a value so
+we're going to group them by the first
+clustering column and then within that
+group we're going to group it by the
+second clustering column and so on and
+so on just depends how many clustering
+columns you have and then finally we
+have plain old columns you can't search
+against this data but it's the data
+you're trying to get to well when you
+finally locate the row and you read it
+in so this is a schema of what we're
+using today for event sourcing table row
+ID it's up to the license aggregates you
+create a row ID each aggregate I'm sorry
+each aggregate can independently choose
+how the rows are going to be stored into
+the event store typically the row ID is
+simply the customer ID appendant with
+the aggregate name now because it's that
+simple you can imagine lots of rows are
+going to map to this row ID so we want
+our first clustering column to be the
+aggregate ID we want to collate
+co-locate all the events with the same
+an aggregate ID together and then within
+that grouping we want to sort it by the
+event time this is going to put our
+events in a natural sequence that when
+we get it back in our query
+we're going to play it in the order we
+got it on top of our aggregate and then
+finally we have the event data which
+just has our serialize data an event
+mapper which will tell us what
+serializer to use to deserialize the
+data well I'll talk about cryo this is
+the civilization framework we ended up
+using in our system it's open source I'm
+grabbing the github URL that's down here
+what we loved about it is out of the box
+it has a number of serializers that will
+probably be good enough for your
+requirements for us we had a requirement
+that we needed to version our events
+because as people had noted requirements
+change and we need to be able to change
+with it easily so we wanted to stamp our
+events with versions so that way when we
+read in a version number we know what
+values to expect in the serialized data
+if it's not there we're going to provide
+a default value I
+so here's a visual representation of
+example of events in our data store so
+here we have two customers who've
+downloaded three titles if we focus on
+that here he downloaded house of cards
+and buddy thunderstruck there's no like
+values so the aggregate ID ordering
+doesn't take place here now let's say a
+little bit in time we move forward
+Matt's done with house of cards so he
+deletes it off his phone that's going to
+give us an event to tell us the license
+is no longer active and we're going to
+create event call it release license
+event now notice it's slid right under
+the first row reason for that is because
+it shares the same aggregate ID with the
+first row which is house of cards and
+we've told Cassandra we want to group
+these together once that grouping has
+been created when you are then going to
+sort it by the event time so since
+obviously 3° 0 it slides right under
+that first row what this gives us
+ability to do is to search Cassandra for
+specific aggregate and we do that by
+providing a row ID and the aggregate ID
+in this example we're going to get two
+events back they're going to be in the
+order we need to play them on top of our
+uninitialized events our aggregate I'm
+sorry and it's going to finalize them to
+a license I argue that's been released
+we also have the ability to ask
+Cassandra give me all the aggregates for
+this customer and we do that by simply
+providing the row ID now we have two
+distinct area IDs so in a repository
+processes this it's going to return back
+to aggregates one with house of cards
+which shows that it's been released one
+with buddy thunderstruck will show that
+it's still being used now a certain
+point in time there's you're going to
+create so many events that you just
+can't process them all it just doesn't
+make sense to process every event that
+has happened since the beginning of your
+service
+so this is where snapshotting comes in
+what you're going to do is the aggregate
+is going to set some conditions that say
+if any of these conditions are triggered
+create a snapshot of what we are and
+then from then on we're going to refer
+to the snapshot and move forward the
+triggers can be anything from how long
+it took to process all the events or the
+number of events that it did process
+either way
+we're going to take the materialized
+aggregates and we're going to serialize
+that and say that off to her database
+we're going to save it off to our
+snapshot table every aggregate starts
+off with no rows in the snapshot table
+so we have a default version of zero the
+row ID once again the aggregate is going
+to is responsible for defining its own
+snapshotting strategy so it's going to
+create its own row ID the version number
+as I say if it's not there at 0
+otherwise we wind up the number and the
+snapshot data this is going to be your
+list of aggregates that is serialized
+going back to our example let's say Matt
+triggers a snapshot so we end up taking
+the aggregates that we created and we
+save it off to the snapshot table we
+start with version number one since
+there wasn't one before we can get to it
+easy by the row ID
+it's just Matt and the aggregate name
+and the event data once again is a list
+of the aggregates in civilized form so
+the next time Matt makes a request we're
+going to look at the snapshot table
+first and gets the most recent version
+here it's version 1 well reading in the
+binary data and we'll create the list of
+aggregates then we'll go to our event
+table and we'll say we only want the
+events that happened after this snapshot
+and the way we do that is by appending
+the snapshot version at the end of our
+row ID so all the events that happened
+before our snapshot happened with the
+mat license aggregate and 0 at the end
+once the snapshot happened we start
+saving our events with the one at the
+end of the row ID so we'll take this
+single events and we'll apply it to the
+appropriate aggregate that we serialized
+and we'll move on from there
+so that's the general overview event
+solution I'm going to take it back to
+Pippa and she's going to describe what
+it's like to actually work with the
+system yeah thanks apparently it doesn't
+want me to talk to you people I'm sorry
+alright so everyone knows designing a
+new system implementing a new system
+it's fun you get to play with things but
+then you get to have to work with this
+new system so what's it like after we
+release this has it been like working on
+and iterating on the license accounting
+service so I'm going to go back and rear
+you ate those four key points that I
+went through before and talked about how
+it's being in practice so what was
+flexibility like and practice Robert
+mentioned prior we mentioned how we
+conversion they're vents and the
+aggregates and when we can create new
+fields we do this on a regular basis
+where all we have to do is go into the
+actual Java object add a new field to
+the object and create an annotated
+version on that it's really easy I'm not
+going to go into that because of the
+simplicity instead what I'm going to do
+is deep dive into something that's a
+little bit more interesting I'm going to
+talk about a new business requirement
+that we had recently which required us
+to create a whole new demand model a
+whole new aggregate so this requirement
+was that you could now go onto the
+website select manage download devices
+and you can remotely deactivate one of
+your devices this means if you lose your
+device or you want to free up a slot you
+can go online and basically release all
+the licenses and have that content
+removed from a device however we only
+want you to do this a certain number of
+times a year so we need to maintain
+state now and record how many activate
+devices happened over the course of a
+year whole new flow on your domain model
+so let's talk about the components which
+are required to do this let's step
+through them first thing is we're going
+to need a new endpoint for the service
+to actually answer the request on we're
+going to need a new device service that
+as Robert said has our business
+requirements layer this is where we say
+are you allowed to deactivate the device
+or any other potential device
+functionality thirdly the device
+repository which will interact with the
+device aggregate and create the device
+aggregate for us and finally we're going
+to need for this case scenario a new
+device didn't you deactivate device
+command and device deactivated event so
+these are the new components that we
+needed for this workflow how do they
+work together we have the flow where the
+endpoint will actually talk to the
+device service and say go do deactivate
+my device for me the device service will
+now ask that question can we deactivate
+the device it will look at the device
+aggregate which he gets from the device
+and it will say how many times is this
+person deactivate a device in the last
+year in this case it's only one so we'll
+say okay well let you have this
+deactivation so can deactivate is true
+at this point the device servers can use
+the licensed service to release all the
+licenses for that device and then
+finally it'll use the device repository
+which will apply the device aggregate
+and the device command to the command
+handler and create a new event that says
+this has happened we've now deactivated
+that device so all of these components
+using the architecture that Robert just
+described or extensible components easy
+to add easy to extend the top-level
+aggregate repository command and event
+as a result putting in this entire flow
+code completions are creating all of
+those components from scratch during the
+unit testing doing the smoke testing the
+integration testing the device
+testing everything in order to get this
+out into production took me under a week
+to do me just one person never once did
+I have to touch the devote their
+database I didn't have to make direct
+changes to the database all of this was
+done in the application Java layer I
+didn't have to have any understanding of
+how the integration with Cassandra
+happened at all so I think this is a
+pretty good example of the flexibility
+that we got out of this architecture
+that anyone could come in that's new to
+our team and be able to have a pretty
+quick learning curve to get up to the
+ability to make these sort of changes so
+what about debug ability for me I think
+this is actually the biggest win so we
+have some really rudimentary tooling
+where you need to get a bit better at
+this but all we have at the moment is we
+have an elastic search log of every
+single request that comes into our
+server and we have an endpoint which
+gives us a event dump for a customer it
+just gives us all of the events that the
+customers had in JSON format for us to
+look through so even with this really
+rudimentary logging we've been able to
+debug some pretty interesting edge case
+conditions and I'm gonna go through one
+of the examples now so what we noticed
+was we noticed that
+his devices occasionally happening where
+they had licenses or they had downloads
+on the device which weren't being
+counted by our server we weren't
+validating them properly so we went and
+we got that dump of all the events and
+we stepped through and what we saw was
+we had to start with an acquire licence
+event good that's what we want this is
+followed by a few of the lifecycle
+events that we have in our system and
+then we saw a release event perfect
+that's what we want and our in your
+event wait we've just renewed a release
+of license
+this license is meant to be closed why
+are we renewing it what's going on here
+so what was happening was rear ending up
+getting a license aggregate that was
+released so we weren't counting it but
+was continuing to be extended so we were
+able to go through these events and say
+okay
+that renew license event happened at
+this point in time we could correlate
+that to the device logs and we could see
+what was happening on the device and we
+could step through it and we're able to
+help with the device team to actually
+identify a bug on the client which had
+an edge case condition that was reusing
+the license ID the aggregate ID and
+hence continuing to keep from acting on
+it but it also identified a bug in our
+code
+can anyone see something we're doing
+wrong here we should never be renewing
+that license this should be an invalid
+state transaction when Robert mentioned
+before about the command handling acting
+on invalid state this is invalid state
+we should never move a release license
+into renewed state that is an invalid
+state transaction and it should be
+caught by the command handler so we were
+able to fix this bug on our system and
+our site as well all right so what about
+the reliability I mentioned before that
+we have fallback so let's throw that to
+that when the client when the device
+makes a call to us it hits our Eid JPI
+layer and on the edge API layer we have
+a license accounting service client it's
+a rest client that talks directly to our
+license accounting service that service
+in turn talks to Cassandra so we had two
+points of failure here
+if either one of those fail we could
+then disrupt client experience so we
+need to make sure that this doesn't
+happen if our failure occurs you
+shouldn't be punished for that so what
+we have is we have a default fallback
+response this acts as if you'd never had
+any licenses if you've never had any
+downloads given that scenario what would
+the response be so we err on the side of
+customer experience this gives us an
+ability to have an outage and you'll
+never even know and we have had one very
+brief outage and no one you do better
+so this definitely has helped us with
+reliability lastly I'm sure this is what
+you all want to hear how did it scare
+you all so the service itself scaled
+really well from the very first day we
+actually pinned high so that we could
+get an idea of what the traffic was
+going to be and then after we had a good
+log of what traffic was we moved to our
+Scryer predictive scaling service i'm
+not going to deep drive you can actually
+look there's some tech blogs we could
+talk about what spur is but it basically
+looks at what customer traffic was and
+uses that to predict how much we should
+scale the service in the future so the
+service code really will what we had
+problems with was the Cassandra nodes
+the Cassandra nodes which we used were
+very very very high throughput low
+latency nodes really great for serving
+traffic however they had a relatively
+low amount of storage so what we saw
+pretty soon was this pretty graph which
+shows this lovely green line of disk
+storage rapidly reaching hundred percent
+so while the blue line shows the
+requests and the throughput for the
+service and we could handle way more
+requests than what we currently got the
+amount of nodes we had was not keeping
+up with the amount of data we had all
+right easy double the cost up done right
+yeah how scalable is that that's not
+going to work we need to find better
+solutions we need to architect better
+solutions for our storage so what are
+some options we
+good look into details however this was
+a few months of data and we have to
+store this for the next year even then
+there's edge case conditions that we
+have this life cycle so you can't just
+drop events off and we don't really want
+to that's the point of events or so we
+want to keep this data so there's
+another option AWS offers a different
+storage optimize cluster called the d2
+clusters these have much more storage
+capacities these have in the order of
+terabytes now but the disadvantage is
+they have much higher latency up to one
+second that's not really going to cut a
+real-time service like this so why am I
+even to mentioning this what about a
+petition approach what if we took that
+SSD I to cluster that really quick low
+latency cluster and we use that to serve
+the snapshot in subsequent events so as
+Robert described when we snapshot data
+we take the they'll take the current of
+course a aggregate thank you we take the
+current aggregate and then we serialize
+that and then we only replay any
+subsequent events on to that aggregate
+we're not really looking at the events
+that came before it they're still there
+or we still use them for debugging
+purposes but they're not used for the
+real-time requests so what if we took
+that snapshot and any subsequent events
+and that's always stored on those SSD
+nodes then for the d2 drives the ones
+with more disk space for those we can
+actually store all of the events and we
+can use that for debugging purposes
+which isn't real-time when a one-second
+delay isn't going to be the end of the
+world so what if we take this one step
+further how many of you have heard of
+CQRS okay for those of you who have an I
+apologize I'm not going to deep dive on
+it to that much today but just let me
+say it's where you segregate
+your command and query responsibility
+this means that you can write depending
+on the use case two different storage
+mechanisms and can read depending on the
+business use case the business
+requirements two different storage so in
+this case what we could have is we could
+have a write segregation where we have
+an event handler which determines
+and where to write snapshots too and
+then where to write events to and how to
+write those events to which rose
+dependent on the storage which is going
+into then you can have an a query
+segregate ur and the query segregation
+could determine where it's going to read
+from if this is a real-time event coming
+in for validation for a customer that
+needs a response right now it can go
+straight to the I to node and say here's
+your response if it's a debug request it
+can go and get all of the events and get
+them and bring them back with a
+one-second latency which is fine or we
+could even have both happening at the
+same time we could go and do both and
+then if we have any failure which
+happens to the i2 instance for any
+reason we've still got this backup being
+processed which we can then use from the
+d2 instance so let's go now and recap
+what we've just looked at flexibility
+this system the event sourcing system
+definitely gave us the flexibility that
+we wanted we were able to very quickly
+iterate and create new changes the
+domain model react to business
+requirements immediately and get the
+changes out into production it's given
+us exactly what we wanted and it's given
+us in the application layer never do we
+have to touch the database but since
+we've like since we've released this we
+have never directly had to touch the
+database it's all been doing the
+application layer debug ability as I
+said one of my favorite things being
+able to pinpoint exactly when a state
+change happened that caused an invalid
+state that happened ages ago and your
+any notice to it now and then being able
+to go back and look at all the logs
+associated with that really helps
+pinpoint exactly where things might have
+gone wrong reliability the fall backs
+definitely helped us with that
+scalability the service definitely
+scaled well however as I said we do need
+to find good architectural solutions to
+make sure that we are utilizing the
+storage properly so in conclusion I want
+to bring up that go back to the
+beginning of last year none of us really
+had a good idea of what event sourcing
+was when you were as an abstract concept
+we had no idea what the intricacies were
+or how
+go about implementing it since then
+we've implemented a solution that is
+flexible debuggable reliable and
+scalable and we've been using it on a
+daily basis successfully and so I just
+want to say this is something that you
+can do too and we hope that you can come
+up with us give us questions give us
+have a conversation with us and let us
+know what you think
+thank you all right we have a few
+questions here hi in your example you
+showed ID in your example you showed row
+ID as a customer ID and you can
+aggregate by port that customer how many
+active movies can you activate buy
+property soft customer like region he
+belongs to our age group you belongs to
+yes so the way it works is the aggregate
+repository ties to a single aggregate
+and there's a function in the repository
+that says give me the row ID so the the
+area itself is responsible for defining
+the row ID so like I said simply we'll
+just use the name of the IRA --get
+followed by the customer ID but there's
+nothing to stop you from putting about
+you on there so if you want to partition
+by not only an aggregate and its
+customer but by a value your it's really
+simple to do it's just a one-line change
+of code hello thanks for the
+presentation I'm curious to know how do
+you guys deal with changes in the scheme
+of the event payloads over time yeah so
+we use the cryo versioning so if we have
+a change like let me think of something
+recent yeah if we needed to add the
+request ID so we had some D duping on
+request ID so for us to actually change
+the schema to include the request ID so
+that we could actually act on that in
+the future it's just a matter of adding
+the field to the aggregate as well as
+the event which we have that idea
+on and then we version that and so we
+know any subsequent aggregates that have
+been using that version will actually
+set that request ID and then we can
+check to see if it's there and act on it
+as needed and the way we set the version
+in is cryo has annotations so you could
+say there's an annotation Adsense and
+you basically wind up that number so
+when you want to create a new version
+because he added a new field you just
+put you annotator with that sense
+whatever the largest number is went up
+it and stamp it with that so that's how
+cryo stamps the version on the events
+when it sterilizes it that being said
+I'll say versioning was by far one of
+the hardest things we ever had to do
+it's just one of the things we couldn't
+wrap our head around I think we deleted
+a lot of scratch databases before we
+felt comfortable moving with what we had
+so be careful Carl's great and all gives
+you what you need but it's not going to
+solve all your problems you still gotta
+wrap your head around this system if
+you're interested we do actually had an
+example we had to remove it for time but
+you can come and have a look and I'll
+show you how it's done
+my question is about aggregates and an
+event sourcing how do you enforce
+invariants the way you were speaking I
+could get sort just pretty much just
+data is that is that it and the
+conditions and states are enforced
+somewhere else or how does it work so we
+do have the two enforcement layers so we
+do have the service layer which does
+actually validate so the aggregate is
+the data essentially but the data has
+been validated prior to being added so
+before actually adding those events we
+do validate to make sure that they can
+affect the data if they're not allowed
+to affect the data then they don't get
+at it in the first place but there's no
+actual condition once they're in them
+once they're in there it's done like
+you're done this is immutable
+whatever has happened has happened and
+here's the current state based on that
+you can change going forward and you can
+change the validation going forward for
+those events and you can say those
+events aren't allowed to have this field
+going forward for example but you can't
+change that past about having the
+service layer the service layer right
+now says the download limits only three
+it's really easy for us
+change that download service to like
+five or ten and we didn't change
+anything in the code now the service
+layer is aware and updated and what was
+previously rejected to you is now going
+to pass into you know the new upper
+limit yeah have you considered to keep
+the snapshot inside the device like
+inside the mobile device or inside the
+device that is basically requesting the
+the movies good that's up to device
+teams I don't think they were under
+their own pressure to deliver this
+download service to everybody so I don't
+think us coming to them and saying you
+know could you store all this data for
+us they that's part of something we
+would have been pushed back on so it was
+it's a toesik store law that state yeah
+okay so let's make this the last
+question right so I was curious about
+when you request the repository am i
+authorize it to get a new license do you
+give back some sort of token saying that
+these guy is retrieving a new license or
+you just say yes or not the a great idea
+is the token actually so I use generic
+examples or just at house of cards it's
+actually a UUID and we call that the
+license ID so the license ID and the
+aggregate ID are the same thing so I'll
+hand the license to the device devices
+takes note of the license ID and it
+stores it with the license so let's say
+the device wants to delete the license
+and wants to let us know that the
+license has been deleted it's going to
+send us the delete event but it's also
+going to send us the license ID check
+the license ID and we'll use that as the
+aggregate ID to get it is actually a
+token as well so it does store
+information about the transaction which
+we can use alright well thank you very
+much everybody thank you so much</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

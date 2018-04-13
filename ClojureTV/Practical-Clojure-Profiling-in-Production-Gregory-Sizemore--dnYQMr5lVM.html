@@ -1,0 +1,493 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Practical Clojure Profiling in Production - Gregory Sizemore | Coder Coacher - Coaching Coders</title><meta content="Practical Clojure Profiling in Production - Gregory Sizemore - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/ClojureTV/">ClojureTV</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Practical Clojure Profiling in Production - Gregory Sizemore</b></h2><h5 class="post__date">2017-03-30</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/-dnYQMr5lVM" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hello my name is Gregory Sizemore I'm a
+senior software engineer at Capital One
+and I'm here to talk today about
+practical closure profiling in
+production the specific project I work
+on at Capital One is a app called level
+money it's a personal finance app that
+helps you track your budget and your
+spending and it has multiple front ends
+iOS Android web serviced by a fairly
+large closure API the code base has been
+around for a few years now and so the
+thing I want to talk about so your app
+is slow our app was slow because we had
+recently RER connected the way our
+clients interacted with our API
+specifically there were multiple API
+calls that were always being made in a
+particular sequence so we refactored it
+so that there one API of call that would
+return all of that data at once so you
+didn't have to make multiple calls the
+idea is to reduce Network overhead can
+be a big deal of ourself
+cellular networks and better utilize our
+cache now when we first made this
+transition the new endpoint was slow to
+slow to be acceptable it took 30 seconds
+to three minutes depending on what was
+happening on cache misses we were taking
+pretty good advantage of our cache which
+why it wasn't just terrible so I was did
+a project to improve this and make this
+endpoint you know acceptable fast even
+on cache misses and I would like I'm
+going to walk through an example of one
+of the pieces of doing that and give you
+an idea of how the approach I took
+profiling as well as some tools I used
+and how they work and some gotchas with
+closure that made it a little more
+challenging and with in some other
+languages I've worked in so this is the
+basic code that we're profiling we
+identified this is one piece of being
+slow so there were a lot of sort of hot
+spots we did some very basic profiling
+because
+API endpoint is flowing identified this
+is one of the sub functions but we
+didn't know what part of this was for
+sure was slow it looked like maybe it
+was something to do with this bit on the
+right so we put in a windowing to like
+reduce the input this was just a very
+very first go not based on much data
+which brings me to my sort of first
+philosophical point about profiling
+measure twice code once when you're
+writing new code speed often isn't your
+first concern other things in my opinion
+quite correctly come first like how long
+the development time how long it takes
+to write the code as well as the
+readability and writing optimized code
+is a trade-off it often takes longer to
+write and it's often harder to
+understand maybe uses some obscure data
+structures maybe it has to be structured
+in a particular way to make it faster so
+you don't always want to write optimized
+code the first go especially because
+there's one often one one or a few
+pieces of code that dominate the time
+complexity others that may not be
+theoretically optimally performant but
+maybe they only get called with small
+input sizes so is it really worth it to
+spend the development time and the
+potential for reducing readability in
+your code base to to change those
+probably not so we want to when
+profiling or when optimizing code always
+make sure that we are going on numbers
+that we have measured and are sure that
+the code we're changing is actually the
+what's responsible for being slow one of
+the tool I use to do this in this
+project was your kit it's great at this
+sort of investigative profiling it has a
+ton of features it can do sampling
+tracing as CPUs it has great amount of
+stuff it sort of tries to figure out for
+you which closures can throw some
+wrenches into that and as you can
+support
+memory profiling they're not great
+because it runs in the JVM so if you run
+the JVM out of memory you can't get a
+memory dump really helpful but Stieb you
+profiling it's great another alternative
+is J visual VM is pretty similar to your
+ket the same basic idea it's free it
+comes with with JDK also good at
+investigative profiling but it has fewer
+features it you sort of see comparison
+between the two that yeah but it can
+work if free is important too it's a
+choice
+so profiling the function functions I
+was head up on the slide earlier this is
+opening your kit you know I have already
+run in a repple that function called it
+with arguments that I knew were slow and
+now I've opened I finished that and
+opened up your kit and we can you can
+see that it's giving you the call tree
+of how methods were called and I don't
+recognize anything from my project here
+yet there's this a fun stuff that looks
+fun digging down some more I'm still not
+recognizing anything from my project
+there's a lot of stuff from in rifle
+from closure core you can filter some of
+this stuff out in your kit but it can be
+a little challenging to figure out what
+exactly to filter out especially with
+closure core because sometimes there are
+functions that you want to know they're
+involved in Perth issues sometimes you
+maybe don't care sometimes their
+implementation details anyway let's see
+if we can get something better hotspots
+that seems like something I want to find
+we go and look lazy seek it's a big
+culprit but really that's just because
+you use lazy seeks everywhere in closure
+and it's not really there's really
+nothing here that's instructive either
+so maybe here we can search in the
+method list for the function we were
+profiling we find it you can see you can
+back-trace and even see all of the stuff
+that closure and the compiler did to up
+the call stack right there there's our
+fun a fun and then the merge collies
+which is all of the calls that that
+function made which is what we're
+looking for so we can maybe drill down
+and see the hotspot
+there's the reduce that was the first
+part of that function that looks good
+digging down some more we have some more
+stuff we don't recognize okay
+detect action transfer that was that was
+one of the functions that we were
+looking at profiling and you can see
+that the seek is one of the top things
+under that then some more more lazy seek
+be a little hard to figure out what's
+going on and you can see that the call
+count is a lot higher it's pretty I
+think we found some in squared stuff
+going on here digging down we see that
+the transfer question mark function that
+was also there see it show up here but a
+lot of the time seems like it's taken up
+by things like mass more think we've
+found the problem is filtering this
+transfer something by this transfer
+function so this brings me to another
+point about profiling and optimizing the
+general witches and the title of the
+talk why you should profile on
+production data that's sort of where the
+in production comes from because
+you want to replicate something like
+what you're actually seeing in
+production because customer for a couple
+of reasons one customers often find
+unexpected ways to use software that's
+like very much something in software
+testing as well in this case especially
+the culprit is input you expected to be
+small with large so one of the things
+that came up in this project with this
+was people who had way more transactions
+than we expected for whatever reason
+maybe many bank accounts maybe they
+accidentally hooked up a business who
+knows but the other component of this is
+it sometimes realistic data has
+structure you can exploit where if you
+think about you know what is the
+theoretical performance of this you may
+not see ways to make it faster but when
+you know oh well this data is always
+going to have this structure almost
+always going to have this structure you
+can often exploit that if they're kind
+of two sides of the same coin violating
+the second one often results in edge
+cases for the first one so here's the
+the code were optimizing again and you
+can see so this this code is detecting
+when two transactions are transfer so
+that they're two halves the idea is you
+have say your credit card connected to
+our app as well as your bank account and
+you pay your credit card bill so there's
+a debit half on your checking account
+going out and a credit half on your
+credit card statement going in and we
+want to detect when this happens so what
+are some of the what is some of the
+structure of this data well most people
+have way fewer credit than they do or
+yeah way fewer credits when they do
+debit you know you get paid once how
+many times do you swipe your debit card
+probably a lot by groceries by gas all
+kinds of other things and you know I
+wish I had as many credits as
+debits but I don't think many of us are
+there so that's one massive thing we can
+exploit right we because the
+transferring needs to have one of you
+calf 1/2 is way smaller probably like
+only two or three ninety-five percent of
+the time that and you can see that
+that's even expressed in this transfer
+function it's checking the first thing
+is doing is checking and make sure that
+you haven't passed in two debits because
+the approach the dyzma taken was very
+basic just like look at all the
+transactions look at all the ones you've
+looked about at see if you can find
+something that meets the criteria before
+pretty straightforward well the other
+thing is that they have to be similar
+amounts so now that we've identified
+this we can figure out a way to exploit
+this information to make it faster and
+really the only thing that was changed I
+didn't even touch the detect text and
+transfer transfer functions because
+they're still doing their thing
+returning the correct result but we can
+keep the data structured in a way that
+lets us easily access those properties
+so we separate the debits and the
+credits before we do anything else and
+we keep them sorted by how much by their
+amount so that we can easily use this
+subsection to find out if they're
+similar amounts we have for historical
+reasons have look at sort of a window
+around the amounts but yeah a lot of
+this another sort of principle I like to
+do in performance profiling is to try to
+keep the functionality exactly the same
+and not like mess with much that isn't
+about performance so now then sort of
+next thing we want to do is make sure
+that our change actually improves for
+because if it didn't just waste a lot of
+time we need to find out happens so now
+digging down to the same place we see
+that the tech Texan transfer has find
+best match is above the transfer key
+market function there's no three hundred
+thousand calls to a lazy cheek looks
+better well so yeah
+a couple of now I want to talk about a
+couple of gotchas that we can see on the
+screen
+they aren't huge problems in this
+example but we can sort of see what it
+might look like if they were so
+reflection is fairly slow and closure
+uses a decent bit it's fine it usually
+doesn't matter it's if you're only doing
+it once you know and you can see this
+here we're in the transfer function one
+of the things that's doing is there's
+something invoking reflector here and
+compared to something like numbers -
+it's six milliseconds versus less than
+one so here it's not a big problem
+because it's only getting called six
+times but if you were having to call it
+thousands and thousands of times it
+could be something you looked into and
+in another part of this project I ended
+up having to do one of the things that's
+a solution to this problem which is to
+type in and it actually got good
+performance results just from letting
+the compiler know that hey you can you
+can definitely expect a string here but
+the bigger thing is probably don't worry
+about like anything else don't worry
+about until you've measured a problem
+but and also when you're doing it it's a
+hint that the compiler is free to ignore
+so sometimes it can be tricky to get it
+in all the right places that you need
+and measuring is really important so you
+wind up with random typing scattered
+throughout your code which I've seen
+enclose your code before so a second
+sort of gotcha
+is um we saw it a little bit before it
+has to do with lazy data structures
+because you might produce a structure
+that consumes late later
+it doesn't always it means that the time
+doesn't always show up in the call tree
+where you expect doesn't always show up
+where a function or something was
+created it can often show up where it
+was consumed and it can it can be mildly
+confusing to really frustrating
+particular causes of confusion is that
+there's a fairly small like number of
+elements with a really expensive
+function where a sequence is consumed in
+multiple places can be a little
+confusing and you can see it here show
+up where this make bound function and
+compare Texans by amount that is
+actually from the sorted set container
+that we created back in the calling
+function but it's only getting consumed
+here but there's no sort of traces of
+the calling function left other than
+this function 5 0 9 8 which was Auto
+generated by the compiler probably
+because there was a anonymous function
+being named there that's actually doing
+this work so can be kind of hard to
+trace down also for reasons of the
+compiler generating stuff like that so
+here it's not a problem it's just being
+consumed but it could be a problem if
+this was really expensive to create
+because it's not being necessarily uh
+clearly consumed in detect X and
+transfer either solutions one is to just
+sort of be aware of it if you're
+profiling you know that like that
+sometimes things might not show up where
+you expect
+and the other thing you can do if you
+have you have to have a pretty good idea
+of where the problem is that you can
+force something to be strictly evaluated
+so at least it doesn't it's sort of
+before it leaves one function so at
+least it sort of doesn't escape but it
+can be really tricky to know where to
+where to do that so that you don't just
+wind up with forcing strict evaluation
+everywhere but it can really help you
+get better numbers especially if you
+have a sequence that's being consumed in
+multiple places so that's the one
+example with sort of investigating with
+your kit another thing that I like to do
+that I came up with in this project
+another point I wish has done it from
+the beginning but I only came up with
+this about half way in which is to
+clearly document performance because
+optimized code remember it can be harder
+to understand so the idea is to document
+with numbers what the performance impact
+is each commit is and the other thing
+you ideally want from it is to include
+the data you use so it's reproducible so
+then six months later when someone else
+thinks that there's no reason for the
+code to be slightly confusing and
+refactor that makes it slow again you
+sort of know what to expect and how to
+test kind of test that this is what I
+ended up doing
+I used criterium which is a great
+closure library that is good for getting
+a realistic picture of actual execution
+times in production it's like warms up
+the JIT it does a lot of stuff to make
+sure that you're it's very similar to
+what you see on a like a web server
+that's been running for a while or
+something like that yeah and so what I
+did is every change I made in this I ran
+criterion for and then ran criterion
+after to make sure that I was actually
+improving so you see I get about a six
+five or six second improvement and you
+know about a second improvement and
+these commits on the same data and then
+another just sort of funny example is a
+time when I ignored my own advice that
+was measure one measure twice code once
+and got really excited about optimizing
+this algorithm because it had like use
+kind of a cool data structure and do
+something like you know it was it was
+really interesting to work on and then I
+finished it and it turns out that I had
+only made about a 60 millisecond
+difference which barely made any
+difference at all theoretically if this
+was way more performance but in terms of
+what what was actually the problem was
+something else and then the other
+another tool that we used after this
+project was New Relic to sort of keep an
+eye on performance we had performance
+monitoring with graphite and some custom
+metrics that was really unwieldy so New
+Relic is also is a sort of inner I guess
+enterprise-e tool that will hook into
+your application it runs an agent and it
+will report on execution times of what
+what in its language is called
+transactions one nice thing about it is
+it will automatically pick up certain
+things like if you're running a web
+server with Jenny or something it will
+measure all of your API requests so you
+get a lot for free it's great for
+getting sort of a high level insight
+when things are slow we would have known
+a lot faster with the project at the
+beginning of
+we've been using it at the time it's
+definitely not for investigative
+profiling it you can capture snapshots
+and and whatnot but they're like web UI
+is kind of iffy on on using it and
+there's you can see the transactions
+this is just from me you're like website
+sort of example data but it's got like
+how long each thing is taking what's the
+worst pretty graphs we've used it sense
+to identify several performance problems
+and fix them it's definitely given us
+earlier warning on on when we have those
+sorts of problems and then another thing
+we use specifically for closure to work
+well with New Relic is clj a new relic
+it's a library that basically just this
+macro which is kind of interesting that
+lets you manually define a function to
+be a transaction and the new relic
+library expects you to have a job
+annotation on a function you want to do
+this with and you can make Java
+annotations in closure but it's a little
+cumbersome so this handy macro does it
+for you and then sort of one last thing
+that I sort of wish I'd been able to
+bring this to the talk but uh this is a
+really great visualization tool for
+performance data called flame graphs by
+Brendan Gregg it sort of visualizes the
+call stack over time so the y-axis is
+each level of the call stack and the
+x-axis is time so you get a good very
+quick visual picture of where the
+problem is this is I believe performance
+data from my sequel database
+unfortunately there's not a parser for
+your kit and I did
+have time to write one so inflamed grass
+the other parts my talk but yeah so that
+is practical closure profiling in
+production anyone have any questions</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,1419 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Debugging and Profiling .NET Core Apps on Linux - Sasha Goldshtein | Coder Coacher - Coaching Coders</title><meta content="Debugging and Profiling .NET Core Apps on Linux - Sasha Goldshtein - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/NDC-Conferences/">NDC Conferences</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Debugging and Profiling .NET Core Apps on Linux - Sasha Goldshtein</b></h2><h5 class="post__date">2017-07-05</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/Jw88UYVG9dg" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so this is debugging and profiling
+dotnet core apps on Linux very very
+specific but then on the other hand not
+a lot of people are doing this yet and
+not a lot of people know how to do this
+yet a lot of this is still changing and
+influx and hopefully the tools you'll
+learn about today will still work in
+three months when you actually have to
+do this in production but I have been
+following this pretty closely and it
+looks like there is there is a story
+shaping up so hopefully you'll be able
+to hear that story my name is Sasha I
+work for a training and consulting
+company called Sela and a lot of my work
+is this just performance investigations
+Diagnostics debugging crashes core dumps
+on various systems sometimes I do have
+to go back in time like last weeks I was
+debugging quote crash dumps of a Visual
+Basic 6 application which was not as fun
+and then the week after that I could be
+debugging Dartmouth core apps on Linux
+which is a lot more fun in a way so it's
+really crazy that we actually got to get
+this far that we are sitting here and
+seriously talking about debugging and
+production and investigations of dotnet
+core on Linux it did take a while and it
+was quite a windy journey but we got
+there and so some of the things I want
+to show you today how to profile your
+dotnet core apps running on Linux
+without needing a Windows machine in the
+background for this we'll talk about
+visualizing stack traces of CPU samples
+and also of other things using flame
+graphs which are a pretty common tool on
+Linux and also getting some traction on
+Windows as well we'll talk about some
+other linux tracing tools like
+general-purpose tracing tools which
+happen to work with dotnet processes and
+they're very important to learn about
+because that's the tools Linux people
+just use we'll talk about runtime events
+that can be collected like exceptions
+garbage collections assembly loads all
+different kinds of events emitted by the
+CLR we can collect and then aggregate
+and do some further analysis on and we
+will also talk about core dumps and
+getting core dumps when our dotnet
+application crashes and how to analyze
+those scored
+using the tools we have in box on Linux
+again like it said this is changing
+pretty quickly
+sometimes monthly sometimes weekly so
+again this sort of works and has been
+tested with dotnet core 1.1 and that
+meant core 2.0 preview and if it doesn't
+work next week it's not my fault as much
+and some of this is actually built on
+top of tools and scripts that I had to
+hack together a little to get them to
+work but it's all in the slides and
+hopefully you should be able to
+replicate these results if you actually
+need this introduction so just to give a
+general overview of the equivalents of
+some of the tools we'll see for Linux on
+other platforms currently supported by
+dotnet core so for CPU sampling for
+example for measuring CPU usage on Linux
+we have perf that's what we're going to
+use mostly on Windows we have a TW event
+tracing for Windows and a bunch of tools
+on top of that and on Mac OS there are
+also equivalents which use the same idea
+anyway if not the same infrastructure
+similarly tracing which is basically
+attaching dynamic login to your system
+is something that can be done on other
+platforms as well dump generation and
+damp analysis also has equivalent tools
+we are going to look only on the Linux
+side of things in this talk which let me
+bring you more demos and more examples
+but of course we could do the same talk
+on Windows and we could do the same talk
+probably for Mac OS and show similar
+capabilities anyway it's not exactly the
+same tools now before we get started if
+you actually intend to use my advice in
+production if you intend to use any of
+this in your own production system you
+have to mind the overhead you have to
+know that production monitoring tools
+might occasionally have an overhead
+which makes them unacceptable for your
+purposes so some people here might be ok
+if you have like 5% increase in
+processing time because you use a
+certain tool and other people would say
+no 5% is crazy what are you talking
+about you're slowing my system down so
+you really have to know what the
+overhead is and the best way of knowing
+is
+actually testing it in your own
+environment and seeing the effect we'll
+touch on the overhead here and there but
+otherwise you you are you have been
+warned about the overhead and finally
+before we get started with the actual
+scenarios just to give a bit of
+terminology I'll be using sampling tools
+and tracing tools in this talk and I
+always preface my talks with a general
+explanation because this is a little
+confusing so basically sampling means
+that something is happening so
+frequently that you can't record every
+single occurrence of that thing so for
+example if you wanted to trace CPU
+execution
+you couldn't possibly trace every single
+instruction it would slow your system
+down not by 10% but probably by a factor
+of 10,000 so the only thing you can do
+is sample look not at each individual
+instruction but every millionth
+instruction for example and then
+aggregate those samples to form
+something meaningful but some events are
+actually low frequency enough that you
+can record every single occurs like for
+example disk accesses or a loading of
+dll's or garbage collections these are
+things happening in frequently enough
+that you can actually record every
+single one and then look at where
+they're happening and do some kind of
+aggregation so we will use both sampling
+and tracing tools in the stock for
+different kinds of events essentially
+for different kinds of things we want to
+trace so here are some of those things
+that we might be able to trace and look
+into some of these are coming from the
+actual dotnet core and the CLR and
+the.net framework and some of these are
+coming from the underlying operating
+system because we are talking again
+about window about linux so some
+specifics if you have a dotnet core app
+your dotnet core app could actually your
+own code could actually be instrumented
+with some tracing with some performance
+instrumentation there is a class in the
+dot and framework called eventsource
+which you can use on windows to emit etw
+events and you can use it on linux to
+emit something similar runtime events
+which you could log and analyze later
+so this is one source of information
+event source the CLR itself is
+instrumented with a bunch of events both
+on Windows and Linux and that includes
+garbage collections exceptions assembly
+loading just-in-time compilation there's
+several dozens of interesting events
+that we could trace on the operating
+system level between the kernel and user
+space there's a lot of libraries loaded
+into each dotnet application that we
+could also be tracing using Linux
+specific tools not dotnet specific tools
+anymore in the kernel itself there's a
+bunch of instrumentation from the
+scheduler to the network layer to the
+disk layer a bunch of things that we
+could be looking at again OS specific
+there's also events like page faults
+migrations between processors which are
+emitted by the kernel in a slightly
+different way but it doesn't matter a
+lot for our discussion and finally there
+is how were events at the lowest level
+which are actually coming from your
+processors management unit the
+performance management unit and that
+includes stuff like cache misses and
+branch mispredictions
+interesting things they are not actually
+OS specific but you do have to use an OS
+specific tool to capture them and trace
+them in the context of your dotnet
+application so let's start with the
+official story like how are you supposed
+to do this sort of performance
+investigation if you look at the
+official documentation I'm smiling
+because it's funny so the official story
+is that you go to a website and you
+download a script called perf collect
+and it's a pretty long bash script which
+was written by a performance engineer on
+the CLR team and it's it's fairly
+isolated and standalone it's a single
+bash script which you can use to install
+all the dependencies you'd need for
+actually doing performance work on Linux
+and perf collect is easy it's really
+easy to install all the prerequisites
+and then you can collect performance
+information on a running system now the
+bash script has some command line
+options but I'm not covering any of
+those and you'll soon understand why
+so after you're done with the collection
+you have a zip file and then the story
+is getting a little murkier you're
+supposed to take that zip file and you
+can do some analysis locally on Linux
+but most of the things you'd want to do
+require windows box so you need to copy
+the zip file over to a Windows machine
+which is sort of surprising I suppose
+and then you download per view which is
+an awesome free tool by Microsoft but it
+only works on Windows and then you use
+perfu to open that trace dot zip file
+that you recorded and you can do all
+your performance analysis there now this
+is lovely and it kind of works in most
+scenarios even I'd say it works but it's
+not something I could live with for my
+own production environments first
+there's the turnaround time you have to
+create the zip file copy it over open it
+on another machine and second I actually
+like to do my performance work where the
+data is where the the system is and just
+be amount of time I would have to spend
+to set up this sort of environment with
+a Windows machine running perfu for me
+makes the whole thing pointless so this
+is again the official story and it
+relies on the same things I am going to
+be doing manually but we will actually
+be doing the investigation on the same
+Linux system without using Windows
+specific tools again it's going to be
+the same data sources but in a workflow
+that hopefully will be a little more
+reasonable for actual production
+environments so the first thing we will
+use for this is a cool tool is a cool
+tool called perf this is actually built
+as part of the Linux kernel so it's
+available for all Linux distributions
+it's not always installed out of the box
+but it is part of the kernel tree so
+worst case you can build it from source
+or typically you can install it from
+your distributions package manager so
+once you have person stalled it can do
+both sampling and tracing of various
+kinds of events including high-level
+ones as well as kernel and hardware
+events which are something we'll see a
+little later the general architecture of
+Perth events of
+earth is something like this so on the
+left on the kernel side there's the
+actual percents component which is a
+kernel mechanism that you can attach to
+multiple different things happening on
+your system to multiple event sources
+most of these event sources are in the
+kernel as well for example you can
+attach it to functions in the kernel you
+can attach it to higher-level events
+like page folds you can attach it to
+low-level how it went like cache misses
+there's a variety of different sources
+that you can attach that perfects
+runtime to but you could also attach to
+user space things for example functions
+in user space libraries so basically an
+arbitrary function in user space can be
+traced
+using perf and that includes dotnet as
+well to some extent
+now what perf can do with those events
+it advocates is either write them out to
+a file just a big file on disk which you
+can analyze offline you can analyze it
+later or perf can write the data into a
+memory mapped buffer and then you can
+have some real time components some real
+time process looking at the events in
+that buffer and just processing them in
+real time so if you have very high
+frequency events you probably don't want
+to dump them out to a file for later
+analysis because you'll have huge huge
+files so you can instead use the memory
+mapped buffer approach you would still
+have lots of events to process it could
+still probably be quite a high overhead
+but at least you're not going to be
+writing every single thing to disk all
+the time we will also see a little later
+some other alternatives available in
+modern Linux which make this even more
+efficient but this is the general perf
+story and this is also what the perf
+collect script is using under the covers
+so if you don't think about symbols in
+advance and this is the first thing we
+will have to touch upon then whenever
+you use perf and any associated tools
+you will get some pretty useless reports
+like for example this report over here
+is supposed to tell you which functions
+in your application are spending lots of
+CPU time and
+do a demo of this shortly but the report
+kind of shows you numbers addresses
+right hex numbers and the end
+percentages and these are the actual
+functions we care about these are the
+functions in our own process that should
+have names that should have symbolic
+names if we're doing this on Windows a
+lot of times the tools are taking care
+of this for you but the Linux the whole
+story is such that you actually have to
+think about this yourself so for
+different kinds of code there are
+different sources of symbolic
+information which translates numbers
+these hex addresses to function names
+that you can actually read and use so
+there's different colors here for
+different kinds of code here the dark
+green is pure managed code which is
+just-in-time compiled so this is a plain
+c-sharp for example that you didn't do
+anything special to it will be compiled
+at runtime and for this kind of code
+the symbolic information can be emitted
+by the CLR into a file at runtime so you
+run the application and the CLR prints
+out into a separate text file
+information about code addresses and
+code function names I'll show you what
+that file looks like it's a very very
+simple format this is by the way
+something you have to do in Windows as
+well and it uses etw to emit this
+information but it's pretty much the
+same story if you have dynamically
+generated code you need at runtime to
+emit information about code addresses
+and code function names then you have
+the light green over here this is still
+managed code but it has been compiled
+ahead of time Aoki compiled on windows
+engine is the tool you use for ahead of
+time compilation on Linux it's cross-gen
+and this is a tool that's actually part
+of the.net core distribution and you
+have to run cross-gen on your target
+machine to get symbolic information for
+those parts of your application so for
+code that's compiled at runtime you can
+actually get the runtime to emit
+the symbolic information but for code
+that was compiled ahead of time you have
+to do a separate step in order to get
+debugging information and it doesn't
+help that the debugging information
+question emits is in a format that no
+other tool can understand and you need
+to write a script to convert it to the
+right format but that's let's leave this
+behind us so suppose you have symbolic
+information for all the managed part of
+your application there's still unmanaged
+code
+there's unmanaged code in the CLR itself
+which you would need symbols for and
+that's something you can typically get
+by either building from source or by
+downloading a debug information package
+for the CLR and these are available but
+not for all distributions so sometimes
+you would build from source because
+that's just the easiest thing and
+finally there's actual operating system
+binaries for which you also want
+symbolic information and that is usually
+easier to get so for the kernel it's
+typically available online like part of
+the running system is symbolic
+information for the kernel and for OS
+libraries like the C runtime for example
+or the P threads library this is
+something you can get as a package with
+your distribution and it's so boring but
+unfortunately you have to get this right
+because if your call stacks if your call
+stacks from your managed applications
+are broken at any of these layers you
+can't do performance profiling you can't
+do tracing you can't do any meaningful
+work without function names of your code
+so this is something you have to
+actually get out of the way and first
+collect sort of does this for you but
+again the result can only be analyzed on
+Windows which is pretty useless again
+for me what we are going to do with
+these stack traces and this is the last
+intro part before we actually dive into
+the demos what we are going to do with
+these stack traces of our application
+that we collect is visualize them using
+flame graphs and flame graphs are very
+useful for displaying a large number of
+coal stacks so think about coal stacks
+when GCS occur or coal stacks where you
+access
+miles or coal stacks when you use lots
+of CPU you have millions potentially of
+different coal stacks that you want to
+visualize and display to the user at the
+same time this is where flame graphs can
+help it is basically a very simple
+visualization approach where each
+rectangle you see on the diagram is a
+function the vertical axis the y axis is
+just the stack trace so if a function is
+on top of something it was called by
+that other function and finally the
+horizontal axis is not a time line it's
+just sorted alphabetically it's pretty
+simple and I'll show you a live example
+of a flame graph coming up so with all
+the setup and the introduction in the
+introductions out of the way we can do
+some CPU profiling some of the things
+I'm going to show you are going to be
+live demos and some are going to be
+precooked screenshots but let's see just
+how much time we have exactly so here I
+have a new bunch of arcs pretty standard
+configuration I did not build my own
+dotnet core here I use the standard
+package of that meth core 2.0 and I have
+this buggy application which has a bunch
+of different issues and now I think my
+SSH connection is kind of dropping
+connard's there so I'm going to run this
+thing in fetch mode this is just one of
+the things this application can do it
+basically is supposed any way to fetch
+apple.com every once in a while and do
+something with it right the code doesn't
+really matter but looking at a top for
+example you can see that this buggy
+process is actually taking like a full
+CPU core and then some so it's really
+busy on the CPU even though it's just
+supposed to be fetching apple.com of the
+internet so something is interesting
+happening we are going to use a perf to
+record the behavior of this application
+and then to analyze it before we do that
+I want to show you the symbolic
+information file which was already
+emitted when I ran this command so it's
+just part of the execution of the CLR if
+we look in the
+temp folder I have a bunch of those perf
+info map files and a bunch of perf map
+files these perf map files are generated
+by the CLR and contains embolic
+information for that specific process ID
+so if we just look at perf pit of buggy
+dot map this is the map file for my
+process here's what it contains it's a
+super simple stupid format code address
+code size function name code address
+code size function name in text format
+plain and simple now this is generated
+in order for us to be able to actually
+give you function names in profiling
+reports this is the only reason this
+file is needed so let's go ahead and
+record the CPU behavior of this process
+I'm going to do a perfect cord
+I will ask for stock traces I will
+record 997 samples per second because
+that's what I like you can configure the
+number of samples as you like to control
+overhead essentially and I will attach
+to the specific process because I'm not
+interested in system-wide CPU
+information just that specific
+application so this is running now and
+collecting essentially until I hit
+control C or until the process
+terminates you'll notice the process
+keeps running it's not affected it's not
+like you had to restart it to profile
+this is perfectly suitable for
+production use and perf tells me that
+nine thousand eight hundred and forty
+seven samples were generated so perf
+actually sampled the CPU almost ten
+thousand times
+and wrote down every single every single
+sample with a stack trace now there's
+multiple ways we could visualize this
+information but the flame graph is
+easiest so I'm going to skip a little
+head and a couple of demos steps and
+just show you a ready-made flame graph
+of the same application that I generated
+in advance there's multiple ways to
+generate flame graphs
+the easiest one is using a pro script
+which takes in the perf file and just
+spits out this beautiful relatively
+beautiful diagram so we call that the
+wider something is the more prominent it
+is this is how you read this thing you
+look at the widest things so looking at
+the right first because that's not the
+whitest thing but it's interesting you
+can see some GC code over here so GC one
+for example is a function in the garbage
+collector in the CLR garbage collector
+and you can see from the tooltip it was
+responsible in this particular profile
+it was responsible for 20% of the CPU
+samples so 20% of the time I was
+actually doing GC looking at the main
+part of the flame graph the widest part
+there's functions here like main and
+fetch and then process result so maybe
+it's not the HTTP requests taking lots
+of CPU time but it looks like I have a
+function called process result which is
+taking 60% of my CPU time and what is it
+doing I can zoom in only on that
+particular function and its descendants
+and then you can see on the Left I have
+a lot of string allocations some
+allocating lots of large strings and
+these are stacks inside the garbage
+collector I also have this taking a lot
+of time like 40% of my time is mem move
+AVX unaligned erm s this is actually a
+function that's clearing out memory
+that's what it's doing it's placing
+zeros in memory so that was also called
+a lot because I'm doing lots of
+allocations and finally there's also a
+little flame over here which I don't
+know if it's significant but I could
+touch it and then see exactly what's
+happening here you'll notice that the
+stacks go all the way into the kernel
+not just managed code not just CLR code
+but all the way into the Linux kernel
+with functions like this M protect which
+is a Linux system call so we have let me
+just unzoom we have a visualization of
+the
+a this application is spending CPU time
+and the flame graph itself is
+platform-independent of course you could
+generate a flame graph from windows data
+from linux data from mac OS data it's
+just a visualization method for seeing
+where my application is hitting lots of
+stack traces of a certain event in that
+case the event was CPU usage but you
+could generate flame graphs of other
+kinds of events as well so we have
+determined that this app is as part of
+processing results is allocating lots of
+memory and there's also lots of garbage
+collection going out in the background
+so a little later we will come back to
+that and try to understand where these
+garbage collections are coming from
+exactly which types are being allocated
+so we'll come back to the memory aspect
+of this application so far we just
+looked at the CPU part so let's see if I
+haven't missed anything
+/ / if record these are your screenshots
+of the demo I've just shown you and the
+flame graph we just looked at so what we
+did so far was look at the perf way of
+doing things and again just to remind
+you we ran perf and then we got a file
+perf that data which had almost 10,000
+samples CPU samples inside now that's
+actually not so bad it's 2 megabytes of
+data from I guess about 10 seconds of
+running time so I could imagine leaving
+this on for like 10 minutes maybe half
+an hour getting a few gigabytes of data
+then analyzing them it's actually still
+kind of sort of feasible but for higher
+frequency events like if I try to
+collect using perf file accesses or
+network events and I had like millions
+of events per second the file would be
+pretty big pretty unmanageable
+I'd say unopenable by any standards - so
+this is where an alternative Linux
+kernel technology comes in for
+collecting performance information this
+is not covered by the official tools
+like the perfect tool I mentioned
+earlier it uses perf exclusively but
+once you know what's happening under the
+covers
+you can obviously use other tools as
+well so we're going to use that new
+underlying kernel technology called BPF
+and I could spend like two hours talking
+about BPF itself and where it came from
+and what it can do for us but in the
+context of dotnet performance
+investigations on Linux you should know
+that PPF is often an alternative for
+getting lower overhead data for getting
+lower overhead performance
+investigations when the rate of events
+is high so if you're tracing a system
+with lots of networking and you're
+interested in networking events perf
+might generate lots and lots of data and
+BTF might be a lower overhead or if you
+are sampling CPU usage and you have a
+large number of cores and you're doing
+high frequency sampling you will get get
+we will again get huge files and BPF can
+be an alternative that generates lots a
+lot smaller results so the way BPS
+basically works for us as opposed to
+perth is that it does the aggregation in
+the kernel instead of generating a
+perfect data file which we have to then
+aggregate in userspace by running some
+sort of script what happens with BPF is
+that the aggregation is happening in the
+kernel so just to explain what I mean by
+aggregation very briefly if you have a
+million stacks which are all the same I
+have a million stacks in the exact same
+function spending CPU then if you use
+the perfo proach you have to record
+every single call stack to the file so
+you have a million records with exactly
+the same whole stack in your file and
+then you can do an aggregation and
+userspace this is also how etw and
+Windows works this is how most profilers
+actually work they record every single
+call stack and they do the aggregation
+or flying with BPF you do the
+aggregation online you do not record
+every single call stack you just know
+it's the same calls that you've already
+seen and you increment the counter okay
+so I've seen this call stack a million
+times
+now I've seen this call stack a million
+x plus one that's sort of what you do in
+terms of aggregation so BPF based tools
+are by default more efficient the
+question is if that if this efficiency
+is actually important for you like what
+the overhead is in the first place so
+you can improve it we're not going to be
+using bps directly anyway we will be
+using a front end a bunch of Python
+scripts on top of BPF which is called
+DCC this is an open source project with
+a lot of contributors from different
+places including Facebook and Netflix
+and I've written a couple of these tools
+also and they are basically wrappers on
+top of the underlying kernel features
+which are easier to use because it's
+just Python scripts that you have to run
+with certain parameters and this can be
+used for dotnet investigations
+absolutely and I'll show you a couple of
+examples the only reason why you
+wouldn't be using vpf always just by
+default is that it requires a fairly
+recent kernel it's only supported the
+things we'll be doing or only supported
+in kernel 4.4 or so which is what you
+have in a bunch of 16 Fedora 24 so
+recent Linux distributions will have
+that but if you try to run these tools
+on like CentOS 6 or something you will
+need to upgrade your kernel and then
+it's a little trickier so here are some
+of the tools that open up once you also
+start using BCC there's tools here for
+low-level stuff like file system and
+disk and network and there's also tools
+for managed languages for example
+there's a tool we could use for dotnet
+called UGC which traces garbage
+collections whenever there is a garbage
+collection it prints out a message and
+the time it took so we have tools very
+high level for specific run times and
+even databases for tracing database
+queries and we have tools on the very
+lower levels of the system including
+even CPU events in the picture so these
+are all part of the same package and I
+obviously encourage you to try them even
+if you're not doing data and core and
+Linux but rather something else on Linux
+in
+so let's see some examples of tracing
+I'm going to do some of these are
+screenshots just to save us a little
+time so what happens here on the left is
+that I have my buggy application run in
+a slightly different scenario and here
+it's just kind of not starting properly
+it keeps printing out opening
+configuration file opening configuration
+file and doesn't make any visible
+progress now obviously there's a bunch
+of tools we could run now maybe we could
+look at the log file but the log file
+doesn't say anything like this is the
+only information I have opening
+configuration file good luck with that
+so in this in this kind of case what is
+often helpful is to use a workload
+characterization tool that would look at
+this process and tell you what kinds of
+things is it's doing like what kind of
+activity is happening so it could be a
+high level tool like is this using lots
+of CPU yes or no or it could be slightly
+more specific and we have a tool called
+sis count which is designed for looking
+at system calls I can attach it to a
+process and it will display all the
+system calls this process is making
+aggregated by number so I can see in the
+output here that this process sorry has
+made for open Siskel's and can futex
+fiscals
+and so on so every system call every
+interaction between user and kernel
+space is counted now suppose I am
+interested specifically in these open
+fiscals there is a dedicated tool called
+open snoop which we could run to get an
+output of all the opens all the files we
+are trying to open in that application
+which kind of makes sense because we are
+keep getting errors about opening a
+configuration file and the output just
+tells us that yeah well we are trying
+repeatedly to open this file called et
+Cie buggy conf
+and the file does not exist or anyway
+there's an error opening the file
+because in the file descriptor column I
+get -1 so the open call is
+actually failing so just by looking at
+the process figuring out which system
+calls its making and then tracing
+specific ones tracing opens we are able
+to understand why this process is
+failing to initialize and what file it
+is looking for and then maybe if I
+create that file it's actually going to
+start up
+now this is not dotnet specific this
+could have been done exactly the same
+way for a Java app or for a C++ app or
+for a Python app so let's switch to
+something that's more dotnet specific
+and this I'm going to do live so
+remember this fetch application it's
+actually still running still fetching
+Apple comm and burning lots of CPU and
+we already know from the flame graph
+that we had lots of garbage collections
+but from the info we generated
+previously so let's switch to actually
+figuring out how many so the question I
+want to answer now how many garbage
+collections is this process having now
+on Windows it would actually be pretty
+easy like if you search Stack Overflow
+you'll probably find ten thousand and
+five answers saying you should use
+windows performance counters and there's
+a windows performance counters called
+GC collections under dotnet CLR memory
+and you can see this in like five
+seconds not so much on Linux and there's
+two general approaches we could take one
+is going to use runtime events and we'll
+come back to that the other option is
+just saying okay well this is all
+happening inside the CLR the CLR has a
+bunch of functions for for GC like a
+bunch of C++ functions that do garbage
+collections let's just trace those
+functions and Linux actually has tools
+that enable need to attach to any
+arbitrary user space function and trace
+its invocation so here's and it's going
+to work I'm just going to use a command
+I typed in previously and you'll shortly
+see why so this is this is the command
+I'm going to run so the tool itself is
+called func account and it's not
+actually a very difficult tool you just
+give it a pattern and it will trace all
+the functions matching that pattern the
+only hard part here is the
+us to leave course CLR lib course CLR is
+just the main CLR component this is
+where the garbage collector lives and
+because this is a stand-alone dotnet app
+I've used dotnet publish to package it
+it doesn't depend on the main shared
+dotnet installation anymore it's all
+just local and so this is just the file
+I can ship with my app and that's what
+I'm using so lip course CLR and I'm
+interested in all the functions that
+have this pattern in them so anything
+that has garbage collect inside so I
+just have to run it from the right
+folder though so let me go to a dotnet
+buggy and run it from here
+no it's not here it's oh sorry it's over
+here no functions matched by parent
+garbage collect but seriously oh and the
+start at the end
+okay so 14 functions actually have a
+garbage collect in their name and we are
+now live tracing all of them this is
+kind of like a debugger but a million
+times more efficient and once I hit ctrl
+C I get a summary of how many times each
+function was invoked now this looks very
+scary because these are Mangold C++
+function names and you don't see the
+actual class name nicely but I could
+take this thing and pass it through a
+command line tool called CPP filt and
+then you see it's actually a pretty
+reasonable name it's a function called
+garbage collect generation which takes
+an integer which is probably the
+generation to collect and an enum called
+GC reason so this is very similar to the
+managed API so now I want to know who is
+calling that function in my process like
+where are garbage collections being a
+cost so for this we could use a
+different tool and again I'm just using
+a command I previously typed called stat
+count and stack count takes very similar
+arguments except I give it a very
+specific function like trace this
+function and tell me who calls that
+function
+kind of like a debugger but again in a
+much more efficient package so if I run
+this it's tracing until I hit control-c
+and finally here's the interesting part
+the output has coal stacks in my
+application and the number you see on
+the bottom is the number of times this
+call stack appeared so three thousand
+nine hundred and eighty-eight times that
+function was called by the following
+call stack now this is all not
+interesting this is just C++ code inside
+the CLR but it is getting interested it
+is getting interesting over here so this
+is my app this is process result this is
+allocate string now we kind of knew this
+already because we cheated and look at
+the flame graph before but we now know
+where the garbage collections are being
+caused and so in lots of the cases
+anyway in three thousand nine hundred
+and eighty-eight cases in the recording
+I've made they're caused by this
+particular place in my application this
+could be a lot easier like this
+definitely could be simplified but
+unfortunately currently with the tools
+we have for dotnet core on Linux this is
+kind of the way things work you have to
+mash different tools together and
+usually get something functional but at
+the cost of having to kind of redevelop
+the whole process yourself so I've done
+some of the work and I've also
+documented some of these things but it
+is still a little tricky I'm going to
+show you a couple of examples before we
+move to dumps for the for the end I want
+to show you a couple of examples based
+on the actual runtime events that are
+part of the CLR so this is moving more
+to the official side of things
+turns out again that the CLR itself has
+events built in for different
+interesting things that are happening
+garbage collections exceptions assembly
+loads JIT compilation a bunch of
+different events have in the runtime a
+dedicated location that would print a
+message essentially where that event
+kurz now the way this works in Windows
+is using etw event tracing for Windows
+Linux doesn't have event tracing for
+Windows
+so instead Microsoft opted to use LT t
+and g LT t and g is linux tracing
+toolkit next generation I think it's
+basically a library for tracing for
+emitting log messages on Linux systems
+it's fairly efficient and the general
+infrastructure is that there is a kernel
+component which can attach to different
+events and then emit those to either a
+file which can be analyzed later or a
+memory buffer that can be analyzed in
+real time now if you're getting a deja
+vu with the perf slide it's for a good
+reason because it's essentially the same
+architecture you have a kernel component
+which aggregates events and then can
+push them to either a file or a live
+memory buffer for consumption except
+this is what they chose to use instead
+of instead of perf there's actually lots
+of additional logging frameworks like
+this so how do you use this thing and
+what can you do first in terms of in
+terms of events so we're not going to be
+interested in kernel events for this
+because we already have perf what we
+will be interested in is user space
+events which are part of the CLR so you
+do need to get a list of the different
+events you can attach to this is not
+very easy but you can read the source
+code so the the core CLR source code on
+github has a list of all the different
+events so exceptions and GC and JIT
+compilation all the things I mentioned
+you can take a look at the source and
+find them there and then here's what the
+workflow actually looks like so I'm
+going to do is a screenshot some is a
+live demo because there's just a lot of
+pointless commands to type so basically
+ltte and jean comes with a command-line
+helper called
+LT TNG which you use the create
+recording session to add the interesting
+events you care about and then to get
+the
+profile the actual recording so you can
+see here we create a trace session we
+add a few context values such as the
+process ID and the process name so we
+get those as part of the trace as well
+we enable all the dotnet runtime events
+starting with exception and we also
+enable all the dotnet runtime events
+starting with GC and then our
+applications Fights logging as soon as
+we call LTP energy start so this still
+happens in parallel with the application
+you don't have to restart the
+application you don't have to do
+anything invasive the app is running and
+in the background you run these commands
+to get a recording of all these
+different events and then finally you
+can do stop and destroy to finalize the
+recording and let's see what the end
+result actually looks like so I'm going
+to resize this a lot there's a tool
+called babel trace which is one of the
+tools for tracing for parsing LTTE and g
+recordings and i can point this thing to
+my trace file under l TT in G trace as
+my trace if I just do that it's going to
+print lots and lots of screen full
+screens full of events each line here is
+a runtime event such as you see here
+GC sampled allocation hi this is one of
+the events the CLR can emit now this
+isn't particularly interesting let's
+look for exception events in this output
+for example so I'm just going to ask for
+the first two these are the first two
+exception events in industries so you
+see exception thrown the exception
+happened in the body process the
+exception type was HTTP curl exception I
+had the exception message saying
+couldn't resolve hostname so it's
+actually given me the exception details
+as you could see in the exception object
+the one thing it's not giving me is the
+stack trace which is a pretty valuable
+thing for an exception to have
+but unfortunately yeah unfortunately
+ltte and G out of the box does not
+support stack traces so like LD T and G
+as a choice for logging framework
+assumes you don't want stack traces
+which is again kind of weird for
+exception events but probably sort of
+okay
+for most other events you'd want to omit
+so let's take a look at something else
+instead of exception let's take a look
+at GC start events so here are a couple
+GC start v2 that's the actual events
+name and the details here are actually a
+little more cryptic so what is the count
+whether the depth what is the reason we
+don't really know we'd have to go back
+to the source to understand but
+obviously we could build tools on top of
+this so this is the underlying
+infrastructure it's fairly low-level but
+we could get a listing of all these
+different events and build tools on top
+one very very simple example of a tool
+that you can build on top is just a
+one-liner shell command so what I did
+here is I recorded GC allocation events
+so basically memory allocations events
+from the dotnet process and then I
+sorted and the removeduplicates and
+counted the number of appearances and so
+at the end I get as output the number of
+times I allocated objects of a certain
+type now this is sampled so it doesn't
+represent all my allocations it
+represents a sample of my allocations
+kind of like CPU sampling but it's again
+illustrative of the things that you can
+do we could grab all the runtime events
+and then we could build processing
+pipelines on top of those and I say we
+have to build because that's what we
+have to do it's not something you get
+magically out of the box as part of a
+tool you do have to build this on top of
+the infrastructure I'm showing you here
+it's all a story of how you build your
+own performance tools essential so one
+final thing I when I talk about and then
+if you have any questions is
+rhythms and how to analyze crash dumps
+core dumps of dotnet applications in the
+field this could warrant its own talk
+but I'm going to give you the highlights
+so first of all just to make sure we all
+know a core dump is a snapshot of a
+running process so you have a process
+running and then maybe it crashes you
+want it to be captured to a file so you
+can analyze the reason for the crash
+later so that's what a core dump is you
+come to a running process you suspend it
+for a second you save the whole thing to
+a file and then the process can keep
+running if it actually had an exception
+and crashes then it doesn't keep running
+but at least you have a snapshot of
+where it was when it crashed so this is
+the general idea how do you generate
+core dumps on Linux this is not dotnet
+specific again there's a file that you
+set in order to tell the system to
+generate core dumps at all and this can
+actually be configured to not write out
+a file but to run an application where
+there's a crash there's a lot of stuff
+behind this file but you can tell the
+system to generate a core dump in the
+process crashes there's a limit on the
+maximum core file size which you would
+sometimes have to increase because it
+sometimes starts at zero which means you
+don't get a core dump file and finally
+once you do that you will get core dumps
+for crashes if you want to generate a
+core dump on demand like maybe your
+application server is stuck and you want
+to see what it's doing then you will
+also want the G core tool which comes
+with gdb and you can point that to a
+process and get a dump file on demand
+get a core dump at that instant in time
+now what do you actually do with this so
+core dumps you can analyze exclusively
+using ll DB on Windows you can actually
+open crash dumps with Visual Studio but
+you cannot take a crash dump from Linux
+and open it in Visual Studio this is not
+supported so you need to do this on your
+Linux system and you need to use
+specifically LOD B not gdb because gdb
+doesn't have a plug-in for dotnet code
+now once you actually open G open L LD
+be I'm going to show you what happens so
+I have a core dump of a crashing
+application I'm going to show you maybe
+the crash for a second here this is what
+the crash looks like when the
+application crashes it's a console app
+so it prints out I had an application
+exception and I get a call stack I get
+the crashing call stack right here now
+if you worked with TPL before you might
+be able to recognize this this is not
+the original crashing stack trace this
+is what happens when you run a task in a
+different thread and there's an
+exception in that task and you didn't
+process that exception and then when the
+task object is finalized it will throw
+an exception for you telling you that
+you had an unhandled exception in the
+task but not actually giving you the
+call stack of that other exception that
+happened so this is a pretty nasty
+situation but fortunately we had dump
+files configured so we had a core dump
+for this scenario so here I'm opening
+that core dump using ll DB there's
+nothing particularly fancy in this
+command line this is just the path to my
+application and this is the path to the
+core dump file so l DB spits out a lot
+of output I'm going to clear the screen
+now the first thing I want to ask for is
+the call stack tell me where we crashed
+like what the the exception stack trace
+was there's a command for this BT back
+trace here's what it says so like this
+is this is fun and this is great but
+this is my C sharp code we are familiar
+with this issue some something needs to
+give debugging information for these
+addresses we need to translate them to
+function names now we might have a purse
+map file but ldb cannot use perf add
+files perf my files are for perf
+elodie be cannot use personnel files so
+what we need to do is essentially not
+use the underlying debugger but instead
+load a plug-in which ships with dotnet
+core and that's actually pretty much the
+same story in Windows if you use windbg
+and Windows to analyze crash dumps you
+need the SOS debugger extension which
+some of you might have heard about and
+used before one Linux it's the same
+story you need a plug-in you need the
+SOS plugin for ll DB in order to inspect
+dotnet questions so the plug-in is just
+part of the.net core distribution so
+here I am loading it
+it's called Lib SOS plug-in Esso and it
+also needs to take the path to the to
+the CLR for some reason it can't detect
+it whatever we've done this got it out
+of the way now we get a bunch of
+additional commands in the debugger
+which are coming from that plugin so one
+example of this would be for example the
+threads command the threads command
+tells me what my manage threads are my
+dotnet threads not all my application
+threads and it shows me here that my my
+first thread this one here in the
+exception column it has an application
+exception this is the exception we have
+already seen we know about this guy
+so let's take a look at the exception
+object from here SOS has a command
+called print exception which takes an
+exception object and prints its details
+now this is the same as it is in windbg
+on Windows which is at least one good
+thing about this now as you recall it
+prints out a pretty useless call stack
+it tells me that you know I had an
+unobserved unobserved task exception
+this is not the original the original
+exception call stack this is just how it
+manifested so I need to get like the
+inner exception somehow out of this
+thing except it's not really there so
+we're going to do it slightly
+differently I want to switch to that
+thread
+and look at that threads call stack
+maybe we'll figure out something from
+the call step so typically what you do
+is run the CLR stack command to get a
+stack trace but then LD be well the
+plug-in complains unable to walk the
+stack the current thread is not a
+managed thread so if you look at the
+threads output again the Linux thread ID
+for this thread is 9 5 7 C whereas the
+debugger here thinks it's 0 because for
+some reason again you have to tell the
+plug-in explicitly which Linux thread ID
+corresponds to the current thread in the
+debugger which is insane because it
+already knows this but you need to tell
+this anyway so there's a command called
+set SOS thread ID which takes the OS
+thread ID 9 5 7 c and the debugger
+thread ID then ask me why you need to do
+this just know that you have to do this
+and I wrote a script that actually
+automates this but in any case once you
+have done that you can actually run CLR
+stack and get the managed call stack for
+that current thread which is the same
+same thing we saw in the exception
+message so why am I even doing this
+because the publish unobserved task
+exception method and also my function
+here handle and handled exceptions takes
+an event args object which contains the
+original exception information so my
+plan right now is to glean that original
+exception out of there and the way I'm
+going to do that is ask for parameters
+to be displayed and then you'll see here
+it tells me that my function handle
+unhandled exception takes an event args
+which has this value so at this point
+I'm going to ask the debugger to display
+this object again these are the same
+commands from windows SOS except if you
+don't use windows SOS it doesn't help a
+lot but it is the same commands and
+notice what happens here
+the unobserved test exception event args
+inside has the original exception now
+once we have that we could maybe hope to
+see the original exceptions or a print
+exception of dump exception we could
+hope to see the original exception but
+it's an aggregate exception and the TTL
+aggregate exception doesn't so easily
+give up what the actual exception was so
+you need to look at the object instead
+let's do SOS dump object out that
+aggregate exception object we are
+printing this time the aggregate
+exception object has a list of inner
+exceptions inside so you can take that
+list oops
+you can take that list and dump that and
+inside the list there is an array of
+exceptions so now we could dump that
+array and in the array there is just one
+element there's just one exception we're
+hunting for which is here and assuming
+it is an exception we will get the
+original exception message and it's call
+stack so it turns out we actually had an
+invalid operation exception in a
+background task and this is the source
+code in my process which caused that
+exception in a background task and that
+was wrapped by the aggregate exception
+business which was so tricky to figure
+out but I wanted to show you an actual
+real example of why you would need to
+analyze the core dump because the
+original exception message was totally
+useless and it didn't point to the
+actual place in my source where the
+exception occurred visual studio would
+have done this for you in like three
+seconds you would click click click and
+you would get to the original exception
+object this is slightly more complicated
+but this is the only alternative for
+Linux this is the only way you can
+analyze core dumps of dotnet core
+processes on Linux so if I tell you that
+the
+all diagnostic story is not like 100%
+super baked and complete yet I hope you
+understand why so let's wrap up I've
+this is just a set of screenshots of the
+whole walking through objects I've just
+shown you so you could replicate this
+later
+I have a checklist slide here which is
+just for your reference that shows all
+the things you would need to configure
+and set up in order to be able to do
+this Diagnostics on your own machine
+some of this is needed for performance
+investigations some of these is needed
+for tracing and some of this is needed
+for core dump analysis but if you don't
+go through these steps ahead of time you
+would not be able to come to a running
+button score app and get out all the
+information I was able to show you in
+the demos so there's actually some
+preparation required which I skipped to
+make this a little shorter in terms of
+what we covered just to make sure we
+really saw it all we profiled CPU
+behavior in dotnet core applications
+using perf and flame graphs we
+visualized again the stack traces we got
+and so nicely in a in a nice diagram
+illustration where our application was
+spending lots of time on the CPU
+we used Linux tracing tools such as perf
+and BCC to look at Dartmouth core
+applications and that works I mean no
+reason why standard Linux tools wouldn't
+work for dotnet core processes we looked
+at Dartmouth core run time events like
+GCS and exceptions which are emitted
+using LTP and G so we have to use the
+LTTE ng toolset to look at those and
+finally we looked at dump
+generation and analysis which requires
+ll DB and the SOS plug-in and a bunch of
+additional commands that you have to
+remember this whole thing is painful and
+again there's lots of room for
+improvement here I hope to see lots of
+changes and Dartmouth core 2.0 but there
+weren't any significant changes there's
+a lot of work in progress
+but if you are currently deploying
+doesn't core to production or if you're
+planning to you should be advised about
+the meaning of doing performance
+investigation
+on those systems trivial issues would be
+trivial and the hard things will be very
+very hard because the tools are in this
+sort of state I have a bunch of
+references for you to look at later
+including some of my own blog posts you
+can find this whole thing in my slides
+and the demo application I've used is up
+on github as well so you can replicate
+some of these experiments if you would
+like if you have any questions if you're
+interested in that net core Diagnostics
+at all please catch me later I'm out of
+time but there's a longer break now I
+think so we can absolutely have a chat
+if you'd if you'd like and I hope you
+enjoy the rest of NDC thank you very
+very much for coming thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

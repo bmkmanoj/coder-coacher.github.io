@@ -1,0 +1,939 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>&quot;EoS in Kafka: Listen up, I will only say this once!&quot; by Jason Gustafson | Coder Coacher - Coaching Coders</title><meta content="&quot;EoS in Kafka: Listen up, I will only say this once!&quot; by Jason Gustafson - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Strange-Loop/">Strange Loop</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>&quot;EoS in Kafka: Listen up, I will only say this once!&quot; by Jason Gustafson</b></h2><h5 class="post__date">2017-09-30</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/WscozkoXLHM" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so thanks for sticking around to the end
+of the day must be tired by now how many
+users of Kafka do we have in here okay a
+lot okay that's gonna make this much
+easier so I'm going to tell you about
+exactly one semantics in Kafka this is a
+new feature that we've added in 0.11
+which was released only a couple months
+ago so like what does it actually mean
+and how to use it so let's Oh Who am I
+I'm Jason I'm an engineer at confluent
+I'm also an Apache Kafka committer we
+were the team responsible for bringing
+exactly one semantics but we weren't the
+team that actually originated the idea
+so this has been in the works for a long
+time goes back to LinkedIn days for
+example when Kafka was run at LinkedIn
+um
+that's so brief overview of the talk I'm
+gonna just give an overview of Kafka
+just at the level that we need to
+understand in order to talk about
+exactly one semantics so I'm gonna cover
+very high level high level overview then
+we're going to talk about the old
+semantics and a little bit of detail
+just so we can understand where exactly
+they break down and then we'll discuss
+exactly one semantics in some depth and
+finally we have if there's enough time
+we'll go on to observations in some
+areas for future improvements very
+briefly since we have a lot of coffee
+users here I'm not going to dwell on
+this and Kafka is like a central nervous
+system for where your data where your
+data is passing so we like to say all
+streams lead to Kafka it's it's sort of
+as true as soon as Kafka's in your
+architecture then all data goes through
+it so you publish data to its you
+subscribe data from it and you process
+data on top of Kafka Kafka organizes
+data into topics topics are organized
+into partitions so partition is kind of
+like the the unit of state that you know
+we're able to move around the cluster
+each yeah and the fundamental data
+structure of a partition is this this
+log of messages as which is
+we have this sequential offset as
+messages are added to it they get
+assigned an increasing offset and very
+briefly you know we're gonna spend a lot
+of time in this talk looking at the log
+because it's really the best way to
+understand what is happening inside of
+Kafka a blog message itself consists of
+you know offset key value timestamp and
+headers that's a new feature for the
+most part we're not concerned with most
+of those fields where we'll focus on the
+offset and maybe mentioned other fields
+when we need them but for a large part
+what will will kind of go with this
+simpler representation of log so as i'm
+as i mentioned before partitions as are
+the the unit of of state so partitions
+are replicated among the brokers you can
+have as many replicas as you want you
+know typically three or four and then
+one of those replicas is basically
+assigned as the leader and so this is
+kind of this is how we get our
+durability and available availability so
+the leader fails one of the replicas is
+promoted so Kafka clients there are two
+kinds producers right two partitions
+consumers read from partitions or topics
+if you want to look at it that way let's
+just understand very quickly how the
+producer works so producers as I said
+they're always writing to the leader the
+leader is replicating to the follower
+and you know you're the creatures
+typically writing to multiple partitions
+this replicated replication is happening
+all the time
+you have many producers writing to the
+logs all at the same time and you just
+kind of proceed this way so in the case
+of a failure you know we have the one of
+the other replicas becomes the leader
+and all requests are routed to it and
+once the the old broker comes back
+online it comes back online as a
+follower it catches up and then you know
+in order to try to keep the balance on
+the overall cluster it would become the
+leader again and and then we resume so
+there are a couple from a protocol
+perspective
+okay in Kafka protocol is very simple
+it's a request response protocol there's
+one point about the produce protocol in
+particular that I want to mention
+because it pertains to semantics so we
+have just a very simple produce request
+which is received by the broker we write
+to the log and depending on the the
+semantics that you want from the
+producer you know replication may happen
+before we return but any case we write
+to log and then you will get some kind
+of acknowledgement it can happen that
+you fail to get that acknowledgement in
+which case typically the producer is
+going to retry and retrying and we'll
+talk about this more in depth but you
+can see there's kind of a protocol
+limitation it results in in duplicates
+in the log okay so Kafka consumer so
+consumers read sequentially from the law
+from the partitions and you know it kind
+of works like this or they're reading
+sequentially once you hit some kind of a
+stable point you write your position to
+another topic as you know consumer
+offsets topic and if you fail this is
+where you're going to look for your your
+beginning position and typically then
+the nice thing about Kafka and the
+reason why I probably why it's so
+successful is you can have many
+consumers all consuming from different
+points in the log all at their own pace
+and all you know committing their own
+offsets and why not the protocol just
+want to mention just want to mention
+this really quickly there's two api's
+that the consumer uses from a basic
+level that's offset fetch this is where
+where I look up what the current the
+last committed offset is and so it's
+typically looks like this I look up
+what's what was the last committed
+offset it's X then I start fetching from
+X and you know I get data back process
+it and then the the offset commit is
+where I write that to the log so the
+main point is really just that there's
+there's a separate API for writing to
+the log for this offset commit
+so in order to talk about semantics we
+need some kind of a model this is gonna
+be pretty informal but basically the
+model we have in mind is this read
+process right we have input topics where
+we're reading from and output topics
+where we're writing to and some kind of
+processor which is transforming the
+input in into the outputs we are
+interested in a couple different kinds
+of failures so our semantics should
+protect us in spite of these kind of
+failures so crashes you process crashes
+we should be able to recover and ours
+you know delivery semantics should be
+preserved and similarly zombie so in
+some cases you know like a a long GC or
+something like this when if a process
+comes back to life even though we
+thought it were dead our semantics
+should still protect us so let's talk
+briefly about you know the semantics
+that are possible it's not comprehensive
+but this is sort of a typical few at
+least once this is the default in Kafka
+and it's what was only possible or the
+limits of what was possible in Kafka
+prior to 0.11 and it basically means
+that all input is processed and the
+result is reflected at least once in the
+output so it means there could be
+duplicates at most once yeah it's kind
+of weird but it means you're you can
+accept some message loss but you just
+don't want to duplicate it's mostly
+useful to talk about for pedagogical
+purposes then exactly once this is kind
+of what you really want you know if you
+if you've got a processor which is just
+copying the input to the output and you
+you got end messages on the input you
+want end messages on the outputs and you
+want them in the same order there's you
+know some theoretical work to generals
+problems and whatnot we're not
+disproving any of that I think as this
+talk goes on it will become clear what
+the what is actually possible and what
+the limitations are there's one
+assumption though that I just want to
+mention so we do assume that you know as
+far as topic availability is concerned
+so topics may be unavailable for some
+amount of time but we assume in the long
+term they
+you know eventually they're going to
+become available so let's go into this
+at least once semantics a little bit
+this is some pseudocode which should
+give you an idea of how the consumer and
+the producer will work together so we've
+got this is this is not an actual code
+it's just pseudocode but let's just walk
+through it really quick so we have a
+subscribe API which is where the you
+express interest in the topics that you
+want to consume you pull two poles where
+you get the actual data that's where the
+fetching is happening from the current
+offset the consumer is maintaining your
+position in the log for you you do some
+processing of some kinds it's just kind
+of what really what Kafka streams is
+doing then you send that output you know
+using this API and finally went once you
+do that to you commit offsets this it's
+not really much of an exaggeration to
+say that I've spent most of the last two
+years thinking about what happens in
+Sindh and in pole so for this talk we I
+want to condense this a little bit so
+we're going to go through a few examples
+where we discuss exactly where in at
+least one semantics duplicates can
+emerge and for this you know the
+processing is not too interesting so
+we're just going to copy input two
+outputs so we have this very simple loop
+right here so the input in this case is
+just a sequence of increasing numbers
+which we're going to copy to the output
+for simplicity we're just going to copy
+one message at a time so yeah what this
+looks like we when we when we start
+we're pulling for data send it to the
+outputs commit our offsets and then we
+continue so what can happen we mentioned
+that the proto the producer protocol is
+not safe you know because of this issue
+with retries so what can happen is you
+lose that acknowledgement you retry okay
+now I've got a duplicate in the log okay
+and we commit offsets like normal the
+second problem that can happen is you
+send successfully to the top
+like and then you have a crash so in
+this case when you resume you're going
+to pull from the latest committed offset
+which in this case is two which means
+the next message we need to consume is
+two and we're going to have another
+duplicate okay and then finally there's
+one more this is a little bit more
+subtle but you know we may have fetched
+some data and then suddenly you know we
+have some kind of system event that
+causes us to hang and it hangs for a
+while eventually we decide that you know
+we need to start up another another
+process to continue the same work so we
+do so and we continue like we did before
+you know and then suddenly our old
+process wakes back up and sends data to
+the log ok so there's another source of
+duplicates so just briefly summary do
+please do placate scum from producer
+retries failure before committing
+offsets and zombies so I most want
+semantics I just want to cover this
+quickly all you really do in Kafka if
+you want at most once a minute six just
+change the order of those two operations
+so what it kind of looks like is this
+you commit your offset first then you
+send the data you commit your offsets so
+we mentioned that's you know producer
+retries are not safe you can have
+duplicates that way so if you really
+want at most one semantics you can't
+retry so in this case if you lose lose
+the acknowledgments oh well you just go
+on the other thing that can happen so
+you can make your offsets and then
+suddenly we crash or you restart well we
+lost that message okay and then finally
+the last thing yeah we can't we can have
+another zombie case so we're just about
+to write data to the log we could become
+a zombie then we start a new process
+across
+let's let's save the question for the
+end please okay so in this case we
+continue processing some data oops sorry
+about that when the zombie wakes it can
+send that data so yeah your question is
+about yeah where specifically did you
+become a zombie so it can happen it can
+happen basically anywhere so it could be
+internal into the producer for example
+we had already processed the data go
+into the producer it experiences some
+kind of GC event or something like this
+and then and then finally when it wakes
+up it sends that data okay so in summary
+it's kind of similar to at least once
+retries are not safe failure before
+writing the data and zombies can cause
+kind of strangeness so semantic
+weaknesses if we want to summarize them
+so producer retries don't save the
+process data is not written atomically
+with the corresponding offsets so this
+is the weakness in both of those those
+cases you guys are you guys hearing that
+you know what the cost of that is
+okay let's try again okay okay and then
+finally the last issue is that we don't
+have protection from zombies okay so
+let's deal with the first one the first
+problem so this is actually the easiest
+one to address what we do is we
+introduce what we call the item potent
+producer we introduce basically it's a
+sequence number so we identify producer
+instance by producer ID and then we have
+a sequence number which is used to
+deduplicate so into the producer if you
+want to enable this you just turn on
+this flag enabled idempotence equals
+true so how does this work
+we'll go through an example just very
+quickly so your producing data with a
+sequence number you know particular
+producer ID and a sequence number gets
+written to the log as long as you writes
+with the next expected sequence number
+it will be accepted now if we happen to
+lose the ACK we retry and now we can
+detect a duplicate okay so now we made
+producer retries safe the next the next
+problem takes a little bit more work to
+solve how do we make the writing of
+offsets and the data automic so for this
+we we look at this so the motivation for
+this comes from a little bit of a
+different problem which is computing a
+consistent snapshot in a distributed
+system so we have this this chandi
+Lamport paper and this is going to be an
+oversimplification of that paper but it
+should convey the basic idea so we've
+talked a lot about this processor of
+course you know we're processing this
+data intending for it to get consumed by
+someone so we have an observer from the
+channel and poor perspective okay what
+we want to do is think about these
+output topics as basically a channel
+that the processor is being is using to
+communicate with the observer and the
+question that the observer is asking how
+can I see a consistent state of
+processing so the processing is going
+along we're computing state internally
+and we're writing asynchronously to all
+of these to the output partitions and
+the observer is reading asynchronously
+so it wants to know when it's hit some
+kind of a stable point where it can you
+know report data to the user for example
+so the way this works is the processor
+is writing data to the log and then when
+it's ready when it's reached some kind
+of consistent point it writes these
+marker messages to the log so like the
+snapshot marker it writes it out on all
+partitions as soon as the observer sees
+it on on one of those partitions then it
+can stop you basically mute that
+partition and then wait for it to come
+on all all of the partitions and once it
+gets all the snapshot markers it knows
+it's reached a consistent point and
+similarly yeah you continue on to the
+next phase of computation and you
+continue right our markers just like
+that okay so the questions that we have
+about this are how do we handle
+different kinds of failures so soft
+failures some some aired during
+processing or hard failures like an
+actual crash you know naively if you can
+if you can imagine the processor it
+picks up from the last snapshot and then
+maybe resumes work if it just tries to
+start writing to the log well you know
+we never actually cleared out that old
+state so the observer doesn't know that
+the processor crashed so it would maybe
+see an inconsistent States so another
+idea in order to solve this when we
+restart we want to send kind of a new
+marker which tells the observer that
+we're we're resetting state and you
+should go back to the last snapshot so
+we have this reset marker instead which
+we said as soon as the observer sees it
+it's going to reset to the last snapshot
+and we can continue okay so this is
+really what Kafka transactions are about
+instead of a snapshot a reset marker we
+call it committable
+and yeah a few if you encounter some
+kind of soft failure you can write those
+abort markers so let's just take a very
+quick look at what this looks like it's
+not really that different we're
+processing data as soon as we're ready
+to commit we start writing markers
+commit commit if we have any kind of
+error during processing we can abort it
+there is still one issue though which is
+if we start the process of writing these
+markers what happens when we crash so if
+we kind of naively when we start up
+maybe we try to abort what's ongoing
+well it doesn't really work because
+we've already committed that data on
+that partition okay so what we do to
+solve this problem is we introduce a
+two-phase commit with a transaction log
+so the way this works you write your
+intent to commit or abort to the log
+then you write all your markers and then
+you write some kind of a completion of
+that commit or abort to the log ok so
+now we can try this again before we
+write any data to the partitions we send
+a message to the log saying that's where
+we have a transaction it's ongoing and
+it's including these three partitions we
+write the data as soon as we're ready to
+commit we write that that marker know
+after that marker is sorry that prepare
+commit to the transaction log after that
+is there then it means basically that
+we're we're doomed to commit eventually
+so at that point it's safe to continue
+or to start writing the markers once
+we've finished writing the markers we
+can complete the commit and we can start
+a new transaction we don't necessarily
+have to always include the same
+partitions in this case maybe we just
+include the first two we'd go through a
+similar process maybe we hit some kind
+of a error during processing then we
+prepare abort now we go to write our
+markers and then maybe we suddenly have
+a crash
+so in this case we'll restart the
+process and the first thing we'll do is
+we'll look inside this transaction log
+to see what were we doing before we were
+preparing to abort so that means we need
+to write markers and it's okay if we
+write the same marker twice there's no
+data in between it so what does this
+give you basically it gives you atomic
+rights across multiple partitions and
+that includes consumer offsets so
+consumer offsets are really just another
+topic so we can include them like in a
+transaction just like any other topic oh
+sorry
+and that's really what we needed in
+order to solve this other weakness so
+the next one is protection from zombies
+yet if you want to stop a zombie you
+need a fence but first we need to have a
+way to identify a producer instance
+across restarts for that we introduced
+this ID called the transactional ID and
+this is specified by the user so there's
+there's kind of two different options
+you can either have the ID generated by
+the broker or by the server or you can
+have it generated by the user so if you
+generate it by you know within the
+library or by the server then the user
+is going to have to take on the burden
+of persisting that somewhere so that it
+can be reused when it's when when the
+processor starts back up so we opted for
+the alternative which was the user needs
+to tell us you know which which instance
+you are a producer is so I want to take
+just a very brief detour from the zombie
+fencing problem just because it's
+difficult to find a place to put this in
+the presentation and discuss transaction
+log availability so this this pertains
+to this transactional ID so the
+transaction log
+is also just a topic in Kafka and that
+means it has multiple partitions each of
+those partitions is replicated so the
+transaction log
+we each transactional ID is mapped to
+one of the partitions of that
+transaction log topic so we have for
+this we have this fine coordinator
+request so whoever the the leader of
+that partition that that transactional
+ID is mapped to whoever that leader is
+we call its transaction coordinator so
+this fine coordinator request is used to
+find it so in this case we're mapping to
+transaction the partition 0 so the
+coordinator should be 1 and from that
+point on you know we store that State
+locally and all of our transactional
+requests are going to go to broker 1 so
+nice thing about this is you know you
+have many different transactional IDs
+out there they're all mapping to
+different partitions so the transaction
+coordinator does not become a bottleneck
+you can have as many coordinators as you
+want because you can have as many
+partitions as you want so if there's
+some kind of yeah but let's focus in on
+this partition 0 for a second of course
+in general it's going to be replicated
+to other brokers now if there's some
+kind of a failure here you know what
+we're going to have regular leader
+election take place the producer is
+going to notice that the coordinators
+down maybe because it got a disconnect
+or something like this
+find coordinator again we find the new
+coordinator and now we can continue
+okay so I've just brought this up here
+because we were talking about
+transactional ID now let's go back to
+Zombie fencing so in order to the actual
+offense itself like in many distributed
+systems it's an epoch so the epoch is
+tied to a producer ID the epoch
+increments when the producer is
+initialized so the epoch is used on the
+broker to tell who is who is the latest
+the latest producer if we get an epoch
+from a producer which is small
+than what is known to be a current epoch
+then we can we can reject it so this is
+added to both the transaction log
+message and the data log message because
+they both need fencing so let's just go
+through an example of how this works for
+the two in order to get the producer ID
+in order to get the epoch we have this
+in a producer API start maybe we write
+it to the log as soon as we've done that
+the producer gets its epoch it's gonna
+store it locally and then you know maybe
+it can start doing a transaction so in
+this case we will start a transaction it
+has just a single partition and for that
+like we went through that example before
+we write message to the log saying that
+the transaction is ongoing and then yeah
+if we consider the data partition that's
+included in that transaction this
+producer is now safe to start writing to
+it
+so if then maybe this producer one turns
+into a zombie and we start up another
+instance and just like before you know
+because it shares the same transactional
+ID it's going to get mapped to the same
+coordinator and it's going to also call
+this in a producer ID and this is where
+we do where we bump up the epoch and we
+immediately we begin to abort so there
+was an ongoing transaction and we start
+the abort process so while this is going
+on before we've written any markers or
+anything like this it's still possible
+for the old producer to continue writing
+to the data topic because that's the you
+know the epoch there is is still the
+highest one that the broker has seen but
+as soon as that marker gets in there
+with the incremented epoch then that
+producer can be fenced and alternatively
+you know after after the inner producer
+ID call had returned and we got the new
+EPIK so another case the producer you
+know maybe it wasn't writing to the data
+topic anymore it was getting ready to
+commit to the commit the transaction you
+know in that case obviously we have the
+higher epic inside the transaction log
+so it's fenced so that solves us from
+the zombies so let's take a look at the
+API very quickly again this is
+pseudocode we have this new init
+transactions so this is really where the
+fencing is taking place we have a begin
+transaction this is kind of obvious and
+we have this new API here so before we
+were committing offsets through the
+consumer but now we need to include
+those offsets as part of the transaction
+so we added this API to the producer to
+send offsets and what you notice also is
+that's the sent offsets also this
+commits they throw producer fenced
+exception so if we do get fenced maybe
+be good because we became a zombie we're
+asleep for a while then we expect to get
+raised the producer fenced exception if
+you receive that then basically the only
+thing you can do is close the producer
+you would you can't really continue so
+again we're gonna we're going to
+simplify this a little bit just copying
+input to output so let's go through this
+example pretty quickly now we're now
+we're to making it transactional so
+we're sending the data send the offsets
+and when we commit we write our markers
+okay continue along like this it could
+be the case that you know we crash we'd
+only written one marker that's fine when
+we restart we'll go through this in two
+transactions the last thing in the log
+is this prepare commit so we'll complete
+it and then we'll continue yeah another
+case that can happen maybe we crash just
+after we had sent the data when we wake
+up in it transactions again this
+protects us so we abort this transaction
+and we continue okay so I think one more
+case maybe that's interesting okay so
+let's just yeah I think you'd probably
+believe me by now but that zombie case
+is covered if we had become a zombie
+after writing the data and writing the
+offsets so again we start up a new
+process our init transactions is going
+to fence off both of these topics and
+it's going to abort the transaction so
+then we're going to continue okay now if
+we try to commit the transaction nothing
+happens because we're fenced
+okay so we've mostly discussed this
+processor here let's stop there and
+let's look at the observer for a minute
+observer of course in Kafka is just just
+a consumer I want to discuss what
+transactions mean for a consumer in the
+consumer configuration we have this
+isolation level which you can configure
+so read committed only committed
+messages are readable read uncommitted
+everything is readable now the consumer
+read isolation is a little bit subtle
+the first issue that I want to mention
+is you know typically the the transact
+the partitions that are included in the
+transaction are sitting on different
+brokers and when you have a part
+transaction which covers that there's no
+synchronization between the two brokers
+when you start the roll forward process
+when you start to write the markers so
+as soon as we get the marker on one
+partition that data is visible so the
+consumer can read that data even though
+the other partition has not got the
+marker yet okay so the point is that's
+yeah there's no read atomicity across
+partitions as far as transactions are
+concerned okay the other issue that I
+want to discuss
+so it takes a little bit of background
+to understand
+so Brooker fetch handling Kafka's fetch
+handling is is very performant and the
+reason is because it's very very simple
+sorry about that
+well we do you know this this is this is
+basically all Kafka does internally so
+we get a fetch for an offset at a
+particular offset and the consumer tells
+us how many bytes of data that it wants
+so we look up that offset and we find a
+physical file position from the log so
+we have kind of this this sparse index
+and basically we just do a binary search
+on it and then we have the file position
+and all we do is we use send file to
+copy the data directly to the output so
+we we look good we just copy M bytes of
+data so we don't do any processing like
+we don't bring that data into memory we
+just copy it directly from the log so we
+take that this goes back to kind of you
+know the very early days of Kafka one of
+J's very early papers meant you know
+this is part one of the key design
+principles I guess of Kafka so we take
+quite a bit of pain to preserve this
+so-called zero copy optimization now
+when the log contains transactional data
+what does that mean well in order to
+avoid having to you know do any kind of
+filtering on the this data which would
+require us to take it into memory and
+lose that zero copy what it means is
+that we we don't we don't filter the
+aborted transactions so they actually
+get returned to the client and the
+client is the one that's responsible for
+filtering so from the clients
+perspective what does that mean
+there's a potential issue here which is
+you know you send an offsets let's say a
+fetch request at offset zero say you get
+back you see two transactions but you
+don't really know
+but you don't really know what the
+result of those transactions is so you
+keep on fetching and finally maybe you
+see that one of them is committed so
+then maybe you can return that data and
+then maybe you find eventually that the
+other one is returned as well the issue
+is that until you see those markers you
+know what are you what are you doing
+with that data because you can't return
+it to the user in until you know it's
+committed so do you have to buffer it
+well that would be less than ideal so in
+fact what we do is a little bit what we
+do is a little bit different we give the
+consumer a hint when the in the fetch
+response we return the data as just a
+big chunk of bytes and we also return a
+hint as to where where those aborted
+transactions actually begin so we
+include in particular the the starting
+offset of the aborted transactions and
+the consequence of that is yeah since we
+have to we need to be able to return
+this reliably to the user we say that's
+messages are not readable at all until
+they have been committed or aborted so
+how does this actually look how does
+this change this picture well when we
+send a fetch at offset zero we get back
+that's yeah we get back the same data
+plus this aborted transaction that which
+begins at offset two so immediately we
+can return that data even though we
+haven't seen any markers so this just
+continues along like this eventually we
+see those markers and we can continue so
+there is kind of a subtle point here
+though which I want to mention now in
+the face of concurrent transactions the
+question is you know here we have a
+committed transaction and one which has
+not been committed yet or committed or
+aborted so the question is when can we
+return the data from that first
+transaction you know are we are we
+to wait for the other transaction to
+complete first so that we can return the
+whole transaction or can we return only
+a part of it so you know in kind of a
+simple case we might immediately see the
+abort marker come next for the other
+transaction and it's clearly safe to
+return all of this data but in another
+case it could be that we have another
+transaction begin before we see that
+abort marker so sort of by induction we
+could end up prolonging this process of
+not being able to return the data
+because we're trying to return it in
+whole okay so what we do in is we
+basically we weaken the read semantics a
+little bit and we say that okay where we
+can return part of that transaction but
+we don't return any data pass to this
+undecided point okay so what we call the
+last stable offset this is the offset
+such that all all prior messages at
+earlier offsets have been committed or
+aborted and everything up to that point
+is fecha ball now as we continue as we
+see other transactions as they become
+committed or aborted we're able to move
+that last stable offset forward and see
+more more of the data okay the key point
+there is again about to read atomicity
+so there there's no read atomicity as
+far as a transaction is concerned so
+let's just summarize very quickly what
+Kafka exactly wants semantics means
+idempotent producer exactly once in
+order transactional producer atomic
+rights across multiple partitions and
+the read committed consumer well what
+we're limited to saying is you know you
+only return committed messages
+so we're getting close on time I just
+want to mention a couple performance
+observations so if you think about the
+now that you understand what a
+transaction is you know all of the
+overhead comes at the beginning of the
+transaction and
+end of the transaction when you're in
+the middle of it you know all you're
+doing is producing using you know normal
+rights to topics so you can sort of make
+the overhead of a transaction are you
+know proportionally as as small as you
+want by increasing the size of that
+transaction but the the problem is that
+it will also increase the latency
+because we do not return the undecided
+data to the uncommitted data to the
+consumer so you have this this this
+trade-off that you need to think about
+now I'm gonna skip through this a little
+bit yeah I limited the processing model
+quite kind of intentionally so kafka iOS
+is really covering processing you know
+within within Kafka so if you've got
+yeah we were we were looking at this
+process model before I just made a
+little bit more concise as long as
+you're staying in Kafka exactly once
+semantics are protecting you and you
+know Kafka streams gives you this you
+just enable this property processing
+guarantee equals exactly once and you're
+done but eventually you want to get that
+data out of Kafka maybe to put it
+somewhere else in a date in
+elasticsearch or something like this and
+for that you need some kind of
+coordination with that remote system
+cough-cough connect already has a number
+of implementations of you know cough
+sinks which provide this for HDFS
+elasticsearch and so on then the other
+side of this you know your data doesn't
+originate inside Kafka unfortunately it
+has to come from somewhere and you have
+Kafka connects sources which potentially
+can do this this is still a work in
+progress and in general you still need
+the coordination of the of the source
+system you know if you have a model
+which is sort of like Kafka where you
+where you have a partition which you can
+track with kind of an increasing offset
+you could do the same thing using Kafka
+you know Kafka transaction that we do
+with with Kafka itself but that's still
+work-in-progress future improvements
+yeah we want to do something about this
+latency I think this is the biggest
+issue
+in kafka streams I'm not gonna discuss
+this at depth but speculative execution
+this is kind of decide to you so you say
+that aborted transactions these are
+probably rare in practice so what you do
+is you you read in uncommitted mode and
+as you're reading you assume that's the
+trend the transaction will eventually be
+committed and then if you later find out
+oh it's it was aborted well then you do
+some rolling back okay so that that's
+the basic idea that we're looking at
+okay so we're at the end thanks for
+bearing with me this this wasn't all my
+work a big team did this and you know
+the work goes back to a lot of coming
+contributions from community members as
+well if you want to read more about it
+Kip 98 says Kafka improvement proposal
+we have a large large design document
+which you can read as well if you're
+really interested Apache Kafka if you
+are yeah it they sort of basically the
+links if you were if you want to learn
+more about it or if you're interested in
+participating like contributing or
+anything like this we're always welcome
+to have more contributors ask questions
+if you're if you're having problems let
+us know and then yeah finally
+confluence obligatory we're hiring so
+thank you all and off I'll stick around
+for a while</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

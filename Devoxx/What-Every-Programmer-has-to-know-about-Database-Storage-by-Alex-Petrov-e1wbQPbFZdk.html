@@ -1,0 +1,1045 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>What Every Programmer has to know about Database Storage by Alex Petrov | Coder Coacher - Coaching Coders</title><meta content="What Every Programmer has to know about Database Storage by Alex Petrov - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Devoxx/">Devoxx</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>What Every Programmer has to know about Database Storage by Alex Petrov</b></h2><h5 class="post__date">2018-03-12</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/e1wbQPbFZdk" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">No hi everyone it's a pleasure for me to
+be here my name is Alex I'm working in
+the core database team at data sex we're
+a database vendor and we're working on
+the best available distribution of
+Apache Cassandra and the title of this
+talk what we talk about when we talk
+about on disk storage was originally
+inspired by Haruki Murakami's book 1
+what we talk about when we talk about
+running did anybody read it or see it ok
+nobody and after that the friend of mine
+Alvaro Videla he did the talk which was
+called what we talk about when we talk
+about distributed systems and I thought
+ok this is really cool and we have to
+have the same thing just for just
+storage and the subject of disk storage
+is actually huge and it was kind of
+somewhat difficult for me to pick up the
+exact subject and the main reason to
+give this talk is that well first of all
+the amounts of data processed by the
+applications every day are constantly
+growing and with this growth the picking
+the storage becomes more challenging and
+actually scaling it also and because
+every database system and storage one
+has its own trade-offs understanding
+them becomes extremely crucial because
+it helps you to pick the right tool for
+the right job this talk tries to
+summarize the modern practices because
+the new like over the last several years
+there were so many new developments that
+open up a lot of opportunities I'm going
+to try to build up the vocabulary for
+you to be able to navigate through the
+well see of the things that you can find
+out there and I will of course point to
+the worthy sources so that you could
+cross check and verify everything that
+I'm saying I've tried to summarize the
+material helping to understand the
+database and storage system building
+blocks at least on the very so to say
+bottom level so the closest to the file
+system
+and this is going to be kind of under
+the hood peek for the operators running
+databases and developers building
+applications around them and this
+subject is definitely not an easy one
+because like there are so many building
+blocks and so many nuances out there but
+I will try to be objective and mostly
+state the facts and not to go into the
+speculations and telling what's better
+and what's worth it was kind of
+difficult to pick exactly what I'm going
+to talk about so I ended up writing well
+going through lots of material and
+released everything I'm going to be
+talking about as a series of blog posts
+so it turned out to be like maybe 15
+minutes of reading time so you can
+imagine it's like a lot of things to go
+through and the blog posts also include
+the subjects of file systems and like
+different approaches to doing IO the
+optimizations that people do on the
+database layer and I will show you the
+link in the end of the presentation if
+you would like to learn more about the
+subject it can just go there and read
+more and in this talk I'm going to start
+with concentrating on the two major data
+storage approaches before we dig into it
+let's start with some terminology one of
+the most important things to talk about
+when you pick the storage system is the
+access pattern because it's going to
+pick or it's going to put a cap on your
+abilities and performance of your system
+and we often start by distinguishing
+between random and sequential i/o access
+patterns by sequential access we usually
+mean reading contiguous blocks of memory
+gone monotonically from lower offsets to
+the higher ones random access can in
+fact also be going from the lower
+offsets to the higher ones but it
+doesn't read the contiguous blocks of
+memory it is of course random because it
+is impossible to predict and sequential
+implies or sequential writes imply that
+we're also writing the continued
+contiguous blocks of memory without
+issuing any seeks for the file system in
+twing for CPU and operating system
+sequential usually means predictable and
+there will be therefore last cache
+misses and because prefetching can be
+done for instance it is also important
+to remember that sequential writes do
+not always result into sequential reads
+and data written closely doesn't
+necessarily is not necessarily
+guaranteed to be read together
+sequential reads are mostly used when
+reading large contiguous blocks of
+memory or data for instance log or range
+scans but how do we actually achieve
+sequential access how do we optimize or
+guarantee that in order to be able to
+write your data sequentially you often
+have to buffer it so you just keep it in
+memory until you have enough things to
+write and then you flush it all together
+in one go on disk and in order to
+prepare your data for sequential reads
+you have to lay it out sequentially by
+pre-sorting and another important
+concept on in on disk storage is
+mutability or immutability of the data
+structures that you're using this is
+also has also significant implications
+for the disk layout general process of
+data structure construction and
+maintenance processes and we will
+definitely go into more details later
+the immutable data structures usually
+pre allocate memory
+they usually pre allocate memory and do
+well in place updates for the data that
+they manage this usually results into
+lots of random i/o especially when you
+do write since the updates are made in
+place there is no shadowing required
+here by shadowing I mean reading from
+multiple sources and trying to resolve
+the conflict before returning the data
+to the client and concurrent accesses
+and modifications have to be guarded by
+complex systems of locks and latches
+immutable data structure requires some
+memory buffering for that they can
+guarantee that writes are going to be
+sequential because of the immutability
+and the fact that
+files are not modified on disk this may
+require reading from multiple sources
+and merchan this this is the shadowing
+that I just mentioned now let's just
+contrast these two things the mutable
+and immutable data structures and random
+and sequential i/o and take a look at
+several storage design systems or
+storage system designs that take these
+two approaches slightly differently the
+first thing that we're going to take a
+look at our log structures merge trees
+anybody is familiar with the concept
+okay
+that's good the LSM trees or lock
+structured merge trees is an immutable
+disk resident data structure meaning
+that it lives on the disk so it's less
+about the on memory stuff in memory
+stuff it's more about things that are
+going on on disk and it is optimized for
+sequential writes and maintaining while
+maintaining the acceptable read
+performance LSM trees have been getting
+more attention recently because they can
+eliminate random i/o on inserts and
+updates and delete operations and
+because well they are in some ways
+friendlier for the modern storage
+systems such as SSDs and in order to
+allow sequential writes LSM trees batch
+up writes and updates in memory resident
+table so you can see the little triangle
+over there it is often implemented using
+a data structure that allows logarithmic
+time lookups and inserts such as binary
+search tree or skip list it recite
+whenever it's size reaches a certain
+certain threshold it is written on disk
+in the process which is called flush
+retrieving the data requires searching
+all these discs resident parts of the
+tree checking in memory table and then
+merging their contents together before
+the returning the result the disgrace
+and end tables are in their files are
+immutable so whenever they're written on
+disk they're not touched anymore so you
+will not come back and try to modify and
+change them they can only be deleted so
+this is
+only thing of course they can be read
+from but other than that only delete it
+so you cannot really modify them at all
+as you can see the Ellison storage
+converts a quote unquote random writes
+into sequential by means of buffering
+many modern LSM implementations such as
+for instance rocks DB which is actually
+used by many other databases or Apache
+Cassandra choose the sorted string
+tables file format or so-called SS
+tables because of its simplicity it's
+easier to write really to read in
+actually trivial to implement so SS
+tables are persistent immutable maps
+from while keys to values where keys and
+values some are some arbitrary byte
+strings every value in a table usually
+has a timestamp associated with it it
+specifies right time for insert and
+updates by the way inserts and updates
+are often indistinguishable in these
+storage systems and for deletes this is
+specifying the deletion time
+structurally as the stables are split
+into date in two parts
+one of them is index lock and the second
+one is the data block index block
+contains keys mapped to the offsets of
+the data blocks pointing where the
+actual data is located on the disk well
+within the data block index is often
+implemented using a format that can give
+you a good look up guarantees so such as
+for instance be three or four point
+queries you can use something like a
+hash table and data block is usually
+consisting of the sequentially written
+key value pairs just like appended one
+after another one after another and each
+key obviously appears only once and this
+whole kind of design and the fact that
+these are sorted string tables open up
+some opportunities so gives us several
+very nice properties for instance the
+point queries which means finding a
+value by the key can be done pretty
+quickly by just searching the index and
+then locating data
+by the row offset and then return ended
+to the client and the sequential scans
+can be done by locating the data in the
+index first and then go into the data
+block and then scanning sequentially
+until you have reached the end of the of
+your range and we will also explore
+several things which are extremely
+helpful or so which are utilizing the
+for instance the fact that sequential
+scans are so good and logical ESS tables
+represent a snapshot of all database
+operations over a certain period of time
+as the SS table is created by the flush
+operation that we just talked about the
+problem it's kind of like whenever the
+mem table which was buffering the data
+got flushed and we got the SS table so
+therefore it's a snapshot of the data
+and as we discussed so the in order to
+read things from Alice M storage you
+have to perform a process called merge
+and whenever you are trying to well
+combine many SS tables into one you can
+also utilize the merge sort process in
+order to merge multiple SS tables so
+kind of like whenever you have too many
+of those
+you can sequentially scan through each
+one in the lockstep well advanced in
+iterators while maintaining the heap or
+something like that of the searched
+heads of the iterators then you perform
+in memory merge similarly to what merge
+sir does and then you're writing the
+results sequentially back on disk also
+sequentially and the best thing about
+the or best part about it is that you
+only need the O of n of additional space
+for that where n is just an amount of SS
+tables so basically per SS table you
+would only hold during the merge process
+the last record in it from a data
+standpoint merge is reconciling records
+from multiple sources records usually
+have a key and the timestamp associated
+with them for instance one of the SS
+table records has a later time stamp
+of the previous data point with the same
+key it's just going to be discarded in
+order to support deletes SS tables is
+using something called dormant
+certificates or Tom stones they indicate
+that a record with a certain key has
+been removed so during the merge process
+the record shadowed by the Tom stones
+will be ignored and therefore not reach
+the resulting table considering more
+specific example of the merge process
+here for instance we have a record key
+Alex
+written with the times 10 100 and on the
+later stage updated when the with a new
+phone number and the timestamp 200 and
+the resulting table will use an updated
+value for the key obviously and the
+record with a key John here gets deleted
+as at the later incest table and it gets
+discarded in the in the result so it's
+just not appearing over there the two
+other entries are taking as is because
+they're not chat out or modified in any
+way so because esses tables are
+immutable they're written sequentially
+and hold no reserved empty space for
+in-place modifications the insert update
+and delete operations would have to
+rewrite the data on the disk in order
+like we write the whole file in order to
+just remove or overwrite one thing of
+course it would be completely
+unreasonable to have it so so
+all operations modifying the database
+state are buffered once again in this
+memory resident table over at the time
+the amount of disk resident tables will
+grow obviously because the data for the
+same key will be located in several
+files multiple versions of the same
+record the redundant records with which
+are shadowed by deletions will be there
+so you will have a lot of things which
+you will simply discard while reading
+and wreaths read operations will get
+more and more expensive over the time in
+order to reduce the cost of reads
+reconcile space occupied the shadow
+records and reduce the amount of the
+desk resident tables the LSM trees
+require a process that can read complete
+as
+Stables from disk and merge them in a
+manner that we just discuss this process
+is called compaction as we discuss the
+SS tables are sorted by key and
+compaction works as a merge sort
+this operation is extremely efficient
+reads are did from several places
+sequentially merged output is appended
+to the resulting file also sequentially
+and as we discuss it also can work for
+the datasets that are not fitting in
+memory because we're only holding one
+record per SS table in order to merge
+them together and write them back on the
+disk and obviously the resulting SS
+table also has or preserves the order of
+the original SS tables during this
+process merge tables are merged as the
+staples are discard and replaced with
+their compacted version after compaction
+is done the amount of SS tables on the
+disk is reduced which makes reads more
+performant again or because they have to
+address last tables on disk and you can
+see that for instance like you can start
+with several memory tables that are
+getting flushed on the left and when
+threshold is reached in the middle we
+start compacting the lowest level into
+the larger ssible so we are merging them
+together and out of several files we're
+making one and that we're taking the SS
+they were like resulted compacted SS
+tables and there were merging them again
+and this process is continuing
+recursively for pretty much the
+lifecycle of your data so pretty much
+forever in order to summarize it the
+first and foremost the good thing to
+remember about SS tables and LSM tree
+storage is that they are immutable so
+this is an immutable storage SS tables
+are written on disk ones are never
+updated compaction is used in order to
+reconcile the space occupied by removed
+items and the shadowed items with the
+later time stamps the merge SS tapes are
+discarded and removed from disk after a
+successful merge of the compaction
+process
+there as we see are optimized for rights
+because rights are buffered and flushed
+on disk in a sequential manner and it
+also helps to maintain the spatial
+locality of the written data on the disk
+reads however might require a little bit
+more work than in other storage formats
+or search systems because data has to be
+gathered and merged from multiple
+sources since the one key can be present
+in several tables and it was written in
+different times so we have to read and
+reconcile and gather this data again
+before presenting it to the client and
+it requires quite some maintenance and
+we've seen also because we had to work a
+lot with the LSM storage so there are
+places when working with LSM has kind of
+becomes tricky for instance heavy heavy
+workloads can saturate the i/o use using
+it just for disk and flushes or excuse
+me for reads and flushes and this stalls
+the compaction process and because the
+compaction process is stalled reads are
+becoming more and more expensive and you
+kind of have the cycle of well not being
+able to recover those of the database
+guess it's slower and slower over the
+time obviously this is this can be
+easily solved by just adding a couple
+more notes into your system and it's
+just something that you have to look out
+for the other data structure or other
+storage approach is a b-tree the b-trees
+is a popular super popular indexing data
+structure or storage data structure
+store system coming in many variation
+and used in many databases for instance
+MySQL in ODB is using PostgreSQL is
+using it and even many file systems are
+one of the most prominent papers on DB
+trees is called
+I apologize
+one of the most prominent papers on the
+bee tree is called ubiquitous b-trees
+it's fascinating it's very interesting
+to read I definitely recommend it and it
+describes in great detail several
+possible variants of B trees and their
+applications and B tree is kind of a
+child of or a generalization maybe so to
+say of the binary tree the binary tree
+is in binary trees every node has two
+children so referred as of left and
+right child correspondingly left and
+right a sub trees hold B keys or keys
+and values that are less than or larger
+than the current node key so one is on
+the left one is on the right in order to
+keep the tree depth to the minimum the
+binary trees have to be balanced so this
+is probably one thing that every
+developer loves so balancing the binary
+search trees everybody does it on the
+interviews right and when randomly
+ordered keys are being added to the tree
+it's natural that one side of the tree
+is going to get deeper and deeper over
+the time and the other one maybe is not
+going to get so deep because it is
+impossible that the random data will
+create you perfectly balanced tree
+otherwise well it would be too good and
+one of the ways to rebalance the binary
+tree is so called rotation and you
+rearrange the nodes by pushing the
+parent node of the longer subtree down
+below and kind of pulling the child up
+effectively placing it instead of its
+parent so for instance on the slide here
+you can see an example of rotation of
+binary dream so on the Left the binary
+tree is unbalanced after adding the two
+in the very bottom in order to balance
+it the three is used as a pivot right
+and the tree is a row is rotated around
+it the five the previously root node and
+the parent for this three the pivot
+becomes a child node and after the
+rotation is done the height of the left
+subtree is decreased
+and the height of the right sub-tree is
+increased by one and therefore the
+maximum depth of the tree has decreased
+so we kind of like flattened it a little
+bit and to summarize or to give you kind
+of a rough idea about like be trees as
+opposed to the binary trees binary trees
+are mostly used for in-memory data
+structures because of the balance in
+step because well we need to keep the
+depths of all sub trees to the minimum
+etc etc and because we just have two
+pointers per node they don't really work
+or scale very well on the disk or that
+would be kind of unreasonable to have
+them on a disk because of the overhead
+the V tree is however allows throwing
+more than two pointers per node and work
+extremely well with block devices by
+matching the node size to the page size
+which is often like around 4k and some
+implementations today is some use the
+larger node sizes but they always
+operate with the multiples of the page
+size and B trees have the following
+properties well first of all they are
+sorted so that allows to do sequential
+scans and simplifies look up
+significantly and they are self
+balancing so that means that they
+require almost no or they have almost no
+need to balance the thing well we will
+get back to the almost part slightly
+later so when the B tree node is full
+its split in two instead of rotating and
+when the occupancy of the neighbor nodes
+falls down to the certain threshold the
+nodes are kind of merged back together
+this also means or at least this also
+means that leaves are equally distanced
+from distant from the roots so there is
+no place in the B tree that is going
+much lower than the rest of the tree
+they also guarantee the logarithmic
+lookup times which makes them a good
+choice for the database indexes where a
+lookup times are super important
+they're also mutable as opposed to the
+pre
+data structure that we discussed so
+insert updates and deletes also
+subsequence splits and merges are prefer
+performed on disk in place in order to
+make and the in-place updates possible a
+certain amount of reserved space as an
+overhead is required the b-trees can be
+organized as a clustered index if you
+familiar with a concept where actual
+data is stored together on the leaf
+nodes or for instance you can use it as
+an uncluttered index with the pointers
+to the heap file in things for instance
+slightly similar to the separation we've
+seen with the index blog and data block
+of the esses tables here we are going to
+be mostly talking about or discussing
+the B plus trees which is a very end of
+B tree and this variant is different in
+that it has additional level of leaf
+notes on the very bottom and data can be
+stored only there because in original
+paper about B trees the data could have
+been stored on pretty much any level of
+the B tree not only on the very bottom
+one and of course the bottom level
+cannot have any children more let's take
+a closer look at the B trees and their
+building blocks first of all they
+consist of all three types or sorts of
+nodes the root internal and leaf notes
+the root are white in internal are kind
+of in the middle green and the leaf
+nodes are on the very bottom and a root
+of course it's kind of easy to
+understand it has no parents so it is
+not a child for any other node internal
+nodes are the ones which are in between
+the leaf ones and the top root one the
+parent and they're kind of connecting
+everything and leaf knows carried the
+data and obviously have no children and
+B trees can be characterized by their
+first of all branching factor which is
+one of the most important things the
+this is the amount of the pointers to
+the child nodes along with the pointers
+root and internal notes have hold the
+keys by which you can distinguish like
+which child you have to navigate to the
+other thing that be trees are
+characterized with is a coupon C which
+means how many pointers to the child
+items the item is the note is currently
+holding out of the maximum available for
+example if the tree branching factor is
+100 and note is currently holding only
+like 50 then we can say that occupancy
+is 50% and the other thing which
+characterizes the B tree is height so it
+is amount of B tree levels so how many
+pointers have to be followed for us in
+order to find the leaf level and finish
+our lookup every non leaf node in the
+tree holds and keys separating n plus 1
+pointers we will get to the details of
+it and just on the next line leaf notes
+may also hold a pointer to the previous
+and next nodes of the same level forming
+kind of a doubly linked list so that you
+could traverse them back and forth the
+way you wish and as you've seen on the
+previous slide notes consist of unsorted
+keys and n plus 1 pointers and let's
+discuss why this is happening well first
+and the last pointers are kind of
+exception this is what adding this plus
+1 thing and the first and last pointers
+are pointing to the sub trees in which
+all the entries are less than and equal
+or larger than the first and leftmost
+and rightmost child correspondingly and
+all the other pointers are kind of like
+telling you that you can follow them in
+order to locate the tree which is
+greater than the predecessor and less
+than or equal the successor key you can
+see the invariance listed out to here
+and one performing the lookup search
+starts at the root node and starts
+following all the internal nodes
+recursively down to the leaf level on
+each level search field is reduced
+by the sub-tree following the child
+pointer and the range of this subtree
+includes the searched value so we don't
+know whether the value is going to be
+there in the end so we may come to the
+leaf node and it turns out that the
+value doesn't exist and we did all the
+work but at least we can guarantee that
+this invariant is preserved so if we
+will keep following it we will find the
+data if it's there when the point
+queries performed search is complete
+after locating the leaf node if you are
+doing this scan you're starting wherever
+you will found your first key and start
+following the doubly linked list of the
+leaf nodes in order to perform the range
+scan so you can think kind of of the
+point queries as going like vertically
+and the range scans going like
+vertically first in order to locate the
+first node and then horizontally in
+order to well read out all the data that
+you require on the slide you can see
+like the route to leave pass highlighted
+with the red color alone so we basically
+go from the top and all the way to the
+bottom in order to locate the required
+node in terms of complexity the B tree
+is guarantees logarithmic lookups
+because finding a key within the node is
+performed using a binary search and
+binary search is quite easily explained
+in terms of searching inside of the
+dictionary for instance so words are
+sorted alphabetically you open the
+dictionary in the middle and start
+searching and if the search ladder
+appears earlier alphabetically then will
+the page that you have open you have to
+continue searching left well otherwise
+you have to continue searching right and
+each step reduces the remaining range in
+half and am therefore making the lookup
+time logarithmic for instance if you had
+a search space of 10 to the 9 then you
+would be able to search it within 30
+comparisons which is actually pretty
+good when the item is found the
+corresponding pointer is followed in
+order to locate this
+the sub-tree now let's talk a little bit
+about well insertions and deletions and
+how they work in contrast with whatever
+we discussed with about Alice and Ruiz
+when performing insertions we have to
+first locate the target leaf so we have
+to still follow the search process which
+well actually doesn't have to be done in
+case of LSM trees because basically
+there is no difference between insertion
+and deletion everything or update we are
+buffering everything in memory and
+storing everything on disk
+well in a sequential manner so this is
+extremely difficult different to here so
+here we have to first find the thing or
+find the note that where we have to
+perform an insert or the update and we
+are using the algorithm that we just
+discussed for that and after the target
+leaf is located the key and value are
+appended to it now if the leaf doesn't
+have enough space this situation is
+called overflow and the leaf has to be
+split in two this is done by allocating
+the new leaf and then copying half the
+elements to it and then adding the
+pointer to the newly allocated leaf to
+the parent now the problem is that
+parent when whenever you have updated it
+with the new record or with the new key
+and pointer then it may also overflow
+and that triggers another update on the
+next level and then may trigger another
+update on the next level until you reach
+the root that means that whenever you
+reach the root you have to grow the
+height of the tree otherwise well there
+is nowhere more to insert and this has
+an implication of the fact that all the
+growth of the B plus tree is performed
+from the root so you kind of like start
+pushing the levels down slightly this
+process keeps trees well almost always
+balanced since the height is growing
+from the root of the tree another way of
+minimizing the amount of operation and
+operation in operations made on the
+nodes and amount of splits and merges is
+a
+to change or pick a right strategy for
+the tree occupancy the percentage of the
+occupied slots it can be different so
+you can say that okay I expect that my
+notes are going to be filled up to 70%
+so everything between 30 and 70 is
+acceptable for me and this also means
+that you well will amortize so many
+costs for relocating like in doing
+splits and merges but at the same time
+you will pay with all this extra space
+that you have to reserve for for nothing
+basically because it's just sitting
+there and waiting for the new things to
+arrive which were not written yet
+besides merge
+besides merges additions and removals
+the B trees may also require some
+balance and this is why we were saying
+that there was like almost no balances
+there is some but every balancing is
+needed to keep the height of the well
+tree to the minimum of course and the
+for the worst-case scenario and this
+process is just moving the pointers
+between the sibling nodes however so
+there were several papers which were
+considering the the rebalancing process
+harmful and many implementers of the B B
+plus trees are saying that okay we're
+not doing rebalancing and well some of
+us some of people do but many people
+actually say that this is not necessary
+in order to summarize it the B trees are
+mutable and this is kind of like the
+thing that probably sets the design of
+the B+ tree is apart from the LSM tree
+storage well extremely significantly and
+they allow in-place updates by
+introducing some space overhead and more
+involved right path although they don't
+require a complete rewrites or multi
+source merges that LSM trees require
+sometimes even though I just said that B
+trees imply mutability some B tree
+implementations are actually immutable
+it is done by bulk loading so you
+basically just built the single B+ tree
+in one go so to say and sometimes this
+is also used in combination with LSM
+storage in order to make more
+performance lookups for the Ellison
+trees they're also read optimized so
+they don't require because they don't
+require reading from multiple sources
+and which simplifies the read path
+significantly and writes and deletes
+might trigger a cascade of note splits
+and merges as we just discussed making
+some write operations more expensive or
+but only some of them because the rest
+is amortized there are some techniques
+that implementers use to well reduce
+this cost such as batching updates pre
+allocating nodes keeping the node
+occupancy low as we discussed it all the
+they the trees are often optimized for
+paged environments meaning that block
+storage and which means that for
+instance with the nvm II storage the
+usage of B trees or they may may be less
+relevant or they may be we may exploit a
+different more optimized data structures
+for that mutable implementations as we
+said it requires some overhead in order
+to perform in plates updates and
+removals and sometimes you may get some
+fragmentation caused by frequent updates
+in different places randomly across the
+tree and of course whenever you have to
+perform concurrent reads and writes with
+the B trees you have to grab a bunch of
+lacks and latches in order to isolate
+the writers from the readers now kind of
+let's try to bring it all together so we
+discussed one approach and the other and
+they obviously have some trade-offs and
+some people wanted to optimize for reads
+some people optimized for writes some
+have more overhead on memory some less
+so what is going on even when developing
+a storage system we're always confronted
+with the same challenges so everybody
+has
+the same problem because like we are
+limited by the physics and making the
+decision about what to optimize for has
+a substantial influence on the result
+one can spend more time during writes
+and lay out the data structures so that
+they would be more efficient for reads
+you can reserve extra space for in-place
+updates and facilitate faster updates
+you can buffer data in memory and ensure
+the sequential writes but you cannot do
+all of it at once
+this is impossible an ideal storage
+solution would have lowest rate cost
+lowest write costs and have no overhead
+but in practice these structures will
+have a compromise between multiple
+factors and it's important to understand
+them and researchers from Harvard Ivy
+lab have summarized the three kind of
+key parameters that database systems are
+optimized for the reads updates and the
+memory overhead the understanding of
+these key parameters are most important
+for the use cases and will influence the
+choice of data structures and the design
+and they will also influence how your or
+suitability for certain workloads and
+will help you to tailor of the data
+structure or storage system for a
+specific use case in mind the ROM
+conjecture that DB Harvard lab students
+came up with or came up with states that
+setting an upper bound on the two of the
+mentioned over hats also set a lower
+bound for the third one
+for example the B trees are read
+optimized and have less right overhead
+but for that they have to reserve empty
+space for updates so we kind of pulled
+two in the one side the third one came
+closer to the middle Alice M trees have
+less space overhead but at the cost of
+the read overhead brought by having to
+access multiple discs resident tables
+during the read right so these three
+parameters form a competing like
+triangle so you have
+so much thread between these three
+things and whenever wherever you pull it
+it's going to influence the other to the
+bee tree is optimized for read
+performance index is laid out in a way
+that is minimizing the disk accesses
+that require is required to traverse the
+tree and only one index file has to
+accessed in order to locate the data
+this is achieved by while keeping it
+mutable this increases the amplification
+resulting from the node splits and
+merges the relocation fragmentation
+imbalance maintenance etc etc etc to
+amortize the update Koston reduction if
+we reduce those amounts of merges and
+splits the bee trees reserve well
+additional space and this is kind of
+getting wasted this all helps to
+postpone write amplification until the
+word is full so in this in short of the
+bee tree is trade update and memory
+overhead for the read performance so you
+can see it this way at the same time
+Allisyn trees optimize for write
+performance
+so both updates and deletes don't
+require locating the note in the disk so
+you don't have to read the data while
+writing it which is the case of with the
+bee trees or at least you have to locate
+the node where you're going to be
+inserting and this is guaranteeing that
+sequential writes and the sequential
+writes are guaranteed by buffering at
+the insert time and this comes at a
+price of higher maintenance costs and a
+need for compaction process which is
+kind of a way to mitigate the
+ever-growing price of reads and trying
+to reduce the amount of the disk resin
+tables and things like to where we have
+to look for the data that we may never
+need and this also results in to more
+extensive reads so besides the fact that
+we have to do all that maintenance to
+reduce the amount of the esses tables we
+also have the problem of the of actually
+having to search so many tables at a
+time when performing the read while
+having to do all the main
+two nuns but like there are good things
+about Alice centuries and there are bad
+things about its it's never like all
+just good or bad so Alice em trees what
+they do they eliminate the memory
+overhead by not reserving the empty
+space unlike b-tree notes and they allow
+for instance things like block
+compression due to better equip antsy
+and immutability and if we summarize it
+all in just one sentence LSM trees trade
+read performance and maintenance for
+better write performance and lower
+memory overhead there are data
+structures optimized for each property
+using adaptive data structures allows
+for better performance at the price of
+maintenance high cost adding metadata
+facility that facilitates traversal for
+instance like fractional cascading will
+have an impact on right time and take
+space but improve the read time
+optimizing for memory efficiency by
+using things like compression for
+instance using like gorilla compression
+or things like Delta encoding and many
+others will add some overhead for
+packing and unpacking the data
+structures during the recent writes but
+save you some space sometimes you can
+trade functionality for efficiency for
+example heap files and hash indexes can
+give great performance guarantees and
+smaller space overhead you but they
+cannot do well more complex queries you
+can also trade Precision's a precision
+for efficiency by using things like
+approximately two structures for
+instance bloom filter or hyper log law
+countenance catch you name it and these
+three tunable z' the read update and
+memory overheads can help you to
+evaluate the database and understand the
+workloads is best suitable for all of
+them require so are kind of intuitive
+and easy to understand and you can just
+take the storage system analyze it and
+understand
+of the buckets you can put it into of
+course there are other many or multitude
+of important things to consider when
+evaluating storage I'm not trying to
+simplify it by saying that okay these
+are the three only things do you have to
+look at such as for instant maintenance
+overhead operational simplicity system
+requirements suitability for I don't
+know a certain type of pork workload
+access patterns and so on this
+conjecture or rule of is it kind of a
+rule of thumb that helps you to get a
+first impression and give you the
+direction after that you would have to
+do lots of testing lots of evaluation
+for better and deeper understanding and
+understanding your workload is actually
+the first step on the way to build a
+scalable backhand and many things vary
+from implementation to implementation
+and even to databases which
+theoretically have to do the same thing
+so they use I don't know let's say same
+algorithm and the same storage type they
+have to perform well literally the same
+way but obviously because of the
+implementation specifics and like the
+way people interpret the certain
+algorithms of course they will end up
+performing differently the databases are
+complex systems with many moving parts
+and it is important in we cannot just
+ignore them because they are too
+important for the applications that
+we're building my hope is that this
+information will help you to kind of
+have a slight peek under the hood of the
+databases and when you know the
+difference between the underlying data
+structures and their inner doings you
+can decide what's best for you if you're
+interested in the subjects there are
+many many books which are going into the
+deeper details of everything that I've
+been talking about and these are the few
+that I had to go through in order to
+give you a short summary of certain
+things and make sure that I'm not lying
+to you so to say and if you want to go
+deeper without having to read for at
+least six seven hundred pages books you
+can just follow this link and this link
+leads you to the block-post series which
+have this information and much more
+information on the subject and that's it
+thank you very much for having me here
+it was a pleasure and hope it helps</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

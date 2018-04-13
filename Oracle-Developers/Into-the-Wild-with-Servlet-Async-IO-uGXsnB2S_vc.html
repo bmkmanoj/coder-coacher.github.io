@@ -1,0 +1,1389 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Into the Wild with Servlet Async IO | Coder Coacher - Coaching Coders</title><meta content="Into the Wild with Servlet Async IO - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Into the Wild with Servlet Async IO</b></h2><h5 class="post__date">2015-06-02</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/uGXsnB2S_vc" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hi I'm my name's Gregg Wilkins I'm the
+founder and lead developer of the JD
+HTTP server and servlet container I've
+been working on Jenny for 19 years now
+still trying to get it right
+I thought Jenny well I thought HTTP and
+servlet containers would have become a
+commodity a good decade or more ago but
+the way we serve content on the web
+continues to change and innovate and the
+JVM changes the browser's changes and
+now the protocol is changing so the last
+19 years has been a continuous
+progression of doing new versions of the
+server to sometimes lead the way of how
+we're serving web content and sometimes
+to follow the trends or the way people
+who develop applications develop it so
+today I'm gonna be talking about servlet
+3.1 async i/o I was told that I needed
+to make the talk interesting so the
+title and the blurb was into the world
+with server 301 but as I try to prepare
+the content I couldn't maintain the
+metaphor so forget the wild bit we're
+just going to talk technical there's
+going to be code there's going to be
+interaction diagrams and and no pretty
+pictures or anything like that so so
+what are we going to talk about today
+the key focus of this talk is
+asynchronous servlet IO so I'm going to
+motivate why we want to be asynchronous
+in the first place
+I'm going to look at the introduction of
+a synchronicity in the service back in
+3.0 and I'm going to show you how we
+have to complete that asynchronous
+handling with the IO capabilities in the
+server 3.1 release in the IO area I'm
+going to motivate how the API works it
+was designed a very specific way a
+little bit different to other
+asynchronous API is that are out there
+and there's very specific reason of why
+it was done that way and so it's good to
+understand that's to see how you use it
+and then I'm going to show you all the
+scary things that we've done wrong with
+it as we've used it and got it
+reduction and basically you do the the
+are be dragons thing to show you what
+not to do but then come back at the end
+to remote about you that even though it
+is complex it's definitely something
+worth doing so why do we want to be
+asynchronous here's a pretty standard
+way we set up our application servers
+nowadays where we have a client talking
+a request over a network to a server
+which will do a little bit of processing
+on that request but more often than not
+it'll delegate it to an application
+server further inside the data center to
+actually you know do some processing
+eventually a result will come back the
+the web server will then process the
+response a little bit and send that off
+to the client and this is fairly typical
+way to structure things but the problem
+is is this little squiggly red bit here
+is basically the web server waiting for
+the application server to produce its a
+response and while it's waiting in a
+blocking scenario we're holding a thread
+and a thread is actually quite an
+expensive resource in a web server it's
+got memory associated with it it's got a
+kernel the thread potentially attached
+to it lots of infrastructure does
+pooling of resources and buffers of
+character converters in thread locals so
+if you're holding a thread doing nothing
+but waiting you're holding quite a
+valuable resource that's doing nothing
+and I can demonstrate in this talk that
+you can get like a hundred to one you
+know two orders of magnitude improvement
+in your resource utilization if you free
+up your threads and go away synchronous
+because what we want to achieve is
+instead of this picture here we want to
+go to this picture here that while the
+server is waiting for the answer from
+the application server it gives up the
+thread and the associated resources so
+they can go and do something useful
+elsewhere either for the same user or
+for a different user and the reason we
+give it up is so we can get to a picture
+like this for instance like if it's for
+the same user we can do multiple things
+at the same time we can send off
+in parallel asynchronous requests to the
+backend rather than doing them
+thoroughly and waiting for round trips
+or better yet they can go to a picture
+like this where by freeing up those
+resources on the server we can deal with
+more clients because rather than having
+a thread sitting there waiting with all
+its memory buffers and all its resources
+it can go and deal with requests from
+other users so there's two key benefits
+we're looking for when we're going
+asynchronous one is better resource
+utilization on the server in that sort
+of direction of using that thread again
+again and again and that's a key benefit
+if you wish to scale if you should go to
+hundreds of thousands of requests a
+second and you know up to a million
+connected users on one server and stuff
+like that and that's certainly your
+concern for a lot of people here I
+already show you all some people here
+it's not not every web application needs
+to scale to those levels but
+asynchronous handling of requests has
+other benefits as well and primarily
+among them is reducing the latency over
+here by being asynchronous and skipping
+around trips across the network we can
+keep our application servers better
+utilize put the handling closer together
+and reduce the overall latency of
+rendering a page or producing an answer
+and it can be this reduced latency that
+can actually be the key benefit for
+going asynchronous for your average web
+application which is not dealing with a
+hundred thousand requests a second and a
+million connected users it'd be great if
+all our Web Apps had that problem so we
+added asynchronous handling in servlets
+in 3.0 and this is kind of a very
+general pattern of how it goes we have a
+a server do get method and we jump
+straight into the asynchronous
+processing by calling start async on the
+request and that puts out us into an
+asynchronous mode and once you go into
+that mode a lot of things change but
+once you're in that mode typically what
+you have to do is then start your
+processing asynchronously so I've got a
+method there called start async process
+and I like to say it always takes two to
+tango asynchronously so I've mixed my
+metaphors already so I'm glad it can
+stick with the wild one meaning that
+it's no good if you're a server being
+having a server asynchronous API because
+unless you know we're talking HTTP
+asynchronously
+unless I can generate my answers
+asynchronously then it doesn't do us any
+good so what you're going to see in the
+servant land is that you're always going
+to be bridging from servlet asynchronous
+api's to other asynchronous api's which
+you're going to use to get your answer
+to calculate your answer to send a
+request to a remote server or something
+and so what we can do inside a a
+synchronous servlet is very key and we
+have to look at the available async REST
+API so that we can work with and so
+typically when we go asynchronous api's
+you'll quite often see a callback as
+part of them not all life synchronous
+like api's have that have this but I'm
+using it in this particular example so
+when the async rest processing has
+finished it calls you back and says
+here's the answer here's your result and
+in this template asynchronous servelet
+once we get the answer we write it out
+so we've a synchronously waited for the
+answer here comes the answer in the
+callback let's write it out ah but what
+happens if that blocks it's you know
+it's an output string output streams are
+blocking API so instead of mixing in a
+synchronous API with a known synchronous
+API we've mixed in a blocking API which
+is what you had to do in 3.0 if you
+block inside in a synchronous callback
+it doesn't matter that's an in
+synchronous callback you're still
+blocking just blocking a different
+thread instead of blocking the servlet
+containers thread you're blocking
+asynchronous clients thread so you're
+still holding up resources so this was
+the motivation for 3.0 so let's just go
+over that the asynchronous things you
+can do within an asynchronous servlet
+can you access the database well not
+really there's not very many
+asynchronous database interfaces out
+there and and databases themselves don't
+really actually handle asynchronous
+loads very well and they like to
+specially SQL ones like to have fewer
+longer sessions so you're not really
+going to do much asynchronous handling
+of a server talking to a database much
+better to do an asynchronous rest
+request to a dedicated database server
+that can serialize its access to the
+database efficiently and all sorts of
+stuff and deal with it whichever way you
+know the Oracle Consultants think are
+best and then asynchronously sent you
+back the result you could do I'm in i/o
+calls directly yourself you know if you
+want to talk over a socket or talk to
+your file system or talk to anything
+that can be represented as a byte
+Channel and you have the asynchronous
+API is there but that's probably a
+little bit low level for a lot of
+developers you know you want to come up
+there for a servlet developer you
+probably want to come up a level of
+semantics so a very typical thing that
+you're going to interact with is api's
+that are available for say rest clients
+for HTTP clients anything you do remote
+access or even local access to resources
+asynchronously and there are a growing
+number of these api is becoming
+available so that's what you deal with
+another source of asynchronous events
+you can deal with is other servlet
+requests if you're doing a comet kite
+application the classic being chatroom
+where user a is chatting to user be all
+over HTTP then you're marrying up two
+sets of asynchronous API is they happen
+to be that both servlet API as these
+guys chat to each other times 100,000 on
+your social network so those are the
+sort of areas where you give this
+asynchronous processing but all of them
+come down to the same blocking
+bottleneck in 3.0 is that they all have
+to read request bodies and they all have
+to write response bodies and unless you
+can do that asynchronously you're not
+truly asynchronous so serve at 3.1 I
+came out that we needed an API to do
+this asynchronously so what were our
+candidate api's well the first choice
+was to go look at the JVM and
+what was standard in there because niño
+had introduced asynchronous concepts in
+the i/o layer several versions before
+the server spec and they certainly were
+a something to consider to use if we had
+used the niño asynchronous API is we
+probably wouldn't need this talk here
+today to explain how to use it because
+people who do asynchronous stuff
+passingly familiar at least with n io
+but there's a couple of problems with it
+that we deemed it work it wasn't
+suitable and if we look at it here we
+have an a synchronous byte channel as an
+example of the API it's actually got two
+styles of API in there the future API
+and the completion Handler callback api
+in there and unfortunately neither of
+them were suitable and i want to go into
+the reasons why they weren't suitable
+because it really helps motivate how to
+use the api that we did get and go so
+rather than telling you what the server
+3.1 API is i'm gonna tell you what it
+isn't well it's not the future way
+because futures a lot of people think
+that using futures is asynchronous but i
+don't think it's a finger at all it's
+just delayed blocking a future allows
+you to call get at some stage but when
+you call get if the answer is not there
+it blocks and waits for it if you
+serendipitously happen to call get at
+exactly the right time the answer
+becomes available then maybe you get
+some asynchronous processing going but
+if you're off doing something else what
+tells you when to call to get you either
+going to call it too early or too late
+so futures released you know prior to
+Java right I just not the API after
+doing asynchronous processing the
+completion handlers were quite a valid
+choice and a lot of asynchronous i/o is
+done with this style of API and the key
+thing here is that you have a a for
+every write that you do or every read
+you do you pass it a handle to a
+callback in this case a completion
+handler which is called back when the
+operation you've requested is finished
+but there's a couple of problems with
+this some minor some major
+the first thing is that it's a bit of a
+both style it's a little bit
+old-fashioned now yeah if you were to do
+it and IO again today you'd use the
+lambda thing of Java right with you know
+flash callbacks but unfortunately
+completion handlers have multiple
+methods so they're not suitable for it
+it's a little bit of encouraging of
+garbage because the examples show this
+sort of inline anonymous inner class
+creation of callbacks which means that
+every right a lot of people acts that
+you know will create a new instance of a
+callback handler which can be a lot of
+garbage created so you have to go away
+from the examples and to try and create
+callbacks ahead of time and so there's
+you know some stylistically stuff that
+we don't really like but the thing that
+clinched it was the problem of who calls
+the completed callback and this turns
+out to be a real key question when
+considering the efficiency of how an
+asynchronous API works and the reason
+we're doing a synchronous is to be
+efficient so it's a really important
+question which is probably best done
+with explained with a interaction
+diagram so if we have a handler dealing
+with a channel it'll call right on the
+channel and the channel alright those
+bytes out so we've requested an
+operation and in the NAO world you know
+that right might take some time to
+complete once it's completed
+it'll get another thread from the thread
+pool to schedule you know and schedule
+it to call back the completed method
+which the completed method will go to
+the back to the handler and say well
+I've got some more stuff I need to write
+so I'll call right again and the right
+will send some data out and at some
+stage later that write will complete and
+a new thread will come out of the thread
+pool and call completed and the pattern
+repeats itself this is great if your i/o
+is slow if your i/o is slow you are
+going to be waiting all the time for it
+to complete so this is doing exactly
+what we wanted to do we wanted to use a
+new thread because we don't want to hold
+our thread while it's waiting but IO
+isn't always slow you're not always
+writing you know
+you know 10 Meg files at once got off
+your your right angle bracket h1 angle
+bracket then you do next right hello
+world and those can to complete really
+quickly so what happens who calls that
+completion handler if your I Oh is quick
+so if your iOS quick what happens is you
+call right and the bikes are sent and
+they might be sent immediately they're
+committed straight to am a kernel buffer
+they're in the interface being sent out
+off the wire straight away and so rather
+than spawn another thread or get another
+thread from the thread pool
+implementations will just call you
+straight back
+I'm completed in the same thread that
+you called right but you've got more to
+write so you call right again and yeah
+the buffers still not full we're in a
+buffer bloat situation here so we can
+put a lot of stuff into the buffers so
+it calls back completed and you call
+back right calls back completed which
+calls back right after tax getting
+deeper and deeper and deeper and deeper
+bang Stack Overflow and this is a real
+problem that you know if your i/o is
+fast and you use this style of
+asynchronous API you will get stuck
+overflow you know hello world fits into
+a 16 K but for an awful lot of times and
+a lot of people do their rights in small
+little chunks so what niño does for
+this is what I think is a really nasty
+hack they let your stack grow deeper and
+deeper and deeper until they say our
+stacks any bit deep they're looking at
+using another thread local to track how
+deep their stack is is our stacks too
+deep I'm now going to dispatch and I
+think this is the worst of both worlds
+scenarios means you get deep stacks and
+you get unneeded and dispatches to
+threads so you know it's inefficiencies
+in what we're doing to try and be
+efficient and dispatching to a thread
+can be a significant inefficiency so for
+this particular reason it would decide
+that this style wasn't good enough for
+the server API we had to invent our own
+paradigm now I'm standing up here
+preaching the wisdom of this
+I have to say I was a late convert to
+this idea so soon way was gonna know
+he's not here
+the other people on the server that
+expert group they should get the credit
+for coming up with this which is not to
+say I don't have cripples which we'll
+get to
+so here is the server 3.1 async output
+API and I'll show the input API later on
+first key thing is it's an output stream
+it's and it's the server the output
+stream already extended the output
+stream and we're just adding methods on
+to it so you know we could have gone or
+we had get output stream already we
+could have got yeah we've got get writer
+already we could have added get channel
+and you know just multiplied the methods
+as the years go by but instead we
+decided to extend the output stream so
+when you're actually writing the data
+out you're still using the same rights
+and for a server the output state stream
+the same print methods to write your
+content we do have a callback but the
+callbacks not passed on each write
+operation because we're using the same
+rights as normal the callback is set on
+the output stream itself it's a write
+listener and the idea is that the write
+listener is therefore reused it
+encourages reuse for the one listener
+rather than making a new one for each
+call and the key methods are instead of
+being called back when an operation
+completes your callback when an
+operation is possible and combined with
+the method of is ready this allows us to
+have a very significantly different
+interaction with the icing our my Olea
+which is probably best again described
+and I'll get to the direction diagram in
+a second okay so here's an example of it
+being used this is a file servlet that
+will get a file off the hard disk static
+content and serve it asynchronously and
+it's using the asynchronous output API
+so it starts off as the boiler template
+that as the boilerplate async server I
+show you before it says start I think it
+gets a context it gets the output
+draining out of the response as a server
+that would normally do it gets a file
+input stream from somewhere dot and now
+we're ready to write this file our
+output stream so we call set right
+listener because we're going to do it
+with an asynchronous listener that's
+going to do it for us and then the key
+thing in this API is that it's iterative
+while the output stream is ready for
+another operation we can read a little
+bit from the file write it out to the UM
+output stream while is it really is
+still ready um is ready keep going so we
+iterate while our i/o is fast
+so unlike nao we don't get that dispatch
+on every right we don't have to worry
+about deep stacks because we've unrolled
+that recursion for us and we're
+iterating in place up until such time as
+that right can't complete we maybe we
+filled up a buffer which is being
+flushed maybe the write was for you know
+a 10 Meg file or something
+in which case is really returns false
+and what you do then in this style is
+you return from the out on write
+possible method and the key here is that
+is really returning false is an active
+method if Israeli returns false you
+schedule a call back to on write
+possible when it becomes possible to
+continue so one of my cripples with this
+API is that both set right listener and
+Israeli look like the simple accessor
+method scatter setters but they're not
+they're both active methods that if you
+call them they're doing scheduling and
+so the issues I'm going to show you it's
+all about the fact that when you call
+these methods you have to think that
+this is a scheduling decision I'm making
+here it's not just a simple query I'm
+doing so let's look at this servlet in
+interaction diagram again to see how it
+works so remember we're trying to write
+a file out an output stream
+asynchronously we set our write
+listening to do this on the M stream the
+contract when you call set write
+listener is that you will be called back
+on write possible when it's possible to
+write and so you know technically
+speaking this will be a new thread
+hold this back but it only has to happen
+after the original request thread has
+returned
+so in jetty and I'm guessing most other
+containers we just used the normal
+request thread so we don't actually do a
+dispatch here but we call you back on
+the on right possible now in the on
+right possible we're now in that while
+loop while is ready can I write some
+more can I write some more so we can
+write some data we check is ready it's
+true we can write some more we check is
+ready we can write some more we check is
+ready and we can iterate in place our
+stacks not getting deeper
+we're not recursing we're going as fast
+as you can the jitters all doing
+wonderful branch predictions and stuff
+like that
+until such time as Israeli returns false
+we're now in the unlocking scenario we
+can't progress any further with our
+writes at that stage we return from the
+on write possible and that stacks done
+with that threads back from the thread
+pool doing something useful but because
+it's really returned false the container
+has scheduled a call back when rights
+become possible again so eventually when
+you can write some more a new thread
+will come in now and call on write
+possible which will then do the right
+and the iteration or start again so the
+key thing we have here is that when our
+i/o is fast or our buffers aren't full
+and things like that we're iterating in
+place and we only gave to thread full
+callbacks when IO is slow and blocks and
+this is actually you know the sheer
+genius of this API which I wish I could
+say I was responsible for and didn't
+fight against for so long but luckily
+the other members of the expert group
+won out on the day on this one and it's
+a very good API that allows you
+developers to do good asynchronous style
+very easily with a few bucks so yeah
+that's really easy right you know we
+it's yeah a while loop while root right
+right right right right until such time
+is that you're not ready return you'll
+get called back how hard could it be to
+write a servlet that does this well
+there's lots of gotchas and so
+I'm twenty three minutes in here and
+probably about half the rest of the talk
+is going to be taken up with the gotchas
+so alright here's my first bag is ready
+it's just a simple little method you
+just call yeah am I ready you know in
+terms of reading the file
+well that example where I was using a
+the blocking file IO to do this really
+properly you'd write a is a a
+synchronous file access mechanism to
+make sure you didn't block on the read
+or better yet no no you know because
+once you've set a right listen up once
+you've set a right listener you've
+changed the mode of that output stream
+so right is no longer a blocking right I
+have a slide on on on how this might
+catch you out later on so it actually
+we've sneakily gone and reused all the
+same our methods so they look like the
+same methods but they're not the same
+methods they have different behavior
+they do not block once you've gone into
+asynchronous mode so okay that's about
+the third or fourth bug this is the
+first bug you might you might like here
+might be likely to make so let's say I
+did this right here which is because
+I've gone into asynchronous mode I've
+been called back on aren't right
+possible I must have set a listener and
+I'm writing all my content in one but I
+know it's one great big buffer and I
+just happen to want you know to know
+whether that all went out or not so I
+write this little debug lining in here
+you know did that you know write
+complete in this method or did it not
+unfortunately if I turn debug on here
+then Israel II might return false if
+Israeli returns false I've scheduled
+another callback to on right possible
+and I'll write on my content again
+so Israeli is not a simple accessor
+method when you call Israeli you have to
+know that if it returns false this is
+meaningful and therefore you can't idly
+call is ready so that's a bug and even
+when you're thinking you're using it
+properly you know it's a scheduling
+decision so here's a I've got some
+asynchronous results coming and I want
+to write them out asynchronously so you
+do a compound if statement you know are
+my results available and is my output
+ready well if that fort first Clause
+returns false
+you don't evaluate the second Clause so
+Israeli never returns false as well so
+the callbacks not scheduled now this
+might be what you're intended here you
+might be organizing another callback for
+when the results really are available
+but you have to be careful that if
+you're getting do compound ifs like that
+which it's quite tempting to use is
+ready like though I switched those two
+around I would significantly change the
+semantics of this code and it's easy to
+make that mistake and later on I have an
+example of where the order is actually
+very important so that's not necessarily
+a bug it's just a possible bug that you
+have to be aware of and that I this call
+comes down to that that I like my
+mechanism of of is ready but I think we
+picked a really bad name for it but oh
+well so having just told you you have to
+be cautious about using is ready I'm now
+going to tell you that you have to use
+it you can't get around not using it
+yeah here we can say is ready yeah I've
+just got two little things to write out
+the first one is not going to block is
+that now I'll just write out two things
+well unfortunately you can't just write
+out two little things because the second
+write it will the first write may not
+complete you don't know what the state
+of the buffer is in which case the
+second right here is gonna have a write
+pending exception and I believe that
+most containers certainly jetty actually
+even enforce this if you have not called
+is really between those two rights
+then you'll get an exception now that
+second right that's rights being pending
+because you're Ian's in it in
+asynchronous mode and you have to check
+before you can go onto that next step
+which kind of brings us back to the
+question from the floor here earlier
+that you know there's a lot of code out
+there written to use the output streams
+one of which is butts a gzip filter so
+you quite often will put a filter in
+your server to intercept all the output
+you're writing put it into a buffer at
+time you commit you'll compress that
+buffer then compress everything else
+with gzip and send it out and that
+filter is pretty much unaware of what's
+downstream generating your content and
+you know up to 3.1 it was always
+blocking but now all of a sudden the
+downstream content can turn you into
+asynchronous mode and now that output
+stream can't do two writes in a row
+without calling is really in between and
+so this typical code here that you'd
+find in a gzip filter is going to say oh
+my buffers overflowed I'm going to gzip
+and write the content in my buffer then
+I'm going to gzip and write what was
+just passed to me oh it's a great big
+buffer I'm gonna gzip 16 K at a time and
+write write write write write so code
+that does that has broken the rule we
+just established that you must call is
+really between each write so it looks
+like a stream it quacks like a stream
+but it's no longer a stream almost back
+to the wild metaphor there sea animal so
+basically what this means is once you go
+into the asynchronous world you're kind
+of you're in the asynchronous world you
+know it's very hard you just no going
+back
+you can't mix and match with a blocking
+code even though you're using the same
+output stream luckily um jetty provides
+an ASIC gzip filter so it does work not
+using these API is using private stuff
+and I think you'll find most containers
+I'm moving moving gzip inside the
+container because of these sort of
+complexities it was never very pretty
+anyway and there's no shortcuts
+you think oh well I'm not allowed to
+my h1 and right my hello world without
+an Israeli in between oh I'll just you
+know do this sold say is really right is
+ready right it doesn't work again if the
+the first one fails to right then you
+will schedule Israeli returns false you
+will schedule I'm sorry
+start again if the second is ready here
+returns false
+you will schedule a callback back to
+this on right possible method again so
+you'll write that first line again so
+there are no shortcuts is really is a
+scheduling method if you're using is
+ready you have to be prepared that a
+false return means a scheduled call back
+and you have to treat it as such and so
+you have to structure your code as a
+proper asynchronous call back and don't
+take any shortcuts here and to continue
+the you know mixed metaphors they can
+only be one mode once your asynchronous
+you're really asynchronous and there's a
+lot of calls in the civil API which are
+really tempting to to use in
+asynchronous mode that are just going to
+cause you all manner of grief so if
+you're in your a synchronous call back
+on the right possible and something goes
+wrong I mean here's a exception thrown
+from something else is like I don't
+handle this exception asynchronously
+I'll just end era
+I'll just call send era well
+unfortunately in servlets you know send
+era is probably implement implemented
+with blocking output in the container
+and if it's not implement with blocking
+output in the container
+it could be mapped to an error page
+which could go god knows where to be
+some implementation which is gonna you
+know do blocking output and your an
+asynchronous mode so it's broken and
+there's lots of methods that are going
+to catch you out this way if you're
+doing asynchronous input you'd really
+like to know the query parameters well
+you just say call get parameter visit
+it's going to try and consume the input
+with a blocking API but you're trying to
+read um asynchronously so you have to
+decode the query strings yourself in get
+query and the same thing with get part
+it's a blocking API you know if
+someone's sending your multi-part
+content there's a nice new API for it
+could get
+it's a blocking API so you can't mix and
+match asynchronous with these sort of
+methods now there might be some things
+we can do to clean it up but basically
+it's it's you're really in a two world
+proposition that you've got these
+methods that were designed for blocking
+and we've got a new set of methods that
+are designed for asynchronous and that
+once you change modes you've mostly
+changed modes hopefully we'll be able
+multi-person purpose more and more yes
+you can't you switching into
+asynchronous mode is independently for
+the Unruh reads and the writes and you
+might make the decision separately
+depending on where your content is and
+stuff like that so we'll get to the
+input side soon halfway through all your
+buffers are belong to your us this is
+there is a contract in the the right
+methods now because it's an asynchronous
+method when you call it you're actually
+passing temporary ownership of those
+buffers this code here is an attempt to
+you know if when you start thinking
+asynchronously you start thinking are
+while I'm waiting for my my last output
+call to complete it's anything I can do
+usefully oh what am I um
+read the file now and prepare it ahead
+of time so when I eventually get called
+back or when I am is ready I've already
+read the file into a buff I can write it
+straight away you know why am I waiting
+for my output to be ready to do my input
+so you this code here we've in the while
+loop we're doing a file read to get the
+next content but unfortunately once we
+caught that write and pass that buffer
+across that byte array now belongs to
+jetty well yeah we've got that in our
+queue of things that we're going to deal
+with and if you go start putting the
+next write into it you'll mess up all
+your stuff now I think you can get away
+with us in some containers that that
+will quickly copy within the scope of
+the call the the byte array that you
+passed them but if you pass them a you
+know 10 megabyte array and they have to
+copy it before they return hardly
+asynchronous so you you're burning a lot
+of CPU for no good reason there so your
+buffer management is
+is an issue and the other big pity is
+that you can't use bytebuffer you are
+we're using the output stream api's
+which are strings and byte arrays and
+this may be really great code to write
+here because byte buffers can be not
+just slabs of memory in this case here
+I've got a memory map file so I can have
+a 10 gig file memory map it into a byte
+buffer without using any user space and
+if I could just a synchronously write
+that as in that method down there then I
+would use no userspace CPU no user space
+memory the 10 gig buffer would be
+flushed by jetty asynchronously it would
+call me back when it was finished and
+he'd get really fast static content that
+way unfortunately that was deemed as M
+file semantics and for some reason we
+were told that we didn't need sinful
+semantics in the servlet which I didn't
+never actually got why we didn't need it
+so in jetty you can do it you just have
+to downcast the output stream so a jetty
+a tidge to the output stream and there's
+writes that take byte buffers there
+which it is really useful for keeping
+your state as well because if you have
+to track where you're up to you got
+positions and limits and things to work
+with them ok so are there was only six
+minutes of gotchas which i rushed
+through quite quickly
+so there's a lot of subtleties about how
+you use this API but there are some
+real-world uses of this API that I want
+to now highlight because you know it's
+not a bad story this is a very key API
+here that I think is going to enable a
+lot of them different behaviors so the
+very first one that we were actually
+wrote for a real client was a data rate
+limited servlet they had am need to send
+files big files but they wanted to write
+out slowly this one happened to be for a
+online trading company whose every
+nanosecond of their trading traffic was
+really important
+and they didn't big files taking their
+network capacity but the same thing
+might be if you your streaming video and
+there's no point sending video faster
+than a user can watch it because they
+might stop five minutes into a two-hour
+show and there's no point sending two
+hours the video down so you want to send
+it out at a slow pace without holding up
+resources on the server so this is a
+modification of the on write possible
+callback that we saw in that file server
+that easy earlier that paces out how it
+writes the content so we're no longer
+iterative here because we're going to do
+a little pause in between each of our
+loops instead of the while loop instead
+of saying wild is ready we just say if
+is ready if we're ready we read a buffer
+of data out of the file and we probably
+should do that asynchronous lengthen and
+then we write it out then instead of
+calling in is ready and I can't call is
+ready because it's a scheduling decision
+I defer the calling of is ready by using
+a scheduled call back here and I
+schedule for a pause which could be
+calculated on your data rate in terms of
+how much data you just wrote and that
+gives me a call back when that timeout
+has expired when that time had expired
+at the very bottom there and that run
+method what we do is we just call on
+write possible back and the first thing
+that on write possible does is call if
+is ready so if during that pause the
+write had completed then if is ready
+will be complete will go in will read
+the next buffer writer if during the
+pause that we were doing to limit our
+data rate the previous write still
+hasn't completed because it was really
+really big all the networks really
+really slow then when we the timeout
+expires we call on write possible it
+does if is ready false is returned and
+we do nothing but because is ready
+return false we are now scheduled and so
+on right possible will now get called
+back to complete our writing and so the
+mentality you've got to think of
+about is when do I call is ready so it
+kind of like inverts is like when you
+you know we're thinking I want to slow
+out how I'm gonna write my data you know
+you you first thought is oh how do I
+control what I call right and there's no
+you don't want to schedule when I call
+right you want to schedule when you call
+is ready so it's a little inversion
+there yeah okay so we've got that one
+and these sort of all these servers
+listed here are in a standard jetty
+release this sort of utility ones most
+of them have been developed for clients
+in some specific form but we put a
+fairly generic version of them in our
+releases so you can get them down and
+play with them so the next - they're our
+async proxy servlet and now a fast CGI
+servlet they're going to need the other
+side of the equation as well as in
+output they're going to need
+asynchronous input so I'm going to show
+you the asynchronous input API now it's
+pretty much the same thing it extends
+the input stream we're adding in our
+listener our read Lister now which is
+again set on the stream not on each
+operation we schedule we have the the
+same is ready behavior and instead of
+saying on write possible we get callback
+with on data available we're saying that
+if you do a read it will return some
+data because with there is data
+available to be read but as well as
+delivering data to you and a synchronous
+input stream can return in the file to
+you and so therefore we've got another
+pair of methods of on all data read can
+be called to tell you oh my you know any
+files just arrived and you can also
+query is finished which luckily is not
+active doesn't matter if is finished
+returns true or false there's no extra
+you're finished nothing else is coming
+coming back so let's have a quick look
+of how this works here's our a secret
+synchronous proxy server
+servelet cut down this is the
+streamreader this is the part of the
+proxy which is responsible for taking
+input from a HTTP request and writing it
+out to our proxy server further along
+which could be fast CGI or HTTP what
+we're using to talk to the server so
+we're again with iterative we got the
+while loop in that callback so we're
+getting that nice fast iterative
+behavior and we're iterative on while
+input is ready but we also have to text
+that not input is finished and the
+reason we're going to do both of them
+here is because even though we're at end
+of file input is ready returns true and
+input is really returns true in the file
+because of it return false it's telling
+you that it's going to call you back to
+say on data available and there is no
+one data available because you're a
+tender file so there's a little little
+trick there that you've got to realize
+that it is finished is there for a
+reason and again you have to call it in
+that order if you called it in a
+slightly different order you get
+problems so this is a little mantra
+you'll get while you're consuming input
+and once we've read the input we're
+writing it out without our proxy
+obstruction in in jetty which is a
+callback style abstraction so it's this
+stream reader is also one of our
+callbacks and we pass this pointer to it
+when that writers has completed so once
+we do that right we haven't called is
+ready yet we wait for the call back from
+the asynchronous proxy which calls
+succeeded which then calls on data
+available which while it's already not
+finished reads some more input from the
+request and writes it out to the proxy
+so this is you know a great way for an S
+synchronous proxy except for it's got a
+bug and this was great preparing this
+talk because I found this bug the
+problem is is that on their available
+calls proxy right
+which has a callback to we've succeeded
+which calls on that available which
+calls proxy right which calls the
+callback that that is succeeded and we
+can get into our stack overflow
+situation again here if our output is
+nice and quick and we can iterate around
+and around and around around so this is
+the challenge of using the asynchronous
+server IO is that you're always marrying
+up with another asynchronous tango
+partner as we saw before and the
+abstraction of the other techno
+tango partner might not be the same or
+almost certainly it's not the same
+abstraction that you've got and you have
+to marry the two asynchronous
+abstractions together so the fix for
+this particular stack overflow is we
+used in jetty am pattern we use
+intensively when our own asynchronous
+i/o layer which is an iterative callback
+pattern so we wrap our callbacks in a
+little asynchronous state machine that
+manages the race condition that's
+inherent when you have two asynchronous
+API is talking to you in this case
+you're racing between an end-of-file
+that might come from your your your
+request the stream and write completions
+of data that you're sending out to your
+proxy so you've got two sources of
+asynchronous events you naturally have a
+race condition and so this complicated
+little state machine which I was going
+to use as an example of how complex you
+can get but I decided it's too complex
+for a presentation I won't talk you
+through this is basically we do a lot of
+our non blocking asynchronous state
+machines in jetty and we use atomic
+references to enumerations do a little
+stack machines and so pattern we see
+again and again and again and what I'm
+going to say to you here is that if
+you're doing asynchronous work and you
+don't end up with a little state machine
+somewhere that you've gone to a lot of
+effort to make it atomic and fight the
+races that are coming from two
+directions then you've almost certainly
+got a bug because it always takes two to
+tango where think of Smitty you're
+always dealing with the
+asynchronous from the servlets and the
+synchronous honest from whatever you're
+dealing with and things can race each
+other then and when they're racing each
+other and then they might not race in
+the normal case but they're probably
+going to race in the error case of a
+timeout case or the failure case you've
+got a race and if you don't have a
+little atomic state machine and by all
+means go synchronous synchronized if you
+want to then you've probably got a
+problem so here's an example of how
+complex it is and how to deal with it
+you have to UM use a little state
+machine this is a asynchronous eco
+servlet so this is not dealing with any
+silly API that Geddy's done this is just
+taking the async server
+input API and echoing any data it reads
+to the output so it's just bout to get
+it out reading in writing it out same
+style same flavor of this synchronous
+API how hard can it be
+well well for a start I noticed a bug
+well it's not a bug it's a silly thing
+that red underline bit there where I
+allocate the bot the buffer outside of
+the callback well that's a problem in
+asynchronous if you're allocating the
+buffer for the whole length then you're
+not really freeing the resources are you
+while you're waiting for the callbacks
+so you really shouldn't hold buffers
+long like that you so this this example
+actually should be more complex because
+in each of the callbacks I should be
+doing buffer allocation and nothing
+freeing probably using a buffer pool but
+let's just ignore the red line bit which
+I noticed a couple of hours ago so this
+this echo server there's actually two
+pages of dense code just to bounce
+characters back and forwards and it has
+this atomic state machine in there which
+in this case can be captured by just an
+atomic boolean and the race that it's
+dealing with here as we're echoing out
+has to be input to our HTTP output is
+that we can get an on all data read
+callback is racing the completion of the
+last write that we did we've just
+written something it didn't complete it
+might come back
+and say Oh the Wrights completed or the
+end of file might come and so you've got
+two callbacks inbound and when both of
+those callbacks have happened someone
+has to say async context complete we're
+finished we're done and you want the
+last of those two to do it so in this
+case we just have it use a atomic
+boolean to work out who's the last one
+in so here's the all data red callback
+happening here and if the outputs ready
+and we do a compare and set is it us
+that's moved us and complete from false
+to true then we call context complete
+and that's racing against the on right
+possible callback which basically has
+that same test in there so I don't
+expect you in the context of this sort
+of presentation to understand the
+details of the code here but basically
+if you're sitting there writing
+asynchronous
+server code and say oh geez I'm gonna
+need a state machine here and geez
+that's a bit complex well you're not
+wrong you're gonna need a state machine
+it's gonna be a little complex it's just
+it's the nature of the beast so and just
+to show you these two pages of code
+whoops that page and that page plus the
+buffer handling that I forgot to put in
+there could be replaced by a blocking
+servlet that does that's the same code
+blocking so you know while I love
+asynchronous you know blocking has its
+place it's it's a very powerful
+abstraction the fact that it can take
+all those events and get it the answer
+here it shows you that you know I don't
+mean to dis blocking it has its place so
+you is all that complexity worth it
+unfortunately yes in the right
+application you're going to get better
+scaling you need to get our lower
+latencies if you go to asynchronous so I
+now have some demos which I got caught
+out by the the local network here which
+has broken my demo it's a bleeding edge
+demo of actually be to and serve the
+async i/o so I'm gonna use my mobile
+phone
+network back to Australia to do the demo
+this is going to cost me a fortune see
+what I did for you guys I'll book a few
+yeah
+then look I charge me of like held
+connections so let's hope this works
+I've got Stan back there now if this one
+this one fails so I need it's is that
+talking - no that's the wrong one I need
+to talk to talk to my phone ok this is
+her endless demo here
+where's my phone go on okay so while I'm
+fighting madly to get this demo working
+what we're going to show you here is oh
+okay and I'll help what I'm going to
+show you here is that interaction
+diagram I showed you earlier on in the
+presentation we're going to talk to the
+live website comm server which has been
+talking HTTP 2 for the last month or so
+and it's going to do an asynchronous
+proxy to a wordpress instance and here
+we go and we're going to see the
+difference that asynchronous makes oh
+there's my phone turn it
+this is so not gonna work well we'll see
+okay so complicated this extra degree of
+difficulty I'm running Firefox nightly
+and it updated last night don't update
+your software before you get online but
+it was working this morning so here we
+go here we are we're looking at the web
+type website it's a job a website
+running jetty strangely enough talking a
+nascent proxy to a wordpress
+implementation and currently I've got if
+I look at my about config page here I
+hopefully I have all the speedy stuff
+turned off in Firefox HTTP 2 is HB 2
+draft is seen as a speedy implementation
+as a version of speedy so if I now make
+sure my caches are empty blow away
+everything the next page I'm going to go
+to has an image on it and the image is
+made up like 50 little tiles of images
+and what this is is mimicking is the
+fact that the average web page has 80
+resources associated with it style
+sheets and images and JavaScript and
+stuff like that but you can't see those
+loading all the time well he can to go
+to a newspaper website you see that
+article you want to read and you're
+better click on it something moves down
+as another head pops in that's what
+we're going to see here so if it doesn't
+work you all know what I'm talking about
+so here I am getting this image ah
+you're joking let's go back here I've
+got Wi-Fi hello
+ah I'm sorry guys I'll just restart
+close tabs I'll look them they're
+running out in droves and nightly I got
+Wi-Fi
+I've got bars
+anyway web time.com now I can trigger
+sentiment glasses on h-2b to tests ah
+sorry guys
+um what's going on here oh no demo the
+but the experience that we um I've got
+an interaction diagram another one to
+show you what the demo was going to show
+you the the experience and it's all this
+is live so I encourage you to download
+Firefox nightly and hit web tied calm I
+here with is a URL here they should be
+two tests push and what you want to do
+is turn off all the speedy stuff and you
+hit the page and you see that experience
+I was telling you about when you you see
+the images come up book the book book
+book and that's the round trips going
+doesn't matter how fast your network is
+the round trips just take time you're
+gonna get six resources at a time you
+turn on HT be to push and you get a
+different experience so so yeah and the
+blocking experience what happens is on
+now the client sends a get four index
+that HTML to jetty it then proxies that
+across to WordPress which then streams
+it out as bits of index dot HTML comes
+out in multiple bits and we flow that
+out and as the browser gets the first
+part of index dot HTML seasoned the
+header of the HTML that this goes style
+sheet so it's a Saab Viggen style sheet
+so it sends off the request to get the
+style sheet hits Jady Jady passes it on
+to wordpress wordpress finds the style
+sheet and it's static content somewhere
+and sends it all on that and the
+stylesheet eventually hits the m client
+the client then looks inside the
+stylesheet parses it and says that it
+needs an image better go get the image
+so it sends a get the the image that the
+stylesheet needs and gets proxy down and
+backwards and forwards and this is the
+critical path that display this page if
+we go actually be to an asynchronous
+we're running out of time here we get
+the index we go asynchronous we got CPU
+despair we set it off
+Jenny's smart it's h-2b - it knows it
+can push the these style sheets and
+logos which is learnt by looking at
+referrer headers that they're associated
+so it's similar honestly does a push out
+to the client and sends off an
+asynchronous get to the WordPress
+instance so now instead of having one
+request outstanding to WordPress we've
+got three outstanding requests to it
+index stylesheet and logo dot PNG these
+can all happen in parallel and they can
+overtake each other it don't have to
+finish it in order I've showing them
+finishing in order to here just because
+I can't draw any better than this but
+they all come back bit by bit and as
+they get proxy back asynchronously to
+the UM client eventually when the last
+of them gets there that page is now
+ready to render the critical path to
+render this page is not three
+round-trips
+it's one round-trip and this is done
+because this is possible because jetty
+can use asynchronous rest api's
+asynchronous servlet api and a
+synchronous i/o api's to send all the
+data backwards and forwards and so even
+if your website's not going to scale to
+a hundred thousand requests a second and
+a million you know connected users even
+if you only get one request a day if you
+can serve it like this it might get
+there fast enough that you make that
+person to a client and you get your
+increased return so it's this is
+applicable to people who want good
+quality of service as well as people who
+want great scale so it's actually a
+widely available
+you know applicable technique it just
+happens to be a little complex and you
+got to be a little bit careful doing it
+and hopefully all of you guys are
+framemaker do a frame work developers
+rather than application developers and
+you'll think of clever ways of doing
+this for the application developers how
+many application developers helped me
+from framework developers application
+developers framework developers okay
+thank you very much like I don't think
+we have much run time for questions but
+I'll be outside for any questions if
+anyone has them all
+any question</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

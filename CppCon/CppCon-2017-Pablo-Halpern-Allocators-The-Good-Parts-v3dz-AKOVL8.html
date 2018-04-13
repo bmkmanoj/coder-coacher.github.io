@@ -1,0 +1,1844 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Pablo Halpern “Allocators: The Good Parts” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Pablo Halpern “Allocators: The Good Parts” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Pablo Halpern “Allocators: The Good Parts”</b></h2><h5 class="post__date">2017-10-30</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/v3dz-AKOVL8" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">Thank you for coming.
+I think this looks like
+the society of introverts.
+Everybody is spread out.
+This giant room, and you got
+little clusters of people.
+When I first presented
+this talk to my colleagues,
+I was basically rehearsing for them,
+and I put up this title slide.
+The first comment that came out was,
+&quot;So you're presuming that
+there are good parts?&quot;
+So the reviews are not good.
+These are actual codes
+from prominent people
+in the C++ community.
+It's now accepted by the C++ community
+that allocators are fairly useless.
+They are painful to work with.
+Next.
+There we go.
+All right.
+This one is my favorite from Scott Meyers.
+&quot;The standard, the committee
+&quot;has emasculated allocators as objects.&quot;
+Now I don't know about you
+but when I hear the word emasculated,
+those are kind of frightening words.
+&quot;One of the most mysterious parts
+&quot;of the standard library.&quot;
+And my favorite if it ever comes up,
+&quot;A major contributor to climate change.&quot;
+So here is my thesis.
+With some guidance and with
+borrowing some features
+from C++17, we can make
+allocators both useful and usable.
+So we're gonna be talking
+about these things today.
+Really, why allocators exist
+going down through actual
+kind of semi-tutorial,
+and how to write an allocator,
+and how to write a container
+that uses allocators.
+So let's start with the why.
+This is a, I think, the.
+I forgot what the count was,
+at 236th talk on allocators
+at this conference, something like that.
+It seems to have become a
+theme in the conference,
+and it was not coordinated.
+Unfortunately, we should have coordinated.
+We have less overlaps.
+So all of us say, &quot;Why
+do you want allocators?&quot;
+So here is an analogy
+why we want allocators.
+When you are checking out from a website
+like, say, Amazon in this case,
+and you want to pay for the purchase,
+you have to tell it how you want to pay,
+what credit card you're gonna
+use or debit card or what-not.
+And there may be a default
+but you get to choose your own.
+To the vendor, it doesn't matter, right?
+Money is just money.
+They're gonna get their money.
+They don't care.
+But to you, it may matter
+because one card may have rewards points,
+another card may be for
+your business purchases,
+one for your personal purchases,
+one that you don't want
+your spouse to know about.
+So the credit card is kind
+of a customization point.
+It lets the purchaser
+customize the transaction
+most of the transaction is
+taking place on that side
+but there is this little piece
+that you say, &quot;Call me back.
+&quot;Get the money out of here.
+&quot;Allocate the money from here.&quot;
+So allocating memory is kinda like that.
+The container doesn't care
+where the memory comes from,
+it just says, &quot;I want a source of memory.&quot;
+But the user might want some control,
+and why would the user want control?
+There is a bunch of things here,
+and this is a very incomplete list
+but it could be that you
+have an allocation pattern
+specific to your use.
+You know that things
+are gonna be allocated
+in certain clusters and things like that.
+You may want to keep similar
+things together in memory
+for locality purposes.
+Special purpose memory, this
+is becoming bigger and bigger.
+Persistent memory, high-bandwidth memory,
+things that may be either limited
+or have very special characteristics.
+Thread locality, so if you know
+that your whole application
+is running in one thread,
+or you know that all of the allocations
+and deallocations are gonna
+come from the same thread,
+you'll save overhead by using
+a thread local allocator.
+And then one we'll be
+talking about more today,
+statistics gathering, and other
+kinds of instrumentations.
+You know what's happening
+with your memory.
+The core functionality
+of an allocator though
+is simply to allocate
+and deallocate memory.
+Give me some memory.
+Here is the memory back.
+And of course, if you
+don't give the memory back,
+you're not being a very good citizen
+although there are situations
+where it doesn't really matter.
+So C++ takes this core functionality,
+and then we add layers of
+complexity to it, okay?
+So I should introduce myself.
+Until we get to this point,
+I was kinda hesitant to introduce myself.
+I am responsible for a
+lot of the allocator stuff
+in the standard.
+But only the good parts, okay?
+The stuff that was written in
+1998, that was before my time.
+So the complexity.
+Unfortunately, I am responsible
+for some of the complexity.
+In fact, a lot of the complexity.
+My name is Pablo Halpern.
+I work at Intel,
+and before that, I worked at Bloomberg.
+And at Bloomberg, we had a lot of need
+for using special purpose allocators,
+and that is where a lot
+of the work got done.
+It ended up getting
+proposed into the standard
+and eventually adopted.
+We didn't really finished
+the job until C++17.
+In C++17, I can finally say
+allocators actually have good parts.
+So if the purpose of an allocator
+is simply to allocate
+and deallocate memory,
+then where does all this
+complexity come from?
+It started at the very beginning in 1998
+when this first standard was created.
+The allocators were invented to solve
+a very different kind of
+problem than we have today,
+mostly near and far pointers with the x86,
+the 8086 memory model.
+It did have aspirations
+to being a more general
+customization point
+but it didn't really fulfill those,
+and we kind of ran out
+of time to make it good.
+So we made a bunch of
+improvements in C++11,
+and had to add a bunch more complexity
+in order to keep backwards compatibility
+with what we had
+standardized in 98 and 03.
+One of the problems, one of
+the pieces of complexity comes
+is the fact that it is
+a template argument.
+The allocators are template
+arguments to your containers.
+If you want to be able to take a vector
+using any kind of allocator,
+it means that your code
+has now to be a template
+because the allocator
+is a template argument.
+To some extent, there was
+too much generalization,
+and I am partially responsible for that.
+Too much generalization, trying
+to please too many people.
+In my defense, I'll say it's possible
+we would not have gotten
+the improvements had I not,
+if I'd pleased enough people,
+so take that for what it's worth.
+But today,
+we're gonna try and get
+past all that complexity.
+So in C++11, we made it
+easier to create allocators
+but we made it harder
+to implement containers
+that use allocators.
+When I say we, I mean I
+but not really just me.
+There are other people who
+are complicit, (laughs)
+I should say.
+All right.
+So the STL containers always
+talk to the allocators
+through this allocator traits.
+So we added this layer
+of template indirection.
+It's not runtime indirection
+but it's template indirection
+in order to get all the features
+that we wanted in C++11 but
+still have C++03 allocators
+work in the new model.
+And we added all this flexibility
+for whether allocators
+propagate when you copy it,
+and object move an object, and so on.
+There are a lot of typedefs.
+There is this rebind template
+that was invented in '98,
+and we had to sort of
+keep some semblance of it
+in 2000-plus, in 2011.
+There is this generalized pointer model
+that lets you create these fancy pointers.
+It can be very useful when you need it,
+and they're totally in
+the way when you don't.
+The allocator type is a policy argument
+to every container that uses it.
+And then we have this allocator traits
+adding one more layer.
+So my thesis is that we're
+going to limit ourselves
+to a subset of this.
+Certain allocators and
+certain allocator usages
+will not work with what
+I'm about to talk about
+but the lion's share work
+that I've experienced at Bloomberg
+using this model is that it
+works for a lot of things,
+and you get a lot of benefit out of it.
+Here is the mess we inherited.
+This has to do with the way
+allocators are propagated
+when you copy an object,
+copy a certain object.
+So I'll walk you through
+this code a little bit.
+(sighs)
+I don't know where to put
+my laser pointer here.
+Oh it's there.
+Okay.
+So this first line declares
+this custom stream class
+whose allocator is this custom allocator.
+Now the custom string is just a.
+Oh this is a typo.
+This should be basic string.
+I'm sorry.
+So it takes basic string,
+and it says basic string with char,
+and this char traits is one
+of the most useless things
+we ever added to the standard,
+and then the allocator, which
+is at least at one time,
+considered the second most useless thing
+that we added to the standard.
+In order to specify the
+allocator for string,
+I have to go all the way
+back to basic string,
+and give it all the template arguments.
+And then I have my custom allocator,
+which I don't describe on this slide,
+but just is kind of custom
+allocator type template.
+And we create three allocators,
+and you don't need to care too much
+about what the constructor
+arguments are here
+except to know that
+they're clearly different,
+three different instances of
+the same type of allocator.
+So when you're talking about templates,
+it's just that be really careful
+about when we're talking
+about types and instances.
+So these are three
+instances of the same type.
+And then we create three custom strings,
+one using each of the
+three custom allocators.
+All good so far?
+And now finally we create a
+vector containing these strings.
+Now the first thing we want
+to do is push a string back.
+And when we do that,
+the string gets created
+with the same allocator
+as where it came from,
+so x1 has alloc1, therefore, a copy of x1
+ends up in our container
+using allocating memory from alloc1.
+Good so far?
+Same thing if we do
+another push back with x2,
+which is allocator two.
+Now things get interesting.
+After this first, we're
+gonna reserve some space,
+and then we're going to
+insert at the very beginning
+of the container another string
+using a different allocator.
+First thing that happens
+is that we have to make room for it,
+so copy constructs the second
+element into the third slot,
+and it uses the same allocator,
+then a copy constructs,
+I'm sorry, then it assigns
+the first element into the second slot.
+Ooh.
+Something interesting just happened here.
+The assignment did not use,
+did not move the allocator.
+That's because assignment
+never does, and never should.
+Hmm interesting.
+So now we have a copy of x1.
+We have two copies of x1,
+one that uses allocator one for its memory
+and other that uses
+allocator two for its memory.
+And then finally we assign
+x3 into that first slot,
+and its allocator is nowhere to be found
+because assignment, again,
+does not move the allocator.
+So I know this is a fairly subtle point,
+and it's not something we
+really need to dwell on,
+but if you're like me,
+this is what you think
+when you see this diagram.
+It's like, &quot;Could this possibly
+have been intentional?&quot;
+My answer has got to be no.
+We didn't deliberately set out
+to create this kind of mess.
+What we really would like
+is something more like this.
+This is the scoped allocator model
+where the same allocator
+is used for the container,
+and then is passed down
+into all of the elements
+that are inserted into that container.
+Hopefully all the way down recursively
+through anything that uses allocators.
+So this is kind of our ideal set up
+if we have our container.
+It has an allocator.
+All the memory from the container
+comes from the allocator,
+and all of the memory for the
+strings within that container
+come from that same allocator.
+This is the scoped model.
+It's kind of our ideal.
+In C++11, we added the
+scoped allocator adaptor,
+which makes this possible.
+You wrap your allocator in this adaptor,
+and now so long as everything
+uses the same type of
+allocator going down,
+it will pass the allocator down.
+In C++17, we added polymorphic allocator,
+which not only makes it possible
+but actually makes it easy to do this.
+So let's look at the simple model,
+and set aside all that
+complexity for the moment.
+The model that we introduced in C++17
+is this polymorphic memory resource.
+It's a new namespace, pmr,
+and it has in it the memory resource type,
+which is a base class,
+for creating your own memory resources.
+And then there is a polymorphic allocator,
+which is simply a wrapper
+around the pointer
+to the memory resource.
+It is an allocator in the
+full C++03 sense of the word,
+so it plays nicely with vector and string
+and anything else in the
+standard and outside the standard
+that uses the existing allocator model.
+Then we also have a vector
+in that pmr namespace,
+which is just an alias
+for the existing vector
+but where we hard-code
+the polymorphic allocator
+as the allocator type.
+So that makes it really
+easy to create a vector
+using a polymorphic allocator.
+You don't have to wait for C++17
+'cause the same thing is true
+for the other containers, by the way.
+You don't have to wait for
+C++17 to get these features.
+There is a link here to my GitHub
+where I have C++11 implementation
+of all of these features,
+so I welcome you to go there.
+It's using the Boost License,
+so you're free to use it.
+Let's dive in a little bit
+into the different classes
+that I just mentioned.
+Polymorphic memory resources,
+this is a base class.
+Like I said, it is a
+pure abstract base class
+that has, as its core,
+these three functions:
+allocate, deallocate, and is_equal,
+allocate and deallocate
+obviously being the main
+business end of the thing.
+is_equal is a special thing that we needed
+just to make everything stick together.
+These functions are not virtual functions
+but they delegate to virtual functions
+in the protected space.
+There is a do_allocate,
+do_deallocate, and do_is_equal,
+and those are the things you override
+when you derive from this class.
+That's kind of a pattern that
+shows up in the standard.
+Stringbuf uses the same pattern,
+these protected virtual functions.
+I won't get into why we do it that way.
+I don't say I completely
+agree with the pattern
+but it is a pattern.
+Polymorphic allocator is
+this wrapper I mentioned
+around the memory resource.
+So let's take a look for a
+minute at the constructors.
+The default constructor uses
+the default memory resource.
+I haven't mentioned that yet,
+the default memory resource.
+You have a potentially open-ended set
+of possible memory resource types
+derived from the memory
+resource base class,
+but there are a few that are provided
+by the implementation, by the standard
+including one that simply
+uses new and delete
+as a way of getting memory,
+and that one is, by default, the default.
+What I mean by that
+is that you can actually
+change the default.
+You can set it
+but you usually don't.
+So if you don't do anything special,
+then the polymorphic
+allocator with no arguments
+in the constructor will get
+the new and delete allocator,
+which is pretty much what most
+people I think would expect.
+And then the second one is
+a conversion constructor
+from the memory resource pointer.
+Notice that it's not explicit.
+It can be used for implicit conversions,
+and we take advantage of
+that a lot as we'll see
+when we actually get to the use cases.
+That's it for our important constructors.
+Now it's got copy constructor
+and move constructor
+and assign and so on, and those
+things are just defaulted.
+Resource is an accessor that
+simply returns the resource
+that you passed in or
+that you got by default
+when you constructed the
+polymorphic allocator.
+And then you've got the important things
+that make this an allocator, an allocate.
+Oops.
+Wrong button.
+An allocate and a deallocate function,
+and these signatures note
+return T's, T's, or Tp's in this case.
+They return the type that the
+allocator is instantiated on.
+Now I'll contrast that
+to our memory resource,
+which the allocate and
+deallocate functions, notice,
+return generic pointers,
+or work with generic pointers, void stars.
+So these just allocate bytes,
+aligned correctly because you
+have an alignment argument
+but it's just bytes whereas
+the C++98 model, the.
+(mumbles)
+Return these T stars,
+and that's actually part of
+the problem in their usability
+because you almost never
+need a T star, almost never.
+What you need is something like a node
+that you're constructing.
+So this actually just
+kinda gets in the way,
+and then you have to rebind
+the allocator, and it's a mess.
+Just raw byte is so much easier.
+So now I'm going to step aside
+away a little bit from
+the actual standard,
+and say, &quot;This is something
+I'm encouraging you
+&quot;as an idiomatic thing,
+&quot;and something that we're actually looking
+&quot;to quasi-standardize,&quot;
+and I say quasi-standardize
+because the standard
+cannot standardize idioms
+but we can make it easier
+for idioms to be used,
+so there are proposals from me
+from making this a
+little bit easier to use,
+but it's pretty darn usable already.
+Polymorphic allocator of byte.
+First of all, what's byte?
+Byte is a C++17 type that
+it represents a byte.
+Got it?
+Good.
+If you use that as kind of
+your one true allocator type,
+then you have a vocabulary type.
+You have an easy way of
+passing allocators around
+without using templates, and
+it does everything you need.
+You allocate bytes out of it,
+you return your bytes to it.
+Easy.
+It's a scoped allocator,
+so that diagram I showed of
+the vector containing strings,
+where everything is coming
+out of one allocator,
+this makes it really easy to use.
+You just pass this string through,
+direct byte allocation
+through the resource.
+It's a better than a raw
+pointer to a memory resource
+because it has a reasonable
+default initialization.
+So that's really helpful.
+If you put an allocator at
+the end of your argument list
+for your constructor,
+you can just default it
+to open-close curly, and you'll
+get some reasonable default
+whereas that's not true for a pointer.
+Pointers don't give you
+reasonable defaults,
+they give you null pointer,
+and null pointer is not a
+good memory resource pointer.
+It can't be reassigned by accident.
+Remember I said that once
+a container is constructed,
+you should never change
+the allocator in it.
+Well, if you accidentally allow
+the default assignment
+operator to get generated,
+you may end up with a serious bug,
+and something that you
+might not catch right away.
+That can't happen if you're using
+this polymorphic allocator.
+It doesn't have a public
+assignment operator,
+and it plays nicely with the
+rest of the standard library.
+It is an allocator.
+Whereas a memory resource
+is not an allocator,
+it's a resource, it's
+a thing that's expected
+not to be copied at all
+but it exists to giving
+and receive memory,
+and you pass a pointer
+around to the single object.
+By the way, the memory
+resource is really formalizing
+in the standard something
+that has always been true
+of stateful allocators.
+Allocators that contain state,
+they almost never contain anything
+other than a pointer to some thing
+that is shared among all
+of the equal allocators.
+So things have gotten a lot easier.
+In C++98 and 03, to use an
+allocator was pretty easy
+but you got this problem
+of the viral templates
+where if you want to be able to accept,
+say, a string taking in the allocator,
+instead of simply writing string,
+you have to write basic string char
+type traits char allocator char
+where the allocator is a
+template argument that comes in
+to your argument list.
+Creating an allocator, again, pretty easy.
+There is a lot of boilerplate
+you'd have to copy.
+If you get the rebind
+wrong, you're in trouble.
+People get the rebind wrong all the time
+because they try to inherit
+from instead the allocator.
+Really, really bad idea.
+Creating a scoped allocator,
+as far as I know, not possible.
+It just did not know
+how to fill facilities
+in the standard library to
+work with the scoped allocator.
+Creating a new allocator-aware
+container, hmm not too hard
+but you had to be careful.
+You have to worry about the rebind stuff.
+And in C++98 and C++03,
+the container could assume
+that all allocators compare equal,
+which means you couldn't really have state
+in your allocators, which
+really limited their usefulness.
+In C++11, we made some things easier,
+and some things harder.
+Creating an allocator has
+now become really easy.
+Basically you just have to
+write allocate and deallocate,
+and declare your value type.
+Creating a scoped allocator
+has become not only possible
+but really not too difficult
+because you simply use a
+scoped allocator adaptor.
+It's a big template but you
+just make a typedef for it,
+and you're all good.
+And creating a new
+allocator-aware container,
+well, we made that harder unfortunately
+'cause now you've got
+allocator traits to work with,
+and propagation traits.
+But then in C++17,
+which is available to you now
+with that GitHub repository,
+we made all of these things easy.
+Creating a new allocator is easy
+as just deriving a new memory resource.
+And a polymorphic allocator
+is always scoped for you.
+And the most important
+thing, which I'll point out,
+is the lower right corner.
+The allocator-aware containers
+can skip all of the complexity
+if you're willing to stick to the idiom,
+that polymorphic allocator byte
+is the be-all and end-all of allocators.
+So we're gonna get to that right now.
+Building a new memory resource.
+So we're gonna do two things,
+we're gonna build a new memory resource,
+which gives us the power of
+creating a new allocator,
+and then we're gonna build a container
+that uses polymorphic allocator,
+and we're gonna see how easy
+or difficult those things are.
+So the memory resource.
+Wait.
+Don't create a new memory
+resource necessarily
+because there are some in the standard.
+Now this is one place
+where I can give you only limited help,
+and the reason is that I don't have
+currently on my GitHub repository
+implementation of these things.
+They may be out there.
+I ran out of time to research them
+but these are what's in C++17.
+So new_delete, that is.
+That one is in fact in my implementation.
+It had to be.
+I needed a default.
+So it just allocates using
+operator new, nothing special.
+It's the default.
+The null_memory_resource throws
+when you try and allocate.
+How useful is that?
+Surprisingly, it's really useful,
+and the reason is, is that
+if you have any kind of arena
+or pool allocator that
+comes with its own memory,
+and when that memory is
+exhausted, it's supposed to throw
+rather than get more memory off the heat.
+These things, these other three resources
+all are chaining, which is to say
+they have an upstream memory resource
+that they get memory from
+when they run out of
+their own internal pool.
+And so, what do you chain when
+you have a fixed size buffer,
+and you want to make
+sure you never exceed it?
+Well, you chain it to
+the null memory resource,
+and then you'll get an exception
+if you actually exhaust
+your fixed size buffer.
+I'll talk about chaining
+when we actually implement our own here.
+All right.
+We start getting to the
+actual truly useful ones next,
+the synchronized_pool_resource.
+This allocates objects
+of similar size together
+into these fixed size pool,
+into these pools, not fixed size pools
+but pools of fixed size objects.
+It gives you good locality,
+and for most containers,
+you end up using just
+one or two pool sizes.
+So it's very efficient.
+It packs.
+There's very little
+fragmentation in memory
+when you use a pool.
+It's synchronized
+because it's thread-safe.
+Two containers using the same resource
+will not stomp on each other.
+The unsynchronized one
+is exactly the same thing
+but it's not thread-safe.
+That gives you some performance benefit
+'cause you don't have
+new text that's involved.
+And then the monotonic_buffer_resource
+that is also not thread-safe.
+This is a memory resource that
+the space it takes up grows
+in one direction.
+It doesn't shrink, which
+means that the deallocate
+is an empty function.
+It doesn't deallocate anything.
+Why is this useful?
+Because allocate is wicked fast.
+I'm from Massachusetts.
+I get to say wicked fast.
+So when you allocate memory,
+all it does is it moves a
+pointer down the buffer.
+That's it.
+It can't be any faster.
+There is one check
+to see if you've reached
+the end of the buffer,
+and if you need to get more.
+That's about it.
+It's extremely fast.
+The consequence though is
+that we're not keeping track
+of anything we've allocated,
+so we cannot deallocate
+something in the middle.
+Why is this useful?
+Because most of the time, what you do
+is you create a container,
+you build it up,
+and then you throw it away,
+so I would say that at least
+half the time with containers,
+you don't ever delete objects.
+You never remove an
+object from the container,
+you just build it up.
+You're creating a set of something,
+and when you're done,
+you just throw it away,
+in which case I don't care
+if you're gonna throw it away
+piece by piece.
+Actually I do care.
+I don't want you to throw
+away piece by piece.
+That's expensive.
+Throw it all away at once.
+In fact, maybe don't
+even call the destructor.
+If the only thing that the
+elements in the container
+are using is memory,
+then you don't need to call a destructor,
+simply throw the memory back,
+give the memory back to the global pool.
+The buffer resource, you
+give it a buffer initially,
+and that buffer could be on the stack,
+which is extremely efficient way to do it.
+Okay.
+But none of those meet our needs,
+so we're gonna write our
+own, and this is the purpose,
+the purpose of this
+allocator is for testing,
+so it is a test allocator
+or a test resource, sorry.
+So I'm gonna keep
+accidentally saying allocator
+when I mean resource.
+Just remember that the
+allocator is the handle
+to the resource, and so,
+when I'm saying allocator,
+I'm usually talking about the resource.
+The resource is what we're
+actually putting the effort into.
+The allocator comes for free.
+It is simply polymorphic allocator byte.
+So the purpose of our test allocator
+is to keep track of how
+much memory is allocated,
+deallocated, high-water marks,
+just basic statistics on memory usage.
+We check that every deallocation
+matches an allocation
+that will flag when for example
+we delete something twice,
+or we delete something
+from the wrong allocator.
+Check for memory leaks.
+So if the resource is going out of scope,
+and there's still memory
+allocated from it,
+it, first of all, reclaims it
+but also tells you that it's done so
+because you shouldn't
+typically be doing that.
+And again, the source
+is in the same places
+the other sources that
+we're talking about.
+So this is our test allocator.
+Good.
+Our interface.
+(clears throat)
+It's test resource.
+It derives from memory
+resource in the yellow there,
+publicly derived from it.
+It has a constructor.
+This slide is a little old.
+It says parent, the typical
+term that we use in the standard
+is upstream instead of parent.
+So there's upstream resource.
+So it's gonna get its memory
+from this resource that's provided,
+and by default, we get the
+default memory resource,
+which is this static function up here.
+Sorry, not static but yeah,
+namespace scoped function
+that returns the current
+default memory resource,
+which is usually the only
+default memory resource,
+which is the new_delete_resource.
+We don't care about the
+destructor too much.
+We have a function that returns the parent
+or the upstream resource.
+And then we've got our
+statistics functions,
+the number of bytes allocated
+and deallocated, and so on
+as you can see, and then these static,
+three static functions at the end
+are for tracking if memory has leaked.
+And the reason we do it that way
+is because the place
+where we discover leaks
+are in the destructor,
+and throwing an exception
+from the destructor is generally a no-no,
+and it's not just, in this case,
+it's actually not something we could do
+because even if we wanted to declare
+a throwing destructor, we can't
+because the base class does
+not have a throwing destructor,
+and the destructor is virtual.
+The protected section of our class
+has our three important overrides.
+Notice that we did not,
+in the public interface,
+have allocate, deallocate, and so on.
+Those are inherited from the base class.
+In the protected place,
+that's where we actually
+override the virtual functions,
+do_allocate, do_deallocate,
+and do_is_equal.
+In order to keep track of our allocations
+so that we can match the
+allocations to allocations,
+we have this simple record
+that records every allocation,
+the memory that was
+returned, the alignment,
+and the size of that
+block of allocated memory,
+so it can look for mismatch.
+And then our private data members.
+I can go into its implementation
+but basically we have to
+have a pointer to our parent
+or upstream resource,
+a bunch of things to
+keep track of statistics,
+and then this vector here of
+the blocks that we allocated,
+so it can keep track of
+everything that we allocated.
+Now I've seen this implemented
+where, on every allocation,
+there is this extra piece
+that is allocated at the front,
+and we keep the statistics
+for like a linked list
+of currently existing.
+That actually looks really efficient,
+and actually is really
+hard to write correctly.
+You get alignment stuff.
+And with things that have big alignments,
+you end up wasting a lot of memory.
+I think it's actually more efficient
+to keep a separate vector of those things.
+But it's certainly simpler.
+And notice that this is a pmr vector,
+so it is going to use
+this pmr, polymorphic allocator
+as its allocator type.
+You'll see that they'll be useful
+when we get to the constructors.
+Okay, and we've got some statics
+for keeping track of our leaks.
+Do_allocate function, finally
+we get to the business end
+of this thing, right?
+So far, it hasn't been too hard, right?
+It's pretty much straightforward.
+Now we're actually doing
+something interesting.
+First thing we do when
+asked to allocate memory
+is we allocate memory.
+Where do we get that memory from?
+We get the memory from
+our upstream resource.
+Obviously for an allocator
+that is using some special kind of memory,
+you're gonna have to do something special.
+That may be OS-specific,
+it may be specific to your
+environment, whatever.
+In this case, it's really easy
+because we're not actually
+doing the hard work
+of allocating memory,
+we're just delegating that
+through our upstream allocator.
+And then the rest of this
+is simply keeping track
+of what we've done, all right?
+We keep track of the record,
+how many bytes we allocated
+and what the return was,
+and we bump our counts.
+I'm not gonna spend a lot of time
+on the actual work that
+this thing is doing
+because it's not the point of the talk.
+But okay, we're pumping our counts,
+and then we return the
+memory that we allocated.
+Do_deallocate is pretty
+much the same in reverse.
+The only difference is we've
+got this big if statement
+in the middle where we
+are checking to make sure
+that everything is valid,
+that we're not deallocating something
+that we didn't allocate, or
+we're not trying to deallocate
+different number of bytes
+or different alignment
+than what we allocated.
+And then we return the memory
+to the upstream resource.
+And then get rid of the record
+that says this thing was allocated.
+It's no longer allocated, so it's gone.
+And update our statistics again.
+Good?
+Now one that people find a
+little confusing, is_equal.
+What does it mean for two
+memory resources to be equal?
+Typically they have to be the same type,
+and in most cases, they
+have to be the same object.
+What it means for them to be equal
+is that you can allocate bytes from one,
+and return them to the other one.
+And it's pretty rare
+that you could do that
+if they are separate objects.
+They have their own state.
+So in the case of this test allocator,
+you can't allocate from one
+and deallocate from a different one.
+They're keeping track of different lists
+of what are the valid allocations,
+and they may have different
+upstream allocators.
+The only way that could be equal
+is that they are the same object,
+which means their addresses are the same,
+and that's what this is doing.
+Most memory resources you
+write will have an is_equal,
+a do_is_equal that
+looks exactly like this.
+It just compares this
+pointer to the other one.
+You don't even care what derived class
+the other one comes from.
+The only way it could be
+possibly compare equal
+if it's the same object, which
+means it's the same type,
+so we don't have any
+dynamic cast, none of that,
+we're just looking at pointer equality.
+So if that's the case,
+why do we have an is_equal
+virtual function in the first place?
+There are exceptions,
+and the exceptions are important
+enough that we put this in,
+and I tried to avoid it but we couldn't.
+And specifically, there is an adaptor
+that says take any C++98 or 03 allocator,
+and make a polymorphic
+allocator out of it,
+make a polymorphic resource out of it,
+and the problem is if you take two,
+if you take the same allocator
+and you do that twice,
+you get two separate objects
+that really are equal to each other
+but they're different objects,
+and so, we couldn't just make this
+the default that always works
+but it almost always works.
+There is one other
+thing that you may write
+other than this, and that is return true.
+If your memory resource has
+no state for some reason
+like the new_delete allocator,
+then they always compare equal,
+so it simply return true.
+Let's summarize 'cause really, we're done.
+All the hard work is done.
+I didn't show the accessors.
+Those are obvious.
+They just return memory variables.
+They do a little arithmetic.
+And the destructor is we don't care.
+It's automatically generalized.
+It's good enough.
+So empty curly is good
+enough for the destructor.
+So we're done.
+So what did we learn?
+Creating the memory resource is easy.
+It's simply deriving
+from pmr memory resource.
+We override do_allocate, do_deallocate,
+and that's where we do all the real work,
+and we override do_is_equal
+to test for equality.
+And this is what I just said
+when I was looking at the other slide.
+Generally, you just look
+for identity equality.
+Sometimes you return true.
+In rare cases, you have to do
+something more complicated.
+That's it.
+That's all you have to do to
+create a new memory resource.
+How easy is it to use this
+to now build a container?
+So let's build a simple container.
+So our container is going to
+be this singly linked list.
+We're calling is slist.
+I know it's really original.
+And it's kinda similar
+to a list or vector.
+It's actually closer to
+forward list in the standard
+in that it's a singly linked list,
+forward iteration, and so on.
+This is the data structure
+drawn out for use
+so that when you look at the slides,
+you understand what we're doing.
+It's simply a sentinel node
+at the head of the list,
+points to the next node, and so on.
+Each one has a next pointer.
+And then we have a tail pointer
+that points to the last node,
+not one past the last but the last one.
+So the important thing to keep in mind
+about this data structure
+is that every time you're pointing a node,
+you're really pointing
+at the thing before it,
+and that is how this is important
+for allowing insertion
+and removal of nodes,
+especially removal of nodes.
+You need to always be pointing one behind
+where you're looking.
+So there is always this
+extra step of indirection.
+When the list is empty,
+it's simply the head node,
+and the tail points to the head.
+Come on.
+There we go.
+So let's look at our interface here.
+We have the default constructor.
+This is the node, I'm sorry.
+This is not the list.
+These are the nodes data structure.
+We have a base class that
+does not contain any values,
+it just contains the pointers
+to the next node, and so on.
+So this is where our head will be.
+And it contains a pointer.
+You can read the constructors yourself.
+It's pretty obvious.
+And then we have a derived class from it,
+which is the actual node
+containing the actual value.
+What?
+Union type?
+What is that about?
+For those of you who have
+not read every sentence
+of the C++11 standard,
+you might not know about
+this interesting feature.
+Unions now can contain objects
+that have constructors and destructors.
+It didn't use to be the case.
+It used to be limited to pod types.
+Now they can.
+All right.
+That's cool.
+But why are we using it here?
+When you have an object, a
+non-trivial object in a union,
+creating the union does not construct
+that object by default.
+So you actually have something
+containing an uninitialized object,
+which happens to be exactly
+what we need for this purpose.
+What we want to do is we
+want to create the node.
+We do not want to initialize
+the object in the node,
+and the reason in that
+is because we're doing this in two steps.
+We are creating the node,
+and then we are somehow
+collecting the arguments
+that we need to construct
+the object inside the node.
+And those are two different things
+done in two different places,
+and it would be really
+a pain to combine them.
+So instead, we say, &quot;Okay,
+we won't create the node.
+&quot;Let's initialize that
+object inside of it.
+&quot;Instead, we'll leave it uninitialized,
+&quot;and we'll initialize it later.&quot;
+It's an anonymous union,
+so this m value has this nice feature
+that looks just like any
+other member variable
+when you access it
+but it's uninitialized after
+we construct our nodes.
+Are we really clear on that?
+Really, really useful thing.
+We used to be able to do this in C++03
+using this unitialized buffer thing
+where we'd create a union
+that had something correctly aligned
+but didn't actually contain the object.
+It was a fairly complex template,
+not too hard to use but this is easier.
+Now let's look at
+directional implementation.
+We have our head, which
+is this node-based,
+pointers are node-based,
+our tail pointer, our size.
+We always have to keep track of size
+because typically you want your containers
+to be able to return their
+size in constant time,
+which means you can't
+just count the elements,
+which would be ordered in.
+We have our allocator type.
+Our allocator type.
+I feel like I'm missing a slide.
+Huh.
+Ah.
+Okay.
+They're kinda out of order.
+All right.
+Our allocator type is in this blue box,
+the last thing in the blue box.
+It is hard-coded as
+polymorphic allocator byte.
+Hey, we have be-all and
+end-all allocator in here.
+All the rest of the stuff in that blue box
+including the allocator
+type, cut and paste.
+Write it once, you never
+have to write it again.
+You just cut and paste
+it exactly as it is here.
+You don't have to customize it for Tp
+or template arguments in any way.
+This is just boilerplate for a container.
+We do need to specify
+our value type at the top
+and our iterators.
+We're not even gonna go
+into how the iterators work
+because they have nothing
+to do with allocators
+but if you go to the GitHub repository,
+you can see how they work,
+basically pointers to nodes.
+Our constructors.
+Notice something about our constructors.
+Every constructor
+takes an allocator,
+or has an overload that
+takes an allocator.
+So in fact, in this case, we have both.
+So our default constructor
+is this thing here.
+It can be called.
+It can be invoked without any arguments,
+and you'll get the default allocator,
+which is the default
+resource, which is new_delete.
+Or you could specify an
+allocator optionally.
+Our second constructor
+is a copy constructor.
+If you do not pass a second argument,
+this has the signature
+of a copy constructor,
+and it is in fact is a copy constructor.
+But you could also specify an allocator,
+so you can create a copy of this slist
+using a different allocator.
+Then we have our move
+constructor, no allocator.
+And then we have this thing
+called the extended move constructor.
+So this is the extended copy constructor,
+this is the extended move constructor.
+It takes an allocator.
+I'll show you why we use
+different formulations
+for the extended copy constructor
+than the extended move constructor.
+The extended copy constructor
+and the regular copy constructor
+are only one constructor,
+but the regular move constructor
+and the extended move
+constructor are two overloads,
+and we'll look at that in a minute.
+This is the business,
+this is where the real business
+of inserting something happens.
+If you look at the interface,
+we have insert front, insert back,
+push front, push back, insert,
+and we have m place front
+and m place back and m place.
+All of these things insert objects.
+They all delegate eventually
+to this one function,
+which is the m place function.
+M place, a term that was
+kind of coined in C++11.
+Add an object to a container,
+building it in place within the container
+instead of creating it
+outside the container,
+and then copying it in the container,
+so it saves a copy, and it
+also allows you to use objects
+that are not copyable.
+Okay.
+The important thing
+here from allocator use
+is this two step that we're doing.
+The secret sauce number
+one, you allocate the node,
+and then you construct
+the value within it.
+So a couple of things to notice.
+First of all, when we allocate,
+we are getting the resource
+out of the allocator,
+and we're allocating the raw bytes.
+Now the proposal I have
+in front of the committee
+is to make it possible to
+avoid this extra middle step
+of getting the resource out
+but actually having a byte allocate
+as a member function within
+the polymorphic allocator.
+But it's not there yet.
+This is just a little bit of inconvenience
+you have to put up with.
+So we're allocating the bytes,
+and we're allocating bytes
+not for a Tp, not for this
+but for a node, and that's
+almost always the case.
+You almost never allocate memory
+just for the element that you're inserting
+but for some kind of node structure
+that contains the
+element you're inserting.
+But then we ask the allocator
+to construct the object
+within that space but we're
+not constructing the node,
+now we're constructing the actual element.
+Construct should always be
+called only on the element,
+not on the node.
+Okay?
+It's a subtle point,
+and it's really a recipe
+that you just keep in mind,
+allocate the node, construct the object,
+allocate the node, construct the element.
+We use construct here instead
+of using placement new
+because construct does the fancy stuff.
+What happened?
+Anybody know what's going on?
+We're using this construct function
+instead of using the placement new
+because the construct
+function has magic in it,
+and that magic is if the
+element that we're constructing
+takes an allocator, we could
+pass the allocator down
+into that element, so that scoped behavior
+that we're so happy to have
+comes from using construct
+instead of just constructing the element.
+You do not have to figure
+out the argument list
+of the element with the allocator.
+You pass the argument list
+without the allocator,
+and the construct function
+tampers with the argument list,
+and puts the allocator in.
+That's gonna get hard if
+I can't switch slides.
+So the funny is I am seeing
+it here on this display,
+so we just lost.
+Oh good.
+All right.
+Oh.
+I skipped over all the rest of the stuff
+because that's linked list stuff.
+Harder than you might think, right?
+But that's what it does.
+The erase is the inverse.
+They call destroy.
+Notice that we're using addressof.
+The reason we're using addressof
+is in case your element type
+has an overloaded operator ampersand.
+We don't want to use it,
+we want the actual real
+address of the thing,
+and that's what addressof does.
+So we destroy the object
+that that address.
+That's the element.
+And then we deallocate the node,
+so exactly the inverse of what
+we did in the insert case.
+Destroy doesn't actually do any magic
+but it's symmetrical, so use it.
+(clears throat)
+It just calls the destructor.
+Okay, at the end here.
+Okay.
+The last subtlety here is
+in our move operations.
+Right in here, we have the copy assignment
+and the move assignment operations.
+Copy assignment is really straightforward.
+It just copies it.
+Done.
+All right?
+It just copies every element.
+Move assignment, the stuff in the box
+is where it gets subtle.
+Remember I said that
+once you put an allocator
+into an object, that construction,
+it should never change?
+I don't have time to explain why that is.
+Trust me that in all the years
+I've been using allocators,
+which is more years than most
+people have been allocators,
+I have never seen a good use case
+for the allocator changing
+after construction.
+Generally, that's a really bad idea.
+And remember the scoped container?
+We have our vector of strings,
+and they're all using the same
+allocator all the way down?
+Imagine if you assign the string into it,
+and the allocator changed.
+All of a sudden, you've broken that.
+So don't change the
+allocator on assignment.
+Copy assignment, move assignment,
+don't change the allocator.
+Don't change the allocator in any way
+except maybe some kind
+of reinitialization,
+which is effectively the same thing
+as destroying and
+reconstructing the thing.
+So our assignment now cares,
+our move assignment
+cares about the allocator
+in that if the allocators are the same,
+the object that we are assigning to
+and this object that we're assigning from
+use the same allocator.
+We could do this very efficient,
+taking the guts of the
+thing we're moving from
+and putting it into the
+thing we're moving to,
+which is the thing we normally want
+from our move assignment.
+But if the allocators are
+different, we can't do that.
+We actually have to copy everything,
+so that everything gets
+allocated into the new allocator.
+So that's what all this logic here is.
+It's really pretty simple.
+You just have to understand
+why we're doing it.
+We check to see if the
+allocators are equal.
+If they are, we just do a swap.
+The swap is one of these
+gut-moving things that we do.
+And if they're not equal,
+then we do a copy assignment,
+and there is a little C++11 subtlety here
+that the other that we're passing in here.
+Ah.
+I hit the wrong button again.
+Here is a normal reference.
+It's no longer an rvalue reference,
+so we're not recursively calling
+this assignment operator,
+we're calling the other
+assignment operator up here.
+Okay?
+Copy and move construction
+is easy as just to delegate
+to the appropriate copy and
+move assignment operators.
+In the copy constructor,
+nothing special happening here.
+If we have an allocator
+passed in, we use it.
+If we don't have.
+Where is my laser pointer?
+I don't see.
+Oh there it is.
+There it is.
+If this thing is passed in, we'll use it.
+If it's not passed in, you'll
+get the default allocator.
+That means our copy, by default,
+was used in default allocator
+or copy constructor.
+This is something that's a
+little bit of a matter of taste
+but I generally found that it's better
+not to copy the allocator.
+But most things do copy
+allocator and copy construction,
+so just know that there
+is a little difference
+between this and the
+other standard allocators.
+The slist constructor
+for move construction
+simply sets the allocator.
+It delegates to the default
+constructor with allocator,
+and then calls the assignment operator.
+So again, there are some C++11 magic here,
+one constructor delegating
+to another constructor.
+For the extended move constructor,
+instead of using the allocator from other,
+we use the allocator that was passed in.
+So this is an important
+distinction, an important subtlety.
+The copy constructor,
+you could simply pass
+a default allocator in.
+The move constructor, you can't.
+Why?
+This move constructor in the middle,
+it always gets the allocator
+from the other one.
+Move constructor should
+always move the allocator
+unless it's the extended move constructor,
+in which case you specify the allocator.
+So if you don't specify an allocator,
+the allocator should be moved.
+That is not true of the copy constructor.
+The copy constructor can
+do whatever it wants.
+And the simplification we're getting here
+is that we are just
+always using the allocator
+even if it's the default
+allocator that was passed in.
+You can't do that with a move constructor.
+So we'll put it all together here.
+Let's write some code
+that actually uses our new
+memory resource and our new list.
+The code here I think is
+pretty self-explanatory.
+We create our resource, our test resource.
+We create our list.
+We create a string to put in there.
+It says, &quot;Say hello.&quot;
+I don't know if you can read that well.
+&quot;Say hello to my friends
+at the university.&quot;
+I specifically chose a
+string that was long enough
+to be larger than any
+small object optimization
+I'm aware of.
+And we assert that we have
+not allocated anything
+from our test resource yet.
+Why?
+Because this string, we didn't
+pass a memory resource in,
+so it's using the default
+resource, which is new_delete,
+and our list is empty, so we
+haven't allocated anything yet.
+Then we push the string back into it,
+and now we say we've got two blocks
+allocated out of our test resource.
+Why two?
+One for the node and one for
+the string's contents itself.
+So this is what it looks
+like in our diagram.
+We see that everything came
+out of the same test resource,
+same allocator, same pool of memory.
+Enough said.
+Let's summarize here to get it right.
+Every constructor should have a variant
+that takes an allocator, and the allocator
+should be polymorphic
+allocator byte, okay?
+So here is our example.
+Now the example I've
+shown before with slist
+always puts the allocator at the end.
+There are times when you want to put it
+at the beginning of the argument list.
+If you do that, you should
+prefix it with allocator arg t.
+This is an idiomatic use
+that the standard recognizes
+so that it knows, the
+scoped allocator model
+knows that this is an allocator,
+that first argument is an allocator.
+The reason you do this often
+is because you may have
+a variadic template,
+the number of arguments isn't known.
+You cannot put a fixed argument at the end
+of a variadic list.
+Eventually we may actually be able to
+but even then, you wouldn't
+be able to default it.
+So you put it at the
+beginning of the list instead
+using this idiom.
+Okay, but just make
+sure that for everything
+that doesn't take an allocator,
+there is a version of the constructor
+that does take an allocator.
+The move constructor cannot
+use the default allocator.
+It always moves the allocator
+from the other thing.
+And so, therefore, the
+extended move constructor
+is a separate overload.
+No default arguments there.
+Move and copy, copy construction,
+and assignment, nothing special there.
+For move construction and assignment,
+we want to move when possible,
+when the allocators are equal.
+Don't move when they're not.
+Just copy when they're not.
+I'm gonna finish quickly,
+so I have time for at
+least a couple of questions
+before I run out of time.
+Adding elements, you allocate the bytes,
+then you construct the
+element in the bytes.
+Consistent use of polymorphic allocator.
+What have we gained?
+Believe me, I would not
+have been able to spend
+only the second half of the talk
+going through how to write a container.
+In fact, I probably need a two-hour talk
+if we were doing without
+this polymorphic allocator.
+We don't have these template arguments.
+The allocator is hard-coded.
+No need for allocator traits,
+no need for these propagation traits,
+we just never propagate the allocator.
+That really should have been the default.
+The other propagation traits
+are really not that useful.
+No rebind, just allocating bytes.
+Simple, understandable defaults.
+So I would normally stop for questions
+before wrapping up but
+we're really out of time,
+so I'm gonna do conclusion,
+and then I'll stay for
+some question afterwards.
+So conclusion, we have
+historical complexity
+but with C++17 features,
+we can ignore most of that complexity.
+So the trick is leave
+the complexity behind
+and just consistently use the new model.
+If you need to interface
+with the old model,
+you may not be able to completely
+leave the complexity behind
+but if you stick to
+polymorphic allocator byte,
+then you can assume things,
+you don't need to use the
+allocator traits, and so on.
+You derive from
+polymorphic memory resource
+to create new allocation mechanisms.
+What would these clippings look like
+using a polymorphic allocator?
+You would say it's now accepted
+that allocators are extremely useful.
+They're a joy to work with.
+The C++ standards committee added wording
+that simplifies custom memory allocation.
+One of the most powerful
+parts of the C++ standard.
+And you earn 200 rewards
+points when you use 'em.
+Thank you very much.
+(audience clapping)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

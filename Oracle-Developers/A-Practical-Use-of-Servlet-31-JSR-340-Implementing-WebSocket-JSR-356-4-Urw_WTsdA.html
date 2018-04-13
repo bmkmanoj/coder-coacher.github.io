@@ -1,0 +1,1435 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>A Practical Use of Servlet 3.1 (JSR 340): Implementing WebSocket (JSR 356) | Coder Coacher - Coaching Coders</title><meta content="A Practical Use of Servlet 3.1 (JSR 340): Implementing WebSocket (JSR 356) - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>A Practical Use of Servlet 3.1 (JSR 340): Implementing WebSocket (JSR 356)</b></h2><h5 class="post__date">2015-06-05</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/4-Urw_WTsdA" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">welcome to this session where we'll be
+looking at some practical examples of
+using the new features of the servlet
+3.1 API mainly how I use those within
+apache tomcat to implement WebSocket one
+point oh so this is a rough agenda we'll
+start off with some introductions I'll
+give a very brief overview of the
+WebSocket protocol I'm not going to go
+into any great depth but just cover the
+key points of it that then impacts on
+the design and then the selection of
+features we use from server at 3.12
+implement that design once we understand
+those requirements will their map that
+to the server core servlet 3.1 features
+probably the most useful part is going
+to be the complicating factors it's all
+the places where it didn't quite work as
+expected where it is a little bit more
+difficult and hopefully that will give
+you some lessons that you can take away
+when you're doing implementations with
+server 3.1 using those api's you'll be
+able to get around those obstacles a
+little bit quicker than it took me to
+figure out how to do it I'll wrap up at
+the end of the quick summary I will take
+questions at the end but if there's
+anything that that's not clear as we're
+going on please you know jump up and
+down wave your hands in the air get my
+attention and we'll deal with it there
+and then so who am i I'm Mark Thomas if
+you follow the apache tomcat project
+then my apache ID is mark to you
+probably seen that on the users and Dev
+lists I'm obviously a committer on the
+Tomcat project and I've done the
+majority of the development work both
+Tomcat 7 and 4 Tomcat 8 elsewhere the SF
+I'm a member of the Apache security team
+I helped out on a couple of other
+projects and I also helped out managing
+Apaches infrastructure my day job is as
+a consulting engineer at pivotal where
+they pretty much leave me to get on with
+working on tomcat which suits me just
+fine as a technically under the pivotal
+umbrella I was a member of the expert
+groups for servlet WebSocket and
+expression language for Jerry 7 whilst
+it it has to be done under the pivotal
+umbrella Releford rather annoying legal
+reasons it was as I was essentially
+there as the Tomcat representative
+elsewhere at pivotal when I'm not
+working on tomcat I do have a few other
+bits and pieces to do and one of the
+things I do is I lead the security team
+so it's a bit of a security theme to
+some of the other things I do as well so
+let's start by looking at the WebSocket
+protocol it's defined in RFC 64-55 it's
+a fairly readable specification if
+you're interested in WebSocket then it's
+definitely worth reading it will help
+you understand what's going on
+essentially it's an asynchronous
+messaging protocol there are three types
+of messages text messages binary
+messages and control messages and
+between the client and the server is
+essentially the client is whichever end
+initiates the connection the server with
+whichever end receives that connection
+there's one persistent connection
+there's no management of state within
+the protocol itself if the connections
+up it's connected if it's down it's not
+and there are messages to close the
+connection at the end but essentially
+that's it in order to initiate the
+connection it uses HTTP upgrade so the
+URLs you'll see in the browser all start
+WS colon slash slash whatever but if you
+actually look at what happens on the
+wire what actually happens it's an HTTP
+request you can see HTTP upgrade
+requests assuming that the upgrade
+request is accepted you get an HTTP
+response back and at that point it just
+switches over to the WebSocket protocol
+you never actually see a WS or a WS s
+for secure protocol on you never
+actually see that URL on the wire it's
+only HTTP you actually see on the wire
+so I mentioned the three types of
+messages text and binary a sort of group
+together and control or a little bit
+difference we have we discuss those
+separately all of the text messages are
+always encoded using utf-8 no exceptions
+it's always utf-8 encoded there's a
+limit of two to the sixty three bites on
+a single frame however messages can be
+split across multiple frames and there's
+no limit to the number of frames you can
+have in a message therefore there is
+absolutely no limit on message size none
+whatsoever which creates a few problems
+on the implementation side because
+infinite buffers denial-of-service tends
+to cause a few problems and so obviously
+we do have to put some limits on there
+but there's nothing there's no limits at
+all
+all in the protocol itself control
+messages are only 125 bytes in in terms
+of payload length and they're meant to
+be short and you can insert them in
+between frames that are parts of other
+messages for text and binary messages
+once you start sending a message you've
+got to complete that message before you
+can send the next one so if it's just a
+single frame you send the frame then you
+can go on to the next message if the
+message is split across three or four
+frames you have to send each of those
+frames in order before you can then move
+on to the next message you can't
+interleave different frames from
+different messages I'm not in the not in
+the base protocol anyway so that there
+is no multiplexing there's an extension
+for that the last time I looked it was
+still in draft I think jetties got an
+implementation for it tom cat hasn't yet
+it's one of the things on the to-do list
+but the reason I mention again those
+those frames is that you can you are
+allowed to insert control messages
+between the frames of a text or binary
+message but you're not allowed to into
+leave multiple text messages or multiple
+binary messages looking then at the
+WebSocket jsr there's absolutely no
+requirement whatsoever to build on top
+of that serve the 3.1 there's no
+requirement to build on any other bit of
+j2ee if you don't want to it's perfectly
+acceptable to build a stand-alone
+application that implements these api's
+however there is a recognition that
+chances are you're probably going to be
+doing this in a j2ee environment and you
+probably won't be using it in a j2ee
+environment so there is the ability to
+pass in the HTTP session when you start
+a web socket connections so you you know
+what HTTP session this particular
+connection was part of always started
+from and but it's passed in it as an
+object explicitly to avoid a dependency
+between the two specifications it has to
+configuration Styles programmatic which
+is as you'd expect you do everything
+just with Java and also an annotation
+style you can do almost everything in
+annotations that you can do
+programmatically it does provide client
+and server api's and the client API is a
+subset of the set
+our API so if you're on the server side
+then you've always got the client API
+available as well so you can always if
+you want to initiate your own
+connections off to other servers then
+you're able to do that with Tomcats
+implementation I was aiming to do a
+number of things first of all in
+compliance with the specifications
+that's a good place to start I wanted it
+to be contained a neutral a number of
+Tomcat components get reused in other
+application servers I wanted there to be
+the possibility for you to be able to
+take Tomcats WebSocket implementation
+and use it in another application server
+if you wanted to or for those
+application servers to take Tomcats
+implementation and use it themselves as
+their implementation I'm not aware of
+anybody doing that yet but the option is
+there obviously if you're going for a
+container neutral approach then you have
+to go through through the server 31 API
+and there's potentially a cost in doing
+that as opposed to going directly to the
+containers internal ap is bypassing the
+sort of additional layer of indirection
+that you get from using the server api's
+from what I've seen so far in the
+testing there's very very little impact
+if any that you can actually measure
+from doing that and whenever I've done a
+performance test I always end up hitting
+IO bottlenecks not sort of layer
+bottlenecks in terms of going through
+the server API that doesn't actually
+seem to have caused any performance
+implications at all not to say that
+somebody won't at some point produce a
+test case that highlights a problem and
+as always an open source when they do if
+they're kind enough to provide us with a
+bug report will take a look and see what
+we can do to fix it so let's look now at
+the features of website and then how
+they map to serve at 3.1 so we've seen
+it it's a single persistent connection
+and it uses asynchronous messages so the
+client can send messages whenever it
+likes the server can send messages
+whenever it likes if you want that sort
+of solution to be scalable you really
+need to be using non-blocking i/o
+otherwise you have one thread that's
+allocated to connection and it's just
+SAT there spinning waiting for some data
+to turn up and whilst that that's okay
+for a few hundred connections it's
+manageable for a few thousand
+connections when you get into tens of
+thousands can
+connections you have an awful lot of
+threads using up an awful lot of
+resources not doing very much so you
+really want to use non-blocking i/o
+where you can only need to use a thread
+when there's actually some data to
+process so there's a nice mapping here
+servlet 3.1 has introduced the concept
+of non-blocking i/o WebSocket needs
+non-blocking i/o there's an obvious
+match up there so one of the first
+feature that we selected was the server
+3.1 non-blocking I also mentioned that
+WebSocket starts with an HTTP upgrade
+connection it won't be a surprise that
+servlet 3.1 added HTTP upgrade support
+that was primarily in order to support
+the WebSocket spec that was the main
+driver for although it's obviously there
+if you want to implement any other
+protocol via HTTP upgrade it that all
+the hooks you need to do that are there
+with some complications that you'll see
+in a little bit later but the hooks are
+there we also need to scan for
+annotations because the WebSocket
+annotation configurate configuration
+essentially means there could be a
+WebSocket annotation on any class in any
+jar anywhere in your web application so
+that means you have to scan all of them
+looking for those annotations
+fortunately servlet 3.1 so I 3.0 in fact
+provides annotation scanning via the
+servlet container initializers so that's
+what we're able to do to the for the
+annotation scanning so that's a a large
+chunk of sort of plumbing that we don't
+need to provide that the container will
+just provide for us so we'll start with
+looking at that annotation scanning
+feature as I said it was added in
+servlet 3.0 and it's done via the server
+container initializer essentially what
+you do is you implement that interface
+and you annotate it with the handles
+type annotation and in that annotation
+you list all of the classes and all of
+the annotations and all the interfaces
+that you're interested in and then web
+application scans for matches for all of
+those and it will also scan up
+hierarchies as well so if you have if
+you say I'm looking for anything that
+implements HTTP servlet if you've got a
+class implements HTTP server that but it
+sort of four levels down the inheritance
+hierarchy the annotation scaling will
+still find it so it's smart enough to
+look up and down the inheritance
+hierarchies for things like oh it needs
+to implement that interface and so when
+the container starts up it starts up
+each web application it scans for the
+annotations and for all of the servlet
+container initializes it looks see what
+they're interested in finds the matches
+and then it calls that initializes on
+startup methods passes in a set of
+classes these are all of the things that
+I found that were either annotated with
+those annotations or implemented those
+interfaces that you said you're
+interested in or were the classes that
+you said you wanted to know about so
+this is what it looks like in WebSocket
+apologies if it's a little bit small I
+was hoping it would be a bit bigger but
+as a small issue with the display
+doesn't really like my Mac unfortunately
+but what we've got there is we're
+looking for a server that server
+endpoint classes that's the annotation
+so that's saying this class implements a
+server web socket endpoint so that's
+something that would receive web socket
+connections we're looking for the
+application configuration that's a
+filtering mechanism that I'll come on to
+in a minute and we're looking for
+anything that extends endpoint class and
+that's the programmatic implementation
+of a WebSocket endpoint so we're
+essentially looking for endpoints and
+things that filter them right go back to
+this filtering one the reason that's
+there if you've got a framework jar that
+provides say 20 or 30 different
+WebSocket endpoints and you only want to
+use two of them if you add that jar to
+your web application by default all 30
+of those will get enabled and that's 29
+places where you've got server doing
+something that you don't want it to do
+that could be potentially exposed some
+sort of security issue so you need a way
+of saying I really only want those two
+and the servlet server application
+config is how you do that it basically
+gets passed a list of all of the
+endpoints that have been discovered it
+can then fill something yet just deploy
+these to these three this one whatever
+it is that you want so that's why we
+need to find those as well and you have
+as many of those as you like in your
+application and it's the combined set of
+all of us all of one's that it says okay
+deploy this so if you've got to server
+application configs one says deploy
+these two endpoints the other one says
+deploy these three you'll get all five
+deployed um because we need to scan
+every single class for things that match
+handle types that's a relatively
+expensive operation in the early days of
+the Tomcat seven implementation it was a
+horrific ly expensive operation we've
+optimized it as much as we can but it's
+still a relatively expensive thing to do
+and if you're in an environment where
+applications start time is important
+then you want to be able to do all that
+you can to minimize that and servlet 3
+does provide some options for minimizing
+the scanning however the specification
+language wasn't quite as clear as it
+could have been and then to further
+complicate matters I then didn't read
+the specification language that there
+was quite as carefully as I should and
+that meant that Tomcat wasn't quite
+doing the right thing since I've written
+these slides we've actually thought of a
+few more edge cases that aren't covered
+at all and there's there's currently an
+exercise going on on the Tomcat devilís
+to work out all of the things where we
+think clarification is required and then
+we need to go to the expert group and
+say right this lot needs clarifying and
+so there's a well-defined process for
+exactly what's going to happen with all
+of these server container initializers
+but the bits that are clear if the a
+servlet container initializer is
+provided by the container it always runs
+it always if it has a handles type
+matches for the handles type are always
+scanned for if nsci um needs to when you
+configure an SC I it's basically done
+via the service loading mechanism so
+that tells you which class you need to
+load it's possible that you have an
+implementation of that class both in the
+container and in the web application
+unusual but not impossible and one of
+the things that the spectres clarify in
+that case the standard class loading
+delegation model applies so by default
+it'll load by the web it will go and
+load the one from the web application
+but you most containers have an option
+so you can flip that in which case it
+would go and load the one from the
+content
+instead there are no specification
+requirements whatsoever that control the
+order in which scis are initiated and
+that's one of the problems that needs
+fixing particularly if you have
+something like so it's implementing some
+form of security feature you normally
+want that set up and configured first
+unit or if it's doing logging you need
+to make sure your logging is in place
+before you do anything else but there's
+no way of controlling ordering at the
+minute so that's something that needs
+looking at and need some clarification
+what you can do in terms of limiting the
+time spent during startup with in
+web.xml from servlet 3 onwards you can
+explicitly define the order that you
+want the jars processed for fragments
+with an absolute ordering if you do that
+only the jars in that list will be
+scanned for SC is and only those jars
+will be scanned for matches to SC is so
+if you know you've got a couple of jars
+that don't have an SC is don't have any
+any annotations in them that you're
+interested in you can exclude them from
+the ordering and then hopefully improve
+your startup time a little bit but one
+of the things that caught caught me out
+in the servlet through implementation
+that since been fixed metadata complete
+has absolutely no impact whatsoever on
+sei scanning even if you mark your web
+application is metadata complete all of
+the SDI scanning all of the handles type
+matching still processes still gets
+applied so that's the annotation scaling
+let's go and look at HTTP upgrade yes
+question that
+um yeah to be perfectly honest I'm not
+exactly sure it was as I can I can sort
+of skip around that was saying well that
+was a servlet three expert group
+decision and I wasn't part of the expert
+group in the mailing list on public so I
+don't know but I think that really the
+the intention was the metadata complete
+applied to web fragments and that that's
+what it was for the SC I scanning
+because it provides things like web
+socket or potentially the GSP engine can
+be provided via sei scanning you really
+don't want a web application to be able
+to disable that via metadata complete
+that the two were intend always intended
+to be separate that's a that does create
+a few complications so if you want to
+use HTTP upgrade then you have an
+interface you need to implement that's
+the HTTP upgrade handler and then the
+application calls the upgrade method on
+the httpservletrequest and then what
+happens is essentially nothing at that
+point you're nothing will happen until
+the response has been generated written
+out the committed and everything's been
+written out to the client only when that
+HTTP request response cycle is completed
+does the HTTP upgrade mechanism kick in
+and the reason for that is that the HTTP
+upgrade mechanism is essentially talking
+raw data so you need to ensure that the
+request and response are complete
+there's no more HTTP bites left on the
+wire then you switch to your upgrade
+mechanism and it can do whatever writing
+it requires and read what it needs to
+read the way that what then happens once
+the response is finished is the init
+method on your upgrade handler gets
+cooled and you get passed in something
+called a web connection that web
+connection is essentially just a wrapper
+for the servlet input stream and the
+servlet output stream and this is
+something I will bang on about several
+times in this presentation you only have
+access to the input stream in the output
+stream you do not have access to the
+underlying socket and that place is
+quite a few constraints on what you can
+and can't do with
+so as well as that init method there's
+also a destroy method the container will
+automatically call the destroy method
+when the connection closes so if you've
+created any resources as part of this
+connection then you can do the necessary
+cleanup now the upgrade method on the
+httpservletrequest is slightly odd
+because you don't pass in an instance of
+the HT to get red handler you pass in
+the class that implements it and the
+reason for that is to allow CDI to get
+its grubby little mitts on the class and
+inject things into the object that's
+created so the continued pass in the
+class the container will then create an
+object for you and obviously the side
+that the implications that is you've got
+to have a zero argument constructor
+otherwise the container can't create the
+object I've mentioned the web connection
+you've only got the input the output
+stream it also implements or it rather
+extends also closable so you can use the
+resource semantics with try catch and
+automatically close it if you wish one
+of the issues with because you've got
+that zero argument constructor you can
+pretty much guarantee that there's going
+to be some extra information that you
+need to pass in to that upgrade handler
+it might be the identity of any
+authenticated user it might be some
+information from the associate HTTP
+session it could have been some query
+parameters that were associated with the
+connection that requested the upgrade
+whatever it is there's going to be
+something that your application is going
+to need or probably going to be
+something and there's no api defined for
+passing that so you've essentially got
+to provide your own and it's kind of
+obvious you've got two ways to do it you
+either have a whole bunch of setters
+will you do it in one big method and
+tomcat does it in one big method and
+passes in all of the things that it
+needs to do the web socket upgrade the
+reason I've done it that way is that it
+lets me call the method pre in it
+which then makes it obvious to somebody
+that's coming along later that okay this
+needs to happen before the init method
+because all of those need to be in place
+before the init method happens and the
+WebSocket connection actually starts
+being used because that this tells the
+WebSocket connection which end point to
+use how its configured which its
+container is information from the
+request and other bits and pieces as
+well moving on then to non-blocking i/o
+again it's a deep in servlet 3.1 and it
+was added by putting additional methods
+on the server input stream and the
+servlet outputstream but there are some
+constraints as to when you can use
+non-blocking i/o you can only use it
+with asynchronous processing or with
+upgraded connections and once you've
+switched a non-blocking i/o you can't
+switch back to blocking well there's one
+small exception to that if you're using
+a sink and first we have to start a sink
+then you're on an async request then you
+can switch to non-blocking i/o when that
+request is either just all that async
+context is either dispatched or
+completed at that point it automatically
+switches back to blocking io because the
+async phase is over and at that point
+you could potentially if you're doing a
+dispatch start a sink again and go onto
+non-blocking i/o again if you wanted but
+essentially within one once you started
+non-blocking i/o within that async
+context you can't then just switch back
+and forth between blocking i oh and
+non-blocking i/o and that causes us a
+complication as well with web socket
+which will come on to in shortly the
+methods that have been added will look
+at the input stream first then the
+output stream the ankle stream is very
+very similar to the input stream there
+are three additional methods is finished
+basically says has all of the data been
+read from this connection so have I read
+all of the request body if we're talking
+HTTP it is ready is am I able to write
+data so I am able to read data from this
+input stream and read listener is the
+object that actually handles the events
+that when when data becomes available to
+read and read data you've got on data
+available so that's des data there to
+read
+all data read is again you've reached
+the end of the stream there's no more
+data here and error obviously
+something's gone wrong and hopefully the
+exceptional but the thread will rather
+will tell you what now there's a
+slightly unusual shall we call it way of
+doing non-blocking i/o there's a number
+of different non-blocking styles in java
+already and this is a little bit
+different so you start the non-blocking
+read by setting the read listener so you
+get your input stream and you set the
+read listener on on it that's that
+that's what puts it into non blocking
+mode at that point potentially again
+nothing happens until there's data
+available to read and that might be
+immediately that might be in 30 seconds
+time it might be in four hours time once
+there's data to read then they can take
+container will call on data available
+when that happens you can read once and
+once only from the input stream doesn't
+matter whether you read one bite or a
+thousand bytes you can only read once
+after that you have to call is ready
+again before you do another read and is
+ready has to return true otherwise
+you're not allowed to read anymore if is
+ready turns false then the container
+will look after things and it will call
+on data available again when there's
+more data to read if you don't do that
+you will get an illegal state exception
+so as I said if it's ready returns to
+you can read again and you basically go
+through a loop essentially well is ready
+at Wally's ready read some data and you
+keep going around that loop until is
+ready is false and that's essentially
+what all of the on data available
+methods end up looking like
+yet the once you've had that initial on
+data available the only time it's going
+to get cold again is if you've called is
+ready if is ready is returned false and
+there's no more data to read so if the
+container calls on data available you
+read the data and you don't call is
+ready nothing's going to happen doesn't
+matter if the tcp / buffers are full to
+bursting nothing will happen until you
+call is ready there you don't get
+repeated on data available methods that
+subsequent on data available methods
+only happen if is ready returns false
+and then later once the data they're
+available to read so you must follow the
+expected cool pan otherwise it all just
+falls apart very quickly and finally
+once you've reached the end of the
+stream then you get the all data read so
+for writing it's very very similar so we
+can spin through this quite quickly
+we've only got two methods here we've
+got on right possible and on error there
+isn't a all data written method because
+you as the application developer
+expected to know when you've written all
+of the data that you're expecting to
+write the container certainly doesn't
+know so that's where you don't get that
+method there but otherwise the model is
+exactly the same you start the
+non-blocking right by setting the right
+listener they contain all then call on
+right possible when it's possible to
+write data without blocking and that
+would normally happen pretty much
+immediately assuming that you haven't
+actually written anything previously so
+there should be plenty of space in the
+buffers but again that's not guaranteed
+so the container calls on right possible
+you can write once and again once only
+you've then got a white call is ready if
+Israeli returns true you can write again
+if ready returns false you can't and
+you've gotta wait for the on right
+possible so it's again it's a vet it's
+pretty much exactly the same pattern as
+reading again you don't follow the rules
+you get an illegal state exception so
+what does this look like in Tom caps
+implementation I've cut out a fair
+amount of the boilerplate in some of the
+detail what I'm trying to do is just
+sort of give you a sense here of what's
+happening so the WebSocket read listener
+it's on data available method
+essentially just calls
+data available on tomcat internal
+representation of a WebSocket frame and
+basically what that will do is it will
+read all of the data it can turn it into
+a frame and then process that frame
+within that there we have got some locks
+we ended up needing to be quite careful
+about having multiple threads here the
+server input streams narrow stream don't
+expect multiple threads to be writing to
+them at the same time you have to be
+normally the sunny day scenario it all
+just works it's the edge cases that
+catch you out you get an exceptions some
+other event fires something ends up
+trying to write a closed event to thee
+to the output stream while something
+else is trying to write to it as well
+you need do need to be very careful to
+make sure that there is only ever one
+thread working with your input stream in
+your output stream at any one time so
+just to be absolutely sure here we've
+got a connection read lock that that
+ensures that and then it's just that
+well loop I was talking about well is
+ready we've also got a check of is open
+so if the connection is closed we just
+closed the connection we stopped reading
+we read the data into the input buffer
+if we don't read any data we just give
+up if you get end of stream then throw
+an exception otherwise we record how
+much we've written and then we process
+that input butter and that's when we
+turn it into WebSocket messages that we
+then pass on to the application right
+listener is a little bit more
+complicated the reason for that is
+there's no limit to how much data you
+can throw at this in a single right so
+if you want to throw five hundred mega
+data in a single right at this stream
+then that's what it's got to deal with
+and obviously that's not all going to go
+in the wire in one go so the container
+has to buffer it so we've what we can
+end up with is a whole series of buffers
+and things are a little bit more
+complicated if you go through when you
+doing this via a sink rather than
+upgrade use with with a sink servlets
+you've also got all of the standard
+servlet buffering that's still in place
+and flushing so whilst at the at the
+niño level you're only allowed a single
+right that might actually end up looking
+like multiple rights further down
+stacks you do need to be very careful
+with this so we've got multiple buffers
+and again it's the world is ready we go
+through those buffers we check to see
+whether there's any data in them if
+there is we try writing it and then
+that's our one right so we then skip out
+and call is ready if the buffers empty
+and we'll check to see whether we've put
+all of the buffers if we do you'll
+notice this right time out unregister
+one of the complications of only having
+access to the input stream in the output
+stream you have no way whatsoever to set
+a time eight so you had there has to be
+some that you have to basically build
+your own timeout mechanism if you want
+to be able to time these things out
+through the API there's nothing there at
+all to set timeouts and that to me is a
+gaping hole that we need to fix instead
+of a 3.2 you can't you can't just say oh
+oh we'll just set a default time out of
+20 seconds three seconds it that doesn't
+different applications will need
+different sets of timer there isn't one
+there isn't a one-size-fits-all so that
+needs fixing so there's some additional
+work at the bottom there just to either
+if we have completed the right we don't
+need to worry about timeouts anymore if
+we haven't completed it then we need to
+make sure that this particular
+connection is registered for a timeout
+and what that background mechanism does
+is basically right you've got whatever
+the configured timeout is to finish this
+right if you don't finish it we throw an
+exception and close the connection yeah
+I mentioned thread safety more places
+and you can imagine possible to trip up
+with this it definitely helps if you
+start off writing it with thread safety
+in mind but even doing that there are
+still a few places I forgot and test
+test and test again you just can't test
+it enough so we've seen this servlet 3.1
+style of non blocking and because we're
+implementing web socket and WebSocket
+also has non blocking rights the ability
+to send messages via non-blocking api's
+we actually end up with three different
+non-blocking styles there's a servlet
+3.11 web sockets has two you can either
+do things with futures or with send
+handlers
+if you look at the client that actually
+adds a fourth because the client I opted
+to implement that via an asynchronous
+socket channel so it was a really really
+good match for what we needed to do on
+the client side apart from ssl which
+i'll come on to in a minute and apart
+from yet another form of non locking
+style so essentially what we ended up
+doing was writing little converter
+classes to convert between all of these
+so futures are always converted to send
+handlers so that was basically half the
+non-blocking api done just wrap any
+method that you needed a future just
+wrap ascend handle with the converter
+and you use the send handle one instead
+server-side the send handles nmap to
+serve that 3.1 we looked at doing that
+both ways we could have wrapped a future
+with a send handler and then map the
+future to the server at 3.1 style but it
+was a much cleaner mapping doing it the
+other way around so that's why we did it
+this way and on the client side send
+handlers just match to completion
+handler so that's again relatively
+simple and now we get to the point where
+it got really really complicated really
+really quickly but not immediately
+obviously which was it added to the fun
+should we say the web socket API lets
+you send a message via blocking or non
+blocking there on there are methods on
+the remote end point that let you use
+blocking and unblocking depending on
+which one you choose you are message I
+they get sent locking or it gets sent
+non-blocking but the server 3.1 api
+doesn't allow you to switch between the
+two so there's a little bit of a
+disconnect there to start with a bit of
+a square peg round hole and as i dug
+into this it was definitely square peg
+round hole time the only option you've
+got is you have to simulate blocking so
+that's not too bad this is an extract
+from that the tomcat code with a few
+bits taken out so when we want to write
+a blocking message so our message is an
+opcode that tells us what type it is the
+message has a payload we can we create a
+future to send handler we then call our
+non blocking start message code which
+that will just go off and start sending
+the message we figure out what the time
+eight is
+and if we've got a timeout we just call
+get on our future with the appropriate
+time out or if we've got an infinite
+time out we just call get and sit back
+and wait so look at that that works
+problem solved if only first of all
+there's no AP again there's no api for
+defining the timeout so that was a small
+complication and again its container
+specific and all of the WebSocket
+containers are going to have their own
+specific solutions for this again that's
+something for WebSocket one point one or
+two point oh whatever the next version
+gets cooled so when we're doing this
+what happens under the hood is that data
+whatever data needs to be written is
+written to the socket as much as can be
+let's assume that there's some data left
+over that's buffered the socket is then
+registered with the polar for rights
+will get a call back from the container
+when we're able to write more data to
+the socket so when that callback happens
+the container automatically just get
+says I've still got data in the buffer
+so I'll write that data out and you
+basically repeat that until the buffers
+empty all well and good the block that
+in our future to send handler is
+implemented with a simple latch so when
+you cool get on the future to send
+handler it just calls latch or wait and
+then that waits for the container to
+call the countdown method once it's
+written all of the data which wing that
+releases the latch and the thread can
+carry on doing whatever it is going to
+do if you're on an application thread so
+somewhere in your application you've
+started off a thread you kickoff a
+non-blocking you so a kickoff a blocking
+right all of this just works and
+everything's fine but lots of
+applications tend to work on the basis
+I've received a message from the client
+I process something and then I send
+something back to the client in response
+to that message not always because
+WebSocket is asynchronous and you don't
+have to work like that but you often get
+a chat application yeah you get a
+message in from a client you write the
+message back out to all of the other
+clients it's very often that gets
+something in and I need to do something
+in response to it and serve at 3.1 and
+all of the early
+versions have an unwritten assumption
+and that unwritten assumption is that
+there is only ever one container thread
+working with a socket at any one time no
+tom cat has always enforced this with a
+lock it solved a whole pile of problems
+when we're trying to implement served at
+three a sink there are all sorts of
+issues with state transitions when you
+had dispatch is happening on separate
+threads and when you then getting the
+complete it was very close to the time
+out which one actually happened first
+there was there were lots of threading
+and concurrency issues as soon as we put
+the lock around the socket they all went
+away and the implementation got a lot
+easier and it passed the tck which was
+good um but because we've got this lock
+that causes us quite a few problems with
+web socket and let me explain why so
+let's start with my right hand I've got
+an established but idle WebSocket
+connection the polar detects that
+there's now some data on this connection
+and this connection gets passed to a
+container thread to process it ok so the
+container thread processes it it obtains
+the lock for this socket so it can work
+with it it reads the data and that data
+eventually gets through to the
+application code the application then
+processes the message they're all well
+and good so far and at this point the
+application says write what I want to do
+is I want to write another message out
+to the client and it decides they want
+to do it in with a blocking message so
+it writes a blocking message all well
+and good so far the message is too big
+for a single right so it gets partially
+written and the remaining data is
+buffered again absolutely fine all
+working beautifully so far the socket is
+then registered with the polar saying
+yet I need you to tell me when you can
+write so when i can write some more data
+to this socket polar says yep fine no
+problem so the soft the socket is sat in
+the polar and then the polar says yep
+the space on the socket for more data
+now you can write some data so the polar
+then passes that socket off to a second
+container thread to handle the you can
+they write data event so I've now got
+two container threads working with the
+socket there's this is where it starts
+to go wrong this container thread is now
+blocked waiting for the law
+Rock to allow it to work with the socket
+the problem is the thread that's holding
+the lock isn't going anywhere until the
+container says I've written all of the
+data the thread that says you can write
+some more data isn't going anywhere
+until the other thread releases the lock
+and effectively what you've got there is
+a deadlock and the whole thing just
+seizes up and the tricky part here is
+you only see this if you do the right on
+a container thread and if the right is
+big enough that you can't write it in a
+single right and you have you end up
+having to buffer some data so because
+how much data there is in the TCP
+buffers obviously isn't going to be the
+exactly the same on every test run we
+had what looked like a hard to reproduce
+problem it's you certainly couldn't
+guarantee to reproduce it every time um
+that made life really difficult
+eventually with some help some test
+Suites and the autobarn test suite for
+web socket is brilliant if you're doing
+anything with WebSocket use the autobahn
+test suite really really good using that
+were able to trace what the problem was
+and then ok how are we going to fix this
+and we discussed a couple of options
+within the expert group and we never
+really came to a conclusion one was the
+idea of automatic blocking and the idea
+there was if you forgot or didn't call
+is ready before you did another right
+the next right would automatically block
+that doesn't actually solve the problem
+you end up in the same deadlock
+situation and it creates a whole bunch
+of other problems and it makes the
+non-blocking semantics of the servlet
+non-blocking i/o even more difficult to
+get your head around so decided no don't
+want to go there something else we
+discussed as well as long as you're not
+doing the right on a container thread
+the problem doesn't happen so the trick
+is obviously get the right onto a
+different thread so you can add say a
+start method to web connection it could
+take a runnable and that will then do
+the right a couple of issues of that it
+should work but we didn't test it it's a
+little bit clunky and it's not
+immediately obvious to application
+developers what this start method for
+why they need to do it what this how
+this deadlock can occur
+and trying to get all of that
+explanation into a coherent set of texts
+in a in either the spec or the Javadoc
+and then for people to actually read it
+understand it and follow what they
+needed to do is pretty unlikely so you'd
+end up with all sorts of problems so
+really at this point there as well we
+could just give up if I could go
+directly to the Container API I could
+solve this in a jiffy dead easy I think
+I've got all sorts of knobs like and
+twiddle in the container API to say
+whether something's blocking or non
+blocking I don't have to worry with any
+of this life will becomes a lot easier
+but I really wanted this to be um
+implementation dependent if I could so
+the option I took was given that the
+servlet spec doesn't actually say you're
+only allowed one thread per socket or
+one thread per connection let's bend it
+a little bit let's ignore what we really
+know they were intending and what we'll
+do is we'll let you have two threats /
+socket one thread for writing one thread
+for reading you can't have two threads
+writing into or two threads reading we
+can have one doing each now that does
+break that implied rule but it is only
+implied it happened to be the solution I
+tried first it pretty much worked it did
+highlight a few currency issues in the
+tomcat code it was never written to
+behave this way but they weren't that
+big and they were fairly easy to fix so
+that's the option that we've gone for I
+suspect if we get to the point where we
+have a a spec defined solution it will
+look more like the start runnable on the
+on the web connection or we'll do
+something like basically if you want all
+rights have to be done on a non
+container thread all that there'll be
+some kind of um fix in the API for it
+that I don't think this will be what's
+adopted by the service back I could be
+wrong but I don't think it will so that
+was probably the biggest complicating
+factor and took the most amount of time
+the next one was generic types I've
+heard lots of people say very nasty
+things about generics at this conference
+how they're the worst possible thing
+that's ever been added to Java um I
+actually quite like them and they
+generally cleaned up the Tomcat code and
+generally made it easier to figure out
+what was going on and it was we in
+converting things to generics we did
+find a couple of problems both in tomcat
+and in some other Apache stuff so there
+are some advantages in terms of type
+safety but yeah I do get where people
+are coming from and after this well I'm
+sort of leaning more towards not liking
+them the issue is that the WebSocket
+spec lets you define these things called
+message message handlers and a message
+handler is unsurprisingly something that
+handles a message and they've got
+generics so when I when I when I tell
+the WebSocket container here's my
+message handler it then has to look at
+the dirt and work out what type it is
+because you're only allowed one message
+handler for text messages one message
+handler for binary messages and one
+message handler for control messages so
+I have you have to be able to get at the
+t work out what it is and then work out
+which one of those three messages it
+maps to to work out whether you're
+actually eight so you can route the
+right type of message right handler and
+B make sure that the application hasn't
+just tried to configure to text handlers
+on a single session so now it's not that
+difficult to figure out what T is at
+runtime and you also you also have to do
+the same thing for the encoders and the
+decoders because one of the things you
+can do is as well as text messages
+always strings binary messages of byte
+buffers and control messages of byte
+buffers as well all these strings can't
+remember either one of the two anyway
+you can also define these things called
+encoders which will map arbitrary
+application objects into either a string
+or a byte buffer and they use generics
+as well so you have to be you have to
+work your way through those to figure
+out ok I've got an encoder Thor map you
+know Apple to text messages and orange
+to binary messages so going back to our
+message handlers if we've got a class
+foo implements message handler whole
+string that's not too bad that's fine I
+can I can figure out that that's a
+string message handler fairly easily if
+I then have a class bar that extends foo
+I can still work my way up the hierarchy
+and
+yep that's okay it can get more
+complicated so if you've got a extends
+be booty and string and bx y xn c so byx
+extend c x y and c exit yang at this
+point what type of message handlers that
+I think it's string isn't it no hold on
+message handler whole ex ex ex what yet
+string now this is doable providing the
+generic information is set at compile
+time as long as you explicitly say
+eventually somewhere up the inheritance
+hierarchy this is a message handle of a
+concrete type whatever that type is
+there's enough information in the class
+files to work your way up the tree map
+all of these from one to the other and
+figure out what's going on if you create
+one of these at runtime and specify the
+type no chance at all no got no idea
+what method type of message hendra is at
+that point the container just gives up
+throws an exception and your endpoint
+one start if you're interested in the
+following games of how to do that it was
+a combination of a few hints on the
+mailing list a couple of good logs that
+then identified and I think a couple of
+things from stack over and you pull all
+the various bits together and you get
+all the bits you need to work your way
+up the hierarchy and figure out what
+everything is those are the methods you
+need and if you rather look at how it's
+done look at the get generic type method
+in the Tomcats util package don't expect
+to get your head around it in 30 seconds
+like it's one of those things that
+whenever I think I need to bug fix it is
+right set set aside a good chunk of
+times the first thing I need to do is
+figure out how it works again next one
+was utf-8 as I said right at the
+beginning WebSocket messages are always
+utf-8 encoded and I mentioned the
+autobahn test suite again big plus one
+to the autobahn test suite really really
+helpful and a lot of what it tests is
+our utf-8 messages decoded correctly and
+the short answer is well as
+getting a whole bunch of test failures
+nothing that I don't think I'm doing
+anything wrong and I wasn't the utf-8
+decoder in the GRE is broken so having
+found a couple of problems I wrote some
+test cases that found a few more okay
+this is going to be tricky what we're
+going to do here well let's get the
+right way around right the issues that
+you've got at first of all there are
+certain biopsy quiz that type bite
+sequences that aren't valid they don't
+map to real characters they should be
+rejected and the GRE doesn't the second
+one is the spec says if you get an
+invalid sequence and the way utf-8 works
+is the first bite I'm amongst the other
+things it tells you it tells you how
+many bytes there are that make up that
+character and say if you've got a 3-bike
+character so the first byte tells you a
+little bit of the information about the
+character and that there are two more
+bites there are then rules about what
+the allowed values are for the second
+bite and there are certain ranges that
+aren't acceptable and if you get an
+invalid second bite what the spec says
+is at that point you throw you the first
+two bytes away and you start again
+completely fresh with the third bite
+what the GRE does is take all three
+bites and throw them away and that can
+cause issues where the wrong number of
+bytes are thrown away if you've
+configured your decoder to replace
+invalid bikes with a replacement
+character you get the wrong number of
+replacement characters so multiple
+problems now writing your own utf-8
+decoder it's not the sort of thing you
+can knock out in five minutes it's not
+that hard writing your own efficient
+utf-8 decoder is a slightly different
+exercise and fortunately Apache harmony
+might be dead but the code is still in
+the repository and it has a perfectly
+good so I thought utf-8 decoder
+unfortunately it also had some failures
+different ones the advantage however
+it's apache2 licensed and I can change
+it so that's what we've done we've taken
+the Harmony Dakota we fix the bugs went
+past the autobahn test suite and we've
+actually switched that decoder
+throughout for all utf-8 decoding in
+tomcat
+and what that got us was it fixed a
+whole bunch of educate educators passing
+URLs are also utf-8 encoded so all of
+that now works the way that it's meant
+to write I did mention was talking about
+asynchronous socket channel that ssl was
+another complicating factor there it was
+a good match in most respects in that it
+was non blocking you could pass it an
+array of byte buffers in a single right
+which was exactly what I needed and that
+took away a whole pile of complication
+downside there was no ssl support so you
+know what you normally do in this
+situation will you start guling to see
+if somebody's already written it
+unfortunately all I could find was a
+couple of posts saying so that the
+software coder equipment that's going to
+be a bit tricky you don't want to do
+that do it a different way which really
+wasn't what I was hoping to find what I
+had to do this n she was right one from
+scratch but I was able to take a few
+shortcuts first of all we only use a
+small number of the methods on the
+asynchronous socket channel so we only
+need to wrap those in SSL we actually
+put a wrap around it that no ops all of
+the other methods you just use the ones
+that you need and if you've got one
+non-blocking i/o ssl implementation it's
+not that difficult to port it to another
+one and tom cat has a non-blocking i/o
+implementation for its HTTP non-blocking
+i/o connector so I was able to take a
+lot of that code and at least map the
+concepts across to make sure I didn't
+miss anything really important to get
+the ssl implementation so we've now got
+a simple ssl refer a synchronous socket
+channels so in summary um tomcat has
+implemented WebSocket one point Oh folks
+that have access to the tck tell me it
+passes I haven't got access to it so I
+don't know it's implement on top of
+server 3.1 it's available Tomcat 8 along
+with JSP 2.3 anyell 3.0 there were as
+you've seen a number of complications
+with using these new server at 3.1
+features hopefully you know a little bit
+more aware of what they are and when you
+use if you need to use them in your
+applications then you'll have an idea of
+what the vet
+appropriate workarounds might be and to
+get tomcatting WebSocket implementation
+to work directly on top of service I
+said we did have to bend the
+specification in terms of threads and
+sockets hopefully that's something that
+we can clarify in the next iteration
+generally the way the way that we sort
+of handle that sort of clarification in
+the past is if the expert group has come
+to a decision and put somewhere on the
+mailing list yet what we really meant
+was dot dot dot there's certainly in
+tomcat we tend to just get we take
+that's okay yeah that that's effectively
+part of the spec and will then go and
+follow that and implement it and that's
+what the expert group intended that's
+what that's what we'll inputs we do
+retrospectively make those changes we
+don't take the view that well that's
+what the expert group rip wrote so
+that's what we implement if they say no
+we really meant something else then we
+take that on board and adjust what we
+implemented if you want to look at the
+source code it's all in Apaches public
+repository svn dashte org repos asf
+tomcat shrunk the WebSocket package is
+all the patchy tomcat web socket right
+that's pretty good for time actually any
+any questions at this point death or one
+there
+the the buffers when we when we do those
+non blocking rights essentially what
+we've got is each time you do a right if
+it doesn't fit we see how much space is
+left or how much data is left to right
+we just use byte buffers but what we do
+is we have a maximum size of that buffer
+and then we try and reuse them so if
+you've if current mo I think it's 64 K
+so if you're trying to write say 300 k
+then you'll get one two three four five
+of them and you know the first four
+before the next one will be about third
+full and then when there's another right
+because of the way that the server
+through server buffering can work you
+can end up getting flushes generating
+additional rights whilst you're still
+doing the previous one and then the
+application hasn't done anything it's
+just what happens internally and then we
+look at how much data trying to write
+and then depending on what's most
+efficient will either tag another buffer
+onto the end of that or put that data
+onto the end of an existing not quite
+full buffer but yet all of the buffers
+are just bind buffers and one of the
+performance things that I was worried
+about was there's a fair amount of
+copying between byte buffers but that
+doesn't seem to be where the bottleneck
+is the bottleneck save mostly on network
+I oh and then after that it's actually
+doing the utf-8 encoding and decoding
+that's where it's not quite as quick as
+I'd like it to be but looking at the
+encoders I can't see any obvious places
+to make them quite get to be honest
+they're pretty efficient already I think
+it's just a price you have to pay any
+other questions
+but what I will say well I'll give you a
+chance to think about them if you do oh
+so they think of any other questions
+then I'm going to be on the pivotal
+stand in the exhibition hall all for
+most of the rest of today I'm also back
+in here at half-past four talking about
+web container security there's a panel
+discussion on that so obviously you are
+all more more than welcome for that if
+there aren't any other questions going
+once going twice gone then thank you
+very much</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

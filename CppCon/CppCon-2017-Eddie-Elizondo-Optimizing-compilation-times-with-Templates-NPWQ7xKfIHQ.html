@@ -1,0 +1,1000 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Eddie Elizondo “Optimizing compilation times with Templates” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Eddie Elizondo “Optimizing compilation times with Templates” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Eddie Elizondo “Optimizing compilation times with Templates”</b></h2><h5 class="post__date">2017-10-26</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/NPWQ7xKfIHQ" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">Well, thank you guys all for coming.
+Hope you like this talk.
+Let's just get started.
+So today, I'm gonna be talking about
+optimizing compilation
+times with C++ templates.
+I know, it sounds super counterintuitive,
+but hopefully after I
+go through this talk,
+you guys are gonna get an
+understanding of what's going on
+and the things that I did to optimize it.
+And just a little bit about myself.
+My name is Eddie Elizondo.
+I work for Facebook.
+Specifically, I work on Thrift,
+which is our internal RPC framework.
+And compilation times are
+definitely not my full time job.
+This is just something that I,
+I was sitting around with
+the code in Facebook,
+and I found these optimizations.
+Initially, I didn't
+know what was going on.
+But I built some machinery and some tools
+that gave me the understanding
+of what was going on behind the scenes
+with template instantiations.
+And hopefully, you guys are
+gonna be able to leverage that
+in your code bases to get
+this information, as well.
+So, let's just start with some history.
+So we've all heard that story about
+how templates are really slow to compile.
+And some other times,
+like one of my judges for deciding
+if I was gonna present here or not said
+that compilation times
+is an ad-hoc process.
+What that means is that
+there's no scientific,
+or not a concrete way to
+measure the compilation times
+of your units, of your translation units.
+And by saying that it's an ad-hoc process,
+it says that we don't have any tools
+to accurately measure
+these kinds of things.
+But hopefully after those talk,
+I'm gonna prove those things wrong.
+So before we start, I wanna
+ask you a couple questions.
+The first one is, do you know
+which is the slowest compilation unit
+in your entire build system?
+And the reason why I'm asking this,
+it's because this is
+like an 80-20 problem.
+And what I mean by that is that,
+by listening to Dmitry's
+talk that we had yesterday
+about techniques for
+improving build times,
+we here about caching
+your compilation units
+and having incremental builds,
+and by having that,
+you're gonna be solving
+most of the problems that
+you have with compile times.
+But if you wanna go even further,
+if you wanna dive down into
+even improving that extra 20%,
+then this talk is definitely for you.
+So the second question is,
+do you know how much time
+it takes to instantiate
+all the templates in the
+slowest compilation unit
+that you have in your build system?
+The reason why I'm focusing so
+much on instantiation times,
+template instantiation times,
+it's because from experience
+what I've found out is that
+if you have a really
+slow compilation unit,
+it usually means that your templates
+are blowing up somewhere
+and you don't even know it.
+And furthermore, do you
+know, out of those templates
+that are taking too much
+time to instantiate,
+do you know which is the slowest template
+that's slowing or bottlenecking
+the entire compilation unit
+in that translation unit?
+So, in this talk,
+we're gonna be addressing
+the latter two points.
+So let's just start with
+a really quick overview
+of what C++ templates are.
+It's specifically about how
+template instantiation works.
+So, we all start with our
+source file, our .cpp file.
+And the first thing that happens is that
+you pass that source
+file to your front end,
+your compiler front end.
+Now, I'm gonna be focusing
+right now on Clang
+because that's where I build my tools in
+and it's really easy to expand
+Clang and add your own tools,
+but after applying the optimizations,
+they normally apply to Clang but also GCC
+and any other compiler that
+you use for your build system.
+So let's keep going with
+LLVM and Clang for now.
+So you pass that to your front end.
+The first step is that
+you're gonna start
+lexing your source code.
+And I'm not gonna dive
+that deep into here.
+It's just you need to
+understand that the lexing part
+is just tokenizing your
+entire source code.
+Now, the next step is that the lexer
+passes that to the parsing stage.
+And the parsing stage
+does a couple of things.
+So for example, whenever
+you have a source file,
+it's gonna have some
+includes if you have any.
+And what's happening is that
+the parser is gonna go
+and find those headers
+and it's gonna copy and paste those
+on top of your .cpp file.
+And it does that recursively.
+So if you have more includes
+in an include that you have,
+it's gonna do that.
+And at the end, you're gonna end up with
+all the headers copy and pasted
+on top of your .cpp file.
+After that, then the parser is gonna start
+actually parsing your source code.
+The next thing that happens is that
+at some point, if you have
+templates in your source code,
+what's gonna happen is that
+you're gonna find something like this.
+So Fibonacci 80,
+that you're trying to
+assign that to the value X.
+After you find that, then
+the parser is gonna start
+the template instantiation phase.
+And it will do that recursively,
+in this case for Fibonacci,
+and after it finishes
+instantiating all the templates
+and parsing everything
+in your source code,
+then it's gonna go on and pass that
+to the optimizer, to LLVM,
+to do the optimization steps
+and finish the compilation.
+Now, let's dive a little bit deeper
+into the template instantiation phase.
+So, let's start with an example.
+In this case, we're gonna
+use Fibonacci as an example.
+That's a really simple implementation,
+and I'm just missing the base cases,
+but you get the idea of how Fibonacci
+is implemented with templates.
+And in this case, we're
+gonna have an a.cpp file,
+which is include that header.
+And we're gonna go
+through to the example that we had before.
+So we have Fibonacci 80
+that we're trying to assign
+that to the variable X.
+Now, as I mentioned before,
+the parser is gonna come in,
+and it's gonna include the
+header into this source file,
+and after that, it's
+gonna find Fibonacci 80,
+which in turn is gonna turn
+to the template instantiate phase.
+What's gonna happen is that
+once you start that phase,
+then it's gonna start
+instantiating all the templates,
+and in this case, Fibonacci
+is calling itself,
+so it's gonna recursively call itself
+until it goes to the base case.
+And once it finishes then,
+then it returns the
+value to the variable X.
+Now, the really key point in here is that
+templates are memoized or cached
+for every translation unit.
+That means that if you
+get another variable
+that you're trying to assign a value
+from a template that you've
+already instantiated before,
+then you don't need to
+roll out or instantiate
+all of those templates anymore.
+You already have them
+in your source files.
+So what happens in here is that
+you're trying to instantiate Fibonacci 40,
+but you already instantiated that before
+with a previous variable.
+So what it does now is that
+it just goes and picks up Fibonacci 40
+and gives it to the variable Y
+without having to
+instantiate anything anymore
+'cause you already have it.
+But let's just be really
+clear that this just happens
+within the same translation unit,
+that is, within just one .cpp file.
+Even if you have another cpp file
+which is part of the same
+library that you're using,
+in this case, we have another example.
+So b.cpp, which is trying to assign
+Fibonacci 40 to the variable Z.
+Now, for this translation unit,
+it doesn't know anything about
+the other translation unit,
+or specifically about the templates
+in the other translation unit.
+So what happens here is that
+Z has to go and instantiate
+all the 40 templates that
+it needs to get its value.
+It cannot use what it already instantiates
+in the other translation unit.
+So I just wanna make really clear
+that memoization or
+caching in the templates
+only happen within in the
+same translation unit.
+So, let's go into the measuring tools
+and how we go about
+measuring compile times,
+and specifically, how do we drill down
+into specific parts of
+the compilation process?
+And I just mention that if you guys
+wanna use any of these tools,
+I've tried to upstream
+them to Clang and to LLVM
+but had some blocks here and there,
+but I've been trying to.
+I'm gonna, at some point, upstream them,
+but if you wanna use them right
+away, my GitHub is in there.
+You can just go in and run my scripts
+to patch Clang and build it yourself.
+So let's just start with a
+demo of how this looks like.
+So I hope this is not too small,
+but what's happening at the top is that,
+I'm gonna open up really quick
+the example that I was
+using before of Fibonacci.
+So I just wanna show you
+the implementation of this.
+In the top part,
+you're gonna see the
+implementation of Fibonacci.
+Now, in the bottom part, you're gonna see
+that I'm assigning Fibonacci
+80 to the variable X.
+All right, so that's our source file.
+What's gonna happen now is that
+what I'm gonna do is I'm
+gonna pass this flag to Clang.
+It's called -ftime-report.
+And what that does is
+that it gives us a report
+of the overall process that
+happens in the compiler.
+As you can see, we get a
+report on the front end time.
+So it gives us how much time it takes
+to do the whole front end part,
+in this case for the Fibonacci 80 example.
+Not only that, but we also get
+some more granular information.
+For example, this is
+something that I add in,
+the template instantiation time,
+so it gives you the time that it takes
+to instantiate all the templates
+within that translation unit.
+And pre-processing is something
+that one of my coworkers also created.
+We haven't been able to
+upstream that to Clang,
+but at some point we're gonna do it.
+And you get all this information
+of what's going on in the front end.
+Not only that, but we also
+get some more information
+about what's going on in the back end.
+So as you can see, if we
+move past the front end part,
+you get all the optimization steps
+that are happening in
+your translation unit.
+So if you were on different
+optimization flags in this case,
+O0 or O3, you're gonna
+get different steps.
+And when you run the most optimized build,
+you're gonna get even more steps
+than what we have right now.
+But it gives you an
+understanding of what's going on.
+And even with just this
+information on the back end,
+there was one time I was able to find
+some inlining issues
+in my compilation unit,
+and by just changing
+some lines here or there,
+I was able to improve
+like 10% of the compile time of that unit
+just by looking at this information.
+And then, once we drilled down into that,
+and we actually wanna go a step further
+and we wanna understand how much time
+every template is taking
+in the compilation unit,
+then for that we use another tool,
+which is called Templight.
+So Templight is just a
+wrapper around Clang.
+And what it does is that
+you pass the correct flags that
+you need to pass into that,
+and what it does is that it just,
+every time that you're
+instantiating a template,
+it's taking that and it's recording it.
+So after you run the first
+tool, the Templight tool,
+then it gives you tracing information,
+which I just pass some scripts
+to get the final result,
+which is in this case the
+instantiation times for Fibonacci.
+And if we open that up,
+we're gonna see that we get the result
+of the time that it takes to
+instantiate every template.
+And after you have this,
+in this case, I'm just sorting them
+by the order of how
+they were instantiated,
+but you can apply more fancy
+sorting algorithms or something
+to sort them by the time that
+it takes to instantiate them.
+And once we have this information,
+it will tell us the things
+that we need to focus on
+to improve our compile
+times within our system.
+Now, just a little bit on
+the stuff that I work at.
+So, I work with Thrift,
+which is our internal
+framework to do RPCs,
+that is, to communicate any
+client to any given server.
+And the way that we achieve that
+is by having an interface
+definition language
+where we define all the structs
+that are gonna be used by
+our clients and our servers.
+And the way that we achieve that is that
+we automatically generate the code
+to serialize and deserialize structs
+on the client or on the server side.
+So if you follow the flow from here,
+you have a client which
+then serializes it,
+serialize any given
+struct to a wire format
+which we then send over the network,
+and on the other side,
+the server deserializes it
+and reads the information.
+And then, after it
+processes the information,
+then it gives it back to the client.
+But the important part here is that
+we automatically generate the code
+to serialize and
+deserialize these structs.
+Now, we have this piece of framework,
+but then a lot of engineers
+started complaining
+that Thrift was really slow to compile.
+And it was pretty obvious,
+because any time that
+you were trying to use
+a translation unit that had Thrift,
+then compile times would just explode.
+So we're gonna go back and use
+the tools that I already presented
+to try to figure out why that's happening
+and attempt to fix it.
+So let's start with -ftime-report,
+which I already showed you before.
+And after running that in our system,
+it gave me a result that
+looks something like this.
+So out of the total time,
+out of 100% of the front end time,
+86% of the time was being spent
+on template instantiation times.
+And as I said before,
+generally if you have a compilation unit
+that's taking too long,
+it usually means that your templates
+are excluding somewhere.
+And that was happening
+in our generated files.
+And not only that, but we also get
+some more information on the back end.
+And I'm showing this right now
+because I'm gonna come
+back at this at the end
+to show some improvements that happened
+from improving compile times.
+All right.
+So once we know that templates
+are really slow to
+instantiate in our unit,
+the next step is to use Templight
+to drill down into every template
+to see what's going on.
+So after running Templight
+in the generated code that we had,
+we get a result that
+looked something like this.
+So out of the total time,
+out of that 350 seconds,
+60 was spent on just
+instantiating that one template.
+That is 20% of the time
+was just being spent
+on instantiating just one template.
+Now, that's not acceptable,
+and we need to go and figure out
+what's going on with that read function
+to understand why that's taking too long.
+And as you can see, that's not
+just the only result we got.
+It was more about 12 different lines
+that told us all the templates
+that were being instantiated
+within that unit.
+All right, so the next step
+is to try to figure out
+what's causing this problem.
+Let's go back and understand
+that interface definition language
+that I talked about before.
+So in this case, if you look
+on the left side on Struct28,
+and if you see field 15,
+you're gonna see a list of integer 32s.
+What that means is that
+every time that we're trying
+to serialize or deserialize that field,
+we'll be generating something
+that looked like this.
+Now, this is not exactly
+how the code looks like.
+I'm gonna go to that in a minute.
+This is just to illustrate the example
+of how that algorithm sort of looked like
+in generated code.
+Now, if we see field 76,
+we have a nested list of integer 32s.
+So we have a list of lists of I32s.
+What that means is that
+whenever we're trying to
+deserialize this field,
+internally, we will be just repeating
+the same code that we already
+had before from field 15.
+That meant that we were
+doing exactly the same thing
+for every template, for every
+field that we already had
+in our interface definition language.
+So in this case, this
+is a really good clue
+that we can apply some generic functions
+to abstract these things out
+to not be repeating ourselves
+whenever we don't need it.
+And now we have our hypothesis.
+So by creating a templated library,
+we'll be able to memoize
+the instantiated templates,
+and that, in turn, we're gonna reduce
+the amount of code the
+compiler needs to handle.
+And by reducing the amount of code
+that the compiler needs to handle,
+then in turn we're gonna have
+a faster compilation unit.
+So let's try to go through this example
+to see if our hypothesis is actually true.
+Let's just jump into a little
+bit of meta programming.
+Now, I'm just gonna say right now
+that I'm not gonna focus
+on a lot of techniques
+that you can use to improve
+compile times with templates,
+and the reason is because there have been
+so many talks about templates in this week
+that you can go to other talks
+that are focused just on templates
+and you can see other
+techniques that people use
+to get around this problem.
+I'm just gonna show you the technique
+that I specifically used
+to improve our problem.
+Now, the first attempt to
+create this generic library
+was to use SFINAE.
+For any generic problem,
+that's usually the first
+approach that you need to try.
+And what that means is that
+for every type that you have,
+you have an enable_if to try to determine
+if that's a correct template
+that you need to instantiate,
+to deserialize the correct
+struct in our case.
+And the way that you use
+it, it's on the bottom left,
+you call the read function
+with the unit that you're trying to,
+with the type that you're
+trying to deserialize.
+And what's happening now is that
+for every type that we have,
+we're going through all
+the templates that we have
+and checking all the enable_ifs
+to make that sure that
+it's the right template to instantiate.
+Now, that's a problem.
+And the reason is because
+that's a linear time
+template overload resolution.
+What that means is that
+for all the 12 different
+types that we have,
+we were checking the
+12 different enable_ifs
+to make sure we were
+instantiating the right one.
+Now, after attempting this,
+it turns out that it was actually slower
+than what you already had
+before for a compilation unit.
+And as you know, you cannot
+ship anything to production
+that's slower than what you already have.
+So we need to be faster.
+And it turns out that
+we can actually improve these enable_ifs
+to change it from linear time
+to constant time overload resolution.
+And the way that we achieve that,
+it's by using type tagging.
+What that means is that
+we use empty structs,
+and they're gonna be serving as tags
+to be able to find the
+correct overload resolution
+to do that in linear time,
+in constant time, I mean.
+And the way that that looks like is that
+now we got rid of the enable_ifs,
+and in turn, we have these type classes
+that are gonna help us jump
+to the correct template instantiation.
+And as you can see, the
+usage on the bottom right,
+we insert the metadata that we have
+from our interface definition language
+into the usage of these templates
+to be able to instantiate
+to the correct one
+every time that we need it.
+So we turn out that linear
+problem into a constant problem.
+And as I mentioned before,
+I'm not gonna be going into
+other attempts that I did
+to improve compile times
+specifically with templates
+because there's so many
+talks that already talked
+about the stuff that I
+wanted to talk about,
+but I'm just gonna focus on the results
+that applying this approach gave me.
+So, if we check out how
+this turned out to be,
+now, this is a nice
+representation in a graph
+of what I already showed you before.
+So on the left side,
+you have the total time
+that it takes to instantiate
+all the templates
+in the original thing that I
+showed you at the beginning.
+And now what I'm gonna show you is,
+after applying this type
+tagging how it looks like now.
+And that's the result.
+So it's just a fraction of the total time.
+And if you're wondering why
+we don't have any more yellow lines
+on the number one,
+number two, number three,
+the reason is because now they're so small
+that they're not even
+showing up in this graph.
+All right.
+So now that we have information,
+let's take a step back and see
+how this affected the
+overall compilation unit.
+On the left side, you have
+the original approach that we had,
+so generating the entire code
+for deserializing every struct.
+And that's what I already
+showed you before.
+Now, on the right side,
+you're gonna see the
+new approach that I had
+by using the tags, the type tagging.
+As you can see, template
+instantiation time
+dropped by an order of magnitude.
+And not only that,
+but this has a trickling effect
+on the entire front end
+and even the back end.
+So as you can see,
+now the compiler needs
+to handle less code,
+so the code generation time
+is now faster than what it was before,
+because now you have less
+code that you need to handle.
+So as you can see, the total
+time now dramatically improve.
+It's not only the front end
+time but also the back end time.
+As you can see, now that we
+have less code to handle,
+the back end is able
+to perform even faster.
+So if you think about improving
+your template instantiation times,
+it's gonna have an impact on
+the overall compilation unit.
+Now, let's check the code
+to see what it looks like
+with this new templated approach.
+Now, the reason why the font
+is a little bit smaller here
+is because you don't need
+to actually read the code.
+You just need to see how it looks like.
+On the left side, we have
+the original approach
+of deserializing the entire struct,
+and on the right side,
+we have the new approach.
+So in a minute, on the left
+side, I'm gonna roll down to,
+wait, give it a second.
+There it is.
+So that entire page, it's
+just deserializing one field.
+As you can see, that first case,
+all of that is deserializing one field.
+Now, I collapse all of
+that into this single line,
+which includes all the
+metadata that it needs
+to go into the generic library
+to deserialize it correctly.
+(audience laughs)
+Yeah, this is just one function call.
+It just has all the metadata
+within the template brackets.
+All right.
+So, why do we care about this?
+Why should we care about
+template instantiation times
+and in general about compilation times?
+And I know I'm gonna be
+stealing one of Dmitry's jokes,
+but this is really important.
+At every company,
+whenever we're waiting
+on compilation times,
+it's just wasted time,
+time that we can spend iterating faster
+or even improving our code
+or getting results faster.
+It's never fun to just wait
+on your compilation times,
+and we can do something to improve that.
+We're not gonna be improving ourselves
+in the time that we take to iterate,
+but we're gonna be improving
+everyone in our company,
+and by enabling them to not
+be waiting on compile times,
+we're gonna be enabling
+them to move faster
+and to iterate faster
+and get faster results.
+So that's why we should care
+about template instantiation times.
+And hopefully, with this talk,
+you get an insight of
+how to get these metrics
+and how to dive down
+into every template that
+you're instantiating
+to figure out what are the correct things
+and the correct actions to take
+to improve the compile times
+within every unit that you have.
+Thank you.
+(audience applauds)
+Any questions?
+(woman in audience speaking off mic)
+So the question is if we
+tried if const expression.
+And the answer is no,
+because the reason why we didn't try that
+is because we don't have all
+the information beforehand.
+So the thing is that,
+every time that people
+are trying to serialize and deserialize,
+they're sending that information,
+and we need to be doing that at runtime.
+So we don't have the entire
+information at compile time.
+We just have some of the information.
+That's why we use the metadata
+from the interface definition language
+to inject it into our templates.
+- [Man in Audience] Hi.
+So have you found any runtime
+performance differences?
+Because now you've taken this inline code
+and you've put it into
+a separate function.
+Yeah.
+So actually, after applying this result,
+I actually got improvements in runtime.
+So it was around...
+Well, depending on the thing
+that you were measuring,
+so I measured this with ads,
+and with ads, it turned
+out that it was able
+to serialize and deserialize stuff
+around five percent faster
+than we already had before.
+And the reason for this is
+because the optimization part,
+it's now doing a better job at optimizing
+those smaller pieces of code.
+So yeah, there's a runtime improvement.
+And just to mention something extra,
+the results that you saw on here
+were examples that I
+created for this talk.
+I applied this internally at Facebook,
+and I reduced the compile time
+of something that was taking
+around 800 seconds to 400.
+So 50% improvement
+on the slowest compilation
+unit in our build system.
+So runtime and build time improvements.
+- [Man in Audience] Why did you template
+the class PM in that one example
+rather than templating the
+actual read and write functions?
+Oh.
+So, the question is,
+why did I template the PM
+and I didn't template the
+read and write function.
+The reason is because
+that's actually something
+that I wanna try next.
+The reason why I didn't do that,
+it's because we need
+some extra information
+from all the fields that we have.
+If we wanted to implement that right now,
+we would need to do
+some sort of reflection,
+and the first attempt
+that we did at reflection,
+it was taking too long to instantiate
+all the things that I needed.
+And the reason we need reflection
+is because sometimes we need to inject
+information about the field
+or information about
+the type of the field.
+So trying to do reflection on the object
+was really costly in compilation times.
+But the next approach that I'm gonna try
+is to do some sort of pseudo reflection.
+So what if on my compilation unit
+I inject some extra information
+that I can pass into the template
+that gives me information about
+every field and every type?
+So now I don't need to
+reflect on the object
+but I just read that metadata
+that I inject into my cpp file.
+Any other questions?
+[Man in Baseball Cap] I have
+sort of a comment question.
+I've found that, so one thing
+that I think is important
+to mention is that
+the template is, that's the
+patched compiler, right?
+Yeah.
+[Man in Baseball Cap] Yeah.
+So there have been things
+like that in the past,
+and because they don't get
+upstream, they fall behind.
+I wanted to say that...
+Oh, so you didn't mention anything about
+explicit instantiations
+or extern templates.
+Did you have any experience with that or--
+Yes.
+[Man In Baseball Cap] Using
+it as a tool to measure,
+or even in your end result?
+Yeah.
+So that's actually something
+that we also leveraged.
+I didn't dive that much into it,
+but it turns out that in the files
+that we generate for
+serialization and deserialization,
+every time that we were trying to use
+the read and write functions,
+so in this case, an example is gonna be,
+if you have another struct
+that depends on one of the other structs
+that you already have,
+every time that it saw that,
+it was attempting to
+do some instantiations.
+And the way the we improved that
+is by having the extern to
+just instantiate it once
+and be able to leverage that to not repeat
+the processes it already did before.
+So yes, we do that,
+and that actually helps
+with compile times.
+But the thing with that is,
+the thing I didn't mention it,
+it's because you gotta be really careful,
+because I started overusing it,
+and it actually worsened
+the compile times.
+So that's why you need
+to be using these tools
+to actively measure the time that it takes
+to instantiate everything,
+because you might think that
+something is improving it
+while in reality it's not.
+[Man In Baseball Cap] From my experience,
+when you, and I think this is correct,
+when you do the extern of the template,
+it still does the full AST,
+it does the full type
+expansion in the AST.
+It just doesn't generate
+the code on the back end.
+So yeah, if you span extern templates,
+you're doing a ton of extra AST work.
+I also found that was an interesting way,
+without using a patched
+compiler, to get an idea of,
+is my time going into
+the AST section of things
+or the code generation?
+And for my particular example,
+I found out it was, for
+me it was about 50-50,
+and so I had to be very careful.
+Yeah, yeah.
+So that's the thing.
+The idea with these tools
+is that it will give you
+all the information that
+you need right away.
+You don't need to playing around
+with adding something
+or removing something
+to see that it works.
+But yeah, you're definitely true.
+We should not be spamming by using extern.
+- [Moderator] This will
+be our last question.
+Sounds good.
+- [Man in Audience] So you
+showed the results for Clang.
+Does it apply to GCC as well?
+I mean, the compile time improvements.
+Yes.
+So I applied the same thing to GCC,
+and it turns out that it actually improved
+the compile time in GCC, as well.
+The reason why I didn't show that
+is because the tools that
+I built were for Clang.
+That gave me the most information
+about the results that I got.
+But the overall compilation
+time in GCC also improved
+by quite some bit.
+All right.
+Well, thanks a lot.
+(audience applauds)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

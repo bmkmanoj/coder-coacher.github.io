@@ -1,0 +1,1181 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Performance of Serializable Snapshot Isolation on Multicore Servers | Coder Coacher - Coaching Coders</title><meta content="Performance of Serializable Snapshot Isolation on Multicore Servers - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Microsoft-Research/">Microsoft Research</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Performance of Serializable Snapshot Isolation on Multicore Servers</b></h2><h5 class="post__date">2016-07-26</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/IP-S_RHlsEQ" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">each year Microsoft Research hosts
+hundreds of influential speakers from
+around the world including leading
+scientists renowned experts in
+technology book authors and leading
+academics and makes videos of these
+lectures freely available
+you
+so it's my pleasure today to introduce
+Alan faculty to you all I think Alan
+actually knows all everybody in the room
+so in some sense he needs no
+introduction at all
+he's from the University of Sydney and
+he has a long history of being involved
+with in doing research and transaction
+processing over the last several years
+he's sort of focused his efforts on on
+exploiting in some ways snapshot
+isolation in multiple ways and has done
+some very nice work including the Sigma
+best paper award in what was a 2008 on
+how to use the versions that you have
+from snapshot isolation to provide
+serializable transactions as well so
+Alan continues to work in this area and
+the talk today is on performance aspects
+of that sort of work so I'm really happy
+to welcome Alan here he's been a
+longtime friend and colleague and I'm
+sure the talk will be very interesting
+thanks thanks very much Dave yes so I
+should just set the context today's talk
+is purely an experimental talk so we
+don't have any new algorithms we don't
+have any new proposals what we have is
+some measurements and so the the idea is
+just to look at some of the algorithms
+that have been published including the
+one of our own that they've mentioned
+but also a number of others and see what
+happens when you actually run them so
+just a a quick marketing I I noticed I'm
+on sabbatical at the moment at Berkeley
+and I noticed that company talks always
+start with we are hiring so we're a
+university so we can't say that but at
+least we can sort of advertise that we
+exist and that you know there is
+database research at the University of
+Sydney and you know should you have any
+interns or whatever who in any stage
+looking to to come out for a period that
+would be a wonderful thing
+yes for those of you who don't recognize
+it anymore so this work is in the
+context of you know OLTP style
+activities so we're looking at programs
+where there is a significant amount of
+modification going on of the data not
+just analytic workloads and the standard
+acid properties that people want
+particularly here focus on isolated and
+the different things that isolate and
+might mean I guess with I wasn't sure
+about the audience with this audience I
+think I can skip the concept of what
+concurrency control is quickly back to
+the serializability which is sort of the
+academic approach to capturing what
+isolated might mean and so there's this
+nice definition that one covers in a
+database course that you have the fill
+in particular has spent years developing
+people's intuitions about this the key
+things here are that the the importance
+of serializability to me is
+fundamentally the fact that it gives you
+this preservation of integrity
+constraints even when the database
+doesn't know about the integrity
+constraint so yeah it's easy enough to
+have a database that will maintain a
+declared integrity constraint but if
+there's an integrity constraint which is
+complicated to express the nice thing
+about serializability is that that
+integrity constraint will be maintained
+even without the platform knowing about
+it provided you write each program to be
+sensible on its own so you it turns a
+global problem into a local problem at
+each program and there's the standard
+theory that you can do this by looking
+for the absence of cycles in a graph
+showing the conflicts
+so that's the academic situation the
+reality is of course that a lot of the
+programs out there don't run with
+serializability as does anybody know if
+there is any platform at all for which
+the default is serializable I
+I'm not aware of one all the ones I am
+aware of you know give you something
+like read committed as the default and a
+lot of people are running their
+transactions without realizing that they
+need to do something so there's a lot of
+weaker isolation out there right okay so
+that will be yes yes so anyway so weak
+isolation is something that's a
+practical reality and so yeah given the
+people in this audience I don't need I
+think to to say too much about snapshot
+isolation it's been successful in
+practice yeah Oracle have I think done
+everybody a substantial disservice by
+confusing the terminology so snapshot
+isolation is an isolation level which is
+not serializable but is a very valuable
+isolation level in many ways it has
+plenty of good properties no you don't
+get the typical anomalies you don't
+block readers so that's that's very
+helpful for a lot of applications one of
+the things I should say about snapshot
+isolation that I found in teaching
+many students when you explain
+serializability the intuition that they
+build up is actually snapshot rather
+than serializability students I have
+found the way they develop a sense of
+what isolated ought to mean is that when
+you have concurrent transactions they
+should be isolated from each other that
+neither should see the other and of
+course that's what snapshot isolation
+gives you rather than the there is a
+serial ordering of them which is the
+academic definition so clearly snapshot
+isolation hit a very sweet spot in the
+space it's one that is taught
+academically so I think thanks to Phil
+for putting it that it's it's actually
+the industry definition but not all of
+the industry at the present time at
+least and it's the one that is covered
+in the textbooks so maybe I should say
+the textbook definition so snapshot
+isolation does not in fact give you the
+textbook property of serializability in
+every situation you can get this
+standard you can get this anomaly of
+right skew where two transactions don't
+see each other and violate integrity
+constraints because each of them is
+modifying different data so it does it
+happen in most of the benchmarks that
+are out there but you can design
+programs that make it work
+that isn't really true though the Oracle
+wasn't going to run wasn't gonna
+participate to PCC because they were
+asked to run serializable and it could
+only support true serializable with
+table level box and they negotiated and
+the TPC council I thought it was very
+important to have water school in the
+process and so the idea was you don't
+have to support serializability you have
+to run serializable for The Bachelor say
+that that's true then TPCC somehow
+violate serialized
+you know run serializable even though
+you use us up yes I take the TPCC
+benchmark give serializable executions
+on SI and but there was some earlier
+definition which I wasn't I don't know
+which one Nate was the first one but
+well after TPCC
+insisted on serializable horikawa oracle
+was right not to participate I wasn't
+there people hear about you closer to
+the action
+I'll defer to them so I hope I don't
+need to sort of walk through the the
+example this is what I like because it's
+one where one can actually sort of get a
+sense of how important it could be to
+have integrity constraints be protected
+so this is one where you have you're
+running a hospital and you want an
+integrity constraint which says for
+every day there is at least one doctor
+on duty and by having programs can
+currently take doctors off duty what you
+can end up with is that the final state
+is one in which nobody is on duty and so
+that seems a very real world impact from
+the loss of active textbook
+serializability from running snapshot
+isolation one of the most important
+things though again which i find is not
+intuitive I mean for most low levels of
+isolation like read committed the normal
+way people think about it is to say look
+at your program and decide whether your
+program leads serializability or whether
+your program could run read committed
+snapshot isolation is not like that you
+can't look at the program and see
+whether it has some feature that is
+Leeds snapshot isolation it's not a
+property of each program it's
+property of the collection of programs
+as a whole it's purely from interactions
+and it's even more complicated you can
+have three programs which work serial
+which gives serializable executions
+under snapshot isolation you introduce a
+new program and then you need to alter
+what's being done in one of the previous
+set of programs because of the new
+program so in order to reason about this
+we need some form of serializability
+theory that deals with multiple versions
+there have been a number out there the
+the papers I have worked on typically
+use the version of the theory from res
+which is a slightly simplified from the
+most general definitions but they're
+they're easy to use and easy to write
+down as a paper you know in a paper in
+particular for everything like snapshot
+isolation you have a version order
+that's given to you the the most general
+definitions the ones Phil and I worked
+on a lot involve quantifying over
+version orders in the theory and in our
+case we just take the commit order as
+the version order because that's what
+snapshot isolation doesn't so we've we
+operate that way so you can draw your
+your conflict graphs for multi version
+histories and you get the standard
+result that if there are no cycles in
+the graph that tells you that your
+execution is serializable the important
+thing to notice is that it's the read to
+write conflicts which are particularly
+critical in snapshot isolation they're
+the ones where you have a transaction
+which reads a version and does not see
+the effect of another transaction which
+is writing the same item that is
+producing a later version than the one
+that the first transaction reads
+and those already at alleges paper now
+almost 13 years ago sort of established
+the importance of these conflicts for
+weaker levels of isolation so anyway
+using that we draw serialization graph
+and we distinguish the edges which from
+read write read to write conflict and
+between transactions which are actually
+concurrent with one another so those
+edges are the ones that we go to pay
+particular attention to in the diagram
+so I'm going to generally show them as a
+dashed edge that's what's called the
+anti dependency so the theory which I
+developed the extending stuff that are
+two larger had done but a theory for
+snapshot isolation is that the crucial
+thing to look for is a situation where
+you have two of these vulnerable edges
+in a row in a cycle so it's not just
+that you have a cycle but you have a
+cycle with two of these anti
+dependencies between concurrent
+transactions successively and the
+theorem so this is paper work I did with
+patent Betty O'Neil in 2005 is that
+that's the critical thing to look for
+when understanding whether you've got
+serializable executions or not in a
+snapshot isolation system so following
+on from that they've already mentioned
+work principally by Michael Karl who was
+at that stage a PhD student of ours at
+Sydney has since graduated and is
+currently working I believe for Wired
+tiger
+proposed slightly changing the
+concurrency control algorithm to be very
+similar to snapshot isolation have the
+same nice properties of snapshot
+isolation but guarantee that the
+executions were serializable according
+to the textbook definition the basic
+idea is very simple it is if we can
+track when you get these vulnerable
+edges when you have a read to write
+dependency between concurrent
+transactions and you look for cases
+where you have two of those in a row and
+if you whenever you have two of those in
+a row you abort that should ensure that
+you have serializable executions because
+serializable executions would have to
+have two of the odd serializable
+executors would have to have two of
+those in a row and you aboard one of the
+transactions that throws it away but it
+should be a lot cheaper than traditional
+optimistic concurrency control where you
+essentially prevent all the conflicts
+from happening so you should have to do
+a lot less so Michael proposed mechanism
+yes could you show how this like on this
+example of the bound of the on duty
+exactly what happens
+so with this this situation here what
+you have is so transaction one is
+reading both these records and writing
+this one transaction two is reading both
+these records and writing this one so
+what we have is that we have a so
+transaction one has a an anti-dependence
+e to transaction - because transaction
+one has read the Smith row it did not
+see the change made by transaction
+- so transaction 2 produces a version
+which transaction one did not see so
+that is an edge from t1 to t2 of the
+read before a write if we look at the
+Jones row that's the case where
+transaction 2 reads it and does not see
+this one's right so that gives you a
+dashed edge so what we have is a cycle
+of two dashed edges one after the other
+and there the whole cycle there are no
+others okay so that's what's happening
+here so yeah this is a necessary and
+sufficient
+okay so we have to be here know so what
+we show is is only one direction if you
+have a if you do not have that structure
+then you get serializability obviously
+so let me move it if you have that
+structure in a cycle then you have a
+failure of conflict serializability now
+it is still possible that even if it's
+not conflict serializable it is
+serializable in say view serializable
+sense because of you know some of those
+rights being blind rights or whatever so
+yeah conflict serializable is actually
+an approximation to view serializability
+but yeah for our our point our goal is
+to ensure serializable executions it's
+okay and if we occasionally abort
+unnecessarily okay there's a performance
+issue and you have to worry about how
+much that is okay so so essentially
+Michaels approach I mean the basic idea
+is look for these two edges in a row and
+abort when you see that pragmatically
+how Michael's suggested to do that was
+in every transaction you have two flags
+one flag which says there is some edge
+coming in there is a flag which
+indicates if there's an edge going out
+and every time you see one of these read
+to write dependencies you set the out
+flag in the first transaction and the in
+flag in the second transaction and
+whenever you see a transaction with both
+its flag set you will bought it
+it's not quite that simple because
+sometimes you discover that both the
+flags are said in a transaction which
+has in fact already committed you know
+basically that transaction is committed
+and you're now doing another dependency
+from another transaction so at the time
+you discover it then you have to abort a
+different transaction but you still
+abort one of the transactions in the
+cycle and you still protect things how
+does Michael propose to actually detect
+these situations so the simplest case is
+somebody did a right you're now reading
+the item but you do not see their right
+because you're operating on a snapshot
+that case is particularly easy to detect
+because when you do the read the
+algorithm for finding the correct
+version for you to return goes down the
+list of versions sees this one sees that
+it's timestamp is greater than what
+you're trying to read and skips over it
+so the moment you skip over it you know
+here is a case where there is an edge
+that's been produced sorry yeah the case
+where you do a read and then later
+somebody comes along and produces a
+version but from a concurrent
+transaction Michael proposes to do that
+by sticking in the lock manager a
+special lock mode to record that the
+read happened and when this right
+happens it's not blocked by that lock
+but it knows that there is an edge and
+so it goes and puts the appropriate
+flags into the transactions and Michael
+I mean one of the things is you actually
+have to keep these locks around longer
+than transaction commit time you've got
+to keep them for another you know
+basically until every transaction which
+had started when this after this
+transaction has finished
+have to keep them a little bit longer
+but they don't block anything so they're
+just sitting there in the lock table so
+Michaels approach does sometimes abort
+unnecessarily it's a conservative
+approximation it for example doesn't
+check whether you've got two edges in a
+cycle as soon as it too sees two edges
+in aborts and sometimes that means that
+you're aborting things which will never
+show up in a cycle Michael implemented
+this into in ODB so the back end for my
+sequel it was very very simple
+he ended up adding 230 lines of code to
+the storage manager most of which were
+simply to track these flags and keep
+them around and then garbage collect
+them as necessary so we have an
+implementation of Michael's algorithm
+that he did then in 2011 another
+proposal was published for serializable
+snapshot isolation so this was by Steve
+River like a student of patent Betty
+O'Neill from UMass Boston and what they
+proposed was to say let's try to get rid
+of these false positives these
+unnecessary aborts and what they they
+proposed they call PSSI for precise
+serializable snapshot isolation and
+essentially it is a very old algorithm
+serialization graph testing right they
+keep the serialization graph and check
+it for cycles and if there's a cycle
+they abort okay so that was their
+proposal they did an evaluation in that
+so they implemented that into nodb and
+for their paper they did an evaluation
+where they compared it to an algorithm
+which they and we refer to as es si so
+it's basically a similar idea it's the
+same idea as Michael Carlson I mean they
+use it as a proxy for Michael's
+algorithm namely
+you just look for two edges and don't
+bother with checking the full cycle but
+very implementation is actually very
+different in the code and we'll discuss
+that so they had this and this Michael
+Kyle had here's all done in in ODB so we
+thought this would be an interesting
+place to actually try and do an
+experimental discussion and see how
+these different algorithms play out
+let's look at there are basically
+several different implementation design
+decisions in these systems so the first
+is in some sense goes to the heart of
+what Michael was trying to do so Michael
+tried to make his algorithm be very
+lightweight not intrusive on the nodb
+code and so Michael tracks things very
+lightly basically has two flags for each
+transaction the alternative is you keep
+this global serialization graph which is
+a big data structure that that everybody
+shares then there is the one which is
+the in some sense the algorithmic rather
+than the implementation issue are you
+trying to or how accurate are you going
+to be in deciding when to abort
+something you know the more
+proximate but less close you are to
+exact the more unnecessary abort so
+there could well be a performance impact
+from that and then the other one is
+again an implementation issue when you
+do the the checking and so I'll go
+through each of these in turn so as I
+said Michaels algorithm you have two
+flags for each transaction one which
+says do you have a dependency in one
+which says do you have a dependency out
+so the benefit of this is that you
+really have very local information each
+transaction just keeps its own threads
+it has to when there's a conflict you
+have to update one other transactions
+flags but there isn't a global structure
+the downside is that those flags firstly
+they're just boolean you know is there
+an air gian so if you've spotted an air
+gender then the transaction at the other
+end aborts you don't have any way of
+knowing that that came from a particular
+transaction and cleaning it out you
+leave the flag there and that can cause
+you to a border necessarily PSSI of
+course tracks the full dependency graph
+and revel acts implementation that used
+as a proxy for Michael's the SSI also
+keeps that whole dependency graph and
+tracks everything at the level of which
+edge there is which transaction you are
+depending on in which transaction
+there's a there's an edge out to the
+downside is that you have this huge data
+structure that everybody is sharing but
+I mean for PSSI you can be incredibly
+precise but even for essi you're much
+more accurate than just with a boolean
+flag of was there an edge
+then do you look for a whole cycle or do
+you just look for two edges in a row so
+here PSSI goes for cycle detection
+whereas both SSI and revel acts proxy
+ESS I do it just when there are two
+inches and obviously if you don't bother
+checking if your edges are in a cycle
+that allows false positives and
+unnecessary aborts will occur and then
+the other one again an implementation
+issue Michael
+Kyle's code basically does this on each
+operation when you do a read you see if
+you're skipping over version and if so
+you you set the flags at that point when
+you do a write you see if there is a
+conflicting conflicting but not blocky
+lock indicating a previous read and if
+so you set the flags and every time you
+go in and set flags you check if there
+somebody has two flags set and if so you
+were born so Michaels algorithm is doing
+work on every operation PSSI and revel
+acts proxy for Michael's algorithm essi
+both do no work at all during read and
+write no no work other than what is
+happening anyway they do everything at
+commit time so when the transaction goes
+to commit you go into the lock table and
+see what other transactions had set
+locks and you build the the extra edges
+into your conflict graph at that point
+and you do a cycle detection and you
+abort
+so here we have the potential advantage
+that you with Michael's that you might
+detect things earlier
+on the other hand that also means that
+you're going into sort of the work
+frequently and if you have many many
+operations it may well end up being more
+overhead than just doing it once at
+commit time where you can get it all in
+a single hit so at least on the surface
+it isn't clear which of these will
+perform better you know there are
+definite advantages and disadvantages
+each way and complicated trade-offs so
+we thought there would be an interesting
+experimental evaluation to to compare
+them so that's what we did so maybe we
+should start with what we had so we we
+basically got the code from Steve rather
+lack that they used in their system that
+was in a so not a relatively recent
+version of my sequel within ODB at the
+back Michael Carl's system had been
+implemented in a somewhat older version
+of you know Denis I mean Michael Karl's
+work was in sort of 2008 whereas
+relaxants 2011 so we've got several
+years of progress so we we took
+Michael's code and taking advantage of
+the fact that we had Michael around to
+consult took it into the same release
+that revelation used so we had a common
+code base with revell acts
+implementations and adaptation of
+Michael cars so we had Michael's SSI and
+Michael had also implemented pure si as
+a comparison so we took his point of
+that also so we had that so this is work
+that was done in collaboration with
+between people at Sydney University and
+Seoul National at Seoul National they
+have
+plenty of nice equipment and so we took
+great advantage of that so we've got a
+twenty four core machine so that's their
+not six core is their six cores I think
+that's probably spell checker at work
+for dies the structure is core private
+l1 and l2 cache and die l3 cache we
+followed both Michael Kyle's experiments
+and Greville ax experiments and we set
+it up to do something which is almost
+group commit it's not proper group
+commit because my sequel doesn't have
+proper group commit but you set it so
+that the log gets flushed only
+periodically so it stops the log
+flashing becoming the bottleneck which
+otherwise it would tend to be very very
+early in these experiments okay so in
+ODB itself is a complicated system it is
+a multi version system it's serializable
+level however is two phase locking okay
+so it doesn't use the versions if you're
+running with serializable the versions
+are used for it's the it's concept of
+read committed which is not the usual
+read committed it's some very bizarre
+different thing so Michael implemented
+snapshot isolation using the versions
+that were there for their read committed
+and the code to read a particular
+version so it's snapshot isolation is
+not there
+out-of-the-box so so what we have is we
+have Michael's code for snapshot
+isolation but it's very readable change
+I mean the nice thing about in ODB the
+reason Michael used it is it already had
+both the versions and the lock manager
+unlike Postgres which had the versions
+but no lock manager at the time and
+other systems which had a lock manager
+and own versions you know Debbie gave
+both the pieces that he needed so as I
+said you know his whole code doing both
+snapshot serializable Si and si itself
+was 230 lines of code and then you know
+the the clients are running on a
+separate machine which is tossing
+requests at this so we use a micro
+benchmark it's you know basically three
+tables the transactions read one of the
+tables and write a different one and
+because they have all the ways you get
+cycles coming up here's one experiment
+you know so remember our goal was to see
+how these different algorithms compare
+and you know so you know sometimes so
+the middle so the the third one here is
+Michael Carl's there then the revol AK
+proxy for it is here and the precise the
+cycle detecting one is at the end and
+the first bar is always just snapshot
+isolation as a baseline so you know
+sometimes the Rev like ones do better
+sometimes Michael Carl's do better there
+doesn't seem to be much in it the
+difference from snapshot isolation is
+not that great though it does seem that
+these are suffering and you know so
+probably you I'd say okay so the
+conclusion of the comparison is it
+depends but not much in it perhaps the
+most interesting thing is that you know
+in fact you know sometimes even River
+likes proxy for Michaels algorithm does
+better than precise but yeah really I I
+think if you were looking at this you
+would say yeah really it's not important
+enough to worry about so one other thing
+that we we did was you know so the first
+experiment I showed you was a case where
+it's 75% read-only transactions and 25%
+updating transactions if we vary the
+proportion of read-only transactions to
+updating transactions we do see
+significant difference but again what
+you're seeing is not much difference in
+the performance between the algorithms
+and any particular workload though with
+a very high rate of read-only
+transactions we do see that snapshot
+isolation is pulling well ahead and
+you're then pay more for serializability
+whereas with sort of the cases where you
+have a more limited amount of read-only
+the the costs are in the range of sort
+of ten fifteen percent which is what
+people both rather lack and Michael
+Karl's papers report
+yes sir so nice plugs just like yes okay
+so things are getting interesting
+and indeed the most interesting figure
+is what happens if yes so if it's said
+previously I sort of showed your graph
+up to here let's have a look at allowing
+the empl to keep going multi programming
+level the number of concurrent clients
+that are throwing requests at at the
+database so this is going back to the
+workload which is 75% read only 25%
+updaters which is sort of the one we we
+sort of regard as in some sense the most
+natural want to look at and this is what
+we found and basically the rest of my
+talk will be not talking about the
+differences between these three
+algorithms but in fact this much more
+noticeable issue which is that the
+performance of all of these algorithms
+collapse catastrophic Lee as the multi
+programming level went up as you get try
+and get concurrency into the system ok
+so the you know so people expect to
+reach a bottleneck and and Plateau but a
+collapse is is a sign of some worry in
+the engineering of the system I would
+have said yes these transactions are I
+think the ones which did 20 writes at a
+hundred reads each of pretty small
+records we did experiments where we made
+the transactions bigger by an order of
+magnitude I mean it changes the numbers
+but not the phenomenon of the collapse
+yeah but I mean not not that big yeah so
+but we see we see a distinct collapse
+and that's really what this talk is
+about that collapse in our attempts to
+understand that collapse and and explore
+it so if we look at the runtimes of the
+transactions what we see is that the the
+collapse goes along with transactions
+taking much much longer so snapshot
+isolation transactions at
+the it be so the the read-only
+transactions that snapshot don't go too
+badly though they do get a bit larger
+the updating transactions get a lot of
+but with the serializable versions they
+really slow down it and you're seeing a
+very substantial penalty showing up in
+the run time there we also looked at
+abort rates and that wallet at MPO 30
+you're beginning to get aborts the
+performance collapse is already at 20
+and you're not getting a lot of aborts
+at MPL 20 so it's not from lots of
+aborts and retries it really is that the
+transactions are running much longer
+some profiling so this one is set up so
+that each algorithm we show what's
+happening as the MPL increases so this
+is snapshot isolation
+this is revel acts michael's and the
+precise version for relaxed and what
+we're seeing is the huge amount of time
+in holding the mutex
+it's a mutex on the entire database code
+you know deepening world has a new takes
+of the database kernel well it did add
+there is a release candidate it's not
+yet i think the official current version
+of you know DB but so we know do be is
+moving towards a situation where it's
+try its refactored to try to divide the
+mutex but at this stage the it is a
+kernel mutex single kernel mutex
+the diminutive internal data structures
+of one show Felix it's also a 24 core
+machine sexually yes I mean so it's not
+every op I mean it's only if you have to
+modify the structures but yes this is
+basically being the problem so so
+essentially you know you're taking these
+mutexes to avoid it it's all it's all
+it's the latch to avoid modification of
+shared data structures what's even worse
+is this is what's happening with a
+read-only workload okay so there is no
+logical contention here you're still
+getting however if you're running with
+these algorithms you are still getting
+the the various locks you're you're
+recording things they're not blocking
+anybody but you are recording them or
+you're doing a check at commit time of
+this graph it will not have any edges in
+it but you still have to go and do the
+check and we're seeing this performance
+collapse pure read-only workload is due
+so snapshot isolation is managing to
+keep going but the other ones are all
+collapsing appallingly
+let's also I'm sorry for the blurring of
+this this is this seemed to be something
+when I took stuff out so I'll interpret
+this this figure so you can see these
+are the same sort of graphs with MPL
+from 1 to 30 the the bars are in the
+same order this is what happens when we
+run on four of the cause so the platform
+has the capacity to essentially make
+some of the cause invisible you can say
+use only certain cause so if you run on
+four cause yet this if you run on twelve
+of the cause you get the collapse
+already
+and fundamentally running on 24 cause
+you do worse than if there was only one
+core there that's the basic story so we
+did experiment with doing it whether the
+cause were on the same die or otherwise
+there are some differences but it's not
+the dominant thing I mean so whether
+you're you know you're sharing the level
+three cache or not it's not the the big
+effect there's a small effect in that
+for the PSSI and essi sometimes you can
+work so that if you're on a single die
+the whole serialization graph fits into
+the cache on that die so that can give
+you a bit of an advantage but it's not a
+strong effect the collapse is not from
+that so you know here here you bay so
+this is one way we've actually plotted
+out so this is one core to 24 cores and
+you see that the MPL 30 your performance
+is as bad on 24 cores as it is on one
+core and already at 12 cause you've got
+a fairly substantial collapse you know
+for cause you do pretty well on and it's
+interesting you know the the earlier
+papers of both Michael Karl's aerobics
+were typically looking on machines with
+two cores or there abouts but 24 cores
+is is really causing problems
+particular that there is me thanks to
+mark the dependencies so yes so so all
+of these algorithms are taking that
+database mutex in one place or another
+and are they drilling to where those
+places are this just again shows the
+experiments on different numbers of
+cause and an NP l10 you don't get
+dramatic increase in the amount of time
+you spend in the mutex but if you look
+at em PL 30 you're getting this huge
+effect even once you get 12 cause you're
+getting lots and lots of time spent with
+the kernel mutex so let's have a look at
+where the mutex gets taken and why so
+with Michel Carl's code
+so Michael cope went to a lot of trouble
+to have it so that each transaction has
+transaction local flags but you still
+end up scanning the list of transactions
+to find the transactions to check the
+other transactions and that is a place
+where you end up getting the the curdled
+mutex so you do that on every reader
+right you don't do much inside that so
+you you take it only for a short time
+but you do it often with revel X
+algorithm you do nothing during the
+transactions running but when you go
+into commit you take the kernel mutex
+and you then have this huge thing which
+updates the global dependency graph and
+runs a cycle detection over it so yeah
+both of them
+have problems what we do see is that the
+ones which operate on the global
+dependency graph tend to collapse
+earlier and more extreme but Michael
+Kyle's still collapses even though he
+went to all the work of trying to have
+stuff with sort of transaction local
+flags just because of the the problem of
+finding the transaction in the
+transaction table so okay so the problem
+as been alluded to the problem is the
+fact that you have a kernel mutex which
+everybody was using to protect
+everything and that that's where the
+collapse came from just as an
+interesting thing we decided also to
+profile the snapshot serializable
+snapshot isolation I mean this came
+about after we've done the the previous
+work then Postgres introduced their
+implementation which was based on
+Michael Kyle's original ideas but they
+implemented it in Postgres well not just
+as a research prototype as ours were but
+so this is now the production code of
+Postgres Postgres is now using Michael
+Cole's algorithm with some further
+refinements so this was a building B
+industrial paper last year so they have
+structures where they don't have a
+single global mutex for the kernel they
+have stuff sort of separated out and
+they have sort of a separate latching
+structure for the little different
+different little bits of the shared data
+so in a sense it's
+it's similar to Michael Karl's algorithm
+however it's a bit more accurate firstly
+they don't just set boolean flags they
+actually track which transaction is at
+the other end so you get fewer cases of
+a dangling flag left by a transaction
+that aborted they also have some
+additional optimizations including some
+for analytics which don't matter for
+this so we also took their code and
+measured that for this we actually use
+the TPC C++ benchmark which is one that
+Michael Kyle invented so it's basically
+TPCC
+and you add one more transaction to the
+mix so that you actually have a
+situation where snapshot isolation
+wouldn't work correctly and so that was
+run this is done on a thirty-two core
+machine and what we see here is there is
+still a performance drop-off but it
+happens much much later and it's not
+really as bad so here so this is MP L
+128 you're you're down by 1/3 from the
+peak at about MP L 32 but you haven't
+collapsed catastrophically though it's
+still the case that with very with high
+MP L you are definitely paying for
+serializability compared to snapshot
+isolation which PostgreSQL still has
+available so if you ask for repeatable
+read you get snapshot there and if you
+ask for serializable you get
+serializable snapshot
+so this shows that you know serializable
+snapshot isolation it's not something
+sort of intrinsic to the algorithm that
+you have this performance collapse it
+comes very much from the implementation
+details and how you share the mutexes
+but even here with some careful work and
+you know the Postgres people did measure
+it on machines with some numbers of
+course as you get to thirty-two cause
+and higher multiprogramming levels you
+are really hurting still in performance
+I guess the the conclusion I would give
+is that and here you guys are way ahead
+of us is the great importance of
+thinking about the implementation
+details and particularly the latching
+that goes on in order to get decent
+performance on the sort of high end
+servers that are are coming and so yeah
+really thinking about what is shared and
+how you protect what's shared become
+vital yep we agree with all the previous
+papers that the serializable algorithms
+do don't have much penalty compared to
+snapshot isolation when there's one core
+to cause but at the moment the
+algorithms are still not taking good
+advantage of lots of cause and the work
+though what we were suggesting was not
+so much algorithmic rethinking of the
+concurrency control but implementation
+rethinking too to avoid contention over
+latches and that's we are and I guess I
+will hear more about the way you've sort
+of got all around this and managed to to
+do stuff with both concurrency control
+changes and algorithmic and
+implementation ones
+I presume that some of these papers and
+past papers on the serializable snapshot
+isolation event something to say about
+the performance drop off from snapshot
+isolation perhaps simulating it or doing
+it in some more controlled setting we've
+all concurrency control algorithms
+ultimately become a bottleneck
+underneath efficiently high contention
+can you give us a sense of what you
+expected it that were the only effect
+okay so the so most actually see it on
+those graphs okay yes so I don't have it
+actually let me just going on I may I
+may have some of Michael's slides among
+the hidden stuff so let me just see if
+I've got some of those but maybe let me
+let me go back to summarize what Michael
+found in his experiments was there were
+lots of situations where the concurrency
+control wasn't the bottleneck so most of
+the cases he did snapshot isolation and
+his serializable snapshot isolation the
+performance was very close however he
+could tune the situation so it became a
+bottleneck and then you can start
+getting substantial drop-offs most of
+the time that wasn't where he found it
+how much the divergence is you're going
+to get some drop off even for snapshot
+isolation and if you get a high enough
+conflict level so yeah so the question
+is was what's the spread between yes so
+right Michael got graphs which where he
+many of his graphs basically you had si
+s si and two PL essentially on the same
+curve but by he was able also to get
+graphs where you had si s si
+and to pl with you know something like
+thirty to fifty percent there by
+choosing the weight of the transactions
+appropriately putting the right delays
+in them we have a we have an
+implementation of our cachaça walls PhD
+thesis simulation concurrency control
+algorithms and they used for an earlier
+study they recall
+yes you interesting to get some kind of
+apples to apples comparison of these
+things just purely based on the
+concurrency control
+there's so many moving parts to try to
+actually do it any other way is really
+really difficult it's worth knowing
+yes so hey I I guess yeah so the first
+thing of course is just trying to
+understand what environment will it be
+that will make the concurrency control
+the bottleneck rather than all the other
+things all eventually all the
+transaction benchmarks are in sight to
+have that effect in so that that wasn't
+what well I guess the first thing is
+yeah you have to do something to make
+sure the furs the log the disk the disk
+rights of the wild don't become the
+bottom eight so you have to have
+something like group claim
+otherwise think that's the one that hits
+you first all of these are done with
+everything fairly fitting into main
+memory so that takes that out yep yeah
+that's sort of a rhetorical question but
+I think it might be you're interested in
+pursuing this line of understanding
+performance I think that would be useful
+yeah so I mean what we found here so one
+of the experiments I didn't show you was
+we we did the one where we really sort
+of crunched down onto a hot spot to try
+to get contention in the concurrency
+control as the issue but basically it
+doesn't turn out to be that much so what
+we found there was that you know when
+when you make it a hot spot all three of
+the SSIS are dropping off they're all
+dropping off far more than si is they
+are all collapsing and even
+right right what you have yes look
+natural just by design with my
+initiative if more movement so you can
+come up with any workload that can start
+an official report when I can cause like
+as much conflict center boards and slow
+down so I can even like yeah but so I
+mean there's the difference between Si
+and the others but but then within the
+SSI variance there's also how they go so
+you know how many false positives you
+get from just looking for two as against
+from being more precise
+how many false positives you get from
+not cleaning up when an edge from an
+aborted transaction say you're saying my
+quite a quick missus those sort of
+difference the difference is that the
+concurrency control double are small
+it's really this is really sensitive to
+how you build the concurrency control
+mechanism and what new Texas you use to
+protect with data structures within the
+currency concurrency control mechanism
+itself yeah again sorry Freddy maybe it
+does a lot better than if it isn't yeah
+but I mean Phil's question is suppose
+you got an idea from all of that and
+really just looked at the concurrency
+crowd but it's it's kind of a weird
+presentation I mean you had this rather
+lengthy build up about realizable
+snapshot isolation mini and you told us
+about the way database kernels behave
+badly which is actually the choice of
+concurrency control algorithm is quite
+irrelevant yes yes so it's not
+completely irrelevant because I mean you
+still have the fact that snapshot
+isolation doesn't have the collapse
+nearly as badly as all the serializable
+variants so
+yes sorry I think that there is still a
+take away which says you know the the
+price of getting serializability which
+you know Michael and we've we've argued
+is is was manageable it was like 10
+percent at the most
+compared to snapshot under most
+conditions turns out not to be true with
+enough cause with the sorts of
+implementations that we had now one
+could maybe and we're trying to find
+better implementations which don't have
+these issues and the question is can you
+get it too close to what snapshot
+isolation has under those conditions
+from this is that what matters
+but what really shows up here is the
+efficiently you can maintain the data
+structures but you have to maintain and
+how efficient you to do it under high
+concurrency right yes and those events
+are now so big that you can't really see
+the difference between two very awkward
+yes yes and I mean the thing is that
+first snapshot isolation pure snapshot
+isolation when you read you don't have
+to do any modification of the internal
+state and so that's fast and it doesn't
+cause all these problems whereas all of
+these things when you do a read you have
+to record the fact and that you're
+paying for yes you need it's not a lock
+manager that can can do this and and you
+have to think about the whole system in
+terms of what you're doing at each stage
+of the checks I mean Michael had tried
+to do this in in designing it so that
+the flags were transaction local but in
+the implementation he just didn't check
+all the other bits and
+yes
+thank you very much</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

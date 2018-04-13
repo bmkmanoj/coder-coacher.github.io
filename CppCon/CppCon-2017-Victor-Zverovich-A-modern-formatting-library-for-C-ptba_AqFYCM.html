@@ -1,0 +1,1338 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Victor Zverovich “A modern formatting library for C++” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Victor Zverovich “A modern formatting library for C++” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Victor Zverovich “A modern formatting library for C++”</b></h2><h5 class="post__date">2017-10-09</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/ptba_AqFYCM" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">- My name is Victor Zverovich
+and I am a software engineer at Facebook.
+I'll be talking today about
+a modern formatting library
+for C++ and it has nothing whatsoever
+to do with my work at Facebook.
+In fact, I started this project
+long before I joined Facebook,
+and I worked on it in
+my spare time mostly.
+First, a bit of wisdom from one
+of the reviewers of my CppCon submission.
+So, &quot;Formatting is
+something everybody uses
+&quot;but nobody has put much effort to learn.&quot;
+And I hope very much that you learn
+something from this talk.
+So, here is a brief high-level overview
+of what formatting
+facilities we have in C++.
+Obviously, we have two standard solutions,
+stdio and iostreams.
+And we have a bunch of
+formatting libraries,
+like Boost Format and Fast Format,
+arguably two most well known libraries.
+I also included Folly Format,
+it's not a separate library
+but it's part of Facebook Folly,
+which provides formatting facilities.
+I include it here because
+it's very relevant
+to what I'll be talking about,
+and there are millions of
+other ways of doing formatting.
+Pretty much every large code base
+has their own safe printf replacement
+for various definitions of safe.
+And I'll go in roughly
+chronological order,
+starting from the past stdio
+which we inherited from
+the C Standard Library.
+Here's a warmup, trivial example
+and also to calibrate the audience
+and see how many of you are
+sleeping or checking emails
+and how many of you are awake.
+So, who thinks that there's
+an error in this slide.
+- [Man] I don't think there's
+an error in the slide,
+there's an error in the code.
+- In the code of--
+(laughing)
+Yeah.
+This is correct. (chuckles)
+Who thinks that this is
+okay, this code is fine?
+Okay.
+One doesn't think that it's fine, yeah.
+So, obviously there is a mismatch
+between the argument type
+and the format specifier
+which is %s.
+It just seems that the
+argument should be a C string
+or null terminated string.
+And good compilers like GCC or or Clang
+will warn you eagerly and they
+give lots of useful details.
+They even say which format
+specifier you can use instead.
+This is great, but unfortunately,
+it only works for literal format strings
+and in reality they can be dynamic,
+especially due to localization.
+So another problem is memory safety.
+Let's assume that you
+want to format an integer
+and you went to great
+lengths to compute exactly
+how many characters you
+think you need to allocate
+for a buffer.
+So, you even edit one
+for terminated null character
+and this is the common
+source of errors of course
+and you allocated the vector of this size
+and you pass this buffer
+to sprintf together
+with the format string,
+and an argument where x is the same
+as before it's an integer
+and you store the return
+value in the results variable.
+So, who thinks that this code is correct?
+Okay, good.
+Who thinks that it's incorrect.
+Okay, yeah.
+This is incorrect,
+and if we wanna check
+and print the result + 1
+for null terminator and the size,
+most of the time it will kind of work
+but for over a billion of integers,
+if you use 32-bit platform,
+you'll get output 12 11 which means
+that you have a buffer overflow.
+Obviously, it will
+happen for integers less
+or equal to minus one billion
+because we didn't take into
+account the minus sign.
+And the solution is to use an snprintf
+but then fortunately it can't
+grow buffer dynamically,
+so you either need to precompute size
+or overestimate the size
+which is suboptimal.
+And did you notice another
+error on the previous slide?
+Not the writing part at
+the end of the buffer,
+but something else.
+So, to kind of remind you,
+here we computed size,
+we returned the results,
+so did you see any more errors
+in this simple line of code?
+(man talks off mic)
+Yes, exactly.
+So, the size_t and
+compiler again gives you
+this nice warning message
+except that in this case it's incorrect.
+So, the correct specifier
+for a size_t is not %lu but %zu.
+So, yeah.
+And then you can get errors like this,
+which is an actual screenshot
+from a bug report to a
+game called, Cataclysm,
+if I read the ASCII,
+or font correctly, where
+you can see lots of zu's
+which I don't think are intentional.
+And this is pretty recent,
+this is opened in 2016,
+this bug report,
+and the problem was that
+they used Visual Studio
+which didn't support %zu until
+like version 2015, I believe.
+And we have the whole zoo of macros
+for fixed-sized integer types
+that define different format specifiers.
+This table I took from cppreference.com
+and the worst thing
+about this macros is that
+to use them you have break the string,
+insert the macro and then
+continue your string,
+which is horrible.
+I don't even know how would you use that
+with a non-literal string.
+So, why do we need to pass
+type information manually
+if the compiler knows the types?
+So, the answer is of course varargs
+which is so old they have been featured
+on The History Channel.
+(laughing)
+So, for a long time I believed the varargs
+must be super fast, it's C, right?
+It's the best.
+But then I looked at the
+actual generated decimal code
+and did some benchmarks.
+So what I found out is some platforms,
+at least, maybe in all platforms,
+they are not inlinable.
+Well, functions that use
+varargs are not inlinable
+and also they produce a bunch of code
+to store the registers on stack.
+This seems insignificant,
+so we can measure what's the impact.
+So, it's just a few percent,
+not very important, but annoying.
+And also, if you optimize the underlying
+printout implementation,
+which can be done in the...
+I have an alternative implementation
+which is somewhat faster,
+then this difference
+will be more profound.
+A more serious problem
+is lack of random access.
+So, if you use positional arguments,
+you'll need to set up extra arrays,
+and printf does a bunch of other stuff.
+So on my platform, which
+is Mac OS with Clang,
+if you use positional
+arguments with sprintf,
+it can be almost two times
+slower, which is crazy.
+What can we learn from it?
+So, we can learn that
+varargs is a poor choice
+for modern formatting API
+because of many old type management,
+they don't play well with
+positional arguments,
+they use a lack of random access.
+We have some optimal code generation,
+and the functions are non inlinable.
+So, we can do much better
+with variadic templates.
+So, now the question, why
+even worry about varargs?
+It is ancient stuff.
+The reason is that I saw many times
+people write safe printf
+replacement on top of sprintf,
+so they solved some of the issues,
+but not all of them, and
+often add extra layer
+of overhead by performing
+the start checks.
+So I think it's better to go
+and kind of start from scratch,
+and use variadic templates
+in the first place.
+Finally, in this historical section,
+I'd like to talk a bit
+about extensibility.
+There is no standard way to extend printf.
+By extending, I mean supporting
+for many of your own types.
+But there is a new extension,
+and as you might imagine,
+it's pretty horrible.
+So, to use it you need to
+register two functions,
+one that actually does formatting,
+here it's called print_widget,
+and it does an UnSafeCast.
+It's supposed to format the
+object that you passed in.
+And the other is kind of...
+Type-checking function,
+although the only thing that it does,
+it just said that the
+argument should be some kind
+of a pointer, which is not very type-safe.
+And moreover, if I remember correctly,
+they recommend only
+using uppercase letters
+when registering...
+Heller's for GNU types,
+so if ever want two supports from adding
+more than 26 types in your
+program, you are out of luck.
+This brings us to the
+present, or iostreams,
+which is the standard C++ way
+of doing formatting and I/O.
+And while it solves lots of problems
+with printf that we saw earlier,
+it has the problems of its own.
+One of the most obvious
+things is what Matthew Wilson,
+the author of Fast Format,
+called, Chevron Hell.
+Which I think is a very good description.
+So, here we have two snippets of code
+that do pretty much the same formatting.
+So, one is a printf and
+the other is iostream.
+So, who prefers the printf version?
+Okay, who prefers the iostreams version?
+Oh, everyone, a few hands.
+But the majority seems to prefer printf
+so if we put aside all the issues with it,
+obviously the code is much
+more compact and readable,
+and finally, C++11 gave in
+to format specifiers for time
+and introduced std::put_time function.
+There are some differences
+in these two pieces of code
+which I will talk about later.
+So, another issue that we
+have with the iostreams
+is problems with translations.
+So, if we use printf, we
+have the whole message
+with arguments available for translation.
+But in iostreams by design,
+parts of a message are interleaved
+with formatting arguments.
+The thing is, in general,
+translation of the formatted
+message is not equal
+to the concatenation of translated parts,
+at least in many languages.
+It doesn't mean that
+the formatting libraries
+should provide translation facilities,
+but it should be possible to build them
+on top of the provided API.
+Other problems related to this
+is reordering of arguments,
+and access to arguments for pluralization.
+So, now let's take a
+look at I/O manipulators.
+So, the first line we just print out
+some integer in hexadecimal,
+and then we try to print something else.
+So, what do you think the
+second line will print out?
+Who thinks it will print out 42?
+No?
+Well, good.
+What do you think it will print out?
+- [Man] Well, it will print
+out (softly talks off mic),
+right?
+- Yes, exactly.
+So, it will print 2a obviously
+because we didn't switch back to decimal.
+And some flags are sticky,
+some are not, so go figure.
+And the solution to this problem is to use
+boost::io::ios_flags_saver
+but it's a bit annoying.
+So, I think that ideally,
+formatting functions, when you call them,
+she shouldn't produce any side effects
+other than the output itself.
+And in this example,
+we're trying to write a little bit of JSON
+and we can do it manually
+like in this trivial example
+or we can use one of the tons
+of JSON serialization libraries,
+which underneath can do an
+equivalent of this code.
+So, what do you think this will print out?
+So, will it be like curly braces,
+and within them, 'value' : 4.2?
+Who thinks it will be (softly mumbles)
+They're all tricky questions, right?
+So, the answer is it depends.
+(laughing)
+Because we are using locales
+and most of the time,
+well, as they say, &quot;It
+works on my machine.&quot;
+It works fine, it will
+print a 'value' : 4.2
+which is a perfect JSON
+as far as I understand.
+Until someone sets the global locale
+to something like Russian
+UTF-8 or other weird thing,
+then you get, instead of
+your nice decimal point,
+you get a decimal comma,
+or, I don't know, decimal ampersand
+or whatever the locale decides
+to choose for decimal separator.
+So, you can argue, &quot;It won't happen to me.
+&quot;I'm a responsible developer,
+I'm setting my locale to C.&quot;
+But in fact it can happen to you
+especially if you're developing a library
+and you don't want to mess
+up with the global state.
+It happened to me personally.
+This is a bug report,
+it's a very helpful title,
+Unexpected Exception.
+So, this happened because the
+user had an Italian locale
+and I was no careful enough to make sure
+that output is locale-independent
+and the format I was writing to
+didn't really allow decimal commas.
+I would argue that the only reason
+for the output to be locale-dependent
+if it's displayed to the actual user.
+If you're writing to JSON
+or XML or anything else,
+there are strict rules
+that you must adhere
+and the output should
+be locale-independent.
+And maybe this should
+be the default behavior
+or at the very least, you
+should have control over it.
+And I should stress that
+this issue is not specific
+to iostreams.
+In fact, this bug report
+was open to a project
+where I didn't use iostreams,
+but it's kind of a common problem.
+And yet another kind of
+worms called threads.
+Let's say you want to print
+something from multiple threads,
+in this case, we are printing
+some simple greeting messages
+from two threads, and then we join them.
+So again, who thinks that it
+will print something obvious
+like, &quot;Hello, Joe, Hello, Jim&quot;?
+Who thinks it's an undefined behavior?
+I think that's a good answer,
+a reasonable answer by default.
+If you see a reasonably big
+chunk of C++ codes, the default,
+the assumption should be,
+(laughing)
+&quot;This is undefined behavior.&quot;
+This is like a rule of thumb.
+But I don't think there
+is an undefined behavior
+unless I made some stupid mistake,
+which is entirely possible.
+But the answer, again, it depends.
+And one of the better
+outputs that I have chosen
+by writing it multiple times
+and then selecting the one that I liked,
+was &quot;Hello, Hello, JoeJim.&quot;
+And the reason why I like
+this particular output is
+that when I was a kid I liked
+to read the Robert Heinlein's
+Orphans In The Sky,
+which had a two-headed character
+called, JoeJim Gregory.
+(laughing)
+So, note that in case of CL,
+there is some transition there,
+but on the level of messages
+but rather in the video
+arguments that you output,
+which is a bit of a regression
+compared to pause sprintf
+where you could have a perfect output.
+Now a bit of a alternative history.
+What would happen if formatting
+libraries became mainstream
+and took over the world?
+Well, not really, this is just an overview
+of some of the major formatting libraries,
+and some of the limitations of them
+which may explain why
+they've never taken off.
+So, Boost Format is
+probably the most well known
+and widely used formatting library.
+It supports two syntaxes
+for its format streams,
+a printf syntax which you
+can see in the example below,
+and the simplified syntax
+with positional arguments
+where you can admit type specifiers.
+And the syntax is very expressive,
+but somewhat complicated
+because you can do everything
+in multiple different ways.
+So here, you have four
+examples that do the same.
+Although it supports printf syntax,
+it's not fully compatible,
+so it's not a drop-in replacement
+which kind of undermines...
+The reason to go this
+way in the first place.
+But the main problem with Boost Format
+is illustrated on this slide.
+The performance code bloat
+and compile times are
+all very disappointing,
+compared to printf.
+And not only printf, I'll
+show later more benchmarks
+comparing to other formatting libraries.
+Now this is an actual photo of me in 2012
+when I ran the benchmark,
+(laughing)
+and realized I can't use this library
+and I have to come up with something else.
+Another well known library is Fast Format.
+I like Boost, I like Boost Format,
+it is reportedly fast, it
+even has it in its name,
+which must be true then.
+(laughing)
+But I've never verified for the reasons
+with that here, this is a quote
+from the author of the library,
+so the kind of features
+that cannot be accommodated
+within the design are leading
+zeros, or other padding,
+octal/hexadecimal encoding,
+runtime width/alignment,
+which seems very restrictive
+and makes one scratch one's head.
+So, how is it possible?
+Fortunately, the author
+came up with a solution
+with the same article.
+So, the way you work
+around this limitation
+is by wrapping arguments together
+with kind of format specifiers represented
+in code, so to speak,
+and pass this wrapper object
+instead of the actual argument.
+But now, I fail to see how
+is better than iostreams,
+it's even more verbose now.
+It has some advantages, for example,
+it's non-sticky flags,
+and also we have atomicity,
+but otherwise, it doesn't
+look very appealing.
+So, having looked at all
+the current solutions
+and limitations,
+let's take a look at the proposed future
+where the P0645R revision number
+standards proposal text formatting,
+which is based on the fmt library
+I've been working on the last few years.
+And the motivation for this proposal is
+to have an alternative to
+the printf family function,
+particularly sprintf, which
+is safe, extensible, and fast.
+Also, it should be
+interoperable with iostreams,
+we don't want to get
+rid of iostreams at all.
+We'd like to have small code size,
+and reasonable compile times,
+have some locale control,
+and have some expressive
+syntax for format strings.
+So as I said, this is not
+an iostream replacement,
+so if you invested in a
+tattoo featuring iostreams,
+you won't need to get rid of it
+or camouflage it with
+flowers or butterflies.
+So, always good.
+So, let me show you a few examples
+that introduce the syntax.
+So, the format string uses
+brace-delimited replacement fields,
+like in this example,
+I think it's pretty self-describing.
+Also, you can use positional arguments,
+within the braces you
+can refer to arguments
+with the anthesis starting from zero.
+And you can use format specifiers,
+similar to printf, after the colon,
+like in the example at the bottom.
+Of course you can have
+width either specified
+in the format string where dynamically,
+you can refer to an argument
+that gives the output widths.
+And similarly, you can
+have precision specified
+in the format string or dynamically.
+The way you do it is after the point,
+you specify the width,
+either literally or
+referring to an argument.
+Also, you can use three
+types of alignments.
+In fact, there are four
+types of alignments,
+but the fourth numeric
+alignment is complicated,
+so I won't talk about it in this talk
+in the interest of time.
+So, we have left, right,
+and center alignment,
+which is an improvement
+compared to printf,
+it doesn't have center alignment.
+I've never used center alignment myself,
+but I've heard it can be useful sometimes.
+And you can have fill and alignment,
+which is even more cool,
+you can do some kind of...
+ASCII art or whatever.
+You might find the syntax familiar
+because it's largely based on Python.
+Particularly, Python str.format
+because they also have percent
+formatting similar to printf.
+It is more expressive than printf,
+in particular, you have
+fill and center alignment.
+But format specifiers
+are similar to printf's
+and almost everything that you can write
+after percent in printf,
+you can write after colon
+in this format syntax
+which simplifies migration,
+and makes it easier to learn.
+But at the same time, the type is optional
+because we use variadic
+templates, we know the types,
+you don't need to repeat yourself.
+(man talking off mic)
+What do you mean by conflict?
+(man talking off mic)
+If you say s on a flow, it
+will throw an exception.
+The syntax is so simple that
+it fits on a single slide,
+even part of the slide.
+So, I won't go into too much details,
+there's fill alignment,
+I think you got the
+idea from the examples.
+It's very easy to parse.
+Like Boost Format, it's
+very consistent and simple.
+It also supports name documents
+in addition to positional arguments.
+This is not included
+in the status proposal
+to make it reasonably compact.
+But it can be added later.
+So, the way you use name arguments
+is inside the curly braces,
+you give the name and
+then in the arguments,
+you wrap your arguments
+together with the name
+in the arg function.
+Also, someone implemented the user-defined
+literal version of it,
+which I won't show.
+But you can find the examples
+in the documentation, and in the pa--
+No, no, not in the paper, sorry.
+So why do we need the new syntax?
+Why not just use printf?
+So, the reason is that we like
+to avoid all the Legacy stuff,
+all this horrible macros, and
+things like LL and PRIU64,
+which is not even correct here
+because this is a sign integer.
+So instead, we just want
+to write curly braces
+and let the compiler figure out.
+Unless we want to
+customize the formatting,
+then we use colon and say how we want
+our nice arguments to be formatted.
+So, we want the specifiers
+to be semantical,
+to convey formatting information,
+not type information.
+For example, d means decimal
+formatting, not decimal int,
+if you see the subtle difference.
+And also, something that I
+call, Bring Your Own Grammar.
+So, you as a user can
+extend formats doing grammar
+for your own types.
+And I show how to do this in this slide.
+So, the replacements filled consist of...
+Curly brackets, the argument ID,
+which can be an index or a name,
+followed by colon and format-spec.
+And format-spec is well defined for...
+Standard types, well, built-in types,
+but for user-defined
+types you can interpret it
+however you like and
+write your own parser.
+The way you do it, well,
+the way you used to do it,
+because the extension API is changing,
+was to provide a format value function,
+which took a buffer where
+you wrote your output,
+the argument, in this case I
+just parse the time tm's object,
+and a context.
+The context provides access to the portion
+of the format string being
+parsed and other arguments.
+Why you need other arguments?
+For things like dynamic
+width or dynamic precision.
+But if it sounds too complicated,
+then you don't have to do this.
+You can just implement or
+reload it operator LSL,
+or in session operator take in ostream
+and your object of your type,
+like in standard iostream way of...
+Implementing formatting of your types.
+And it will fall back to this operator.
+So, why this particular syntax?
+It has been proven to work.
+So, Python designed this mini language,
+went to great lengths to implement it,
+and to test it in production,
+and it worked out very well,
+they wanted to deprecate old
+percent printf-like formatting.
+They didn't, but, for
+compatibility reasons,
+but they are in a more difficult state
+because percent formatting
+in Python is less broken
+than printf in C and C++.
+It's just a little bit broken.
+There were fewer reasons to
+migrate to this new syntax
+and still it was very popular.
+It was so popular that other languages,
+like Rust, adopted it.
+And there are several
+popular C++ implementation.
+The fmt library I'm talking
+about and Folly Format.
+And the API's fully type-safe,
+no varargs nonsense just
+for adding templates.
+So, we have the format function,
+which is the main API function
+which takes a format string
+and arbitrary arguments,
+and returns an std string.
+If you want to be efficient,
+you don't want to allocate
+a std string, maybe,
+you want to write to a buffer
+allocated in stack or something,
+then you can use the format_to function
+which takes the buffer,
+and again, a format
+string and the arguments.
+So, the memory management is automatic
+which prevents the whole range of errors.
+So, the buffer concept represents
+a contiguous memory buffer,
+memory range, with efficient
+access with only one call,
+virtual function call,
+if you need to grow.
+It can have limited capacity
+and report an error on growth,
+or it can grow dynamically.
+And it has also an associated locale.
+So here is a simplified
+version of the buffer class.
+So, we have size, capacity, resize,
+access to data, this is very simplified
+just to give an idea.
+And only two virtual functions,
+one when you hit the
+capacity, it calls grow,
+and all the relocates
+will report an error,
+also, a virtual function
+to get the locale.
+Now let's go a little bit deeper
+and take a look at the format function,
+how it is implemented.
+And if you look at it,
+it just forwards to vformat.
+Which is very similar to
+printf, vprintf, in some sense.
+So format calls vformat
+with the same format string
+and it wraps arguments in
+an object called arg_store,
+which represents an array of references
+or copies if the argument is civil,
+of reference to arguments.
+And to build this arg_store,
+we call make_args function
+and the vformat function
+takes not args_store
+but the kind of view of this object,
+which is similar to,
+let's say, array view.
+And notice that vformat is not
+parameterized on the types,
+which might be surprising.
+And why is that so?
+So, this slide shows the kind
+of implementation details
+where I think it's so interesting.
+So, if we have small number of arguments,
+we can take all the types together
+and pack them in a single integer,
+and have a pointer to an array
+of pointers or copies of arguments.
+So, argument store can be thought of
+as an array of variants.
+And on the left, it's kind of
+compactor presentation a bit
+and on the right is
+expenditure presentation
+if the number of arguments is big
+and they don't fit,
+all the types don't fit in one integer.
+So, why do this?
+It helps greatly with compile times
+and code bloat, it makes
+the plural function
+binary code very small
+comparable to printf.
+So, when you call printf,
+you often have an integer parsed,
+representing the number of
+arguments parsed anyway.
+So here, we have the integer representing
+all your argument types.
+So, you have similar binary code,
+printf is a little bit better
+because varargs parse
+more stuff in registers.
+Another thing is that this kind
+of type erasure method
+prevents code bloat,
+so instead of instantiating
+all your formatting code
+on all combinations of arguments,
+you have just one instantiation.
+So, why do you need all this stuff?
+Let's benchmark and see
+whether it really helps
+or it's just hand waving.
+So I wrote this little benchmark
+which might be a little bit cryptic,
+but let me guide you through it.
+So, what it does, it
+calls the format function
+for 125 combinations,
+different combinations,
+of argument types.
+So, there's gen_args function at the top,
+it just calls F with
+five arbitrary objects.
+The only thing, they just
+need to be of different types,
+and then we combine them.
+We're doing all possible combinations.
+So five to the power of three,
+we have 125 combinations.
+And now what do we compare it against?
+We can measure our
+implementation, the fmt library,
+but I don't want to go and
+re-implement everything,
+parameterizing everything in templates.
+Moreover, I can do it
+inefficiently intentionally
+to show how good my method is.
+Fortunately, Folly Format
+comes to the rescue.
+They did exactly that, they
+passed all the arguments
+throughout the formatting code,
+and that's what we're
+gonna compare against.
+So, this is a optimized Clang build
+with Ant debug, everything
+is linked dynamically.
+And as you can see, there
+is a tremendous improvement
+both in the compile time,
+and binary size.
+So, the compile time is roughly...
+Six or something times
+better compared to Folly
+when we apply this type erasure technique.
+And the binary code size is by
+the order of magnitude better
+and this is just formatting code.
+So, I don't know about you,
+but I don't want 100
+codes to format a function
+to take one megabyte of space.
+So, what we can learn about this,
+I think the lesson is use
+variadic templates judiciously.
+Don't pass the unnecessarily
+throughout all of your code.
+So, a few more benchmarks.
+So, this one is interesting.
+This tries to be realistic,
+unlike the previous one
+which tried to fit on the slide.
+So there is 100 translation units
+with five calls to formatting
+functions per translation unit
+and no other code.
+This is optimized build,
+and as you can see,
+Boost Format goes through the roof.
+The fmt library, which is the
+basis of the status proposal,
+is a little bit worse than printf.
+It used to better before
+I switched to string view
+because now we have to
+pass an extra size argument
+compared to previous when we
+just passed a null terminated string.
+There is a trade-off, now
+the API's more convenient
+because you don't have to
+pass a null terminated string.
+But you pay a little bit for it.
+But I think the price
+to pay is very little.
+It only matters if you operate
+in a very resource-constrained
+environment.
+And in this case, you can
+obviously provide overloads,
+taking null terminated strings.
+One thing to mention is Folly Format
+doesn't perform that bad here
+because there are fewer
+combinations of types.
+There are only five different
+combinations of types
+in this benchmark at like 125
+but it's still quite big difference.
+Here's a benchmark showing
+compile time performance.
+Unfortunately, with compile time,
+there's that much we can do.
+So, printf beats everyone, obviously.
+I think we can get to
+the level of iostreams.
+In fact, it used to be
+in the level of iostreams
+until some recent regression,
+I think we can bring it back down.
+But this still performs
+significantly better
+than other formatting libraries.
+And a lot of efforts have been put
+into optimizing compile times,
+particularly by Dean Moldovan
+who has done great research
+and investigated different ways
+of optimizing compile times,
+and even put together these
+graphs of compile times
+over the number of arguments.
+This on Clang,
+and the way it was optimized
+is by replacing template recursion
+with variadic array initialization.
+Interestingly, it doesn't
+give such a big improvement
+in GCC or in Clang.
+Also, it's more noticeable
+if you use very large number
+of arguments, like 10 or 12.
+Now, more at a traditional
+benchmark runtime performance,
+as you can see, fmt performs
+maybe within 10 something
+percent compared to printf.
+Better than iostreams and
+other formatting libraries.
+Iostreams perform, for some reason,
+particularly bad on this platform,
+which is Mac OS with Clang,
+on the Linux with GCC,
+the difference was not that profound.
+One thing to mention is
+that there is nothing
+in the design of the library
+that makes it impossible to beat printf.
+In fact, this particular
+benchmark is largely dominated
+by formatting or floating point numbers,
+and for floating point, fmt
+currently falls back to sprintf.
+So it cannot be better than printf.
+But for integer formatting I
+showed in some other benchmarks
+that it was possible to beat printf,
+even with allocation of string.
+And you can of course write
+your own formatting functions
+similar to format.
+Let's say you want to write a function
+that takes an error
+code and a format string
+and some arguments and
+write these to the log.
+So, you can either make it variadic
+if you don't care about
+compile times or anything,
+or you can apply the same
+technique to your own code,
+and get the same benefits.
+So, work in progress is
+separation of parsing
+and formatting the extension API.
+So, instead of format value function
+that I showed before that does everything,
+parsing and formatting,
+we want to be able to specialize
+this formatter object,
+have a separate function
+that does parsing,
+separate function that does formatting,
+and between these two,
+you can store the state
+in the object itself.
+And you can reuse standard
+format as you (softly mumbles)
+For example, inheriting a
+formatter from formatter int
+and get the same parse method and all the,
+let's say, provide the format method.
+For example, if you are,
+object is just some
+kind of wraparound int.
+Other things I will get
+into is compile time
+format string checks and
+range-based interface.
+So, let's take a look at
+the new extension API.
+Here's a little example,
+let's say you want
+to format a vector of some
+objects of arbitrary type,
+so you specialize the formatter struct
+and inherit it from the formatter T.
+And you don't need to
+provide the parse method.
+Let's say you just want
+to reuse the parsing
+of the format string for the...
+For the vector,
+from the formatter of T.
+So, you only provide the format method.
+The way you implement it, you
+just try to buffer a brace,
+delimited comma separated list of values.
+And you just delegate all the
+work to the formatter of T.
+It's very simple, it fits on the slide
+and it can be used as shown.
+Of course, if you want
+more advanced features,
+you can have a different syntax,
+you can implement your parse method,
+and I don't know, a customized separator
+instead of hard-coding comma here.
+But that's all up to you.
+So, the migration, will we ever be able
+to migrate from printf?
+I think that it might be possible here,
+some of the ideas.
+So, there is an easy
+method between the printf
+and this mini-language.
+We can come up a compatibility library
+with printf-like semantics,
+particularly that returns error codes,
+and in other ways that's similar
+to printf and maybe even...
+Well, we won't make a
+drop-in replacement probably,
+but we can have a tool like Clang-Tidy
+which goes over your code base
+and transform literal
+strings into this new format.
+So with this proposal, I went
+to the Toronto Standards
+Committee meeting and presented
+and my main goal was
+to get initial feedback
+and understand whether people
+want this in the standard,
+should I work on this,
+or go on with my life?
+But unfortunately, for my life,
+it was fairly well received
+and I've been encouraged to continue,
+I'm working on a revision
+of the proposal.
+So a little bit about the library itself.
+So, you can find it on GitHub,
+fmtlib/fmt.
+There is also a website,
+fmt.net with the documentation.
+There've been many contributors
+which I'm very grateful to,
+and some people took time
+and packaged the library
+for all major Linux distributions
+for HomeBrew and NuGet,
+and you can find the implementation
+of the standards proposal in
+a separate branch called std.
+A bit of history,
+more history, so, we started in 2012,
+and originally, the library
+was called cppformat.
+It was inspired by formatting
+facilities in Clang.
+That's kind of surprising.
+I don't even remember
+what the facilities were.
+I just remembered this fact,
+and back then the library
+looked completely different.
+It didn't use variadic templates,
+it used weird operator overloading API,
+until I figured out how to...
+Emulate variadic templates
+with variadic macros for
+compatibility with C++98.
+So, since around mid 2016,
+main focus was on the standards proposal,
+and that's why you don't
+see very many commits
+or activity in the timeline
+because this shows the master branch
+and all the work is
+done in the std branch.
+There's been a lot of projects using fmt.
+Here's a small selection one.
+In particular that I want
+to draw your attention at is spdlog
+which is a great logging library.
+So, many people...
+Don't even realize that they use fmt.
+They get it through
+spdlog, which is fine by me
+because I get fewer bug reports.
+No, all the bug reports end up in fmt.
+The author of spdlog is very thorough.
+So, thank you for the attention
+and if you have any
+questions, feel free to ask.
+(applause)
+- [Man] Yeah, I have a question.
+- Yes?
+- [Man] About formatting
+the floating point numbers.
+Isn't there another way to do that
+without going to sprintf?
+Like a standalone library?
+I'm not an expert, I think I saw something
+that's not going through C Lib.
+- Yes, so, the question is
+whether there is another way
+to do formatting of floating point numbers
+without going through sprintf.
+So yes, for example, we can
+implement Grisu algorithm
+or use double conversion library,
+and not rely on sprintf.
+That's actually one of the
+items on my to-do list,
+maybe I'll do it sometime.
+- [Man] Another question,
+I was just looking
+through the GitHub implementation
+for common compile time bottlenecks,
+and you're not doing a lot
+of template meta program,
+do you know what's taking a
+long time in compile time?
+- So, the question is,
+do I know what's taking
+a long compile time?
+I haven't looked at it recently.
+So, last time we looked at it,
+there was a problem when we used
+the recursive kind of template stuff.
+Right now, I'm not sure
+what exactly contributing
+to compile times.
+I would appreciate if anyone
+knows a good way to debug...
+PRF compile times.
+Yeah, let me know.
+- [Man] I think there is
+a Clang extension, but--
+- Yeah.
+Yeah, it would be interesting.
+- [Man] There exists some Clang extensions
+to help to allow you to do
+static checking of things
+so you can flag incorrect
+format strings at compile time.
+Have you explored any of those?
+- So, if I understood
+your question correct,
+there is a Clang extension
+to check format strings at compile time.
+- [Man] It allows you to write a function
+that would check it.
+- So, unfortunately, as far as I know
+it only works for printf syntax.
+- [Man] There's this Clang extension
+to let you specify your
+own custom function.
+- Ah, there's a Clang extension
+that specifies your own function.
+No, I didn't know about that.
+It would be interesting to look into.
+Yeah, thanks for letting me know.
+- [Man] I was wonder--
+Can you hear me?
+- Yes.
+- [Man] I was wondering if there's
+any kind of improvement
+that you could make
+when the format string
+is a const expression
+so that more of the kind of parsing
+of the format string
+happens at compile time
+as opposed to run time.
+And taken to (quickly mumbles) conclusion
+if you say, &quot;hello string&quot;
+and the string is world,
+that could just compile
+down to, &quot;hello world&quot;
+and do nothing at runtime.
+- Yes, in theory--
+- [Man] In theory.
+- So, the question is are there
+any optimization we can do
+for compiling constexpr
+strings and arguments,
+for example, if we have
+both the format string,
+if we have everything in constexpr
+to do formatting at
+compile time, basically.
+So right now, I'm only looking
+at compile time checking
+of format strings.
+But in theory, I think
+it should be possible
+to do parsing and at least construction
+of the format object at compile time,
+and maybe even formatting itself.
+But there is still a lot of work to do.
+- [Man] Thanks.
+- [Man] Yeah, I guess
+the problem is sort of
+(quickly mumbles off mic)
+questions that have been related to it.
+Sort of, do you kind of
+have a plan of attack
+for the situation where a
+string literal's passed.
+Because it's pretty tricky
+because once you pass something
+by value into a function,
+like in the body of a function,
+you can't really assume
+that's it's constexpr,
+you're not gonna be able to
+like static assert with it.
+So, I don't know, is the plan
+to like have some string literal type
+that you pass in as a
+non-type template parameter
+or something or like, do you
+have a plan of attack yet?
+Or, not really sure?
+- So, if I understand correctly,
+the question is how do I plan
+to handle the constexpr
+format string, right?
+- [Man] Like checking it at compile time.
+- Yeah, checking it at compile time.
+That's actually a big
+problem and I'm not sure yet
+how to do it.
+So, I would appreciate
+someone who has experience
+with constexpr and compilers
+so if they have any ideas
+how to do it, let me know.
+Unfortunately, we've run out of time.
+So, if you have any questions,
+feel free to find me and
+ask everything, thanks.
+(applause)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

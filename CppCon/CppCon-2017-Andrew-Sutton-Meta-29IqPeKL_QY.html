@@ -1,0 +1,2347 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Andrew Sutton “Meta” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Andrew Sutton “Meta” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Andrew Sutton “Meta”</b></h2><h5 class="post__date">2017-11-03</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/29IqPeKL_QY" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">- Nine o'clock, all right.
+So welcome to my talk on metaprogramming.
+If you're out in the hall
+and can hear me, come in.
+No? Oh, anyways.
+So I have to apologize in advance
+for a little bit of bait and switch.
+When I originally wrote the
+submission for this talk,
+it was supposed to be
+kind of an application
+of metaclasses to work that
+I'm doing on networking.
+That was perhaps a bit ambitious.
+Because I didn't have
+a compiler that could
+actually solve the problems
+that I wanted to talk about.
+In fact, I still don't.
+So I ended up changing
+the order of my talks.
+So one of them was
+going to be specifically
+about the reflection
+aspects of metaprogramming
+and meta classes, and
+this one is going to be
+about code generation.
+Unfortunately this talk is
+not about really good examples
+of how you would use code
+generation in your problems.
+It is going to basically be a brain dump
+of things that I've done over
+the last month and a half
+explaining how metaprogramming works.
+Or at least how generative
+programming works in C++.
+Or at least how I've made it work in C++.
+Which could be scary.
+Anyways.
+So my hope is that by kind of talking
+about the implementation details
+or like the details of
+language semantics here,
+you guys can get a better
+idea of how you might
+be able to apply those particular features
+to the problems that you guys have.
+Even though I'm not going to be giving you
+the best examples of perhaps
+how to use these things.
+Or even perhaps elegant syntax
+for how to express them.
+So, regular introduction.
+My name is Andrew Sutton, I'm a professor
+at the University of Akron.
+That's my university.
+Not my offices.
+If you guys don't know where Akron is,
+it's in northeast Ohio.
+This doesn't help you
+identify where it is on a map,
+but it's also the home of Good Year,
+you guys are familiar
+with Good Year from tires,
+I hope, and blimps.
+And that actually is Akron
+and the university is
+in the bottom right hand corner.
+You can tell because of the
+overspending on athletic fields.
+(audience laughing)
+American university joke.
+Okay, so, nope, that was not a button.
+What is the background of my talk here?
+Okay, so I actually started
+doing this work with Herb,
+metaclasses, because
+he showed me this paper
+and I was really interested.
+And then I got kind of a,
+what's the word I'm looking for?
+Uh, self motivated to work on it.
+Because I figured out that
+I could take his ideas
+and actually apply them
+to an NSF funded grant
+that I have to work on
+software defined networking.
+And so this seemed like a good idea.
+Like hey take these meta class ideas
+and apply them to
+building packing decoders
+and networking tools that you can use
+to write hopefully
+faster, hopefully safer,
+you know, networking programs
+or libraries essentially.
+Right?
+Again, haven't quite gotten there yet,
+but we will at some point, hopefully.
+Okay so the talk is basically as I said,
+a follow-on from Wednesday's
+talk on reflection,
+or yesterday's talk on reflection.
+Yesterday I talked a lot about,
+specifically about how
+you take existing code
+and turn that into data that you can use
+to write algorithms.
+There was a little bit of
+code generation in there
+in the form of these
+like projection operators
+where you can use to turn
+say a reflection of a type
+back into a type specifier
+so that you could use it
+to declare a variable
+or function or parameter
+or a base class or whatever.
+This talk is actually
+just about how you create
+those values fresh, like
+without having an existing
+declaration, sort of.
+And then how you turn around
+and actually emit those
+as real source code.
+So we're going from nonexistent code
+to data to actual source code.
+So basically we're
+talking about programmable
+code generation, right?
+Let's see here.
+So when we started the
+metaclass work we had a bunch
+of requirements on how you
+actually generate code.
+And they basically looked like this
+after we kind of worked
+through some of these ideas.
+We have to be able to
+write this thing called
+a metaprogram or basically
+some kind of function
+or block of code that evaluates,
+that executes at compile time.
+So this is what I'm calling a metaprogram.
+We had to be able to read
+properties of classes
+so enumerate the list
+of members of a class
+or member variables of a class.
+We had to be able to generate a new class
+for to receive the
+output of whatever we're
+going to generate.
+And then kind of copy members
+from the original class
+into that output class and
+maybe generate new members
+from that class and insert
+those into the output class.
+And then also, finally,
+at the end of the day,
+generate the new, new class.
+Seems like it covers a
+lot of problems, right?
+No.
+Because we missed a lot.
+So it turns out that
+actually really only covers
+two forms of code generation,
+which is that if you start
+with a class, you get a class.
+It turns out that a lot of the problems
+we ended up looking at require you to do
+way more than this, right?
+So generating the new from
+the old class, that's great.
+We can do that.
+Generating non-member
+functions of a class,
+we didn't really support that so well.
+Sure, friend functions, great.
+But that's not really
+necessarily what you want
+to do with these things.
+You may actually also wanna
+generate specializations
+in another namespace,
+for example standard hash
+which we all love to specialize.
+Yay hashing tools in standard library.
+And then like the hardest
+thing we can actually
+figure out how to do is to
+take an existing function
+for example and wrap that
+with another function
+that somehow figures
+out what the parameters
+to the original function
+are represents as those
+as new parameters, adds
+parameters, modifies return type,
+and then wraps the call
+while performing analysis
+on the original arguments
+and then analyzing the result
+type on the way back out.
+Not easy.
+And also not being discussed
+in this talk today.
+For very good reasons, like
+maybe it doesn't quite work yet.
+We also actually have
+this requirement that we
+really wanna be able to
+precisely control where
+code is emitted.
+It may be that the code
+that you generate is not
+where you think it should be,
+it's actually somewhere else.
+Maybe.
+And we kinda do this with
+templates by the way, right?
+Like we have explicit
+instantiation to specifically say
+put the specialization of
+this template instantiation
+right here, right here in
+this particular translation.
+So we probably wanna be
+able to do the same thing
+with code generation.
+So, since let's say
+Toronto, so early July,
+We've kind of been working
+on very specific use cases
+for these things and kind
+of ran against the wall
+with the original metaclass proposal.
+Started running into problems
+that we couldn't quite
+figure out how to do.
+So over the last month and
+a half since late August
+or mid August basically,
+I've taken what we were doing
+in the metaclass proposal
+and just said, okay, I'm
+willing to put this over here
+on the side and start breaking down
+each of these use cases
+and trying to reduce it
+to the smallest possible
+fine grain operations
+that we can possibly have.
+So just a real deconstruction
+of the entire problem set
+and then start building it back up
+and providing tools
+that we can use to solve
+each one of these
+particular instances, right.
+The goal was really to,
+one of the main goals
+of this was to not try
+to get lost in the syntax
+of how you express these things.
+It turns out that doesn't really matter
+when you're trying to
+understand a problem.
+Like making elegant syntax
+is a second priority
+when you don't really
+know what you're doing.
+We need to start with the semantics first.
+Understand what these things
+actually are and what they do.
+And then we can go back
+and craft better syntax.
+So the syntax I'm showing for
+this is intentionally bad.
+I hope you like underscores.
+Anyways, so we also wanted to
+make sure that our injection
+mechanisms were building
+directly on top of reflection.
+We really didn't want to end
+up with kind of two different
+systems where you have this
+kind of reflection system
+over here and this kind
+of metaprogramming system
+over here, they should be unified.
+And actually, they should
+actually layer on top
+of each other.
+You have reflection on the bottom,
+you should have metaprogramming on top.
+And if you don't have a seamless approach
+to doing both of these
+things then your language
+design is probably a little bit funky
+and it's gonna require
+people to work a lot harder
+to do the things they wanna do.
+So, first things first.
+We have to be able to write a metaprogram.
+We wanna be able to execute write code
+that executes at compile time,
+kind of as you write it.
+So we actually ended up creating this,
+this constexpr block which is,
+which I'm actually calling a metaprogram
+or sub-program, metasubprogram?
+This is basically stolen, borrowed
+from Daveed Vandevoorde's
+metacode proposal.
+He actually suggested using
+the word constexpr here.
+I think in his original
+proposals it was metacode,
+or something like that.
+Same concept.
+Roughly the same concept.
+But inside, anyways, inside
+these constexpr blocks
+you can basically write
+any code that can actually,
+would normally execute
+in a constexpr function.
+And in fact, there is really
+no magic to doing this at all.
+If you write this, it
+is exactly equivalent
+to creating a constexpr void function
+whose definition is just
+the contents of the block.
+And that second line is really just kind
+of a little bit of hackery
+that says evaluate it.
+And yes, that is a comma
+operator with a constexpr void
+first operand and a zer,
+yeah, it's weird but it works.
+Compiler doesn't really do this,
+but that is effectively
+what you want to get
+out of these things.
+So there's really no magic
+behind any of this stuff.
+Well, there's some
+magic behind some of it,
+but at least in this case,
+we're trying to build
+on existing language features
+and really not create
+something entirely new.
+That tends to be difficult.
+So, the reason that we
+actually wanna have these
+metaprograms is so that
+we can generate code.
+And this is basically a version of a slide
+that I cribbed from Herb's talk,
+although I rewrote it a little bit.
+So this is my two string
+function for enumeration.
+So you pass an enumeration type
+and a particular value of that
+and the goal is that you
+wanna print out its name.
+And so we, I was gonna
+laser point at this,
+but it's way over there.
+So effectively the body
+of this is that you switch
+on the value and the statement
+underneath the switch
+is actually a constexpr
+block which turns out
+to actually be a declaration
+statement in this case,
+so it seems to be valid.
+And inside that block you enumerate over
+or iterate over all of the
+enumerators in the class.
+Which syntax we talked about yesterday.
+Enumerators in the Enum, sorry.
+And then we have this
+weird little arrow thing,
+which is labeled injection.
+Hopefully in italics there.
+So the idea is that
+that would take the code
+inside of these braces and
+then emit that as a statement
+where it appears in the program, right?
+So ideally what we really
+have is basically this
+little metaprogram that
+gets replaced by a sequence
+of case statements as
+they come out of this.
+And hopefully the compiler
+is smart enough to actually
+stitch those together so
+you get a valid declaration.
+Hopefully.
+I make no promises that this works.
+But that is the effective idea of this.
+So the real question is
+what does that injection
+statement actually mean?
+What are we actually putting there?
+What are we doing?
+Well, you have to figure out what's inside
+of those things first.
+Are they tokens?
+Is it a string?
+It's no a string, it would have
+quotes if it were a string.
+Is it actually a fragment of source code?
+Which means, when I say a
+fragment of source code,
+I mean is it a parsed and
+analyzed fragment of code?
+Like an actual abstract
+syntax tree if you were
+building a parser.
+So, not an obvious answer, right?
+What do you guys think it is?
+What do you guys want it to be?
+Tokens? I heard tokens first.
+I'm kidding, I didn't hear tokens first.
+But tokens first.
+Which is what I thought too.
+Because I think that's what
+Daveed's original proposal was.
+This is just a sequence of tokens.
+And actually my first
+implementation of this was
+exactly that, this is
+just a sequence of tokens
+enclosed in matching braces.
+Fantastic.
+When you go to generate these
+things you actually have
+to kinda go back out and
+parse them and turn them
+back into legitimate code,
+and that actually worked.
+And it really only took me like four hours
+to get working Clang, so
+a testament to the Clang
+compiler that I could do that quickly.
+Fantastic.
+Then I tried to do something
+interesting with them.
+Well, in fact, you might
+say that I tried to write
+just this slide.
+You see that E in there?
+Appears twice.
+That refers to a local variable
+in the constexpr block.
+It turns out that by the
+time you start reparsing
+this as a string of tokens,
+that E is no longer in scope.
+It has no meaning, it just oops!
+It is an unknown identifier.
+So, I thought about this for a long time,
+I'm like, okay I can fix
+this, I can make this work.
+We'll just have this
+kind of escape mechanism
+that let's me push meaning
+into the stream of tokens
+and then I'm like oh, wait, I'm recreating
+a pre-processor by using C++ code.
+This might not be the right approach.
+We already have a pre-processor.
+We don't need a second one.
+Scratch that idea.
+So I threw that out, and
+then I immediately threw
+out strings too, because that's basically
+the same problem except now
+you actually have to tokenize
+these at the same time.
+And I really didn't wanna get
+into string interpolation,
+compile time string
+interpolation, it's a mess.
+So that leaves fragments of source code.
+Which, leads to its own very
+very interesting problem.
+If you haven't thought about this,
+you might want to avoid it.
+It will make your head explode.
+It can make your head explode, forward.
+Okay, so what are we
+actually going to inject?
+Declarations? Sure.
+Statements? Yes.
+Expressions? Maybe not yet.
+For the same reason we don't
+reflect on expressions.
+This would effectively give
+us a really interesting
+system that's basically
+equivalent to Template Haskell
+which is kinda neat.
+So, ultimately the goal
+is that we actually have
+to able to build like
+fragments of source code
+that we're going to inject.
+We have to represent that as data.
+And then we need to define
+a bunch of operators
+that can take that data,
+those value, the values
+of those particular things
+and generate source code
+from them and then put them
+somewhere in the program, right?
+So, this is where the
+details start getting fun.
+So this is a source code literal.
+And you can tell by the
+way this is bad syntax
+because of the underscores.
+So a source code literal
+introduces a fragment of code
+and the way that I actually
+ended up spelling that
+was underscore, underscore fragment to say
+this thing that follows
+is a fragment of code.
+It's not a real class,
+it's not a real statement,
+it's not a real enum, it
+is something that will
+potentially become a
+class or enum or statement
+or something later on, right?
+So it's followed by, a
+fragment is followed by
+some kind of a declaration or definition.
+So here C is a class fragment,
+and this doesn't say that
+we're going to try to inject
+the class C later somewhere on,
+we're going to inject the
+members of C somewhere later on.
+So fragments are not themselves injected,
+but the members of a fragment are.
+So this one injects an
+integer X, member variable X
+into some class somewhere else
+and a member function that
+returns X plus this or a Y.
+You will notice that Y
+is not declared anywhere
+in the scope.
+It's an interesting problem.
+So effectively, what we ended
+up doing was making this thing
+kind of like a template, so it's actually
+a dependent context.
+So when you actually do
+a lookup on this or a Y,
+you get back a pending look
+up for member later on.
+So we end up kind of getting another kind
+of two stage instantiation.
+So, frag ends up actually
+the value of frag here,
+the thing that we actually
+get the value for,
+turns up being a reflection value.
+Like kinda the same thing,
+exactly the same thing
+that we were talking about later.
+Yes, uh Wednesday.
+Which is essentially an empty class whose
+type is a specialization of
+something like a class type.
+It's not quite that, it's
+a little bit more involved,
+but we'll see what it
+actually is in a second.
+So, again we can have
+fragments that define,
+you know we have class
+fragments, namespace fragments,
+so we have members that we want to inject
+into some kind of
+namespace or global scope
+which is a nice thing to have.
+And then right now, we
+also have block fragments
+which basically contain
+statements that you can
+inject into a function
+somewhere which you saw
+earlier on with the arrow example
+from Herb's talk on Wednesday.
+The rules for injecting fragments
+are pretty straight forward,
+you can really only inject a
+fragment into a like context.
+So you can inject class
+members into a class,
+you can inject namespace
+members into a namespace,
+you can inject enum members into an enum.
+Or enumerators into an enum.
+We might be able to tweak the
+rules a little bit sometimes.
+Like if you have a namespace fragment,
+you might be able to
+inject that into a class
+by making all the members static.
+I don't know if that's useful.
+Somebody else can tell me if it is,
+we can support it if we need to.
+Okay so class fragments look like this.
+Again, so you have class node.
+You can use the name of
+the class fragment to refer
+to itself, so this is
+basically going to build
+injection, a thing that
+you can inject to get
+a sort of hooks for wlink list.
+I presume.
+You don't necessarily
+need a class name there.
+You can leave it out.
+It doesn't matter if you
+don't refer to the class.
+You just have an anonymous
+class fragment it's fine.
+But if you need to refer to this
+or the type of this then you can do so.
+Namespace fragments basically
+what you think they are.
+Except that the name is
+currently not optional
+due to a bug in the implementation.
+If you leave it off you get
+like an anonymous namespace
+and then things get kinda weird.
+Clang does different things with those.
+But you know, namespace members just,
+and regular free member functions,
+they look like normal member functions.
+But you could use this
+for example to generate
+operator equals for some type if you have
+some well defined simple function to call.
+You can declare a block
+fragment which is basically
+what you saw earlier being injected.
+So a block fragment
+doesn't have a keyword,
+it's just a compound statement.
+In this case we have a
+case statement with the,
+with the return statement.
+So this would get injected somewhere,
+hopefully somewhere inside
+of a switch statement.
+And this is, by the way, there
+was an early implementation
+of this in, oh no, I
+left the, I left the link
+to my compiler off.
+I'll type it up there
+later, it'll be fine.
+So, this, there was an
+early implementation of this
+and it worked actually quite nicely
+and then I have deprioritized
+it, so it's kinda fallen
+by the way so you can't
+quite do this yet anymore.
+Okay, so,
+one of the things that
+actually ends up making these
+difficult is the fact that
+you actually want to push
+data into those fragments.
+So for example if I went
+to declare a, let's see,
+a class fragment that
+declares a new variable,
+idexpr is a special function
+that creates an identifier.
+So that I'd have var_num,
+where num is resolved to
+as this loop expands, each
+value of num through the loop.
+So var zero, var one, var
+two, something like that.
+In this case that the
+fragment captures that value.
+Has anybody used Template
+Haskell, by any chance?
+Anybody looked at it?
+So they have a very similar
+operation called splicing.
+You can actually splice
+values into essentially
+a quoted string, that is very similar
+to what we're doing here.
+It's a good thing I read
+about that yesterday morning.
+Now I have a reference,
+frame of reference.
+This turns out to be really interesting.
+Because that expression there
+is not actually evaluated
+in the way that you think it is.
+Like you could not, for
+example, write plus plus num
+in this case.
+Oh oops, I have a bug in my program.
+That should say plus
+plus num at the bottom.
+You can't move that ++n in
+or num into the expression,
+into the statement.
+Can't do it.
+It's captured by value.
+Sort of.
+So when you look at these things,
+there's actually three different
+things that happen here.
+There's sort of three phases
+to translating these things.
+So first you actually have
+to parse the fragment.
+We actually have to get
+a semantic representation
+of these things, an
+abstract syntax string.
+Part of that means we
+actually have to determine
+the type of that source code literal.
+Like what kind of value
+are we going to define
+by that thing?
+And then at some point in the future,
+when we evaluate those
+things, we have to compute
+the actual value of those things,
+which are pretty interesting also.
+And then during injection
+of course we actually
+have to substitute whatever that value is,
+we have to substitute
+information back into that value,
+the source code fragment value
+to generate new source code.
+And that process is gonna be a little bit
+like template instantiation,
+but a little bit different
+because you can't for example
+instantiate a namespace
+or an enum or whatever, so.
+Actually I guess you
+can instantiate an enum,
+never mind, scratch that.
+If it's a member of a class
+template you can do so.
+So the way that we actually
+do this is that we build
+these things out by kind
+of wrapping every fragment
+with this enclosing thing.
+And I'm using the word thing
+very vaguely here on purpose.
+It's not really a class,
+but you guys don't know
+what a class is so I wrote it as a class.
+Every local variable
+that appears in the scope
+where a fragment is used
+gets captured as a member
+of that fragment thing,
+the enclosing fragment.
+And it's really just a
+dependent name whose value
+is opaque or magic in this case.
+So those are called place holders.
+So now when we actually go to
+parse the body of the fragment
+we have names like num or n or whatever,
+any that refer to these local things,
+and instead of actually
+referring outside of the scope
+of the fragment, they
+actually just refer back
+to these placeholders.
+And they are entirely dependent.
+Which means they carry no type or value
+which actually ends up
+having the nice property
+that it delays analysis.
+Right, and again, source code
+fragments are essentially
+templates without template parameters.
+They have place holders.
+And by the way, the reason
+these aren't actually templates,
+is because those things
+have non-type value.
+So if we used, if we tried
+to do this with template
+we would be limited to
+substituting through types,
+or substituting through integers.
+Or template names, but who
+does that stuff anyways?
+Okay, so, the type of this
+thing is actually computed
+on the fly every time you
+have a source code fragment
+you generate a type
+based on the reflection
+of the thing that it is.
+So this is the actual class
+generated that defines
+the type of that expression.
+Source code literal expression.
+It is a fragment class,
+fragment underscore k
+is just a place holder name,
+call it whatever you want.
+But meta colon colon class
+type is the reflection,
+the information about the
+fragment that you actually got,
+that you actually created.
+And then there are a couple of members.
+We actually create a member
+variable for every captured
+value whose type is the same.
+I don't really know what the
+type of X is but it was an
+auto, an iterated number
+list of member variables.
+So it's probably something like field.
+I just forgot what it
+was, so I wrote decltype.
+And then n is the captured
+integer value there.
+And they're both constant
+because you don't
+want to modify these
+things, that would be,
+that would be pathological.
+And there's a constructor
+that takes those arguments in
+and you can actually just,
+it does member-wise initialization.
+It's actually fairly straight forward.
+So, the value of this thing,
+oh sorry, I was just gonna
+walk through this here.
+Again derives from the
+metaclass so we have information
+about the type, just said that.
+Again capture member variables, skip that.
+So the value of this thing
+is actually just constructed
+by calling the constructor
+of that expression.
+So whenever you see something
+like fragment source
+code literal or underscore
+underscore fragment,
+all of that stuff (audio
+glitches) together into an object
+of this one particular type
+and that entire thing
+basically gets replaced
+by the single expression
+that just constructs
+a PR value of that
+particular type as it goes.
+So every source code literal
+is simply a constexpr value
+of this type, that's all there is.
+Seems easy, right?
+Any questions so far?
+This is the obvious thing to do of course.
+So the interesting thing
+is that because you have
+you've done it this way,
+frag now actually contains,
+variable frag actually
+contains all of the information
+that you need to get the
+original class fragment,
+all of its members, any
+information that happens
+to be in there through
+reflection, of course,
+and it has all the values
+that you've captured
+associated with those things.
+You are binding all of this stuff together
+into a single value whose
+type can actually be unpacked
+into the original class fragment.
+Unpacked from the original class fragment.
+This is a nice thing to do.
+Okay, the rest of this talk is what you do
+with those values.
+And again, excellent syntax
+with lots of underscores.
+It turns out there are really three things
+that we might want to
+do with these things.
+At least these are the
+three things that I've been
+able to identify from the
+use cases that we looked at.
+We wanna be able to generate code.
+And when I say generate
+code, I mean we're going
+to take these values and we're
+going to put them somewhere.
+And I do mean somewhere.
+We don't really have control.
+When we generate code we
+don't really have control
+over where it goes with
+this particular operation.
+You could inject code,
+which means that you take
+one of these reflection
+values and you inject it
+right here at its point in the program.
+Or we can extend an existing declaration
+by taking a value and injecting
+it in some other context,
+some other scope, some other declaration.
+Possibly.
+This extend, by the way is
+not actually implemented.
+So all of these things differ,
+the semantics of these things
+are generally the same,
+like the behaviors they use
+to generate source code,
+put them into the compiler
+or into your program,
+are basically the same operation.
+The biggest difference is
+where you actually put them,
+which I'm calling the injection site,
+'cause it seemed clever.
+So injection site basically
+can be a namespace, class
+or function at this point.
+Again we don't really
+have expression fragments
+or expression literals
+so I don't know what
+to do with those yet.
+So all of these operators
+have kind of two forms.
+We have an injection operator
+that takes a reflection,
+which is basically an expression
+that computes a value.
+So we have like autofrag equals whatever.
+You could use frag as the
+expression after these things.
+Or if you don't really wanna
+make a variable for it,
+you could just write the
+fragment directly after
+the operator name, it's
+just shorthand for declaring
+the variable and then
+injecting the variable.
+Same thing.
+So there's a little bit
+of syntactic nicety here.
+Okay, so generation.
+The idea behind generation
+or source code generation,
+this particular operation,
+is that we want to be able
+to kind of run a metaprogram
+and have that metaprogram
+be replaced by whatever code
+that we've actually generated.
+And this is why, by
+the way, why I say that
+I'm not sure if it's on
+this slide yet here, yeah.
+This is why it's somewhere, right?
+The generation operator, which
+isn't even on this slide,
+has no control over where
+the code is generated.
+Where that's then generated
+is determined entirely
+by the context of the program
+that executes it right?
+So this actually gives you the ability
+to take a metaprogram or a set
+of rules that generate code
+and decompose them into
+functions that you can actually
+call or reuse or isolate
+the logic of code generation
+in a way that is not a 2000 line function
+that tries to generate an entire program.
+Those things are crazy,
+we should not do that.
+So for example, this one,
+ostensibly you would run
+this metaprogram inside of
+a class or after a class
+to generate definitions
+of equality and less
+based on some pre-existing
+operation in your class
+like dot equal or dot less.
+And those things, those
+functions we might actually
+just define like this, they're just
+regular constexpr functions.
+This is great.
+So metaprogram does not need
+to be this big new thing,
+we just have these
+interesting new facilities.
+So here we actually have
+the generate operator
+which I forgot to bold and make red.
+So this generates a namespace fragment.
+So this is the second form
+of syntax we're using.
+Namespace fragment just
+takes then, creates a bool
+operator equal with
+whatever T is, and returns
+and would expand to that thing.
+And again this is why I
+say it's inject somewhere.
+That generate operator
+has no control over where
+the code is actually injected,
+it is determined entirely by the context
+in which it's executed.
+Useful, very useful.
+So, the obvious if you start with this.
+The result, because I didn't
+define the other function,
+would just be this code.
+Like the constexpr, the
+metaprogram goes away
+and all we have left are the programs
+or the operators.
+And so the way this
+actually ends up working
+is that these things, this is terrible.
+These generate operators are
+actually a kind of side effect
+of metaprogram or constexpr valuation.
+I'm actually gonna say
+metaprogram evaluation
+because you really don't
+wanna start generating
+effects from every constant
+expression evaluation.
+Like you shouldn't be
+evaluating array bounds
+and get code generation side effects.
+That seems a little bit odd.
+So that only really happens
+when you execute a metaprogram.
+But you end up getting
+queue of these things
+and they're just generated,
+they're injected into your program
+at the point of execution in the order
+that you generate them.
+That's sort of a side effect.
+It's very monadic, I guess.
+Okay, source code
+injection is kind of the,
+well it, there's a nice
+relationship between source
+code injection and code generation.
+So you might for example
+inject something like this,
+or write something like this,
+so that would say evaluate
+whatever that function is,
+that expression, as long
+as it returns a fragment
+or a reflection, an object of
+meta colon colon something,
+it will declare whatever
+that thing is right there
+in that program.
+That's what injection is.
+So the idea with this is
+that we can actually use this
+to start building up classes or namespaces
+by bringing things into scope.
+So you might think of
+generation as pushing things
+into particular scope or pushing
+things out of your function
+to side effect.
+These things actually, this,
+it lets you bring things
+into the scope that you're constructing.
+Again right here means
+like declare this here.
+So for example going back to
+our little class fragment here,
+so I actually really like this example
+because I'm actually returning
+a source code literal
+from a constant expression,
+or constexpr function.
+And again, not magic.
+We don't need special kinds
+of functions to do this stuff.
+It is just a constexpr function.
+It returns a value
+whose type is determined
+by whatever magic I showed you before.
+And this thing just gives
+you a part of a class
+that you can put into something else
+that gives you next and previous links
+for for example a wlink list.
+Kind of a weird sort of
+intrusive wlink list perhaps.
+And so when you actually
+inject this thing,
+you write before, struct
+MyList inject make links,
+and you actually get
+hopefully what you would
+have expected to see.
+Note, you can kinda
+see how this might work
+by the class name C there,
+being replaced by the name
+of the class in which it's injected.
+That's part of that template
+instantiation thing.
+There's some substitutions
+that happen as you do this.
+So injection and generation are actually
+pretty closely related.
+If I,
+Yeah, right, sorry.
+So they're pretty closely related.
+So the inject thing was
+basically equivalent
+to having a metaprogram
+that evaluates the function
+and injects those
+numbers as a side effect.
+That happens to be, I
+think it's a nice property
+that they are that closely related.
+But other than that I have no
+other thoughts on that topic.
+Extension is actually really interesting
+because it lets you take
+a fragment of source code
+that you have in one place and inject it
+into something else.
+So for example, here's a
+use of extend that takes
+MyList which is a
+reflection, as an argument
+and it would take whatever
+members of the fragment
+you have and inject them
+directly into the MyList class.
+And if you're looking at that and going,
+hey can I use this to extension methods?
+The answer's probably yes.
+You can.
+That is just an application
+of the same rules
+that we're applying in
+slightly different ways.
+But again, this is the inject
+over there rule, right?
+Like you can take this
+fragment and you can inject it
+into somebody else's code, maybe.
+There are probably going to
+be some fairly strong rules
+assuming that this actually
+makes it anywhere out
+of this talk, there will
+probably be some fairly
+stringent restrictions on how
+you would actually do this.
+Like don't inject things
+into standard containers.
+That might be frowned upon.
+Don't inject a member variable
+into an existing class.
+That would change the
+size and you would ruin
+somebody's function calls.
+Don't inject virtual functions.
+These are terrible terrible
+things that you can do
+after a class has been defined.
+So those are probably
+going to be off limits.
+But injection of a normal
+function that just calls
+other member functions is not
+a particularly concerning thing.
+And that is especially
+true if you have modules
+where those extensions
+are isolated in scope
+where you couldn't actually see those
+or affect the way that somebody
+else uses those programs.
+Okay, so you might write
+something like this,
+here's MyList, I can extend it with sort
+and of course it would
+just put that there.
+I should add by the way,
+I don't know if this is
+implementable in every compiler.
+I can do it in Clang.
+I haven't done it, but I can do it.
+It's fairly straight forward.
+This is just one of those
+things that kind of fell
+out of the analysis and ended
+up getting sketched out.
+There was one other thing that
+I wanted to say about this.
+What did I wanna say about this?
+Why am I asking you?
+I'll probably think about it
+later, or remember it later.
+Anyways, so,
+extension is a little bit odd.
+It's kinda the odd man
+out in these features.
+It's not really like
+injection or generation.
+There's no equivalent, there's
+no rule that you can say
+these things are kind of
+inverse of each other.
+I don't necessarily know
+that it adds really useful
+features except for its method extension.
+Namespaces can already be reopened,
+so this really doesn't
+add functionality there.
+I don't know.
+But, oh right, now I remember
+what I was gonna say.
+It does actually solve
+one particular problem
+that you have with metaprogramming
+which is that you might
+want to create, for example,
+a class fragment in one function,
+return it and add new members as you go.
+So you actually end up
+building up a class fragment
+through injection or through extension.
+And then finally in the last stage,
+you can just emit the entire
+class or the fragment,
+wherever you want to.
+Okay, so all of this is based
+on the ability to actually
+inject fragments, well
+that's not actually true.
+It's really based on the
+ability to inject reflection.
+And you can reflect declarations.
+Which means that you can actually reflect,
+you can actually inject
+existing declarations
+which actually turned out to
+be one of the main requirements
+of the metaclasses work.
+We had to be able to copy declarations
+from an original class
+into a resulting class.
+And so this actually works
+pretty straight forward,
+in a pretty straight forward way.
+If I want to, for example take this class,
+So I have a class S that has three ints
+and I have another class T.
+So I could for example inject S directly.
+That would give me a new
+nesting class called S,
+so I have T and then inside there class S.
+When you inject, by the
+way, a declaration you don't
+inject its members, an
+existing declaration,
+you don't inject the members.
+It's not a fragment, it's
+an actual declaration
+so you inject it in its entirety.
+Or you could open up the,
+we have a little metaprogram
+that kind of opens it up
+and walks through its list
+of members and you can actually generate
+each member in turn.
+So this way the
+metaprogram in this example
+is going to generate int A, int B, int C.
+Or however your compiler would
+hopefully represent that.
+Let's see here.
+So, because you can generate
+existing declarations
+you can also kind of
+make local modifications
+to them before you inject them.
+You can't do this with fragments yet,
+I'm not sure how useful it is.
+Mostly 'cause a fragment is a container
+and declarations are not containers.
+For example if you have a reference to a
+reflection of a member function
+you may want to be able
+to make it virtual so you
+could actually just set
+or call x.make virtual.
+This does not actually make
+that member function virtual,
+that would be crazy, this
+just sets a little local bit
+inside of that object that
+says when you emit this code
+make it virtual.
+Henceforth when you generate
+this code it shall be virtual.
+That's all it does.
+Oh, and I left in a version of expand.
+Expand should be spelled generate.
+If you guys see any other expands,
+replace that mentally with generate.
+I was tinkering with names before.
+Before I game a talk, last week actually.
+Okay so, like I said
+injection is kind of like
+template instantiation, it's
+a little bit more involved,
+maybe a little bit less
+involved, no it's more involved.
+So we have to deal with
+references to the fragment name.
+We have to substitute
+the name of the fragment
+for the name of the context
+into which it's being injected.
+All those little place
+holders will be captured.
+As we substitute through this
+to generate the new code,
+we actually have to
+replace references to those
+expressions with their
+values that we captured
+in the original constructor call,
+or the construction of
+that particular object.
+And then we actually have
+a couple of other little
+extra quirks that we
+have kind of stitch up
+in order to make this stuff work.
+And all of those little
+quirks, by the way, kinda point
+to the fact that maybe
+we're trying to do things
+a little bit too implicitly
+and we actually need a set
+of extra declarations to
+say we expect these names
+to exist in particular context.
+Not sure yet.
+So for example if the model
+that you wanna think about
+is that you're injecting
+say one definition,
+like a member function
+definition from one class
+into an output class, if that
+member function definition
+refers to its member variables,
+you can lift that out and
+drop it into this other class
+and those references to
+member variables need
+to be restitched to hopefully
+members in the output class.
+So that's like an example
+of these little quirks
+that you have to deal
+with when you do this.
+Okay, so, formally,
+semi-formally, quasi-formally
+an injection is a reflection
+of a fragment to be applied
+that's the value of the payload
+of these injection things.
+And remember the type of that thing,
+and the type of that value
+in codes are referenced
+to the fragment that we have.
+So we have, we can actually unpack that
+and get the AST node internally from
+from those particular things.
+The value has all of those,
+all of the captured values
+as you evaluate those things.
+The injectee is the context
+that's actually receiving that.
+So the context in which the
+fragment is gonna be injected.
+So the injection process
+actually instantiates all
+the members of the fragment
+or if we're just talking
+about a single declaration,
+copy the declaration out.
+It subs, it basically just
+instantiates that thing
+performing all these substitutions
+that we just talked about and
+whatever little stitch ups
+that we end up needing.
+So, here's my painstaking
+walkthrough of how this
+actually works so I think
+I actually had this earlier
+or something like it.
+So we have a struct S,
+two member variables int n
+will be in another class
+cleverly named blah.
+That has a metaprogram that
+will for each member variable
+of S, generate a new
+member variable in blah
+whose name will be var
+underscore some integer.
+That's the goal.
+So, the first thing that happens as you,
+okay so this is where things
+start getting a little weird.
+So remember C++ works left
+to right, top to bottom.
+So as you walk through
+this thing the first thing
+that you actually have
+to do is you process
+the constexpr block is
+you find that for loop.
+And the first thing
+that happens is that you
+actually decide that
+you need to expand it.
+So that unrolls the loop like this.
+So now we actually have
+two fragments that we're
+going to generate.
+So the first one is going
+to be get of the first
+member variable and then
+we generate type name,
+x.type, idexpr whatever right?
+So we actually just end
+up doing this twice.
+And we're gonna look at the
+first one for the most part.
+So as we translate, so
+we basically unroll this,
+which is one instantiation
+that actually used
+template instantiation to do that.
+So now we actually go through
+and analyze the results
+of that to create types.
+So if we look at just the
+first one we have to assign
+a type to that generate,
+at least the fragment
+in the generate thing.
+So fragment one here refers
+to the type of the fragment
+or source code literal
+starting with class.
+And that's actually going
+to look like pretty much
+like what you saw before.
+So metaclass type X1, that
+X1 is an encoded reflection
+value, it's a pointer to the AST node.
+That's how you actually have
+a reference to that thing.
+The captured variable X,
+is a reference to a field,
+because each version of X is
+actually a member variable
+and field is the name of the class we use
+to reflect those things.
+And then we have the captured
+value n which will hold
+what the value of n
+actually is at the time that
+you evaluate the fragment.
+So there's a couple different
+things that go on here.
+We have an expansion to unroll the loop,
+you have, you generate
+the type of this thing,
+which allocates space for these objects
+and none of this is evaluation yet.
+We still have to at
+some point in the future
+actually evaluate all this stuff
+to construct the value
+and apply the injection.
+Okay, so at the time
+that you evaluate this
+which is, by the way,
+when you get to the bottom
+of the constexpr block, right?
+Remember the metaprogram is
+just a constexpr function
+that gets called at the line below.
+So that's when you go back through
+and you start evaluating program.
+So let's see, where were we?
+So as you do that you create
+a value of the fragment
+which the base class is going
+to be metaclass type X1,
+it's just a, basically just
+a default constructed class,
+turns out to be empty.
+Well, it turns out to be
+empty with no modifications.
+Captured value X, again this
+just an empty expression
+constructed by an empty, or
+an empty object of type field.
+The only important thing
+there is fact that it holds
+pointer to the abstract syntax tree.
+And then captured n in the first unrolling
+of this thing is going to be zero.
+Remember if you get to
+the bottom of the loop
+you increment that and so, oh.
+I left off the increment in my for loop.
+Ooo, I put the for loop
+increment in the wrong place.
+Oh well, pretend that
+I did this correctly.
+Suspend disbelief.
+I realize I'm asking a lot 'cause
+this is pretty suspension-y.
+Okay so n ends up being zero
+and if I had programmed this correctly
+then in the second
+expansion of this the value
+of n would be one.
+And so that's the object that
+we're then going to inject.
+So now we can actually generate the code.
+So we're basically going to
+form this injection, right?
+Which is essentially just
+the value of the fragment
+we're going to inject.
+And we apply these substitutions.
+We replace the name of the
+fragment with the enclosing
+context or the injectee.
+We replace every place holder
+as a substitute to this
+you replace every place holder
+in the original expression
+with a constant expression
+whose value is captured here.
+So that's why you can't like
+modify the value in flight
+as you define these things.
+I couldn't write for
+example ++n in the idexpr.
+So it actually gets replaced
+by a constant expression
+of appropriate, hitting the wrong button,
+of appropriate type.
+And then we find names
+that refer to local names
+of the enclosing scope
+and kind of replace those
+as needed to stitch them up.
+And then you end up with,
+well, let's see, one more slide.
+So as you evaluate these and we generate,
+so you actually generate the code,
+like this is actually what
+ends up being queued to be
+generated, you have type
+name meta field x2.type
+which will give you bool in the first case
+and int in the second.
+Idexpr var of zero is the identifier,
+and so after you strip out
+all the sugar from those,
+from those substitutions or projections
+you end up with int var zero.
+And so eventually, after all of that,
+we created a stupid class
+that has two member variables
+named var zero and var one.
+It's amazing, right?
+Yay!
+Okay, so, a lot of work
+to get a little bit done.
+But it does scale up, or should scale up
+in interesting ways.
+Okay, so after all of that,
+we have these little low level
+tools for building for
+reflection and source code
+generation, how do you actually
+get back to metaclasses?
+Remember metaclasses are this other thing.
+Well, original proposal
+was like you know $class
+equals or $class interface.
+And if we think about this
+we can actually just define
+these in terms of things that we have.
+With a little bit of help, right?
+So, maybe interface is
+just a constexpr function
+that takes some template parameter.
+In particular, that template
+parameter is probably
+a thing that you are
+declaring to be an interface.
+And if we wanna actually
+make it kind of like
+a little bit nicer syntax,
+we can just sort of invent
+syntax and nominate
+interface as a class key
+which means you could use
+interface to introduce
+a struct in this case, or if
+you wanna make it a class,
+you could use it a class.
+So when you actually write these things,
+you might write interface
+IShape and that interface there
+would mean go find something in interface
+that's been nominated as a class key,
+or if you find a name that's
+been nominated to class key,
+start parsing it as for a struct or class
+or enum or whatever.
+And what it really means is
+maybe there's no magic at all.
+Just take the original
+class that you defined
+to be your interface,
+stuff it into a namespace
+and then just call the meta
+function on that thing.
+Just call interface with
+the original specification
+of the class and generate the code
+that you need to generate.
+It doesn't necessarily
+lock you into generating
+a single class.
+Right, because you can
+generate non local members,
+you can generate specializations
+and other namespaces,
+you have almost carte blanche to generate
+whatever you want from
+this single invocation.
+So we kind of, we can
+kind of by decomposing
+all this stuff get back
+to a point where we can
+rebuild the original
+specification in terms of
+operations that actually kind of compose
+in an elegant way.
+Hopefully compose in an elegant way.
+I mean except for all of
+the underscores, right?
+Okay, so, metaprogramming
+needs a bottom-up approach.
+Really needs a bottom-up
+approach if you don't,
+if this is your first pass
+trying to implement it.
+You have to implement reflection first.
+It is important.
+You need that to do anything else.
+Having this idea of source code literals,
+like the actually implementation of this
+or the idea of the model
+of these things was,
+turned out to be a really good idea.
+We now have a sort of
+uniform system of dealing
+with both reflection and
+values for code generation.
+Thinking about this in
+terms of primitive injection
+operations was also incredibly helpful.
+We can actually talk
+about what you need to do,
+what operations you need to generate code
+and supply semantics that
+actually do the right thing.
+And then after all of that
+we can start thinking about
+maybe abstraction
+mechanisms for these things.
+Or sort of compositions of them
+that lets you do particular things.
+And I will say that there was
+one thing that metaclasses
+give you that you cannot
+actually do with just
+these primitive tools.
+Which is that I have interface IShape.
+That is not the class
+that you want, right?
+With only the primitive tools,
+I would have to generate
+a class with a slightly
+different name like IShape_interface.
+This actually gives you a
+class replacement mechanism
+on top of what we've already defined.
+So we are actually replacing
+the original specification
+of IShape with the code
+that we're generating
+or whatever code we
+actually end up generating
+from these things.
+And presumably by the way,
+interface would generate
+a class named IShape but
+that isn't just now shown.
+Okay, so that's a lot.
+That's a lot of work for a
+month and a half in Clang.
+Especially when that's your
+development environment.
+Yes, my laptop and my dining
+room table are my office.
+At times.
+But I still haven't actually
+talked about all the things
+that we actually need to do.
+And in particular I haven't talked about
+what it means to wrap a function call
+which turned out to be a nightmare
+of interesting semantics.
+In fact, one of the things
+that actually came out
+of that work is the fact
+that we might actually end up
+getting generalized pack
+expansion for tuples and classes
+and whatever so that if you have a tuple,
+you can apply dot dot
+dot to it and generate
+a sequence of expressions.
+That may actually fall out of the work
+on generating parameters.
+Or injecting parameters for the purpose
+of wrapping functions.
+Different talk though.
+All right, so really
+quickly, acknowledgements.
+Material based upon, let's
+see funded by NSF grant
+and by Microsoft.
+Special thanks to Jennifer
+Yao, who had to leave, I saw
+over there some where, who's
+volunteering here today.
+She did a bunch of work
+on the original metaclass
+definitions last year.
+Thanks Matt for hosting the compiler.
+Are you slinking down
+in your chair? (laughs)
+And again thanks to anybody
+that was actually trying
+to use this thing and I
+apologize for the bugs,
+but please quit sending bug reports.
+I'm not ignoring you, I'm
+just trying to move forward
+and not be perfect on this stuff.
+Let's see here, questions?
+I'm sure there are no questions because
+this is perfectly
+understandable and obvious.
+Yes.
+- [Audience Member] I found the whole,
+I feel that the whole
+thing can be simplified
+if you give the reflection
+objects full variable semantics.
+Currently you obtain
+the reflection objects
+like auto seen air, inside
+all the functions since
+all the translation
+functions ends you know.
+Make modifications in place.
+But it seems that if some
+of the translation functions
+can take, take reflection
+objects sort the parameters
+by value and return by value,
+things can be simplified.
+- Um maybe.
+I like calling functions and
+getting values out of functions
+that's a very simple model.
+I mean I realize there's
+a lot of complexity here.
+I don't think that this gets much simpler.
+- [Audience Member] Well,
+- We can talk about design
+alternatives off line.
+But so we probably should.
+I would like to hear good
+ideas for simplification
+because it is fairly complicated.
+But more questions.
+Who's first?
+All right.
+- [Audience Member] Hi,
+kinda interesting question,
+so now with all those
+mechanisms for injecting
+or using metaclasses,
+so only compiler knows
+what class will look like at the end,
+before the actual compound, right?
+- I can't quite hear you.
+- [Audience Member] Oh yeah, so, how do we
+generate documentation now?
+Do we inject comments
+as well, like you know,
+doxygen and all that stuff,
+or compiler should start
+to generate documentation?
+- No, you can't inject
+comments so the translation
+stages for this are follow
+from normal C++ rules so,
+whatever, whatever the
+normal translation rules are
+for C++, like comments
+get replaced by spaces.
+They just, they disappear.
+The only thing that you have
+is the data or the abstract
+syntax trees from
+constructing those fragments
+at compile time.
+- [Audience Member] Yeah,
+but like tools like doxygen,
+they probably won't be that smart to,
+- Yeah, I,
+- [Audience Member] You
+know, process injections.
+- There is an entirely
+separate question of tooling.
+Right, like this adds,
+this basically allows you
+to write a program that
+writes your programs.
+And so,
+Tooling will need to catch up.
+Or we'll need to start
+thinking about tooling
+very carefully, debugging
+these things I do not expect
+to be particularly easy.
+And so we'll need to do
+some work to figure out
+how that happens.
+I have some thoughts on it,
+they're very pre-mature.
+But you can probably, you
+might actually be able
+to tie that back in
+through code generation.
+Sorry, doxygen type stuff.
+Basically you just need to keep
+track of where the original
+fragment was and then,
+so every declaration
+that you write out has
+a link to the original
+fragment where it was and then
+if you know the source code
+location of that you
+can pull up the comments
+that are on top of it.
+- [Audience Member] Do you have
+a feeling that documentation
+should become part of,
+I don't know, standard?
+- Oh, so,
+should documentation become
+part of the standard?
+No, documentation should not
+become part of the standard.
+That's the easy answer.
+Not part of the standard, maybe part
+of the style guideline, sure.
+- [Audience Member] Hi, I've
+got two questions actually.
+The first one is kind of a basic one.
+So in C++ there's already a
+bunch of key words that mean
+completely different thing
+in different contexts.
+Like static for instance.
+So why did you choose
+constexpr to for metaclasses?
+- For metaclasses?
+Actually Daveed Vandevoorde suggested it.
+I have a feeling that constexpr
+might start showing up
+in more and more places unfortunately.
+Although hopefully we can
+get rid of the keyword
+in most cases.
+I, Daveed suggested it, I liked it.
+It actually describes
+pretty accurately what that,
+what that thing actually
+is and what it does.
+It is a constexpr block of code.
+It executes, ostensibly it
+executes as you translate it.
+- [Audience Member] But isn't,
+I don't know, synthesize
+or generate be a better
+option for this kind of thing?
+- Well, the program itself
+doesn't actually generate code.
+It's the generate operator
+or inject operator
+that actually performs
+that particular action.
+You can write a metaprogram
+that doesn't do anything.
+This is not a big deal.
+I mean, it's not particularly useful,
+but you can certainly
+write a program that just,
+it counts from one to 10 and because
+it's constant expression
+you have no side effects.
+But it's just a block of code
+that executes a compile time.
+So we wanted to keep, I
+think it's important to keep
+separate, keep semantics separate.
+- [Audience Member] Okay,
+and the second one is
+with current version of
+the language you can shoot
+yourself in the leg.
+And it seems like with
+this thing you can blow off
+the entire, the whole body.
+- Yeah, sure.
+- [Audience Member] How
+are you going to enforce
+some good practices from users?
+- Well, okay, so as a
+professor I will not teach this
+until year five out of a four year degree.
+(audience laughing)
+- [Audience Member] Okay.
+- I expect that organizations
+will have their own
+strong policies about
+how this should be used,
+how this could be used.
+And almost certainly the
+first one'll be don't use it.
+I think that'll be pretty popular,
+a pretty popular option.
+- [Audience Member] Why
+would you need it then
+if everybody will forbid it's usership?
+- Some people don't like
+adopting new features.
+So there are some interesting
+things that happen with this.
+We now have lots of
+compile time programming,
+so in large translation units
+compile times may drop significantly.
+So people may as a policy
+opt to generate code
+externally rather than
+have the program generate
+its own code.
+I suspect that many places
+will initially say don't
+do this until the benefits start
+becoming very very obvious.
+I think it'll be an evolution.
+It'll be a good, it'll be a
+good story for that, I'm sure.
+- [Audience Member] Okay, what's your bet
+on the version of
+standard that we're gonna
+see this thing in?
+C++ 20?
+- Oh no, not C++20, certainly not C++20.
+We might see some of the
+early static reflection stuff
+in C++20, this is maybe C++23,
+but I'd be willing to bet
+more likely a TS first.
+And then further down the line.
+- [Audience Member] Thank you.
+- [Audience Member] Fragments
+of clauses and namespaces,
+if I understand this right,
+they will be typically
+injected in headers and
+therefore they will shared
+between multiple translation units.
+But in some situations,
+specifically when we have
+dynamic libraries we want
+that I am to go to a specific
+translation unit only.
+So what are your thoughts on
+having some control over this?
+- So, yeah, I mean,
+I'm not particularly concerned with it.
+I mean we're going to have metacode.
+Meta, we're going to write
+metaprograms that generate code.
+And sometimes those
+will be in header files,
+and sometimes they won't.
+I look forward to the day
+where we can talk about this
+in terms of modules where
+this starts becoming
+a little bit more sane, but
+I mean ultimately what you're
+doing is just replacing these
+compile time evaluations
+with the code that it
+actually generates, right?
+We already do this with templates.
+We already do it with macros.
+We already do with, well,
+actually that's about it.
+And so like that is a fact
+of life that we already,
+that we live with.
+So this is another way to,
+another slightly different
+way to generate code.
+Hopefully in a slightly
+more intelligent manner.
+'Cause we have so much, we have access
+to the full source code as data.
+But I, yeah, it'll show
+up in header files.
+I don't think it'll
+have any impact on the,
+I don't think it'll
+have significant impact
+on the code that actually
+relies on that though.
+Other than perhaps compile times.
+- [Audience Member] Yeah,
+apart from compile times,
+I'm concerned about things
+like duplicating functions
+between multiple dynamic libraries
+or even those functions
+having different meaning
+if actually access some
+global variables also.
+- Yeah, so this is, you
+can't duplicate functions.
+I mean you can in different
+translation units,
+but then you get linker errors, right?
+But there's a rule that
+when you actually like
+an unimplemented feature,
+that when you actually
+inject code you have to do
+a redeclaration check, right?
+So I can't have a member function called,
+or a member variable called
+int or int_n and then generate
+a new int_n.
+Like that's a duplicate definition.
+That gets rejected at the point
+you generate those things.
+It has to be.
+That said, the compiler
+doesn't do that yet.
+Which means you get some
+interesting effects.
+But yeah, so we can't
+logically generate duplicate
+definitions or redefinitions
+in the same scope.
+You can certainly generate
+equivalent declarations
+in different translation units,
+but again you can still do that today just
+by writing it by hand, and
+then you get translation error.
+Or linker errors, right?
+Yes?
+- [Audience Member] Hello, how
+does reflection and injection
+interact with class templates?
+- All of this stuff lives below templates.
+So you cannot ask for information about,
+well, the semantics of
+all of these operations
+live below templates, so when
+you instantiate a template
+that's when all this stuff gets applied.
+It doesn't happen before hand.
+So if you, you don't for
+example execute metaprograms
+within a class template
+until you instantiate it.
+It happens, it applies
+to the specialization,
+not the template.
+- [Audience Member] So
+I can't, for example,
+inject something into an
+uninstantiated template?
+- I hope not, no.
+- [Audience Member] Too bad, sorry.
+- Well, actually, may be.
+I don't know yet.
+Yes.
+- [Audience Member] Hi, not
+a question, but a comment.
+Coming from a comma-less
+background, I'm used to macros
+being just implementable
+with normal functions
+which I've always found
+particularly elegant
+and actually easy to understand.
+And so conversely every other
+metaprogramming mechanism
+I've ever seen has been
+very difficult to understand
+and inelegant, so I'm very
+happy that you're doing this.
+- Oh thanks, thank you.
+Not a question, but thank you.
+All right, one more question.
+- [Audience Member] So
+speaking about list macros.
+So, there's a notion of
+hygiene in list macros.
+So do we have the same issues here?
+- Um, I hope not.
+So we need to make sure that we have rules
+that don't allow,
+So, you can't build a partially
+incomplete statementer
+thing, like you can't
+build part of a class.
+You can build complete declarations.
+We have an issue where
+names can sometimes refer
+to things in like non-local scope.
+Where they might end up being
+sort of dangling references
+when you inject them.
+So we need to be careful to
+make sure that all of those,
+all of the lookup rules are sane.
+But once we actually lock
+down the lookup rules
+for injection, or at least the
+rebinding rules for injection
+then you're really just
+trafficking in kind
+of completely cohesive units of code.
+Not parts of like a
+statement, for example.
+- [Audience Member] So yeah,
+to weigh in on that as well,
+because I was trying to
+answer that same question
+while looking at your slides.
+I think yes, we do have to
+worry about hygiene here,
+the same way you do with list macros.
+I also personally think
+it's not that big of a deal.
+You know, particularly because
+you have metaprogramming
+there is actually an easy way to say hey,
+I want these symbols to be unique things
+so that they are guaranteed not to clash
+with anything that you
+might otherwise have.
+And that's kind of, yeah,
+that is the big weakness
+of list macros, but
+compared to what you've got
+with every other system, I think it's a
+small price to pay.
+- Okay, thank you.
+Any other questions?
+All right, thanks for coming oh, no.
+One more question.
+The guy with the metaclash shirt.
+- [Audience Member] Yeah
+so let's say I have a class
+template like pair and
+I don't like the names
+of first and second but
+I would like them to be,
+I dunno, name and street
+or something like that,
+could the user of my
+class provide these names?
+Like could an ID expression
+for instance be a template
+parameter or something like that?
+- An ID expression can certainly
+be a template parameter.
+So, I mean the rule for
+idexpr of that operator
+is just that it forms an unqualified ID.
+So anywhere an unqualified ID can appear,
+actually template parameters
+are just identifiers,
+they don't incorporate that parse.
+Technically not yet.
+But it's a thing to consider.
+- [Audience Member] Okay,
+that would be crucial
+for my use cases.
+- Yeah, but could you potentially
+inject alternative names
+for first and second?
+Probably not because you have to modify,
+like that's part of the,
+you're essentially injecting
+name binding rules into a class.
+And you certainly don't
+want like replace, impair
+the names first and second.
+'Cause that'd change
+potentially the structure
+of the class in a really weird way.
+- [Audience Member] Not the
+current pair, of course,
+but if there were a named
+pair or something like that.
+- Um, maybe.
+I don't think I see a way
+to do that directly yet,
+but I will think about it.
+Any other questions?
+All right, well thank you for coming.</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

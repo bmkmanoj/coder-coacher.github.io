@@ -1,0 +1,1237 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Faster HTML and CSS: Layout Engine Internals for Web Developers | Coder Coacher - Coaching Coders</title><meta content="Faster HTML and CSS: Layout Engine Internals for Web Developers - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/GoogleTechTalks/">GoogleTechTalks</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Faster HTML and CSS: Layout Engine Internals for Web Developers</b></h2><h5 class="post__date">2008-11-17</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/a2_6bGNZ7bA" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">thanks for coming uh this talk was
+started we were thinking about doing
+some experiments and around performance
+in CSS and search the web with search
+engines found very little there's not a
+lot of research out there on this so it
+occurred that maybe we should go to the
+guy with the secret knowledge how how
+does this stuff really work we're poking
+at the black box but we don't even know
+how it works
+so I want to introduce David Barron he's
+a software engineer at Mozilla where
+he's worked since 1998 he's a member of
+the w3c CSS standards working group and
+he's here to present Thanks
+so um it'll be a little interesting
+because right now I have the slides
+there but I don't have them here so you
+know I may get a little confused which
+way I'm moving the mouse at some point
+but in any case so what I'm going to
+talk about is really the so just well
+one one little pointer is that if anyone
+can't see them I also put the slides on
+the web although they um at DeGuerin org
+slash talks but a sort of requires a
+relatively recent browser to look at
+because I basically wrote them against
+Mozilla trunk using HTML and SVG so it's
+a little fun anyway
+essentially what I'm going to talk about
+is it's sort of a how browsers work from
+my perspective which you know you ask
+any engineer who works on web browsers
+how they work and they have that you
+know they work more in a different area
+and they're gonna be biased towards
+talking about that area of the browser
+rather than some of the other areas that
+they have less experience in so I'm
+going to try and sort of give a how
+browsers work talk but edited pretty
+heavily to focus on
+the parts that are relevant towards what
+authors can do to make web pages faster
+but it's still fundamentally sort of
+this is how a web browser goes from
+getting stuff on the wire to displaying
+stuff on the screen but with a lot of
+other comments interjected in so when
+I'm I'm coming at this from the
+perspective of somebody who works at
+Mozilla you know so I work on one web
+browser I don't I know a lot more about
+one that I know about the other so a lot
+of the details that I'm going to sort of
+that I'm going to get into some of them
+are sort of pretty common across
+browsers whereas some of the others vary
+more between browsers and I'm not even
+necessarily sure in some cases which are
+which and beyond that a lot of these
+things vary between browser versions in
+that when you're writing a web browser
+you have a lot of compatibility
+requirements in terms of what you have
+to basically you know anything that
+you've shipped before that other
+browsers do too you have to keep doing
+and it's not necessarily that way with
+performance if you're slow at something
+before nobody's really going to complain
+if you find some way to speed it up so
+we sort of have the have a lot more
+ability to change the performance
+characteristics of our of our layout
+engine than we do to change the output
+in terms of you know visual output or
+behavior or other characteristics so an
+example of that would be like in Firefox
+3 we made some pretty significant
+changes what we there were many
+significant changes between Firefox 2
+and 3 but one of them that's relevant
+here is that the way we handle style
+changes change drastically so that we
+would coalesce separate style changes
+and process them all at once
+rather than processing all separately
+which could pretty significantly change
+performance characteristics of pages
+that were exercising that but you know
+it doesn't break anyone we have the
+ability to do that so with with that
+preface in mind I want to just sort of
+dive in and talk about the data
+structures we have in web browsers and
+some of the things we do so sort of one
+of the central data structures we have
+is the Dom tree or the content tree we
+call it a bunch of different things but
+basically HT HTML this bunch of tags is
+a serialization of a tree structure and
+most modern browsers actually turn that
+into an actual in-memory tree structure
+this in some older browsers that
+actually wasn't the case but these days
+most browsers actually have a tree in
+memory and when you use the Dom API s
+that work on a tree there's an
+underlying tree data structure that
+looks pretty much like you think it
+would look so you know a simple HTML
+document has a bunch of HTML element
+nodes and a bunch of text nodes and so
+on and you know the types of the nodes
+in this content tree or things like HTML
+elements and then there are specific
+types of HTML elements and they differ
+based on you know based on what Dom
+methods they have you can also have SVG
+and SVG Dom tree or if you have
+something like the slides I'm using
+today you can have a Dom tree that mixes
+both of them but the thing about this
+tree structure is that the types of the
+nodes are are related to the types of
+the elements then in it now in addition
+to that and this varies this starts to
+vary a little bit more across browsers
+but I think it's still reasonably
+similar we have a second tree structure
+that represents the what we render for
+all of these elements so we call it the
+frame tree which
+is sort of odd and I will tend to use
+that term just because it's the term I'm
+used to using people will also call it
+the rendering tree I'll probably use
+them interchangeably the nodes in this
+tree all represent rectangles
+essentially but the the more important
+difference is that the types of the
+objects in this tree aren't things like
+element types they're things like CSS
+the values of the CSS display property
+will mostly correspond to the types of
+nodes in this tree so block or inline or
+various table types or text nodes in
+many cases there's a one-to-one
+correspondence between the nodes in
+these trees but in some cases there
+isn't for example a node that has CSS
+display:none um wouldn't wouldn't create
+any nodes in the rendering tree so like
+you see in this slide that the head
+element doesn't have there's no nodes in
+the rendering tree pointing to the head
+element because we make the head element
+display:none
+so there's just nothing generated there
+likewise there are cases especially when
+we break elements across lines or pages
+where you'll have multiple rectangles
+representing a single element in the Dom
+so with these two data structures and
+now I want to sort of walk through the
+process of what we do as we display a
+web page so for a start there's and
+there's sort of there's I'm actually
+going to start off to the left edge of
+this slide but we start off you know
+we're just work reading HTML things like
+parsing or mostly linear time in the
+length of the thing you're parsing it's
+not
+there's nothing all that complicated in
+terms of
+parsing that at least that I'm
+interested in then again it's sort of
+not my not as much my the area that I
+work on so I'm sure there are other
+people at Mozilla who could talk about
+performance aspects of parsing for quite
+a while
+but there are actually some in some
+cases parsing the process of parsing a
+document actually ends up not being
+linear time not because not so much
+because of the algorithms but because of
+the way it's done incrementally and in
+particular if one element has a very
+very large number of children you end up
+with some quadratic time algorithms
+showing up just because of the process
+of incrementally loading a document and
+incrementally adding those children
+there are they're sort of a very small
+quadratic term because there's some
+operations especially when you're
+dealing with laying out the document and
+displaying it where you're going to walk
+over that child list as it as it
+incrementally grows every single time
+though by and large it's linear time so
+the more interesting stuff about the
+process of loading a document is dealing
+with things like loading style sheets
+and loading scripts and loading images
+because when you're just sort of in this
+static version and what I'm sort of
+going through now is the sort of the
+case of displaying an HTML document
+that's just static and doesn't change
+dynamically which is sort of the the
+basic case and then I'm going to go back
+over again and talk about how we handle
+dynamic changes that are a lot more
+relevant to use of HTML in applications
+but in any case on the UM
+so loading images is sort of
+straightforward you that's when you're
+constructing the Dom tree you hit a node
+that's an image you kick off a network
+load that starts loading that image and
+you just keep going it's asynchronous
+it's not giving you some huge penalty
+although there's of course issues with a
+limited number of it we're limiting the
+number of HTTP connections to a given
+server so there's some serialization
+against other resources that you might
+be loading um scripts and stylesheets
+are a little bit more interesting
+because scripts have this model that I
+suspect a lot of you are familiar with
+where what's in a script executes at
+that point so right where the script is
+linked you are executing that script so
+you have to wait for the script to load
+because the script could document dot
+write a start tag and not an end tag it
+could document dot write all sorts of
+things and the programming model used on
+the web is is a synchronous model where
+you're where the where the script has to
+execute at the point it's loading so
+when you're waiting for a script to load
+you're often waiting for you're
+essentially not even parsing the HTML to
+find other things to load that was
+actually true until yesterday on Mozilla
+trunk we actually landed a patch
+yesterday that finally sort of
+speculatively parses the HTML after the
+script on the assumption that the script
+isn't going to do anything too serious
+and starts initiating the network loads
+for things that it finds linked there um
+but
+but even so this is this is something
+that you have to be pretty careful with
+style sheets are sort of an in-between
+case because the idea with style sheets
+is that they can have drastic effects on
+the render entry but they have no effect
+on the Dom tree at all so you really
+want to wait for style sheets to load
+before you construct the rendering tree
+but you can keep building the Dom tree
+and potentially executing script even
+while they're loading that said the way
+that's happened has changed over time in
+Mozilla the original way this was
+implemented is somebody said oh hey we
+need to do this why don't we just reuse
+the code for script so in the old days
+we actually did all the things for that
+we do for script also for style sheets
+that's changed such that we will load a
+style we will now continue parsing the
+HTML continue loading the page while
+we're waiting for a style sheet to load
+but potentially that means you're
+running scripts and those scripts could
+potentially ask for the result for
+layout information which means suddenly
+we need a rendering tree in order to
+give the script to the information they
+asked for which can potentially produce
+a problem that web developers hate so
+much that they've given it a name which
+is flash of unstyled content and since
+we've started doing this for style
+sheets in Mozilla we've actually started
+having this type of problem in a few
+rare cases where a page asks for layout
+related information so this is all sort
+of the preface to building up this
+content tree once we have the content
+tree we then have to go decide how what
+types of objects to put in the rendering
+tree and since the types of objects we
+put in the rendering tree depend on CSS
+Styles like the display property and
+some other properties we actually have
+to compute the style for the element in
+order to construct the rendering trick
+so the next thing I'm going to talk
+about is CSS selector matching
+which is sort of fundamentally it's it's
+from an algorithmic perspective it sort
+of looks like it ought to be a bit of a
+performance hotspot although it actually
+ends up not being that bad in most cases
+because of the way we optimize it so the
+basic idea of CSS selector matching is
+that you have a set of elements in the
+in the content tree and you have a set
+of CSS rules and for each element you're
+asking does this rule does does this
+selector if this selector matches this
+element then we'll use this rule so
+fundamentally for you have a problem
+where you're running this algorithm for
+every pair of element and selector which
+can add up to a lot so the question is
+first of all how we optimize that and
+second of all what it is that can make
+that more or less expensive so I
+actually want to briefly step through
+the unoptimized version of CSS selector
+matching just so that it's clear how
+that this works because it says a few
+things about what types of CSS selectors
+can be faster or slower so the CSS
+select the the things over here on the
+right side of the slide are examples of
+pretty simple CSS selectors the first
+one represents a diva any div element
+the second one represents any element
+with a class attribute that's item the
+third is any element with an ID
+attribute that's sidebar the fourth is
+any div element that has an ID attribute
+with class side with ID sidebar the
+fifth one represents any P element that
+is a descendant of a div element so this
+is this is one of the things I wanted to
+talk about here which is essentially the
+process of matching
+so if we were trying to figure out which
+selectors match the body element in the
+unoptimized case you'd sort of look at
+this and say no you know this it's not a
+div element no it doesn't have class
+item no it doesn't have ID sidebar it
+doesn't really matter
+fundamentally which one you match here
+first to match this one the way pretty
+much all browsers do it is that CSS
+selectors match from right to left so
+the first thing you look at when you're
+trying to match the selector is the part
+that's at the right the part to the
+right of the rightmost Combinator where
+the space is a Combinator that
+represents is descendant of the greater
+than sign represents is child of and so
+on so if you're trying to match this the
+the P say this P element here these
+rules it's there's only one what there's
+no Combinator's in these you just look
+at the piece the one simple selector
+which is the unit between the
+combinators and in these four cases it
+doesn't match in this case when you
+match the try to find out if the P
+matches the the simple the rightmost
+simple selector does match so then you
+look at the Combinator and say well we
+want to find an ancestor that's a div so
+you look up and say okay this one
+matches so it turns out that selector
+matches whereas with a selector like ul
+space P if you're trying to see if it
+matches this P you start at the P it
+matches then you look for an ancestor so
+you end up walking all the way up the
+tree looking for an ancestor to see if
+it matches so if you're dealing with a
+deep document tree you can potentially
+spend a lot of a lot of time even just
+on a single selector nevermind this
+problem of multiplying and multiplying
+all the elements times all the selectors
+so there are actually some some
+selectors are even worse in that
+there's backtracking required um for
+example this one here body you're
+looking for a P that is a descendant of
+a div that's the child of body if you're
+trying to see if this P matches what the
+browser will do is well it'll say that P
+matches matches the rightmost part then
+it will find the div matches the next
+part but this div doesn't match the next
+part so since the body div relationship
+is a child relationship you have to
+backtrack try to match this div against
+the middle part that succeeds but this
+fails to match body backtrack match this
+against div and finally you get a match
+the third time so that's just that's the
+unoptimized case now the way we avoid
+the problem of having to match every
+element against every selector is that
+we hash the selectors into a bunch of
+buckets in advance to filter out the
+ones that we know aren't going to match
+and all that filtering is done on the
+rightmost part of the selector in other
+words the part to the right of the last
+company der so essentially we'll say
+that if an element has if a selector has
+an ID in that rightmost part of the
+selector we'll stick it into a hash
+table for selectors that have an ID by
+its ID if it has a clasp we'll stick it
+into a hash table for selectors that
+have a clasp unless it was already in
+the hash table for those with an ID if
+it has a tag name we'll stick it in a
+hash table by tag name and otherwise
+we'll just stick it in the list of all
+the selectors that we couldn't classify
+so then when we want to find the
+selectors that match say a div this div
+here what we'll do is go to our hash of
+selectors with IDs in them pull out the
+entry for ID equals sidebar there's no
+class on that div so it doesn't matter
+we'll then go to the hash for all the
+selectors with for the hash of selectors
+by tag name and pull out the div pull
+out the selectors that have given that
+rightmost part and we will then combine
+those lists and
+you run those selectors so what this is
+saying is that in Mozilla and I think
+this is also reasonably true in other
+browser engines your selectors are going
+to cause much less of a performance
+problem if they're more specific the
+rightmost part of them is as specific as
+possible because then you won't even
+there won't even be any code at all to
+deal with testing them against all these
+other elements that probably are going
+to fail but maybe not all that quickly
+in the algorithm so in any case so once
+we have the list of selectors that match
+we have a set of we have a list of CSS
+rules that match you take all the
+declarations compute that see compute a
+property value for every element and
+start constructing this rendering tree
+which is you know there are too many
+interesting performance characteristics
+of the constructing the rendering tree
+in terms of the static case it's pretty
+much you go build objects and pretty
+boring then once we have a rendering
+tree we compute all the positions of
+those objects which is like constructing
+the rendering tree it's a recursive
+process in that and one of the so
+essentially the process of layout which
+we sometimes call reflow at Mozilla
+involves essentially assigning
+coordinates to the rectangle for all of
+these rendering objects so you know
+traditional document layout algorithms
+tend to treat widths as inputs and
+Heights as outputs so it's it's this so
+it's essentially done as a recursive
+algorithm where the a parent will have
+some width input
+it'll compute its own width tell its
+children to fit in that width and we'll
+add up to some
+amount of height and then you'll come
+back out to the parent it'll finish
+determine its own height and pass that
+on up back up to its own parent now it's
+not completely true that with sir input
+and Heights or output there are cases
+where we use intrinsic widths of content
+we're essentially widths our output but
+that's not too relevant here now the
+code that does this is going to vary a
+lot by frame type how it's optimized is
+going to vary a lot by frame type so you
+know block things like blocks and tables
+probably are optimized reasonably well
+unusual things might not be might not be
+as careful about being efficient then
+once once we've computed all these
+rectangles we then come along and we
+want to actually display something so we
+build a display list for all the things
+that we have to display within a within
+a rectangle um we and then we
+essentially paint that display list and
+back-to-front order using a 2d graphics
+API now that's sort of there now in in
+that painting process there are some
+things that make it slower for example
+if you have opacity which is group
+opacity you have to composite things
+into an off-screen surface or paint
+things into an off-screen surface and
+then composite that onto the rendering
+and so on but I don't want to go into
+that too much now that's sort of the one
+pass through simplified version for the
+static case now when you're building
+applications you end up potentially
+dealing with more pot more possibilities
+here
+sorry so um so there's a lot of dynamic
+changes that when you're writing script
+when you're writing yeah when you're
+writing script that there's a bunch of
+different types of dynamic changes that
+can happen to cause changes in this
+whole pattern so you know one of the one
+of the simplest is sort of adding and
+removing elements from the Dom which is
+something you can do with Dom API is
+it's pretty common basically in that
+case you sort of run through this same
+pattern on the elements you added the
+same static pattern in a pretty
+straightforward way so it's not all that
+interesting in terms of unusual
+performance characteristics however
+there are a bunch of other types of
+changes that have different performance
+characteristics so a lot essentially not
+web browsers are in some sense CSS
+centric in that they've sort of used the
+design of CSS as sort of a central part
+of their architecture so a lot of
+changes changes that affect layout are
+often sort of indirectly CSS changes
+that happen because something causes the
+computed style of CSS properties to
+change which in turn causes um causes
+the display to change so examples of I
+mean so this sort of the simplest
+example of that change is simply
+changing the style attribute so you
+change element style on some element
+you're pretty clearly changing the
+computed value the computed style of an
+element so they're sort of I have this
+there's sort of a bunch of a bunch of
+different paths I drew here
+so I'm sort of looking thinking about
+you know what types of content changes
+there if you change the computed style
+of an element if sorry the style
+attribute of an element you're going to
+change the computed style there's no way
+around that however there are some other
+types of changes where you can avoid
+changing the computed style but that
+sometimes change computed style like if
+you change an attribute like the class
+at the class attribute is pretty likely
+to affect computed style but there are
+some attributes that are more or less
+likely to change the style and we have
+up some optimizations to detect whether
+or not they will which I'll talk about
+in a second then there's sort of a third
+class of changes where the changes are
+actually not completely avoiding this
+system at all one of the interesting
+ones there is scrolling which scrolling
+is a pretty pretty optimized process
+because it's something users do a lot
+and it's something that graphics cards
+are reasonably good at doing in the
+common case which is in most cases
+scrolling down a few pixels you can
+simply tell the graphics card to move
+everything a few pixels up and then you
+manually repaint the little slice at the
+bottom that appeared so that's that not
+only avoids dealing with all of these
+systems except for painting but it also
+avoids even repainting anything but the
+little region that changed at the bottom
+now there are a bunch of cases where
+that's actually not the case where we
+have to repaint everything some of the
+obvious ones are if you use background
+attachment fixed or position fixed which
+basically are a way of creating
+something that doesn't move when you
+scroll then if you're drawing something
+that's a composite of things that do
+move when you scroll and things that
+don't you have to repaint the whole
+thing you can't just any bits on the
+screen there's actually a third case
+there that's sort of interesting which
+is when you have overflow on an element
+that's so the CSS overflow property lets
+you create something that's scrollable
+inside a document
+if you have overflow on an element that
+is that does not that has a transparent
+background and is on top of something
+that's not uniform then we again have to
+repaint the whole thing when you scroll
+and we've gotten better at detecting
+some of the optimization cases there I
+think at this point we will actually
+detect you know if you have something
+that is um something if you're scrolling
+something that has a transparent
+background but is on top of something
+that has a uniform background I think
+we'll still optimize that but that's
+probably something that differs a good
+bit of cross browsers and versions as
+well to move away from this the
+scrolling is sort of an interesting side
+side point because it's something that
+you can do programmatically through the
+Dom you can change element scroll top
+and element scroll left which is often a
+much faster way of doing something that
+affects that people do by changing
+element style top and using absolute
+positioning or relative positioning to
+move things when there are some of those
+effects can also be accomplished by
+scrolling something programmatically and
+this could be something with
+overflow:hidden which still can be
+scrolled programmatically and that's
+sort of a way to bypass this whole
+pipeline and just deal with the
+repainting um so then there's this third
+set of changes that sometimes cause you
+sometimes cause recomputation of style
+and sometimes don't these are things
+like changing attributes and the classic
+case that needs to be pretty heavily
+optimized is what we call a vet states
+now the event state that's important is
+the in terms of optimization is the
+hover state because hover is a CSS
+selector that applies to whatever
+element is under whatever elements are
+under basically the element that's
+underneath the mouse pointer and all of
+its ancestors so in theory one element
+matches that selector changes every time
+the user moves the mouse
+but we but so the optimization through
+which we avoid doing this recomputation
+of style is essentially geared towards
+optimizing that case so that we don't
+have to recompute style every time the
+user moves the mouse which is that every
+time so when when and when when we when
+the element that it is in when element
+changes whether or not it's in the hover
+State we essentially look at all of the
+CSS selectors that have hover somewhere
+in them so not necessarily in the
+rightmost part but we look at an any CSS
+selector that has : hover in any part of
+the selector if that selector matches if
+that part of the selector all the way to
+the left end matches the element then we
+might have to then there might be some
+style change because you can have a
+selector like colon hover space P that
+applies to any paragraph inside of an
+element that's currently in the hover
+State so we need to check not only the
+rightmost part but all the parts of the
+selector which sort of yields a second
+guideline for fast CSS selectors which
+is that there's any anytime you write
+something like hover in a selector or
+write an attribute selector based on the
+attribute chain an attribute that
+changes a lot it's also worthwhile to to
+have that part of the selector be as
+specific as it possible even if it's not
+the rightmost part of the selector
+so the reason this is so valuable to
+optimize is that at that point we can
+check only one element whereas once we
+decide that we need to go through and
+recompute style for an element that
+implies that we're also recomputing
+style for all of its descendants
+both because of CSS inheritance because
+a lot of properties are inherited and
+because of a lot they're it's pretty
+common to have selectors that move from
+dis that select based on ancestors so
+the way of handling so we sort of just
+handled that all in the same code so it
+turns out that once so once we decide
+that we do need to do this restyling we
+then coalesce as many rese tiles as
+possible now essentially what this means
+in the normal case is that we post an
+event to the main event loop and say
+when this event fires will process all
+the Rhys tiles that have happened
+between the first one and when the event
+fires
+however the web has sort of that the web
+has evolved with a synchronous
+programming model that doesn't let us
+quite do that because basically the
+expectation of script authors and the
+expectation of all the pages that
+they've written that we have to be
+compatible with is that changes take
+effect immediately so when we say that
+when we do things asynchronously we can
+do that as an optimization but then if
+somebody asks but then if a script asks
+for information that depends on the
+thing that we're planning to do later we
+suddenly have to do that immediately to
+provide the information the script want
+it and there's a lot of things a lot of
+JavaScript a lot of Dom api's that act
+that actually require this information
+so if you're looking at the computed
+style for an element that requires that
+all the style
+up-to-date and in it in fact requires
+that the layout be up-to-date in some
+cases if you're asking for various
+properties like offset top or offset
+left that requires that the layout be
+up-to-date which in turn requires that
+the style be up-to-date so there's a lot
+of things that cause us to cause us to
+flush our cue of all the things that we
+would like to coalesce and that poses a
+potential danger to script authors
+because you can it's pretty easy to
+write a loop where you're making a
+change and then reading something that
+requires that change to be flushed
+whereas for example if this were split
+into two loops you could read all the
+data that you needed and then make all
+the changes you would then have all
+those changes coalesced and it would be
+much faster to make all of them then if
+they'd all been then if you force them
+to all be flushed separately so once
+when we recompute the style for a bunch
+of elements we then essentially compare
+the compare the style for the old style
+data and the new style data so we have
+you know we find out that for example
+the CSS display property changed the
+display property affects what type of
+frames we constructed so if the display
+property changed changes we need to go
+we need to go construct frames and then
+go through the rest of the pipe if say
+the width property changes that doesn't
+affect what type of rendering objects we
+construct but it effects the layout and
+so we need to go through the pipeline
+from here it could also be that say the
+color property changed at which point
+the color property doesn't affect the
+first two so we can jump straight to the
+third so when we handle these when we
+handle all these things that change CSS
+properties depending on the property
+we'll do a different amount of work to
+handle that change
+so then there's the question of how much
+work these different types of things
+take so reconstructing frames for
+something basically if we reconstruct
+the frame for an element we're also
+reconstructing the frames for all its
+descendants that's just an invariant
+that we maintain I don't know if other
+browsers do that or not um but it's not
+particularly it's there's no interesting
+behavior regarding the depth of the tree
+except for things like there except for
+a few odd cases where we have to go and
+reconstruct ancestors because there are
+a few really strange cases like when you
+have blocks inside of inline elements
+where suddenly we there's enough
+complicated fix up that we need to go
+throw out a lot more in order to redo
+the fix up from the top of the tree
+doing relay out or reflow is a little
+bit more interesting in that a relay out
+is always a recursive process running
+down from the top of the tree because we
+have this algorithm where the widths are
+input and the heights are output so if
+there's some change way down in the
+depth of the tree it's possible that
+that change propagates out into
+different heights all the way back up to
+the top so what we do and potentially
+some other things that we need to update
+during layout like over like the regions
+of overflow which are sort of like a
+second rectangle so when we do
+incremental reflow it's a there is this
+aspect that's a function of the depth of
+the tree so this is a diagram that I
+stole from a presentation a colleague
+did six years ago essentially we sort of
+optoma we recall that these relay out
+methods all the way down the tree and
+some of them aren't necessarily going to
+be all that efficient but they in turn
+at least aren't going to relay out all
+of their children they're going to just
+relay out the
+child on the path to get to what needs
+the layout so the cost of doing relay
+out can be pretty heavily affected by
+the ancestors of that element for
+example if you have an element that's
+inside a floating element that's got a
+lot of other floating siblings
+recovering state the state we have to
+recover for floating elements is pretty
+substantial because we need to rebuild
+State in order to know where what areas
+we can wrap around and what areas not to
+wrap around so the cost the cost of a
+reflow can vary a lot depending on what
+depending on what something is inside
+not just depending on what it is that is
+being laid out again so then the final
+step is repainting where essentially
+what we're doing is were invalidating
+regions telling the operating system
+that our region's invalid it'll then
+come back to us with a paint event
+telling us to repaint that region so
+there's sort of this hierarchy of CSS
+properties in terms of which caused more
+damaging style changes than others and
+this this can introduce some trade-offs
+for example if you want to hide elements
+there are actually multiple ways that
+you can hide hide an element you can
+change it to be display:none and like I
+said earlier making something
+display:none means we're not going to
+construct any rendering objects for it
+so if you change something to
+display:none we're going to destroy all
+the frames for it
+and then if you change it back from
+display:none to whatever it was before
+we then have to rebuild all the frames
+lay them out over again and paint paint
+everything if in turn you hide something
+with the visibility property
+you don't incur any of those costs
+because the visibility property doesn't
+affect frame doesn't affect the frame
+tree it doesn't affect layout but you
+have slightly higher costs in terms of
+what you're doing every time in other
+words the trade-off between display and
+visibility is essentially that with
+visibility changes are cheaper but the
+overall cost when it's not displayed is
+higher because the visibility property
+you still have the rendering objects you
+still have to do all the layout but then
+you just don't paint it so I want to
+them I want to go back now and talk
+about some implications of this for
+things that you can four ways to test
+this is one of the things Lindsay asked
+me about when he asked me to give this
+talk is that people were thinking about
+you know what types of things are useful
+in terms of testing performance of web
+pages and some of that depends on what
+it is you want to test but so one
+example is if you want to figure out
+essentially what the cost of building
+the frames and laying them out is for
+some particular piece of content you
+could do something like the following
+you could set the element or maybe it's
+the body element to be display:none then
+you could get the offset property of
+some random element in the tree which
+will in turn flush all the style changes
+and flush the light flush the layout so
+that your ascent you've essentially
+flushed the buffer of what's queued up
+then you get a timestamp then set the
+thing that you had set to display:none
+back to its original value then again
+access offset top of some random element
+in order to flush everything then what
+that will do is getting offset
+we'll flush all the style changes it'll
+recreate the frames and lay them out
+again
+and then you can look at another
+timestamp to see how long that how
+essentially how heavy that chunk of
+markup is now doing that within
+something that's dynamic has a could
+potentially throw in some confounding
+factors because by by forcing these
+flushes you're also forcing splitting up
+things that could potentially be
+coalesced within a real application um
+so likewise something I talked about a
+little bit earlier is dealing with the
+costs of incremental layout um you know
+you one of the things that might be
+interesting to test in terms of layout
+is how expensive some structure is in
+terms of the its performance effects on
+real a out of what's inside of it um
+because like I mentioned the layout
+process depends on the depth of the tree
+so you can do again similar things by
+checking an offset top making some small
+change and then seeing how seeing if
+different structures um seeing if
+different structures take shorter or
+longer amounts of time to handle a real
+layout I'm sure there's lots and lots of
+other examples here but um does it those
+are just a small number and hopefully of
+hopefully I've given you some ideas here
+for other things that you can test and
+I'm certainly open to questions about
+pretty much anything I talked about
+Thanks
+and I was told if you have questions you
+should use the microphone
+hello well thanks for the great
+presentation I do have a question so a
+while back you suggested using a
+overflow:hidden changing scroll in order
+to move things around but I found in the
+past and I've done that it causes
+unrelated elements and the the screen to
+kind of have stuff flash behind them do
+you know if there's a reason or
+workaround for that or um I don't know
+I'd be interested to see a test case for
+that um it's it's really not something
+that should happen um I don't know okay
+I was just curious thank you thanks for
+the great talk I have a question about
+absolute positioning and what kind of
+optimizations you do to not reflow the
+rest of the tree when you move it around
+for example um so absolute positioning
+is sort of interesting in that it's so
+absolute positioning is the CSS
+specification defines this concept that
+it calls a containing block where um
+that's sort of the in four normal
+elements it's the nearest block level
+ancestor but for absolutely positioned
+elements it's the nearest relatively
+positioned element or the viewport if
+there is no containing relative the
+nearest sorry the nearest positioned
+element whether it's relatively or
+absolutely positioned or the viewport so
+for absolutely positioned so when we
+build the this when we build the frame
+tree the absolutely positioned element
+is a child of its containing block so
+for absolutely position elements that
+are positioned relative to the viewport
+in other words if they're if they're
+containing block is the viewport then
+they're then in our implementation their
+parent is the viewport so the only strut
+so there's essentially no structure that
+you have to delve down through in order
+to get to them but if an absolutely
+positioned element is inside a
+relatively positioned element that's
+inside some complicated structure we
+actually are going to go all
+way down through that structure to the
+relatively positioned element and then
+jump from there straight to the
+absolutely positioned element sure
+so you discussed the performance
+differences between hiding an object
+using display:none versus
+visibility:hidden
+so that's sounds sort of like an
+implementation detail or is that
+actually is that behavior somehow part
+of the standard and so in terms of
+visibility it sort of is part of the
+standard because visibility is something
+that can be overridden by descendants so
+inside something that's visibility
+hidden you could actually have something
+that's explicitly visibility visible and
+then it suddenly appears again so it is
+effectively part of the standard that
+visibility elements with visibility had
+need to have let need to be laid out as
+far as display I mean I I thought it's
+it's not strictly part of the standard
+but if something's display:none you
+don't know what display value it would
+have if it weren't known so you don't
+really know how like if you were to try
+to lay it out you wouldn't know what
+display type to give it because what
+type of rendering objects you construct
+and how you lay it out or a function of
+its display value
+so if you are building a three column
+layout for performance do you pick
+tables or do you pick floats it sounds
+from what you said you distinguish table
+elements being very optimized from other
+things so what you're doing tables and
+floats are both reasonably well
+optimized although probably four
+different cases um I I tend when I'm
+trying to do a layout I tend not to be
+worried so much about the performance
+aspects um in terms of floats versus
+tables I worry more about what can
+actually do the layout I want because
+usually there's only one answer that I
+can come up with at which point I just
+run with it I think a lot of it depends
+on what like I I don't think there's one
+answer I would give for that like I
+think it depends on what exactly you're
+trying to do what what you want to be
+flexible what you what you know width of
+and so on
+question near the end you were talking
+about if we were doing timing we should
+start up a clock do some whatever it is
+we want and then stop the clock
+I found that any concept of timers or
+wall clocks is incredibly jittery with
+regards to browsers is there any other
+measure of work I can use in order to
+time it um not that I know of um so
+there's I think there have been some
+improvements to the accuracy of things
+like date dot now recently it used to be
+very inaccurate on Windows but I think
+that's fixed now that is in Mozilla on
+Windows my salute my solution to timing
+things when the timers are inaccurate is
+always just do it more times
+and you have performance benchmarks for
+layout and rendering um tests that
+you've improved that we use on yeah so
+we have a bunch of different performance
+benchmarks that we keep track of some of
+them are just page loading benchmarks
+where we're essentially timing the load
+of a whole set of pages that were
+downloaded at some point and which we've
+say archived for that benchmark we also
+have some other benchmarks that are
+testing particular things a bunch of
+constructed tests to test Dom
+performance and graphics performance
+those are the we also have some
+benchmarks for application performance
+as well but those are probably the key
+benchmarks that we're looking at all the
+time there's also you know people look
+at specific test cases as well but not
+for not for tracking purposes
+um coming back to Lindsay's question
+about cables versus floats for
+horizontal layouts what if you have deep
+nesting like if you want to create like
+a general generally just a sure
+structure for lengths of things out
+horizontally is deep nesting of tables
+generally more expensive than deep
+nesting of floats or um
+I can't think off the top of my head why
+one of them is going to be worse than
+another immediately one factor is going
+to be that in some case Oh in some cases
+tables depend more require more
+intrinsic width computation in that
+table cells have so they're sort of any
+piece of content has two intrinsic
+widths one is sort of the simple way to
+think of it about it is using a
+paragraph as an example if you lay out
+all the text in a paragraph on one line
+that's the larger of the intrinsic
+widths and then smaller intrinsic widths
+of the two intrinsic widths is the width
+of the longest word in the paragraph and
+then you can sort of extrapolate those
+intrinsic widths outwards so table cells
+have a rule that they will never go
+smaller than the smaller of those
+intrinsic widths which means they always
+have to compute that one even if you've
+assigned them a width they will still
+check and compute it and make sure that
+they don't go below it unless you're
+using fixed layout in which case you
+don't have to deal with that so there
+now some of that with deep nesting of
+tables depending on the browser some
+browsers are going to respond pretty bad
+basically whenever you have deep nesting
+of things that require intrinsic with
+computation some browsers are going to
+respond pretty badly in particular
+Mozilla before so Firefox 2 or earlier
+um and I suspect internet explorer also
+because there's sort of two fundamental
+different fundamentally different
+designs for how to do this intrinsic
+width calculation and basically gecko
+recently changed between firefox two and
+three gecko changed from one to the
+other so that now we don't have there's
+not as much of a penalty for dealing
+with deeply nested tables because worse
+we've essentially separated the two but
+what we did back in firefox two was
+intrinsic width computation was
+essentially also treated as a layout
+pass where we would sort of say do
+lay out at some arbitrary width and you
+know at infinite with essentially and so
+then the process of redoing the process
+of doing that would destroy the
+information that you had in the normal
+layout so if you had a series of deeply
+nested things that all needed intrinsic
+width information you could get into
+trouble essentially throwing away the
+layout to compute an intrinsic width and
+then having to rebuild it multiple times
+as you recurred down and up the tree in
+order to light things out so that's one
+reason you could get in trouble with
+deeply nested structures although that's
+that should be much less of a problem in
+Firefox now and shouldn't be a problem
+in WebKit or opera you would also
+mentioned dynamically altering an
+element that had a float element as an
+ancestor as being potentially expensive
+because more contextual information must
+be recomputed well it's it's um it's
+more dealing it's more any really any
+change where there's a bunch of floats
+somewhere along that path because
+essentially for it when when we when we
+layout an element we essentially even so
+when we're doing layout on an element
+because one of its descendants needs to
+be laid out again we still have to sort
+of look at each one of its children and
+say so that does this child need to be
+laid out does this child need to be laid
+out and so on and if that child is a
+float then there's a bit of information
+that we deal with so if something along
+the path has a lot of float children
+that might be a problem but some of
+these are problems like some of those
+problems are things that only show up if
+you're say using single pixel divs to
+build a 1,000 by 1,000 image people who
+do that tend to tend to find all these
+performance problems and browsers that
+nobody else finds so you know some what
+some of those things might only be
+things you hit with very large numbers
+of children
+anyway thanks</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

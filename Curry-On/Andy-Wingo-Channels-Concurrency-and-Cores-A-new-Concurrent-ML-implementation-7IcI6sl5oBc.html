@@ -1,0 +1,1073 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Andy Wingo - Channels, Concurrency, and Cores: A new Concurrent ML implementation | Coder Coacher - Coaching Coders</title><meta content="Andy Wingo - Channels, Concurrency, and Cores: A new Concurrent ML implementation - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Curry-On/">Curry On!</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Andy Wingo - Channels, Concurrency, and Cores: A new Concurrent ML implementation</b></h2><h5 class="post__date">2017-06-22</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/7IcI6sl5oBc" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">thank you to everybody for coming it's
+really a pleasure to be here and to get
+to talk to y'all this is a talk about
+pucara Mel and this is a very Korean
+talk of a sort because I didn't have
+this work plan in any way about a year
+ago until last Korean actually at a
+discussion I had a problem and last
+Creon sent me out on a journey and I
+eventually discovered more things about
+concurrent amel and came back a bit and
+that's kind of the arc of the talk as
+well and and so just for as a bit of an
+introduction my name is Andy I co
+maintain ASCII mathematician called
+guile at work I also work in Lua JIT and
+I've worked on other language virtual
+machines like v8 and spider monkey
+things but it on the guile side which is
+really my love I know we all have our
+projects that we have a soft spot for on
+the girl side he was never a very good
+story as far as concurrency goes like it
+was always something that just nod at me
+you know because we have pthreads which
+is just not satisfying you know and not
+satisfying on a very deep level and and
+I thought about why it was you know why
+it's just not such a great thing like
+world okay you know we all know our
+problems with pthreads but specifically
+the things that that I found it to be
+problematic were one that they don't
+compose abstractions built on P threads
+and mutexes specifically users of
+mutexes don't compose with each other
+you get deadlock if you compose various
+pieces of code that use mutexes together
+without thinking of like mutexes in your
+system as a whole as an abstraction it's
+very low level it doesn't actually
+provide you much expressive power you
+cannot make a thread per web server
+request for example you can but it
+doesn't like scale up to millions of
+requests usually with most imitations of
+P threads and I didn't want to rely on
+only being on those people in
+foundations that did actually support
+this iOS scalability and then as my role
+as maintainer I have to recommend a
+story to my users about what do you do
+for concurrency and I fell it's just
+terrible you know explaining all the
+things that could go wrong with papers I
+know it's possible to make you know
+systems that are correct using these
+abstractions but it's hard and it's not
+something I don't even want to tell
+their people other people how to do it
+even though it's that bad so
+before curry on last year finally we
+were starting to get to a point where we
+had a new release and guy'll coming up
+and I started to build a lightweight
+threading system built on delimit
+continuations in Kyle so this was a
+built as a library but with the goal of
+being able to scale some many many many
+threads in a system and where the goal
+to also being able to solve this i/o
+concurrency problem that I should be
+able to very happily spawn off a thread
+for any sort of long going interaction
+with it with a web client with some you
+know networking process or whatever and
+then under underneath everything that
+would be e-poll then basically when we
+need to block on a file descriptor or
+something we would register our
+continuation our callback effectively
+with some some data store and then when
+a poll says that ok you know this this
+file descriptor has some activity on
+again we restart the computation and
+then finally I want to be able to scale
+to multiple worker course so had about
+all this more or less the implemented
+more or less come last Korean and I I
+was very lucky because Matias foison and
+Mathew flat were there who are my people
+you know like from our the scheme tribe
+like the lambda tribe right so I come up
+then I'm like so
+Sage's right tell me am i doing the
+right thing you know is this actually
+the right abstraction is it something I
+should finish you know or is it
+something that's just a sketch and they
+say yes this is the right thing this is
+what we would say for you to use in
+racket like use racket dreads but
+additionally you need to look at
+concurrent ml I'm like what you know
+okay and and they said yep you need to
+look at from kernel melon Michael okay
+all right so I read up about concurrent
+melon that was actually the first time I
+heard about it because I'm very ignorant
+I don't come from a tradition where this
+is this was lore so to speak so I had to
+learn all about it so this talk is about
+what is this thing how this concurrent
+ml relate to communications primitives
+we might know from other languages which
+are more popular now like go and air
+lang and such is it actually worth it
+for you to implement it and how's it go
+but before I can actually dive in there
+I need to give you a bit of context so
+I'm going to show some code
+I know that ml was in the talk title but
+I'm a schemer so these are a bunch of
+parentheses what what we have here is a
+basic scheduler so I'm going to start
+we're going to implement a scheduler
+that can run tasks and this is basically
+it right and what we have is a function
+say we run takes the scheduler as an
+argument and the scheduler has two
+components it has this inbox and it has
+this i/o set being the Ipoh leftie and
+such and in the body here is just a loop
+and at every beginning of the loop it
+will fetch some number of tasks run
+those tasks and then when there are no
+tasks left it will fetch some more tasks
+and loop back again and to fetch tasks
+we get tasks from our run queue
+effectively our inbox and other other
+cores can post messages to this inbox
+and then we get tasks also from the
+kernel we said it's okay I've got these
+file descriptors they're ready we look
+up which tasks are associated with those
+file descriptors and we add them to the
+queue in this regard like when there's
+code like this and it's kind of nasty I
+understand there's like nine parentheses
+there at the end if there's a question
+y'all can raise your hand I can I can
+explain things but it's pretty simple
+right so we can take this programming
+language sort of building up layers and
+make it more like an operating system
+because what is you know a concurrency
+facility but an operating system in the
+end we can instead of just using
+callbacks we can layer threads on top of
+those callbacks using limit
+continuations that's a pretty cool thing
+here this is just explaining what I had
+last slide so here is a high I wish I
+could say it was the gnarliest slide of
+all but it's definitely the one that it
+might be least familiar to you how many
+of you all have worked in languages that
+have delimited continuations maybe some
+of y'all think about five maybe okay so
+the the primitives that you need and the
+system and they really are primitives
+that your system should support our call
+with prompt and abort to prompt there
+are many other formulations of this
+there can be shift reset a couple of
+other ones but these are the ones that I
+prefer these are the ones that rocket is
+based on these are the ones that Kyle is
+also based on make prompt AG just makes
+a
+object it can be any object so if you
+have types you have a better story here
+but in garlic and just be any fresh
+object and call with prompt will
+establish a a prompt right and this is a
+prompt in the operating system sense so
+this call with prompt invocation runs
+the body thunk and if there's ever an
+abort to that prompt anywhere within
+that body you can be like pretty deeply
+recursed you come back to this
+continuation meaning come back to this
+return point on the stack come back to
+you know where we are going and you pass
+any values that you aborted with to the
+handler so run the body if you abort you
+abort to the handler and so I define the
+handler it's taking its first argument
+is the the continuation the suspended
+continuation from when you abort because
+you can resume it and any other
+arguments that were passed the abort so
+when we abort the prompt here we abort
+to the tag and we pass it one argument
+which is this on suspend argument just
+sort of passing through so our call
+suspend primitive we'll run this
+function and apply its arguments inside
+the body and if anything inside that
+body decides to suspend that thread then
+it will come back to this handler and
+pass it the the continuation of that of
+that thread to the on suspend well yeah
+so the on suspend a value that's passed
+back is a function which we call with
+the continuation and I know it's the
+first time you read this it can be a bit
+gnarly but I a the you can build lots of
+primitives on top of it so for example
+if I want to schedule a task based on
+these primitives so I schedule my tasks
+a wooden I apply it to those arguments
+then I simply include into the inbox a
+thunk a function of no arguments which
+just calls that continuation with the
+arguments effectively enabling it to be
+suspended and on top of this I mean I
+have I have threads now so spawn
+fiber-like is something that I built in
+terms of other language primitives so
+spawn fiber is simply scheduling the
+thunk to yield on that fiber is simply
+suspend and then what do we do after we
+suspend while we reschedule that fiber
+so next next time we have a turn coming
+around that fiber will come back again
+to wait for readable for example we get
+a wood block or a again
+these return values from the kernel on a
+non-blocking file descriptor we simply
+call a wait wait for readable and
+whenever that file descriptor becomes
+readable again the the continuation will
+resume and we can retry the operation so
+we built effectively a lightweight
+threading system on top of the language
+using this trimmers okay so CML I know
+everybody's in here for for concurrent
+amel and all these things so I got to
+this point and and it was the day after
+because Creon it's two days right so the
+first day you know fly siniflat tell me
+okay CML I look at I'm like chemic can I
+just make channels right can I can I
+just implement channels that have these
+fibers communicate because I have
+already a system where I can have many
+fibers and and when they would block on
+Io they suspend but how do I make them
+communicate between each other is it
+channels is that the right thing and I
+say no no no no Matias license said a
+very rude thing about go as he would and
+and specifically he's like well you know
+like the the system is was designing go
+actually made a mistake that CML is the
+right abstraction to use and that's what
+you should implement and say oh come on
+I mean that looks like a lot of
+complication because after I read this
+stuff and you'll see in a minute and
+then my Explorer was also there also
+said yeah you know I had to re-implement
+things on top of CML as well so all of
+these you know sages in Rome are saying
+okay this is the thing you have to do
+and then finally I set off on my journey
+okay so channels CML comes out of the
+tradition of communicating sequential
+processes which if if y'all haven't read
+the Toni horrors book the using CSP or
+this it's called the CSP book really
+wonderful stuff it's like starting from
+essentially a mathematical formalism how
+do you design concurrent processes and
+in in CSP one of the abstractions that
+they make is is this channel abstraction
+so the processes which are the fibers of
+the lightweight threads whatever you
+might call them they what they
+rendezvous which means they meet an
+exchange of value and then they continue
+this is something I didn't appreciate
+before because I had programmed in you
+know C C++ and all these things and I
+have asynchronous cues and and I thought
+that's where channel was
+so I was I was ignorant it's not like
+that which an asynchronous queue has a
+buffer inside it so if there's a place
+to put the the datum then the the sender
+just deposits that data and continues
+but in CSP and in go the the sender and
+the receiver actually have to
+synchronize right there to hand off that
+value so the value is either owned by
+the sender or owned by the receiver and
+and they are together at one point in
+time and that was a bit that I didn't
+quite understand the beginning so if we
+try to implement a receive function on a
+channel a receive function which can
+operate in the presence of multiple
+threads we're already talking about you
+know a bit of concurrency we have to
+avoid race conditions and such here's
+what it might look like so let's say we
+have a channel data structure and has
+two components the receive queue and
+ascend queue so one of them is a list of
+waiting receivers and one of them's a
+list of waiting senders and if I am able
+to actually DQ a sender somebody who's
+ready to send a value on this queue and
+I and I get this value okay well I can
+return the value and then it's my
+responsibility to resume the sender
+because the sender is said okay I'm
+ready to send this value and and here is
+how to resume me when I'm when I'm done
+when there's actually a receiver ready
+to receive the value and if there's
+nothing there then I suspend myself and
+I rely on the sender to resume me if the
+sender comes later and says okay I
+actually have a value there's a race
+condition here I don't know if everyone
+but I know it's far encode too many
+people who suspend remember that this
+lambda runs after is invoked after the
+thread suspends and it's invoked with
+its suspended continuation it's probably
+not obvious where they were the races
+but might be thinking maybe a bit about
+it explain a bit more in a minute
+okay so a concurrent send receive
+channel implementation already okay we
+can admit that now how do we invent
+select all right so selects is is the
+primitive which allows you to let's say
+you have two channels and you want to
+receive which one is whichever channel
+has a message on on it first and you
+can't simply you know block on one
+because maybe there's a value on the
+other and we shouldn't be blocking when
+there's actually we can complete
+how we go about implementing this well
+it's tricky because the select primitive
+I mean you wouldn't be able to select
+not only on you know receiving from two
+channels but you wanna be able to select
+four maybe okay give me the first event
+which can either receive on this channel
+or send on that channel so the arguments
+to the Select function are no longer
+like the channels right there's a
+channel plus some kind of annotation
+like it's a channel plus okay and I want
+to receive on this one and this channel
+B and I want to receive on channel B so
+effectively we have to make an
+abstraction right we need to you know
+tag these values with the intent of what
+we're going to do and then select can be
+maybe performing this abstraction so
+given these operations I'm going to
+perform that joint operation and so but
+then you don't know when you've selected
+on this operation which one actually
+happened so you also need the ability to
+to annotate if we think about composing
+select so to go in many ways has it
+solve this problem in a much more direct
+way by integrating select is the
+language primitive you have these
+different cases right so if this case
+fires then you'll execute the code
+that's right there but if you try to
+compose select given other primitives in
+your language how do you actually do
+that how do you how do you indicate
+which of the cases actually occurred
+well you need to effectively annotate
+again like build up some data saying
+okay if this operation occurs then pass
+its result or results to this
+continuation effectively you need to
+wrap the operation so we're no longer
+performing the basic receive operation
+here we might want to wrap it with
+something that says okay and also
+prepend the string hello on it so if I
+send world to this I get hello world
+right at this point we made CML so this
+is it right this this is the the essence
+of CML you have instead of directly
+performing a message send you kind of
+abstract it into this data abstraction
+which represents some sort of
+synchronization some sort of operation
+which which occurs as a communication
+between this thread and some part of the
+world and I like to think of it as you
+know the difference between an
+expression and having and wrapping it in
+a lambda right so in the expression
+it's going to evaluate right then if you
+wrap it in a lambda you can call that
+function many times to actually get the
+effects or the value of that expression
+the same sense receiving on a channel
+what is more like the expression and and
+the operation describes some future
+possibility of receiving on this channel
+and it doesn't have to occur at any any
+time it's just data right it's an
+abstraction over the operation and this
+first appeared in this form in APL di 16
+years ago is that right I don't know if
+I can subtract no is that 26 years ago
+Jesus world so Haley a paper called the
+CML a higher-order concurrent language
+and I actually it uses the term
+synchronized an event and I use the
+terms perform an operation and I don't I
+didn't understand I felt like their
+terms were not very intuitive to me but
+you can transfer if you're no CML then
+do transform my terms due to their terms
+okay so what is an operation know right
+how do we actually represent this is it
+specialized two channels or is it
+generic in some way well it turns out
+it's generic right if we if we look at
+the structure of the channel receive
+function which we made we have basically
+two parts right there is a first part to
+say is there actually a value already
+available when I'm receiving in that
+case I just take off the value resume
+the sender and I keep on truckin right
+otherwise there's a kind of a
+pessimistic case i suspend myself I have
+to add myself to the receive queue it's
+a bit more expensive but but I actually
+need to reschedule myself in that case
+and again we have this race condition
+here before turns out this is a this is
+a general pattern so the optimistic
+phase and we can resolve the race as
+well in the optimistic phase if it's
+possible to complete the trans to
+complete the operation directly then you
+commit it and then you're responsible
+for resuming anybody else who's waiting
+on that transaction if but this is just
+an optimization it turns out so if you
+want to just ignore that part you can
+ignore it entirely because the
+pessimistic part is all you need to know
+so it so instead of like you know
+keeping on driving through the
+intersection we we stop suspend the
+thread we publish the fact that we're
+waiting so that some other
+thread can wake us up once this
+condition is actually completed but to
+resolve the race after publishing the
+fact that we're waiting we have to
+recheck if we can do this transaction so
+because it could be the sender did the
+same thing at the same time and so you
+don't want to end up in the case where
+you have a sender on the queue and a
+receiver on the queue but both are
+suspended and neither is going to start
+each other so this last little phase
+actually resolves a race and this is
+what the what the two parts of a CML
+operation actually do so the perform
+function so we remember in that select
+implementation we had perform choice up
+or whatever it looks like this now you
+have an optimistic case and you have the
+pessimistic case you're optimistic case
+can always fail my it's not it's purely
+an optimization but you're you're
+pessimistic case it is a bit harder one
+so an OP is that is it data structure a
+normal data structure simple data
+structure with three fields it has a try
+field it has a block field and it has a
+rap field and that's all you need and
+I'll explain what all these ones are the
+optimistic case runs the try the
+pessimistic case runs the the block and
+the rap is is that rap operator we saw
+before that kind of annotates the
+continuation so let's look at these for
+a channel and this is the this is the
+gnarliest bit of the talk so any
+questions are very very welcome if this
+gets terrible and it's going to get a
+little bit worse so let's take this is a
+try function on a channel so this is the
+optimistic case so at this point we need
+to actually represent the fact that we
+have a rendezvous between different
+fibers which could be running on
+different threads so we need a new
+primitive and that's an atomic reference
+an atomic reference with a with a atomic
+ref operation and with a compare and
+swap operation and we need it not only
+for the memory model but also is a
+compiler barrier so the compiler needs
+to also understand that they can't
+optimize over these operations so we
+look my send queue and if it's if I do
+an atomic rep and there's nothing there
+than I fail right
+so the optimistic case is only if
+there's something there so if I see
+there's a head and a tail and actually
+somebody is ready to descend then I will
+try to change their state I will try to
+commit that train
+action so by changing the state from man
+do I need ah so I introduced States a
+couple of slides later which is terrible
+of me so I try to commit the transaction
+and if that works I resume the sender I
+try to pop off the cue but it could be
+that somebody can currently mess with
+the cue at the same time there's an
+ongoing garbage collection that that
+happens here of different operators on
+the channel well we'll try to do a bit
+of garbage collection when they can and
+if it worked return the thunk which
+actually returns the values for the
+tribe so the end result is if the try
+function succeeds then the caller does
+not suspend and otherwise we have to
+bump to the to the pessimistic case and
+the pessimistic cases where we actually
+create this operation state I have three
+phases here first we suspend a thread
+like we said parked a truck right when
+we make a fresh transaction effectively
+a fresh atomic variable which starts off
+in the fresh state of waiting and then
+we call the block function of the
+operation and as you can see we call the
+block function with the continuation to
+the to resume the the task and this this
+fresh transaction state and what is the
+transaction state it's an atomic
+variable and has three states we have a
+waiting State which is the initial state
+and we have a sync state which is the
+final state and eventually we want to
+end up in the in the sync state and we
+so we also have this intermediate state
+which is for you know if any of y'all
+have implemented like multi-word compare
+and swaps you end up with these central
+values in there sometimes this middle
+value is kind of like a sentinel value
+in that sense and so when i say that
+it's a local transaction to go to this
+claim state i mean that it's only the
+thread which suspends itself which will
+ever move into or out of this claim
+state so we can move into it from
+waiting we can move from it back to
+waiting and in some cases we can move
+from this claim state into the final
+synchronized state so basically we're
+sort of driving valances to the sync
+state and every time you perform an
+operation you'll get a fresh up state
+and that's what distinguishes the
+different operations from each other
+so one operation can be performed many
+times it's just a data abstraction it's
+not like code in motion so right let's
+take a look at the block function and
+and this this is a where we kind of
+bottom out and then we come up the block
+function called again after thread
+suspend and has two things to do publish
+itself and publish the the fact that I'm
+waiting on this operation and then retry
+the operation and the results of this
+retry can be three things and it might
+be worth it to like you know go through
+in your head about how we can get here
+in all these states first of all we can
+try the operation and we actually
+succeed it's fantastic so at that point
+it means that in the meantime because
+the try function failed already we
+checked and we couldn't do it before but
+now after we suspend ourself we can do
+it what does that mean
+it means that it's um in the meantime as
+a sender concurrently came on and added
+itself to the send queue so now after
+we've suspended suspended ourselves we
+actually are able to complete the
+operation in that case we not only have
+to resume the sender we have to resume
+ourselves as well that's a general
+pattern in these block functions i meant
+that means that the in our element ation
+the the fiber won't run again directly
+it will only be rescheduled at the the
+next time that the scheduler picks up
+new tasks if i try to if i try to
+perform a send or receive and and the
+sender is in the is in the sorry excuse
+me oh I'll say this one more time if I
+try to perform a receive but then I find
+that actually this operation is already
+complete then we have the reverse of
+this other case it means that somebody
+else actually saw that I posted my
+willingness to complete this operation
+to the receive queue and a complete the
+operation on my behalf in that case I
+have to do nothing right so that that's
+really the race here otherwise we've
+done our check so somebody else will be
+responsible of presuming this
+transaction of resuming this thread if
+in fact something this operation
+actually completes
+if we look at it so we incubation that
+resumes the receiver and the state of
+the receiver that atomic variable and
+then we have this little loop here we
+have to be able to retry if we if we hit
+the certain state so what after taking a
+look at the send Q if we see an
+available sender then here is here's the
+gnarliness we we set our own state oh
+man
+that bad yeah yeah
+yellow yellow really great though thank
+you for staying with me as I saw your
+eyes are also doing the same thing the
+projectors doing going off sometimes so
+we we set our own state declaimed
+this is a where we start with a
+multi-word compare-and-swap effectively
+and this is that local state transition
+from waiting to claimed and then we try
+to set the sender state to synced we try
+to commit that transaction and if we
+commit that transaction then we can
+commit our own right so that's exactly
+what those first two states are we have
+committed the result transaction because
+the compare-and-swap returns the the
+previous value of the of the atomic flag
+so we if that compare-and-swap returns
+w that means that indeed we transitioned
+it from w-2s in that case we can maybe
+GC we don't have to actually check that
+we were able to pop this item off of the
+SEM queue because it doesn't matter
+somebody else will do it if we don't do
+it and it could be there's some
+concurrency here and we don't need to
+spin on it but we were assumed the
+sender and we resumed ourselves there's
+two bits that we talked about otherwise
+it could be that the other side was
+doing the same thing as we were doing
+right so we have a bit of a double
+embrace here so if we see a remote state
+which is in the which is in this claim
+state then we have to back off and we do
+that by backing off returning to the W
+state to the waiting state locally and
+then finally if we saw the remote side
+that was actually complete that means
+that somebody else completed that
+transaction that remote transaction so
+we try to pop it off the queue we do a
+bit
+you see here and try again thank you so
+that's it that's all the source code I
+have and I only left out a couple
+details right so it was maybe 30 lines
+of code and that was the entirety of a
+concurrent ml implementation for four
+channels the couple bits I that's out is
+that the Tri function can do a loop if
+it sees the sender in that intermediate
+C state and the block function it's
+possible to do a select operation on
+sending and receiving to the same
+channel and you don't want those two
+components of one select operation to
+complete each other so you have to
+prevent that from happening and you do
+that by comparing the identity of those
+upstate transaction variables and that's
+it but what about select actually you're
+like we didn't actually talk about
+selecting all this implementation of
+channels or you know perform or anything
+like that it turns out it's not a
+primitive and you don't have to invent
+as a primitive you can add special
+support for select operations in the
+representation of operations but you
+don't actually have to you can just
+gather all the Tri functions from all of
+the sub operations that you're working
+on into one try function in that select
+operation and if any of those succeeds
+then you have succeeded the transaction
+otherwise the block function does the
+same thing and because you have that
+concurrent capability of committing with
+the OP state variable you're able to do
+this so it's it's not a primitive in any
+way it's built on the on the
+abstractions below the thing is is that
+all this complication is actually
+necessary because if you have Ament
+channels they're sending between
+different threads you need atomic
+variables you need probably some sort of
+lock lists protocol once you've
+implemented this it is exactly what you
+need for CML excuse me so you don't need
+to sorry you don't need to uh to well
+think of this is some sort of
+performative right you've done it
+already
+by implementing channels in your
+language or your framework in your
+library or what have you you have done
+that all the unique event in current ml
+and that inventing channel send on top
+isn't any more expensive right so as far
+as a from the performance perspective
+you're already winning but the thing you
+gain is a bit of abstraction with CML
+that you can compose operations using
+data that you can pass operations as
+return values of functions that you have
+many many things for free right from a
+performance and from a complexity
+perspective and additionally the bit
+where we actually suspend the thread
+that only happens in the core of CML it
+doesn't happen in the implementations of
+the different operations that happens in
+the perform function so if you have a
+system where maybe you have part of your
+system with lightweight threads or
+lightweight tasks or what-have-you and
+part of your system with P threads you
+can make that work together if you
+detect that you're in a lightweight task
+or lightweight fiber or what have you
+then you suspend the fiber and then to
+resume the fiber you resume it in that
+way but if you're in a p thread you can
+create a mutex and a cond and suspend
+block the thread and so you can use the
+same abstraction for communication
+between P threads and communication
+between P threads and fibers and
+communication between fibers and fibers
+it's really a universal primitive for
+communication in these systems it makes
+you a very nice uniform flavor to to to
+the whole system like the lightweight
+part and the heavyweight part so you can
+use thread pools if you need to do
+blocking the mass flow cups or what have
+you
+so where does this come from this is not
+like my idea so a CSP itself Tony Hoare
+1978 the ideas of channels percolated
+into the literature and the
+implementation through mostly through
+the ahkam language I find it's hard to
+search literature and say definitively
+this is where it comes from
+but the interesting development for me
+was the the abstraction over channels
+the abstraction over synchronization
+that came with CML which was worked from
+John rebbe and others CML was it's kind
+of in in a esoteric lore in a sense
+because it's not part of like you know
+Java rioters not part of like big
+languages but many PL people say you
+know this is the sages of Rome so you
+need to go out implement CML and it's
+mostly in these more niche languages
+that it was actually adopted so it's in
+racket it was in Milton and standard ml
+New Jersey one point but until the late
+2000s it was always it was concurrent
+but not parallel so it would only run on
+a single core and it would only run on
+systems that are in single core so the
+the novelty of the end of the 2000s was
+this invitation of parallel CML again
+rep E's group it's kind of amazing how
+he stuck with this thing all these years
+and that published a version of the
+protocol that I presented to you here
+and to see this work now you check out
+the manticore project manticores where
+parallel CML is implemented this work
+that I've been working on is in this
+fibers library and this this is
+completely a concurrency system as a
+library on top of the primitives granted
+by guy'll scheme I had to add a few
+primitives like some of the atomic stuff
+that I didn't need before but there's no
+special facilities for fibers inside
+gala self and the novelties of this work
+I mean this is not PL di so I don't need
+to rest the value the presentation on
+its novelties but first of all I'm very
+happy that it existed it's implemented
+night it's very satisfying to work with
+however there are a few differences from
+from rep EES work if you look in the
+literature he divides the CML phases not
+into try and block but into pole do and
+block and pole sees if an event is
+available do actually does it but in my
+trail in parallel CML and then block is
+like our block but with any kept these
+this division when he moved to parallel
+CML but you don't need this right
+because you have all the concurrency
+happening now you need to do the recheck
+after you suspend which was introduced
+in in parallel CML and because you need
+that then try is simply an optimization
+so the fact that try is an optimization
+is relatively novel miss and then
+finally in in rep ease CML accommodation
+parallel scheme alimentation he uses a
+spin lock in a couple of places in the
+maternal code whereas I used atomic you
+for the senders and receivers boom and
+and also the the fibers and pthread
+integration I think people have done
+work on CML on P threads and CML on
+lightweight tasks before I haven't heard
+of them making them communicate between
+each other but I could be wrong now
+right so performance again this is a not
+p LD I but I do have some performance
+slides I had some goals first you know I
+I wanted to scale right everybody wants
+to scale like dozens of course I can
+certainly get you know hundreds of
+thousands of fibers to the core that's
+not a problem the way this system is
+designed though is one a pole scheduler
+per course so if you suspend and you
+need the Block on FD you add to the
+local Ipoh leftie and you can have many
+of these when we need to wake up across
+a thread we post the message that
+threads in box and if the thread is
+sleeping we also have to wake it up with
+a file descriptor or a socket pair and
+the system is optionally pre-emptive
+okay I ran these tests not on on a dozen
+core machine not on dozens of course
+sheets and this is a - Numa nodes -
+sockets 606 CPUs for socket and hyper
+threading off performance CPU governor
+the results are are only ok
+unfortunately this vertical line shows
+the Neumann boundary and there's a clip
+right so and this is kind of shape of
+all the graphs in this particular case
+this is a sense per second in Chains of
+various links at the bottom we have a
+chain with with just the sender and
+receiver and then next we have with ten
+links in the middle and then next we
+have with hundred links in the middle in
+theory because because these are total
+number of cents per second counting ten
+cents as a chain with ten links in
+theory we should have the same numbers
+but in actuality we see higher numbers
+with a chain with more links because
+more more threads are runnable and we
+don't have to go through that Ipoh land
+and fetch things from the inboxes again
+so on the good side we do have some
+speed ups up to a certain point variance
+is pretty low on the bad side we hit
+this Numa cliff and if we don't have if
+we have to keep going back through
+e-poll to pick up more to pick up more
+threads than in that that ends up
+costing us
+as far as yeah so I expected initially
+linear speed ups as we all do right but
+then after I saw the data I revised my
+expectations just sub-linear speeds
+because as we add cores we're not we're
+not adding you know multiple units of
+independent work we're actually adding a
+lot of communication and so I we should
+expect speed ups but sub linear speed-up
+so that we're really measuring overhead
+here and not you know honest workload so
+that's a thing another side is a gal for
+veteran forearms
+it's still a bytecode virtual machine so
+the number of things that can do in a
+second is much less than go for example
+and I measured its instruction retire a
+bit like what is that for our million
+compare that to you know ten billion if
+you think about a four IPC core on that
+particular machine we can't I say these
+test results from any sort of
+performance analysis on the fiber system
+as a whole and we and that includes this
+choice to be able to sleep when when a
+core is idle which implies this a poll
+capability and we can't isolate it from
+from GCE either because as we start to
+add cores we're starting out a lot of GC
+overhead Geils GC is to stop the world
+parallel Marc but it stops a world with
+signals and we get a bunch of
+communication overhead here and it has
+no idea about new mom it's not
+generational okay all right lots of
+caveats so that said we have similar
+results across the number of benchmarks
+this one is a ten pairs doing ping pong
+sending messages back and forth spawned
+on different threads randomly and in
+otherwise 100 pairs flight speed up as
+we see more runnable zijn less need to
+go back through the event turn but
+generally some improvements but not
+linear as we increase the core count if
+we have a 1 to n fan out so we have like
+one producer and we have a number of
+consumers all racing to receive a
+message on this on this thread we see
+speed ups as we add cores I have no idea
+actually how it goes down from 5 to 6
+because that's on the same Numa node I
+actually haven't been able to explain
+that yet but then as we cross into the
+other Numa node it's it's sad if we try
+to commute if we try a pipeline
+we produce numbers and then we fan out
+to a number of processes doing squares
+to compute the diagonal length on
+n-dimensional cube and then we come back
+in the square root and some and square
+root that in that's a very small
+workload but we do see some moderate
+speed ups as we add cores we don't see
+slowdowns which actually you would see
+in Manticore as published and then
+finally with the slightly more work not
+really more work but a fall severe
+Stephanies where you keep adding on new
+threads at the end of the chain once you
+discover new Prime's we do see a more
+reasonable speed up again these are our
+overhead measurements they're not
+workload measurements really and there's
+work to be done here so it's not like
+amazing stuff finally to close out a bit
+so if you know CML maybe you're
+wondering where the guard functions
+where the with knack functions there are
+a number of other ways that if CML
+events can compose and composable
+facilities it turns out those can be
+built in terms of the primitives and
+that was one of the results from Mathew
+fluid for proceeding that other terminal
+parallel CML work you can also make
+other event types condition variables
+that don't require synchronization
+between two processes timeouts you can
+wait for thread drawings you can
+basically build these things given this
+operation primitive you write your try
+function you write your block function
+there's a book which I hear that there's
+gonna be a new version coming out
+shortly a new revision concurrent
+program in ml in terms of like patterns
+for composing systems giving these
+primitives and patterns for composing
+systems using CSP CSP book finally
+there's been some great work and Aaron
+Tunes thesis on reagents in oh camel
+which they claim that it generalizes CML
+towards well it generalizes parallel CML
+and i've been able to really digest this
+yet but i would definitely point to it
+as a as another thing and in the
+meantime it's possible in CML on top of
+channels there are some issues but i
+would point you to basic carbone and
+sedimentation on top of core async
+enclosure and there's also an invitation
+in F sharp in terms of I think tasks and
+threads as well there are some
+limitation
+and like I say the right way to do it is
+the other way okay so in the end I think
+mightiest and Matthew and and Mike
+Sperber were alright
+right I think it was correct thing to
+build CML I'm very happy with it you can
+implement CML and you can integrate it
+with the existing code so if you have
+some code and thread some code and
+lightweight threading you can do it this
+code is here github Wingo fibers also
+has a big old manual so the manual is
+not you might find an interesting read
+so I would definitely suggest check that
+out so that's my talk design systems
+with CSP and then and buildin's you know
+so happy yeah the worst yeah okay all
+right thanks
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

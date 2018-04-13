@@ -1,0 +1,726 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Practical Load Balancing with Consistent Hashing | Coder Coacher - Coaching Coders</title><meta content="Practical Load Balancing with Consistent Hashing - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/GoogleTechTalks/">GoogleTechTalks</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Practical Load Balancing with Consistent Hashing</b></h2><h5 class="post__date">2017-05-25</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/jk6oiBJxcaA" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">we are very happy to have a new here and
+you rodent is the senior back and
+ingenuity of every known systems and it
+being a developer before that Strother
+stock and so connect prominent of
+conferences and also contributed some
+cool stuff to see that if we have a
+gravity here and you thank you
+afternoon of so first thing is despite
+their online if anybody wants to refer
+to them at any point oh great the lag is
+minimal so i am a video systems engineer
+at vimeo vimeo is a video hosting
+website founded in 2004 with focus on
+film makers and high quality video
+content we also has lots and lots of our
+videos embedded on websites throughout
+the internet so even if you've never
+been to vimeo.com you've probably seen
+our product in action if you've gone to
+a website that has you know like a
+full-screen background video embed
+probably us and we are not that far away
+we are in new york city on 18th Street
+and the West Side Highway in this
+building that supposedly looks like a
+sailing ship the icebergs of this route
+along the would be now it I it is the
+IAC building um and today I'm going to
+be telling a story about Skyfire which
+is our dynamic video packager which
+means that it serves playlists and video
+segments for for people who are using
+adaptive streaming mpeg-dash
+and HTTP Live Streaming um Skyfire runs
+in the cloud on Google cloud platform
+and uses a che proxy as a load balancer
+to distribute the incoming HTTP requests
+all of the among all of the servers
+it handles basically the majority of our
+plays on on the website except for a few
+legacy things and all of our mobile
+plays and runs about a billion requests
+per day um this is this is just a
+quickie a quickie little diagram so we
+have we have CDN in front actually
+accessories not the only one and then H
+a proxy as a load balancer handles the
+HTTP request goes to dedicated servers
+that handle requests for either video
+manifests or for individual video
+segments and then they go to Google
+Cloud storage where the videos data is
+actually stored um so what is what is
+the reason for this whole dynamic
+packaging business um we have decades of
+content like I said Vimeo began in 2004
+stored as progressive and mp4 files that
+you could in the olden days just send to
+send to a browser and it would play that
+file straight through but if you want to
+do adaptive streaming then that doesn't
+cut it so we need to serve fragmented
+mpeg-4 or MPEG transport stream for Def
+and for HLS cut the video up into little
+tiny bits and serve them on demand and
+converting everything all in one go into
+that format would be a expensive and
+very time-consuming effort so that's not
+what we did instead we have some
+in-house codes that will take a
+progressive file that is in the storage
+access it over HTTP and the serve on
+only the bits that we need for a
+particular video segment request which
+is pretty cool
+just look what what this yes so and how
+do you compare the other things you to
+you do have a lot of video so bit
+to compare yeah um it's I it's mostly
+different
+they're based different different kind
+of contact maybe maybe we'll come back
+to that later on but so if we're if
+we're going to be if we're going to be
+doing this on-demand serving up requests
+for individual video segments we need we
+need a map of the territory it's not too
+hard to take these video packed video
+packets change a few bits here and there
+and send them back in the new format
+it's not that computationally expensive
+or anything like that but in order to do
+random access in order to say I want the
+937 segment of this video
+we need an index that has locations of
+all the key frames all of audio video
+packets in the file to generate such an
+index tape a couple of HTTP requests and
+a bunch of CPU to parse through all of
+the data structures in the video file
+and locate the specific things that
+we're interested in and because we get
+multiple requests for a video obviously
+first we need to send them the manifest
+and then you know the first segment the
+second segment the third segment each is
+independent request we don't want to
+duplicate that effort so we should be
+able to cache that index um so we did a
+soft roll out of this product before
+before the end of 2015
+Vimeo didn't do any of this adaptive
+streaming it was just progressive video
+playback so for our first stab at it we
+said we will generate the whenever comes
+into a machine will generate the index
+and will cache it in memory and if a
+later request comes in for the same
+video then we'll use that cache and in
+order to make sure that that happens
+we'll use consistent hashing at the load
+balancer to send a video ID send
+requests for the same video to the same
+machine so that that cash can be usable
+a little bit a little bit of a quickie
+on consistent hashing so we're using the
+part of the URL that contains the video
+ID to
+use the server the basic algorithm for
+this goes back to 1997 it compares to
+the simpler modulo hashing where you
+simply hash the request and then say
+mods the number of servers that you have
+available to choose a server the problem
+with that technique is that if servers
+come and go if you add servers if you
+remove servers then almost none of the
+IDS will now hash to the same server
+that they did previously if you have 10
+servers and you add an 11 then came out
+of 11 requests are going to go to a
+different server than they did
+previously which is bad news if you want
+to have this cache be effective um so by
+comparison consistent hashing actually
+takes an ID of the server itself
+generates a hash of that and treats the
+hash space as though it was a ring and
+so now each server it just as a point on
+that ring and you can compare the
+request hash with the server hash to to
+find a particular say that this segment
+of the ring belongs to this server and
+all of the requests that land in that
+point are going to go to that server and
+now when you add a new server it's going
+to take over some portion of that ring
+but the majority of it is still going to
+fall closest to the same servers that it
+did previously so that you can add and
+remove capacity without without
+disturbing more than is necessary um and
+there is there's an elaboration on the
+algorithms which we use which is that
+you don't just give each server a single
+hash but instead you determine this that
+we generate a say 64 or 100 or some
+number so that these spaces dividing up
+more finely so that the traffic ends up
+distributed more evenly um but that said
+there's still a problem with the load
+distribution
+if you if your traffic is uniform then
+basically the distribution that you get
+with consistent hashing
+is about the same evenness of
+distribution that you would expect if
+you just randomly assigned each request
+to a server which is not the bit not
+particularly even and there's a there's
+a problem on top of that which is that
+as a web content provider we have pretty
+much a power-law distribution of
+popularity of our content which means
+that some of it gets an exceptional
+amount of traffic and if we use a hash
+and we send all of the traffic for a
+particular video to one server it may be
+more than one server can even possibly
+handle the write alone whatever other
+traffic that it's getting the result of
+that is servers getting overloaded
+returning errors returning stuff slowly
+this is real-time video playback
+obviously we don't want that and we did
+run into this in practice
+um so we said ok this consistent actions
+aim isn't working out for us
+um there's different policies available
+there's round-robin where you just said
+successively each request to a different
+server
+there's leased connections policy where
+you say whatever server is the least
+busy at the moment is going to get the
+next request which um you know even if
+even if there's some unevenness of how
+much work it takes to do that should
+load each of your servers evenly so
+that's what we decided ok we're going to
+we're going to abandon consistent
+matching and use a loose connection
+policy but that comes with a problem
+which is that now the cache is not
+effective um if we don't have the
+caching then most of the time the
+request is not going to go to where the
+index is already cached and we're going
+to have to regenerate it which costs us
+money and gives us gives our users video
+more slowly so the natural solution to
+that is add a shared cache so in each
+fit we still have the in-memory cache on
+each server but in each compute region
+we add memcache and so when we generate
+an index write it to both the local
+cache and the reasonable memcache on a
+read see if you have it locally if you
+do great also send a touch command to
+the memcache that's and this is being
+used up you know don't let it expire if
+we can't find it locally check it in the
+regional cache and if so then we'll pull
+it from there we'll store it in the
+local cache so that we have a chance of
+not having to fetch it the next time and
+of course if we don't find it at all
+then we've generated a MacGregor to the
+cache and that's great
+um but again it comes every solution
+comes with a problem and in this case it
+is a scalability problem the as we get
+more traffic we run more servers in the
+cloud to deal with it as we run more
+servers the requests get distributed
+among more servers and so the chance of
+finding what you need in the local cache
+goes down the amount of traffic to the
+shared cache servers goes up but
+basically basically linearly I think
+potentially even worse than that
+and if for some reason memcache breaks
+now we're back at the previous situation
+where you don't have the shared cache at
+all and everything everything is well um
+and to me this is this is a cache
+locality problem you hear you hear about
+this kind of thing when you're
+optimizing code for you know software
+that runs on a single machine but it
+turns out that cache locality is also
+something that you can apply to
+distributed systems as well and so
+basically we have a situation where any
+server any of our servers they're not
+differentiated it's not about where the
+data is stored because it's all stored
+in Google Cloud storage but if if a
+particular server has B has the index
+already cached then it can server - but
+with less work than a server that
+doesn't already have that data
+um so you know when we were when we were
+building the shared cash system it
+occurs to me why why do we have to have
+this problem why can't we say I want
+consistent hashing I want you to try to
+send the request to somewhere where the
+data is already cached
+but please don't overload any of my
+servers doesn't sound like too much to
+ask for um and I had read the paper the
+power of two choices
+which is which is very very interesting
+it says in essence that when you need
+when you need to make certain sorts of
+optimal choices you don't necessarily
+need to need to inspect every um every
+possible candidate instead you can make
+a make two or three or two random
+choices from among the candidates and
+then simply pick which one is better so
+in this case it would be which server
+had less load and instead of random
+choice I was I was basically treating a
+hash as a random function hash the
+request twice with with say a different
+scene and then whichever server
+whichever server came out has less load
+then we'll take that one and I wrote a
+simulator based on some assumptions of
+how our traffic is distributed in our
+servers would behave under load a at
+least under the assumptions that I made
+the simulation said well your algorithm
+is the worst out of all of the possible
+causes um a so you know being practical
+and having to get this done I gave up on
+that for the time being and focus on
+making our shared caching and efficient
+as possible luckily there are people in
+the world who has more followers than me
+um so in August of last year there was
+this paper consistent hashing with
+bounded loads
+was published on archives excuse me
+sorry
+and of the authors
+two of them are researchers here at
+Google MIT and the third was a visiting
+researcher from Copenhagen and I
+discovered this a couple months later a
+internet friend and programmer Damon
+Gretzky posts some really interesting
+stuff on his Twitter and just posts
+research papers that interest him as he
+comes on them and I found it there um
+and this algorithm is there are
+subtleties to it that I won't even
+attempt to get into for use cases that I
+don't have to deal with but when using
+it for load balancing it comes out to
+something very very simple which is that
+you compute the average number of
+requests that your servers are handling
+at this moment you add some fraction of
+overhead say 25 percent overhead round
+that number up and then that's your
+threshold for thank you very much for
+how much load a given server is allowed
+to take so if you if you chose your
+factor to be 25 percent then a server
+can have 25 percent more loop than the
+average but no more um and then you
+apply consistent hashing as usual and
+see if your server if the if the result
+of that fashion gives you a server that
+falls below threshold if it does great
+it gets the request if not you simply go
+around the hash wing in order until you
+find one that uh that does have the
+capacity available um and in the papers
+there's a bit that I particularly liked
+it says while this idea seems pretty
+obvious it appears not to have been
+considered before um because it's a it's
+a very it's a very simple concept um so
+and it was simple enough that I could
+at least a good approximation of an
+intimal simulator in less than a day and
+unlike the algorithm that I had come up
+with this time their simulator says this
+will give you better performance than
+either plane consistent hashing or a
+loose connection policy so okay this is
+this is promising and my boss agrees
+that this is promising so let's see if
+it's possible to get this in twos and
+what about a proxy that we use in
+production a little bit of background on
+H a proxy is it's an open source HTTP
+and PCP with a balancer it's written and
+free the code is a mi and then pretty
+neat and well organized and easy to deal
+with and it already has consistent
+hashing that's what we were using or
+using early on with various hashing
+algorithms available and with the
+servers stored in a binary tree and this
+is what it this is what it took this is
+the gift if fat um this is not including
+the documentation but this is what it
+took to add the algorithm into a proxy
+plus 59 line minus 1 which didn't seem
+that hard to me I mean that's at the end
+of all of the work but there were a few
+challenges involved in doing this the
+first was doing it with integer math um
+if you look at the formulas naturally in
+the paper you're going to want to use
+floats but H a proxy has no floating
+point math in it whatsoever
+you cannot like you can't have a non
+whole number specified in the config
+file it doesn't know how to read one it
+doesn't know how to do math with one and
+I saw I saw no reason to introduce that
+but that meant doing doing the math
+involved in the algorithm with integers
+only um H a proxy also gives you the
+ability in configuration to give away to
+a server that says that some servers has
+more capacity inherently than other ones
+do and so should receive more of the
+load and so I had to modify the
+algorithm slightly to be
+able to say that that the target
+capacity for a given server should be
+higher for some of them than for others
+this is okay this I'm not going to go
+through in detail I doubt that anybody
+wants me to what I will point out is
+that there is a there's a line about 80%
+of the way down that says here
+everything above that is existing code
+in H a proxy that is it's done the hash
+it's looking up in its tree where are
+the premix and previous servers compared
+to that hash position doing a little bit
+of racking logic to treat the to treat
+the tree as a ring so if you go up one
+and you come back on the other so it's
+everything up to that line that says
+here was the existing code everything
+below that except for the return line is
+what I have had and it simply says if we
+if we have this balance factor
+configured then we're using the new
+algorithm then do a while while the
+server that's under inspection is not
+eligible to receive another request go
+on to the next one and this is what the
+eligibility looks like again not going
+to go into detail you can probably see
+some of the tricks that that has gone
+into doing integer math and doing
+sealing in and of your map and basically
+saying per weight unit in each a proxy
+we're going to assign this many
+potential requests and then there's
+going to be some fraction left over so
+distribute them among all of the servers
+and then see whether that number turns
+out to be more or less than the number
+of requests as the server's already
+handling um so I did that and send an
+email to the AJ prophecy now endless
+that said here's this algorithm here's
+the archive link for it I think it's
+very interesting and it solves a problem
+that we're having at Vimeo and here is
+some really question
+double coat but I'm going to send it to
+you and I want I want your opinion on it
+on whether we we could do this in H a
+proxy and the the primary maintainer of
+a proxy Willie Thoreau was actually very
+encouraged and he said this is this is
+an interesting algorithm and I like I
+see the use in it and it would excite me
+for H a proxy to be the first product
+that actually is able to do this because
+it doesn't look like anybody anything
+else can actually meet this criteria of
+having hashing but also giving you
+guarantees on not overloading servers so
+he did means he gave me some good code
+review some good responses from good
+advice and a few week later I was able
+to submit a second patch that fix some
+bugs added configurability and
+cigarettes offer a year yes no it all
+happening in the future very high
+productivity instead of hard coding
+thing make sure that all the things were
+configurable added the support for the H
+a proxy waiting that wasn't in my first
+draft and then he went on one of those
+long European vacations but he did he
+did come back he gave me gave me gave me
+final review and it was only it was only
+a couple more tweaks and the addition of
+the documentation that was submitted in
+October of last year
+the day after I sent the final patch I
+started rolling it out to the load
+balancers at Vimeo and we'll see the
+results are back shortly and one month
+later H a proxy 1.7 was released so now
+this is something that is available to
+anybody who's doing HTTP balancing on
+the internet like I said open source
+software so this is a little bit of our
+internal metrics showing the percentage
+of requests that that hit either the
+local in memory
+or the regional ash on a prayer request
+basis and you can see obviously on the
+on the 26th the point where we cut over
+to the new algorithm before that what
+you what you're seeing is a diurnal
+variation because there are times a day
+when we get more requests when we're
+getting more requests we start more
+servers when we run more servers the
+chance of finding something in the local
+cache drops and so the traffic to the
+remote caches goes up and the after the
+switch its was it was really that
+amazing that now the percentage of
+traffic that hits in the local cache
+went up substantially and doesn't show a
+noticeable diurnal pattern um this is
+our bandwidth usage on the shared
+memcache um
+which ran you can ignore the spike there
+but rancid you know 400 500 megabits per
+second per server with a pool of eight
+servers per region so we were moving
+several gigabits of traffic just in just
+in index caches and after after
+switching to the consistent hashing it
+went down very nicely to under 100
+megabits per server which is much more
+manageable gives us some nice room to
+grow this is a graph of the response
+time for the actual service from the
+user perspective and what you should be
+seeing here is nothing um there's a few
+spikes you can see places where I made
+mistakes with the load balancing
+deployment but what you want to see what
+you want to be seeing here is nothing it
+had no effect on what the users saw we
+were using less capacity to deliver the
+same thing to users which with all that
+which is all that I could ask for um so
+the nice properties of this algorithm
+from my perspective for load balancing
+the first one is obvious that the
+server's can't get overloaded by more
+than a factors that you configure which
+is based on how much
+you want to you know how much do you
+want to over provision servers um and as
+long as as long as the servers don't get
+an excessive amount of load it behaves
+the same as consistent hashing in terms
+of its cache properties which means that
+the shared cache is much less of
+bottleneck um when the traffic does
+spillover and because we're balancing
+this on a per individual HTTP request
+basis that means that you can have many
+many requests even per second for the
+same content and as those start to fill
+up the one server that is the primary
+one that also has four that it will
+spill over on to additional servers in
+the ring and it will do that for a given
+video it will do that in the same
+priority order for this server and then
+the next server and then the next server
+um which again is good for caching that
+not only will there be consistent first
+choice but also it gives consistent
+second and third and fourth if that
+becomes necessary choice so that so that
+the cache data can stay where it needs
+to but it's also good that for different
+videos that were occupying that
+overloaded server they will most likely
+go to different places because of the
+because of the multiple virtual and
+consistent hashing algorithm um they
+will most likely go to different servers
+which means that that excess load gets
+spread out neatly across the pool and so
+basically basically this was this was
+our problems solved now we have
+something that is able to behave nicely
+with regards to the cache but we can
+control the work we don't have these
+problems with overloaded servers anymore
+and I just wanted to end on a little bit
+of a personal note which is that usually
+when I encounter research algorithms
+because I'd like to I like to read these
+papers but either it's something that
+you super super well-known and popular
+and awesome and
+already been implemented in every
+language that you can imagine or else's
+something that I can see the merit in it
+but it's so abstruse that I can say this
+paper is cool but there's nothing that
+I'm ever going to be able to do with it
+and so it was an amazing it was an
+amazing stroke of luck that at the right
+at the right time
+I found completely randomly something
+that was not only what I needed but
+completely within my grasp to make it
+happen so I wanna I wanted to thank the
+authors of the paper for making that
+possible
+and while I'm um I thank you sly thank
+you to Google for inviting me to be here
+and thank you for everybody in the
+audience for putting up with me I'm only
+a programmer I shouldn't be answering
+that question I'm good
+Oh any as you know if you ever go for it
+I this um this is I this is Justin
+rumbles who is well I co worker of mine
+yes along transcoding tea and then so
+the terms of like the progressive
+segmentation YouTube just did everything
+all locks their whole library and we
+just can't afford to spend that kind of
+money on detection power to kill the cat
+so everything that they have is already
+in - format and they can just request
+individual segments with razor questions
+if you wish the data becomes obvious or
+roaring yeah we're not really coming in
+terms of the profiles like other quality
+things like that but uh yeah in terms of
+the delivery system you know it's some
+wondering we want to do more like what
+YouTube does but we have this big back
+catalog that we had to support that we
+don't really have the ability to just
+convert everything
+call once yes yeah I think I had
+misunderstood your question when I was
+talking about like different audiences
+and things like that but yeah it's it
+comes down to not not everybody can be
+Google and throw a million CPUs at a
+problem
+so I gathered from the so the last
+little discussion that you're still
+using the something like sixty four
+virtual slices per machine we will do
+that part of the on position hashing
+lowdown algorithm as did it give some
+properties there directly or is it just
+something that you're doing to get that
+second property that would be spill
+different videos still a spell
+differently so I I gave a little bit of
+thought to that the the straightforward
+reason for that is because that is how H
+a proxy works and I didn't find anything
+to change it and there wasn't any
+problem with it um but on on second
+thought I think that it does contribute
+to that second property so it seems at
+best not harmful or at worst not harmful
+I should say Christopher look it's at
+the empathy also thank you very much to
+like basically find this paper and the
+implemented anon like Israeli happens to
+researchers from outside the satiric
+something like this and has like two
+questions is it like on the email that
+you also try to do Aldean
+I hear Regina mention this slides back
+there when you said you tried consistent
+hashing that's on like when did you try
+this mutual bin idea on top of that that
+way just as the only thing that we ever
+did try one on so it was with your
+serving okay when you say consistent is
+what it is Mitchell yeah okay
+and then the simulator ah new question
+did you simulate also the caching
+property like so it's like a simulator
+that takes into account how did you seem
+like that part I'm like this is it's
+lost in
+so you basically simulate the cash as
+well okay
+cash pieces countered and like you
+report definition is okay right
+each seek server was modeled as as
+something that had an LRU cache of
+excitement that would respond to a
+request in a certain time if the value
+within the cache and a longer time you
+signify the cache I think then you
+reported this to day and yes basically
+just out of curiosity how close were the
+results you were able to measure when
+you finally deployed it to how well is
+they compared to what your server was
+pretty or simulation was predicting use
+at some gas between there because the
+real world doesn't behave as nicely the
+simulation typically those character
+that sort of Nash what you sort of
+thought and simulation it was early was
+her gas stuff my basically my simulation
+didn't have the fidelity that even gave
+any thought to that question okay
+I basically I I thought it was on like
+just barely reasonable from the start so
+I only I only used it for sort of
+directional guidance is this algorithm
+going to perform better or worse than
+another but I would I wouldn't trust it
+as far as you know performance numbers
+looks like that's done it thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,815 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Tracing Android | Coder Coacher - Coaching Coders</title><meta content="Tracing Android - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/GoogleTechTalks/">GoogleTechTalks</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Tracing Android</b></h2><h5 class="post__date">2016-10-14</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/vM-pinH5R7A" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hi everyone my name is Nick I'm on the
+Nexus team today I want to talk to you a
+little bit about tracing the various
+layers of Android and particularly i
+want to show you how to analyze a trace
+that captures information both from the
+application level various parts of the
+framework and the colonel and having
+that all be in one trace so this is an
+overview of what i kind of want to talk
+about is compare tracing and sampling
+when we talk about profiling show you
+how to capture a trace and how to
+analyze it how we trace or instrument
+Java C++ and kernel code which is all C
+and then i'll show you a quick anecdote
+from one bug that we were taking a look
+at in perfect triage so to start with to
+kind of quotes that i think are really
+inspirational for doing kind of tracing
+stuff the first one is kind of a
+reminder that everything happens for a
+reason i'm sure you've all seen bugs
+where you know how could this possibly
+ever happen there's no way that this
+could happen right we we've seen things
+all the way down to like memory
+corruptions do to like ddr failures and
+like random bit flips and memory
+corruption and like even those have
+explanations so like tracing i think
+really helps give you a better view into
+your code especially the second coke
+here is more along the lines of whenever
+you have a very complex system there's a
+lot of moving parts and a lot of moving
+pieces and simply that can sometimes
+simply be too much source code for you
+to analyze and to read right someone
+might say oh just view the source that's
+the ultimate source of truth and while
+it's correct when there's so much source
+code you don't know where to start it's
+difficult to see how the pieces fit
+together and in my opinion it's easier
+to do a trace and understand what code
+is actually live code that's running and
+what runs for longer durations than
+another code helps you kind of pinpoint
+what's important and kind of spot when
+you're doing things that are maybe
+redundant or could be optimized there
+could use a better algorithm so when we
+talk about profiling this is a form of
+debugging tailored towards finding
+performance related issues there's kind
+of two categories one sampling and one's
+tracing so sampling is usually a good
+place to start sampling usually is is
+fairly automated it just has to do with
+sampling call stacks and unwinding those
+call stacks that's fairly low overhead
+relative to tracing and that's usually a
+good starting point so today's talk is
+definitely putting the cart before the
+horse because I'm going to focus on
+tracing which is the which is usually
+what you want to do to follow up is once
+you've identified something in a sample
+that's taking a long time tracing is
+usually more manual as you have to go in
+and instrument your code before you can
+kind of start to analyze the data so
+tracing tends to be higher overhead then
+sampling I guess everything's relative
+so usually you don't want to trace
+multiple items at once and we'll see in
+a little bit how we kind of filter those
+results but usually you want to start
+with sampling and Gabon and I are
+actually working on cool stuff for
+sampling so maybe in a follow-up talk
+we'll show some cool sampling stuff for
+the frameworks but today we're going to
+take a look at various sampling
+utilities in particular systrace so the
+first thing that we want to acquaint
+ourselves with is this notion of trace
+tags so because tracing adds overhead to
+what we're doing we don't want to
+analyze multiple things that we don't
+need to sew in Android we have a this
+notion called trace tags which is a way
+of kind of specifying I just want to
+analyze the graphic stack show me what's
+going on in graphics or I just want to
+analyze binder show me what's going on
+in binder or networking or there's a
+couple various trace tags so there's a
+list on
+this on this link on the slides here you
+can see what the what the full list of
+trace tags are I think if you invoke
+systrace it will also print out what
+some of the tags are and it's possible
+to add your own tags as well but usually
+you can get away with using either the
+existing ones that we have so far or
+using something that's called app level
+tracing that we'll see in a little bit
+so here's how you invoke systrace so
+assuming that your current working
+directory is the top of an Android
+source check out with an external
+chromium trace there's a python utility
+called systrace you give it a list of
+different tags that you want it to
+activate in a sense so the all these
+tags that you enable all the
+instrumentation is going to be active in
+the captured trace that you'll see so
+for instance here I'm saying any binder
+related tag I want to instrument all the
+binder calls binder is how we do IPC and
+RPC across processes in android I want
+to instrument graphics I want to have
+information about the scheduler I want
+to see what was running on which core of
+the CPU when dash a is used for
+application level tracing so system UI
+it's all written in Java it has tags
+that are not specific to binder graphics
+or scheduler so you can say turn on the
+generic app level tracing ones and then
+finally I want to output the file as an
+HTML file so this HTML file has
+everything that you need in it you can
+either go to chrome / tracing and click
+load and pull in the file or simply open
+it itself and it has everything the the
+framework that's used for drawing this
+resulting chart is the style of charts
+called a flame graph which we'll get to
+in a little bit but this utility is
+actually open source it's on github it's
+called catapult so if you ever want to
+hack on it or read the source code
+figure out how it works it's all get a
+can anyone does anyone here recognize
+this gentleman show of hands can anyone
+does anyone want to try and summarize
+what on those laws hey so uh um Dale's
+law focuses mostly is referring to speed
+up but kind of the key takeaway from it
+is if you're going to invest your time
+on making something faster you first
+want to measure and figure out where
+you're spending most of your time so in
+this really good example that I like
+taking Sheamus Lee from Wikimedia if you
+have two processes an A and a B and you
+spend an awful lot of time and you make
+be five times faster the 5x looks great
+compared to maybe a 2x performance
+improvement you could have gotten in the
+same amount of time optimizing a so
+while that number looks better on paper
+the overall measurement actually doesn't
+change as drastically compared to if you
+had focused on which process takes the
+most amount of time right so kind of the
+idea behind sampling and then tracing is
+this notion of measurement so we want to
+be able to measure and figure out where
+are we spending our time right when we
+talk about optimization we want to be
+focusing our optimization efforts where
+we've measured that things are taking
+longer than others so the flame graph
+that we saw kind of a zoomed-out photo
+but we'll see some more insist race is
+an interesting graph that makes it
+really easy in my opinion to understand
+call stacks so the ones you'll see in
+this trace are inverted from this one
+here but essentially you have a the
+first stack frame in the function is
+function a a calls be when bees done the
+next statement is invoke H right we can
+see be called see which calls d which
+calls en F and F calls G so when you
+have a flame graph you might
+tempted to look at a function like a
+because a is the biggest right we were
+just our previous diagram we just showed
+showed that we're looking for whatever
+was taking the longest amount of time
+right well it turns out for a flame
+graph we're actually interested in the
+outermost edge the topmost edge and
+essentially who has the largest profile
+as far as the edge is concerned so
+actually the function that we would be
+most interested in looking at in this
+example is actually function G and so I
+tried to highlight here in pink what I
+look for is kind of that the length of
+the the outermost edge so let's say you
+have some Java that code that you want
+to trace so what you'll do is you'll
+import android OS and then you can
+either use trace begin and trace end and
+you give it the tag that you want the
+tag that you want to have to invoke
+through systrace and then you give it a
+string literal you can give this string
+literal whatever you want my preferred
+way is to simply put the class and a
+hash hash and symbol and then the method
+name so this makes it easier for someone
+to then if they see your trace in a
+trace that they captured it makes it
+easier for them to go grep back in the
+code base and know exactly what was
+going on here versus if you put some
+string that means something to you today
+and you leave that trace in the code
+base it's probably not going to mean
+anything to the next person who reads it
+unless it's very meaningful you can also
+use trace begin section and end section
+for app level tracing when you don't
+really care about a particular trace tag
+so maybe you you might have some kind of
+trace that's important to you as maybe
+the system UI developer but it's not
+really important to the graphics team or
+to binder or whichever maybe you'd
+prefer begin section and end section to
+trace beginning tres bien tres end now
+there's also additional methods for
+checking
+whether or not a trace tag is enabled so
+let's say the string that you wanted to
+print for some reason is very expensive
+to compute at runtime you can check and
+see as well is a trace tag enabled and
+if so generate this expensive string and
+then call trace begun so that's an
+option you can do as well for c++
+there's two two different functions
+there's two different header libraries
+one's an ndk and one's not I forget
+which I think the first is in ndk and
+the second is not but you want to
+include see utils tray set H and then
+you call trace begin a trace begin in
+capital or there's also the lowercase
+version so i'm not sure i don't remember
+off the top of my head what the
+difference is between these two but
+because we're dealing with c++ and we
+have the preprocessor we can use double
+underscore funk double underscore which
+the preprocessor will replace with the
+function name this could just as well be
+a string literal I like in utilises tray
+set H because there's a trace that call
+is essentially an RA are AII wrapper
+around the same trace begin with double
+underscore funk so anytime you enter a
+scope you can just invoke this macro and
+it basically does the heavy lifting for
+you and you don't have to close out or
+watch multiple return statements but
+we'll get to that and then little bit
+later and finally in the colonel so this
+is a little hacky and i hope there's a
+better way to do this but what i've done
+is i published it jist here that kind of
+shows essentially getting a kernel trace
+to show up in systrace is a lot more
+work maybe this is something that we can
+improve in the future but essentially
+what what i do is reuse the colonel has
+functionality called trace events and so
+in order to get trace information you
+need to create a new trace event so this
+is a patch ice take a look at frame
+buffer code
+on marlin sailfish so there was no
+existing trace event for the frame
+buffer so I created one so there's
+actually there's an lwn article that
+talks about tres tres events essentially
+a lot of boilerplate here but
+essentially you kind of have to define
+via macros at a really not fun debug
+when they don't work a fast copy method
+for any kind of struct that you're
+debugging and then when you pull this in
+you can you would invoke your your trace
+event so this is something that that you
+can add throughout the rest of the
+kernel code you kind of pull in this
+header and you have a define and then i
+define to macros here that you don't
+really need to define but we basically
+need to log the current thread ID and
+name is actually just a string here and
+whether or not we want to actually
+enable the trace or disable the trees so
+on trace entry and trace exit
+essentially now once you have this in
+the colonel the colonel has a wholesome
+subsystem for dynamically enable
+dynamically enabling tracing and
+disabling tracing so on an android
+device you need to once you have patched
+your kernel like this you need to
+recompile your kernel and reflash it on
+device and then you need to enable
+tracing of that subsystem so you through
+sisyphus you just essentially enable it
+and then finally when we capture the
+trace if you actually take a look at the
+HTML file that's generated by sis trees
+it actually will have tons of colonel
+tracing information as well but catapult
+is not set up to graph that information
+because it's assuming that you're using
+a trace or application level trace and
+not any of the colonel tracing
+information so a quick hacky thing is
+just to run the output of the systray
+HTML through said and do a replace of
+the tag of the trace event that you just
+defined
+with this tracing mark right which is
+what a trace where label traces ass so
+it's definitely a lot more work to get
+Colonel tracing into to show up in a
+systrace definitely worthwhile I'll show
+you in a little bit how we can kind of
+tell these calls apart Colonel subsystem
+already has that race event so the first
+step is is essentially to figure out
+does this Colonel subsystem have its own
+trace event which kind of defines this
+fast copy of whatever internal structure
+and if it is like things are relatively
+easy right because then you just need to
+invoke your your trace tag one of the
+most important things about tracing is
+to clean up properly after yourself
+right so one of the issues when you
+instrument blocks of code is you have to
+be wary of the of the control flow of
+any block of code so if you think of
+programming style of either having
+multiple return statements or one return
+statement if you have a function of code
+that you want to instrument and there's
+one return statement like that's really
+easy to do right like there's there's
+one should be obvious where entry to
+that function is you can add your trace
+begin as a first statement and then
+trace end as the last but there's some
+caveats depending on which language
+you're tracing right so Java trace begin
+can go outside of a try finally block
+but your trace and call what you should
+be put in a finally block and that this
+is because Java has exceptions right and
+so even though not not only to get this
+a trace n before every return statement
+but you need to wrap all statements in
+this tri finally block because if any of
+those statements throws an exception you
+could return execution from there and if
+you if you miss a trace and due to an
+exception you'll just see like a really
+long trace is if like it started and
+then it never stopped and it turns out
+an exception was thrown in there
+c++ makes it super easy because it has
+are aii that's essentially for those of
+you who don't read a lot of C++ is
+essentially having destructor functions
+where the compiler will add a call to
+the destructor implicitly on every
+possible exit of scope of an
+automatically allocated veritable or
+dynamically allocated ones too but C is
+is fairly straightforward you just look
+for multiple return statements the only
+thing that's not good is that there can
+be a lot of macro magic especially in
+kernel code you need to watch out for
+any code that makes use of go to and set
+jump long jump I haven't really seen too
+many issues with set set jump long jump
+being used but that's just one thing to
+watch out for as well so now I want to
+show you some traces why it's okay took
+a look at so not a super exciting bug
+but kind of breaking down what we're
+looking at when we look at his histories
+so here's a systrace that I captured I
+think the bug was we were seeing really
+slow screen on times with marlin
+sailfish so you touch a fingerprint
+sensor and device takes anywhere from
+half a second to six seconds in this
+case to unblock the screen right so on
+the top here we can see some existing
+trace information saying that the screen
+on was blocked and it's possible to
+measure the duration of these things and
+so here you can see it took six seconds
+in this trace I was captured and I think
+one of the things that I added was I
+said I wanted to trace binder
+transactions and graphics and like a
+whole bunch of tags I'd sprinkled on
+here and working with fill the perf team
+fills kind of pointing me in the right
+direction to get started with kind of
+saying hey there's this way clock here
+so wait clocks are used to drought and
+Roy
+to keep the device from powering off
+when you're doing some kind of critical
+operation and so we can see a wakelock
+gets taken here in this light blue very
+early on and released and that's kind of
+a starting point so when you want to
+start tracing code and you have lots of
+code in a really complex system and you
+don't know where to start getting
+started can be one of the hardest things
+of figuring out what you want to trace
+frames so that's usually why you want to
+start with sampling before you move into
+tracing that way you kind of get a heads
+up for what's going on in what's taking
+long so given a sample then it gets
+easier to start otherwise you're kind of
+playing guessing games trying to figure
+out what part of the system should I be
+starting with first and then a lot of
+instrumenting and tracing is when you
+find something that looks interesting
+and you instrument it and you want to
+learn more about what's going on you
+typically run through another debug
+compile trace loop again and again again
+where you sprinkle additional
+instrumentation you're a trace begin
+trace on calls on either parent
+functions or child functions depending
+on if you want to find out okay who's
+calling me or what am i calling where am
+i spending my time right so the first
+thing I thought when looking at this
+trace is oh my god there's a lot of
+stuff going on here what what is
+definitely overwhelming definitely
+presents a lot of information but okay
+system UI that sounds somewhat related
+right to to the screen unlock process
+and we can see some binder transactions
+that are taking up a large duration of
+time right so what's kind of unfortunate
+here is we don't have too much
+information about who which method
+triggered a binder RPC call there there
+actually is UI for that will draw arrows
+for binder transactions between
+processes one of the issues is you can
+only turn it all on or all off and if
+you turn it on it essentially looks like
+a big ink smear because there's so many
+binder transactions going on at any
+given moment that that the trail of
+lines becomes very difficult to follow
+so after doing some more digging I found
+some some key guard code right so again
+I didn't write any of this stuff don't
+really know how it works how it fits
+together so we go in and just sprinkle
+ton of instrumentation on everything
+figure out how it works so we'd see this
+this way clock that we're interested in
+before we zoom in a little bit more we
+can actually see so I'd instrumented the
+fingerprint and lock controller trying
+to figure out oh maybe the issue is
+something to do with the fingerprint
+sensor so we can see here that the
+fingerprint unlock controller it
+differentiates between when a
+fingerprint is acquired which it refers
+to as detecting a touch and when the
+fingerprint is authenticated so there it
+takes a little bit of time for the
+fingerprint to iterate through all the
+fingerprints that you've added to its
+database and try and match what was read
+from the sensor to a valid fingerprint
+to authenticate it and then later on the
+phone status bar will invoke a method
+called hide key guard so turns out
+there's a whole key guard class thats
+related to the the lock screen on the
+device so when you wake up the device by
+pressing the power button or touching
+the fingerprint sensor you'll you'll see
+kind of the the keyguard appears which
+will prompt you for password if one set
+so so this kind of starts to give us a
+clearer picture but you can see here
+there's still this very large binder
+transaction which I couldn't catch so
+things get very complicated it's very
+easy for you for any given method to
+grab food what are all my call sites so
+you can kind of instrument and see who
+called me who called me who called me to
+go kind of go up the call stack or it's
+very easy to then go to the all the
+statements within that function all the
+child functions and instrument them see
+who did I call who did I call who did I
+call but essentially you can only go so
+far up until certain processes have
+multiple threads and it you kind of get
+stopped when you get to thread
+invocation or thread creation
+so the the scheduler actually kind of
+hides a lot of things so this is a
+binary transaction nine extra never
+actually found out what this binder
+transaction is right which is
+unfortunate I could do some more digging
+but taking a look in instrumenting some
+more code so now this is instrumenting
+some c++ code so I staking a look at
+system server so system server is we
+make use of a monolithic kernel in
+Android but then a lot of the system
+services with an Android have a very
+microkernel esque feel to them where we
+have multiple servers and then lots of
+apps are communicating to these servers
+via via binder RPC calls so there's a
+class called photonic modulator is it
+happens to be a thread of system server
+system server responds multiple threads
+for all these different servers in we
+can see here that almost for the whole
+duration of screen unblocked we see
+something that's requesting display
+state and its trying to set some display
+power mode and it triggers a binder
+transaction so without turning on all of
+the binder transactions if you click on
+a given bar at the bottom you'll get a
+listing of incoming and outgoing edges
+for binder transactions if you click on
+one you'll get a highlight of the narrow
+so that's that's what this red line is
+here is basically saying we invoked a
+binder RPC call so you'll see binder
+transactions either be usually be either
+the bottom edge or the top edge and that
+depends if they're the the client or the
+server or the requester or they're the
+server I guess so here we're making a
+call that triggers a binder transaction
+and then someone else will service the
+binder transaction and metal show up as
+the the top bar right so following where
+it goes we get a binder reply here in
+surface flinger okay so I need to either
+enable trace tags for surface flinger or
+analyze surface flinger or instrument
+surface flinger and we can see here I
+leave that this is this view is multiple
+threads of the same process so I think I
+don't have definitive proof but I
+believe that these two threads are
+synchronized in surface flinger and one
+of the things like that caught my eye
+here looking at this it's very difficult
+to kind of see this even when looking at
+at assists race like blown up big but if
+you can see this hardware device power
+on call which is C++ code at service
+slinger trying to turn on the screen
+there's this top edge of it is colored
+and you get that when you add sched to
+the command line when you invoke
+systrace and that shows you what the
+thread state is right so P threads has
+state machine you can go look it up red
+means the thread is put to sleep
+interrupt uninterruptible sleep usually
+it's doing some kind of i/o or
+communicating with someone else or
+blocking within the colonel for instance
+but then the rest of the leading edge is
+green and actually percentage-wise sorry
+green means that it's running it's doing
+busy work could be spinning in a spin
+lock you know straight so if if we just
+take a look at percentage-wise it's
+eighty eight percent is spent in this
+running category and twelve percent is
+spent in a sleep state so that's kind of
+going back to that um dolls law example
+let's try and figure out like what busy
+work we're doing here for eighty eight
+percent of our time that's blocking
+screen on so this is with after adding
+the colonel tracing to get more
+information suddenly now we have more
+information about what's going on in the
+colonel so it starts off in surface
+flinger we C C++ code with this hardware
+device power on call but eventually
+invokes in I octal which is kind of a
+messy syscall that's like a catch-all
+that a lot of drivers and fortunately
+implement so you can see here that we're
+invoking some kind of I octal related to
+the frame buffer that the type of it is
+a FBI
+blank so we're asking the screen to
+blank is terminology for either to
+unblock the screen is essentially to
+turn the screen on versus blank the
+screen is to turn the screen off and
+there's multiple calls within the
+colonel here which so a lot of this code
+looks relevant like it's doing actual
+work that we expect but then we get this
+we find out that all the busy work we're
+doing is spent entirely in one function
+which is this council on unlock function
+and whenever you add sked to collect
+scheduler information in a trace you'll
+get this at the very top of your sis
+trace this area so this shows you for
+the four cores on marlin sailfish what
+was running at any given time that that
+we had instrumented so here we can see
+surface flinger is actually running full
+bore on one core essentially saturating
+one core and that you can see kind of
+the width of this maroon line of when it
+was scheduled lines up pretty well with
+this green duration right so we can see
+hardware device power on was saturating
+a whole core eighty eight percent of its
+time was spent within the kernel and a
+function called console unlock once we
+spotted this this was essentially a
+known issue has to do with having cereal
+debugging enabled on your kernel so
+whenever we're debugging kernel code you
+may not have adb working so we actually
+use the headphone jack as a serial
+counsel and usually I use screen or
+something to connect to the device and
+because i had this debug feature on
+which is something that we can toggle on
+and off essentially the colonel ring
+buffer was getting was it printing out
+until this I actual finished and then as
+content got buffered and buffered and
+buffered it would actually take longer
+and longer and longer to right over the
+cereal council at its really slow baud
+rate to kind of DQ all the messages that
+came into this buffer so we're actually
+seeing
+if you had a device I was overloaded
+where it was doing a lot of work and all
+the other cores were saturated it was
+possible that a lot of different
+applications could be adding a lot more
+to the council to the Colonel's ring
+buffer it's d message output which would
+make counsel unlock take longer and
+longer and longer and longer so known
+issue real simple fix disabling seal
+debugging when you don't need it speeds
+up on locking the screen quite a bit
+right so this is what a healthy trace
+looks like after it's been fixed right
+so before we can see how hardware device
+powering on you can see the time
+measurement up here I took ticks and
+this one it took half a second so the
+trace earlier I showed you six seconds
+was from different points in time fifty
+taking half 500 milliseconds to unlock
+the screen was still way above expected
+we're expecting something close to like
+100 to 200 milliseconds so a healthy
+trace here we can see now screen unblock
+takes 130 milliseconds which is much
+better and hardware device power on is
+now spending its entire entirety in the
+eye octal call as expected in no time in
+council unlock so if we wanted to we can
+go and try and calculate the speed up
+here right think of dolls login and if
+we really wanted to improve this number
+again then we could go and maybe spend
+some time in this flush kick off and try
+and figure out what's it what is it
+doing here on this exposed leading edge
+or maybe dsi panel on but I think we're
+kind of at a state now where we're good
+enough and we're happy so so give you a
+quick trace a quick run through of how I
+can work with with systrace so once you
+have a trace open I really like the
+controls so scroll scrolling vertical
+and then it's got this WASD for zooming
+in and out so W zooms in and as soons
+out and then a and D for panning left
+and right so usually we all go through
+and do is collapse a bunch of processes
+that
+care about so if there was any kind of
+application running like wallpapers GMS
+core I don't care what it's doing I
+don't think it's in the critical unlock
+path so I'll just collapse those let's
+say I want to I just added some
+instrumentation to keyguard you hit / to
+jump into the search box so typing
+keyguard you'll see all the all the
+color fade out of all the bars assuming
+your search has a valid match so let's
+say for instance i typed a bunch of
+stuff that doesn't match anything all
+the color comes back so that's really
+helpful when you're trying to find your
+your instrumentation you can see there's
+a little bit of light coloring here for
+everything that matches keyguard so far
+if i hit enter it will go to the first
+result and if i keep hitting enter it
+will jump to the next result so you
+might be able to see the colored bars
+getting lit up and so then you can dive
+in and find more information to if you
+hit it let's say you have a big trace a
+lot of information and you want to find
+where's your new where's the latest
+instrument that you just added you can
+do a search things stay grey that shows
+me that my my instrumentation did show
+up in this key in this trace somewhere i
+hit enter to find them maybe the one I'm
+interested in then I'll hit escape to
+get out of the search box and I'll hit
+em to mark it so this is what gives us
+the time you can see up top that it now
+shows us 17 milliseconds for whatever I
+searched for and then you can hit f2
+zoom in on that item and then you'll
+have to scroll and find here it is right
+so and then it can hit / again to enter
+and go to the next one hit escape market
+fill it so that that's how I work with
+systrace and
+so my call to action everyone is if you
+have a code that you that is performance
+critical please help out your fellow
+folks interested in perf and instrument
+any code that you think is worthwhile
+anything that could be a problem down
+the line if it ever slows down more than
+expected the thing that I really like to
+see that I tend to do a lot is
+instrument both sides of a binder call
+so i think binders really neat but it
+can be difficult to debug who is
+invoking binder and who is on the
+receiving end of a binder call so if
+you're making use of anything that
+invokes binder that could potentially
+take a long time like please wrap that
+in some instrumentation so it shows up
+in a trace and it makes it a lot easier
+to prove that you've improved something
+if you can measure it so thanks everyone
+for your time I appreciate it</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

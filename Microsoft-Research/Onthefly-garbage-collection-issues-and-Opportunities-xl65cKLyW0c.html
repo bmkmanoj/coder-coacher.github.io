@@ -1,0 +1,1396 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>On-the-fly garbage collection: issues and Opportunities | Coder Coacher - Coaching Coders</title><meta content="On-the-fly garbage collection: issues and Opportunities - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Microsoft-Research/">Microsoft Research</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>On-the-fly garbage collection: issues and Opportunities</b></h2><h5 class="post__date">2016-06-21</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/xl65cKLyW0c" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">each year microsoft research helps
+hundreds of influential speakers from
+around the world including leading
+scientists renowned experts in
+technology book authors and leading
+academics and makes videos of these
+lectures freely available
+you
+okay it's my great pleasure to introduce
+Richard Jones to go to talk he wrote the
+book on garbage collectors and then 10
+years later wrote the next book on
+garbage collectors and I think he's
+going to talk about garbage collectors
+yeah you've kind of got what I do well
+don't write okay so what I'm going to do
+today is talk about a couple of things
+that we've done in the context of on the
+fly garbage collection first of all
+before I forget I have to give the
+credit for a lot of this work to Carl
+rips and then tomorrow you go wha who
+are a couple of really really smart
+young researchers so they probably take
+credit for most of the smart ideas I'm
+responsible for the dumb slides or
+whatever so this this work is been done
+in the context of the the mirror GC
+project what we've been trying to do is
+build a fully concurrent copying garbage
+collector I fully concurrent I mean that
+it never stops all of the threads at any
+one time that most it ever does is stop
+one threat at a time for example to scan
+its roots and we've done this work in
+the context of the jacks rvm meta
+circular java virtual machine is the
+Java Virtual Machine that's written
+almost entirely in Java apart from a
+small core of C and we've been running
+it on pretty standard multiple hardware
+so what I thought I'd do today is I give
+you a background on concurrent GC
+anybody who knows a lot about current
+can currently see can have a little
+snooze for 4 15 minutes but I thought it
+best to get everybody on the same page
+first and then I was going to talk about
+an opportunity and an issue and the
+issue we found was trying to process
+Java's reference types because we
+started off with jugs lvm we ran our
+concurrent collector and we got bugs we
+thought hey what's going on and then so
+we looked at what Jax would be doing
+and then we looked at the the
+specification of Java reference types
+and we thought something needed to be
+done the other thing we looked at was
+and this is the opportunity in nothing
+June last year Intel brought out to the
+the Haswell family of processors which
+provided to transactional memory so we
+rushed out and grabbed grabs the the
+best Intel processor Haswell processor
+we could get only to find that it didn't
+provide transactional memory so we got
+someone slightly further down the soul
+specification and that did so that was
+that Thank You Intel that was annoying
+but and we looked at various ways to
+exploit transexual memory to support GC
+so a background and as I say for those
+of you who know lots about GC I do
+apologize for trying to teach you to
+suck eggs or whatever so broadly I'm
+interested in tracing collection there
+are two styles of a tracing collector
+the several point yes it does we might
+do mark sweep collection where you start
+from some root you've got some graph of
+objects and basically you walk over this
+graph of objects and as you visit
+objects you you set some kind of mark
+bit which might be the object room up in
+another side table and when you've
+finished you then sweep the heap and
+anything that hasn't got a mark like
+these ones are garbage and you can throw
+them away the problem with mark sweep
+collection is it's not moving and so you
+can end up with fragmentation you can
+end up with holes in the heap that or
+they might have a lot of them mendel's
+them are big enough to admit any
+allocation requests you might make in
+the future so the other style is copying
+collection and here we've got some sub
+graph so here maybe we've got a list
+with pointer to the headand to the tail
+and what the collector does is it walks
+over this and as it visits each object
+it copies it into to another space that
+we have a from space and a to space and
+you're copying objects from from space
+to to space and compacting them as you
+go and
+key thing to note here is that as I copy
+this object a I have to leave a note in
+a's header of where I've moved it to and
+this is important for when you got
+sharing because you want to preserve the
+topology into space and from space
+otherwise you get multiple copies of
+shared objects into space and that's a
+bad thing it's particular bad thing if
+you've got a cycle because then you'll
+get an infinite number of copies if you
+don't do something like that and that's
+probably not a good idea so I mean
+pretty broadly those are the two styles
+of collection there's almost every
+modern garbage collection algorithm
+works on they do something like that and
+you can also have compaction where you
+try to slide objects down to the bottom
+of the heap but I don't think people use
+that kind of sliding compaction when
+they do compaction often they do
+something like this particularly because
+you've probably got multiple GC threads
+do the work at the same time so you want
+to give them each their own region in
+which they can compact things in anyway
+that's that's not germane to this talk
+so all that's ancient ancient stuff
+what's new today is that we have lots of
+parallel hardware it's really ubiquitous
+so how we're going to deal with with our
+our collection well the simplest and
+easiest way is we have lots of mutator
+threads running are these white bars
+meant to be mutilators roads time is
+running along that way and every self
+when we run out of memory we stop the
+world and we do a collection cycle to
+hear cycle one number one finish that
+stop the world up again or mutates
+running and stop the world again that's
+obviously a very bad use of parallel
+hardware and it leads to all the big
+pauses that everybody always complains
+about him but with the garbage collected
+systems I mean there is an old joke much
+of Iowa that there was people complained
+about the pauses in emacs caused by
+garbage collection
+and the garbage collector implementers
+because we're an arrogant punch we
+thought the users were idiots or I'll
+tell you problems without pauses so they
+replaced the message saying garbage
+collection saying waiting for NSF
+traffic and then gave it to users and
+they all said it improve performance
+wonderfully so so stop the world is one
+thing well the obvious thing to do is
+rather than just use one thread for
+doing collect collection when we stop
+the world will user we use all the
+hardware contacts we can so we get as
+much parallelisms as we can make these
+pauses shorter but you still got pauses
+so what we do a bit better well maybe we
+can do it incrementally so every self
+and we probably have to stop the world
+to do some kind of synchronization
+typically what that means is maybe we
+scan the the roots of all these threads
+so we know what's on all the stacks and
+then maybe we let the mutaters go again
+and ask them to a bit of bit of garbage
+collection work every so often until
+we've finished in them then we repeat it
+again or we can do it more concurrently
+so again we let the the threads run stop
+the world briefly prob again to scan all
+of their snacks at the same time because
+that makes it much easier and then we
+let a garbage collector thread run
+concurrently with mutator threats and we
+hope that this bar is short enough so
+that it completes before we run out of
+memory again scanning doesn't miss
+typical it doesn't take too much time
+compared to the the rest of the stuff oh
+yes okay yes scatter scanning it is
+pretty short ah I mean yeah because
+certainly in Java the depths of stacks
+are usually quite shallow now if you're
+working in a functional language might
+was met with lots of recursion you're
+going to get deeper stacks reduce you if
+you're working with linked elite list
+optics that are you know very fast and
+stuff like that
+you start from this talk about you oh
+yeah but but we do we deal with the
+linked list objects into of this part we
+just use a factor it's just so we know
+throw brighter is just we shoulda
+brought my hat it's just so it's just so
+we can we can we can snapshot the state
+if you like yeah because rob Wes ki
+mutators they keep on changing things
+and it's a real nuisance or and this is
+what we've done and what this talk is
+going to be about all we can do the
+collection complete on the fly and the
+idea here is although you might pause an
+individual thread for a very short time
+to scan it stack almost all of the
+collection work is done concurrently so
+we're never pausing more than one thread
+at a time and we can do that very
+quickly now it's probably it well it is
+possible to to break down this scanning
+of stacked into even smaller quanta but
+we haven't done that because it gets
+more complicated and nasty right now as
+will be no surprise once we start
+talking about all this parallelism and
+our case we have multiple collector
+threads multiple mutated threads all
+running at the same time you get issues
+of consistency and issues of
+synchronization so it helps to to
+abstract about higher than the level of
+sort of code to think about what's going
+on and the way to do this or well-known
+way to do is this is what's called the
+tricolor abstraction and here we have
+the notion that every object
+conceptually has a color there are lots
+of different ways that you might
+represent that color white objects are
+those that the garbage collector has not
+reached and so by the end of the
+collection anything the garbage
+collector has not reached is unreachable
+and hence is garbage black objects where
+the garbage collectors reached it knows
+all about it has scanned it fails and
+the garbage collector does not need to
+go and revisit those objects
+and the intermediate stage is gray which
+the the garbage collector knows about
+this object but maybe hasn't finished
+scanning its fields or maybe needs to
+come back and scan them again because
+they've been changed or something like
+that and as I say by the end of garbage
+collection you hope that the world will
+have been divided into black objects and
+white objects and there are no gray
+objects left because it's the gray
+objects left you've got more work to do
+and that that proves to be a very
+powerful way of thinking about about
+garbage collection so here's the
+fundamental problem for any concurrent
+garbage collector you can lose objects
+so consider this scenario where a
+mutator is going to hide a reachable
+objects from the garbage collector so we
+started from some roots maybe the
+garbage collectors visages this object
+it's all about it no is it what is its
+fields are going to visit you this one
+knows all about it and then the garbage
+collector pauses and the mutator comes
+along and says i will i will copy this
+point to a and i will install it into X
+and then I will remove pointer a and at
+this point the garbage collector wakes
+up again says well I've done I've done
+the roots I've done x I need to go and
+have a look at why are going to ever
+look at why it's got no no pointers in
+it so I can mark that that black and I'm
+finished and so I'm going to reclaim
+object Zed wrong that that needs to be
+reclaimed there are these throw that
+needs to be preserved so something's
+gone wrong they're slightly more subtly
+you can also do this in a more
+transitive way so here with a similar
+scenario so we've gotta stay like this
+garbage scow has seen this object knows
+all about it knows all that P nose q is
+there but hasn't scanned it its fields
+and then it pauses and at this point the
+mutator types copy see uninstall it in p
+and it will do and it will delete some
+other point while it could delete it
+could delete that one or equal it could
+delete that
+doesn't really matter which but at that
+time the the garbage cat then wakes up
+and says oh I'll have a look at Q it's
+got no fields and no no pointers in it
+so I'm finished and so again we have
+this object which is is reachable which
+is going to be collected and we don't
+want either of those things to happen so
+how does that come about well there are
+two conditions I think these conditions
+are due to pull Wilson in in from way
+back in nineteen ninety-two I I don't
+know a six inked expression of this
+problem the predates is so what he says
+is he says this problem can happen if
+two things happen first of all a mutator
+is storing a pointer to a white object
+into a black one and secondly there is
+no route to that white object starting
+from a grey object passing through a
+change of white objects I mean the black
+to white is fairly obvious that came
+from those those cartoons on the
+previous slide the past issue is that if
+there is such a path starting from a
+grey object we know we've got to go and
+deal with the gulf station knows it's
+got to go and deal with it grabs it and
+it will walk along those white objects
+and it will eventually find this object
+that's that's cause a problem so we need
+invariant to prevent either loes
+handling and the invariants are there's
+a strong invariant and a week in burnt
+the strong invariant captures condition
+one it says there will be no point we've
+got to make sure there are no pointers
+from black to white objects so pointers
+like that are not allowed and the second
+one the week in variant which is an
+alternative is to say if there is a
+pointer from a black to a white then
+does this chain of pointers starting
+from a gray object going through white
+ones no GT can't go through a black one
+because that would stop your trace can
+you sound was black I finished
+and I'm going to call that such at these
+these two objects gray protected because
+they're they're reachable from a from a
+from a gray object and it doesn't matter
+which of these invariants we impose
+either either invariant is sufficient to
+make our program correct the choice of
+which in very new wish to support is all
+all about efficiency and implementation
+and so on and we maintain those those in
+barents with with barriers these are
+actions that the mutator performs that
+communicate with the garbage collector
+in some way typically if you're if
+you're in the Java world you're writing
+your writing references with an a
+bytecode like put field you make sure
+that your put field implementation as
+well as writing that pointer also
+doesn't communication with the garbage
+collector like color the object I mean
+you could have an explicit color in
+there in the header of the object or you
+could say well the way I'll make an
+object gray is it I will put it on a
+work you of work to be done and that's
+what you really do and there are two
+ways to two kinds of barrier well
+actually the three I'm not going to talk
+about read barriers other than just to
+mention them I'm mainly going to talk
+about about barriers or on right actions
+we prefer barriers on right actions
+because right actions are much more rare
+than read actions and we'd really like
+to avoid putting costs on Reed's because
+because it's inefficient so the two
+kinds of barrier one of which I call an
+insertion barrier and wonder bush is a
+deletion barrier other terms are
+incremental update hoods or snapshots at
+the beginning I call them insertion and
+deletion because that's the barrel you
+do when you insert a pointer that sort
+of Perry you do when you delete a
+pointer this is called snapshot of the
+beginning because effectively it takes a
+conceptual snapshot of the heap at the
+start of the collection and anything
+that was live at the stars of the
+collection will be live at the end
+pretty much
+so I've taught about colors of objects
+but a really nice piece of work by becca
+purine and way back also extended the ID
+of colors to mutate too so you can have
+a black mutator and a gray mutator
+remember the idea of black and groves
+black youth completely the garbage Crips
+finished with it grey needs to do some
+more work because then the same idea to
+mutators so a gray mutator is one in
+which its roots maybe have yet to be
+traced we've got it yet scanned the
+stacks or maybe we need to go and scan
+the stacks again for some reason but
+anyway we've got to do more work on the
+stacks and this means that the stacks
+may perfectly legally point to objects
+of any color black white or gray black
+mutators in the same way so if we send
+objects black we don't need to trace it
+if you mutate was black with the garbage
+coats it doesn't get need to go and look
+at it again and the sorts of things that
+a black mutator can point to depends on
+which of the invariants where we're
+going to support so if we're going to
+support the strong invariant which is no
+black to white pointers that means it
+can never point to a white object we
+make sure that no white objects on the
+stack if we're going to support the gray
+invariant we say well this mutate can
+point to this stack can hold references
+to white objects but those white objects
+better be gray protected in other words
+the better be a path from a grey object
+through a change of white objects to
+that object and then we're safe and to
+enforce those invariants we can use two
+different kinds of barrier so if we're
+if we're working in the world of a grey
+mutator we use an insertion barrier the
+this was I mean this is this is old hat
+this is from Dijkstra's so here we are
+we're black object and a white object we
+want to write this pointer so before
+as we write that pointer we've got to
+dick so as we're at that point we've got
+to color that object and they're all
+sorts of subtleties about the order in
+which you do which is off
+counterintuitive to be honest if we're
+working in the world of a black mutator
+there are several things we can do we
+could have a read barrier which says we
+will make sure that whenever we load a
+reference on to the stack we will make
+sure that we've colored the object
+target first but I don't want to talk
+about read barriers because they're
+expensive so what we were interested in
+is a deletion barrier so here we have a
+pointer from an object that's mentis
+mean this object could be gray or white
+kino didn't quite get the contrast as
+aggressive as I wanted it to be but so
+we're going to delete this point from a
+gray or white object and when we do that
+it means that the target we're going to
+say is gray so that's why it's called a
+snapshot because this object now we
+deleted the pointer to it but the
+collector is still going to preserve it
+so it means that anything that was live
+at the beginning of our collection cycle
+is going to be live at the end pretty
+much so why why why are we interested in
+these two I mean you know clearly
+clearly this one looks better because it
+doesn't have so much floating garbage
+this one is producing you all sorts of
+stuff you know this this look like is
+going to be garbage but you'll hey
+you're going to keep it around how
+stupid you got loads of floating garbage
+so why would we want to do that and the
+answer really is all to do with
+termination so if we've got the gray
+mutator that's the one that supported
+that here's his or his or terminate our
+termination grants here's our
+termination loop so we start off with
+trace until there are no gray objects
+left till our work listed or empty and
+that means
+but the trouble is as we're doing that
+these sneaky mutators they might start
+loading references from our stack you
+know the mutator might run ahead of sort
+of the of the collector grab a reference
+to a white object install it on the
+stack and delete the original reference
+to that white object so the collectors
+not going to find it so I think I should
+just say gray i think i should say white
+then anyway probably that is the the
+stack of one of the mutaters might hold
+a white object so we got to go and find
+that so we have to scan each of this
+thread shading any white objects found
+you know putting them onto our work
+queue and then if we did find any we've
+got to go and trace them again and once
+we've done that we're pretty much back
+to where we were there so we've got to
+get around the loop again and you do
+this at nauseam until until you know
+you've not found any gray objects and
+you could write anniversary program that
+would make that loop forever so what'd
+you stop it looping forever well maybe
+you maybe you make the system run out of
+memory so it has to stop stop all those
+user threads or or maybe the garbage
+plate says I'm bored with you mutator
+guys I'm going to block you all until I
+finish doing that in contrast here is
+see the press wrong button here is the
+the termination process of a black
+mutator it just traces there's a normal
+trace and toggle no gray objects and it
+stops we are finished why is that safe
+well because we have the tricolor
+referent so the mutator can only hold
+black references we've general is
+tracing there are no gray objects left
+there are no gray objects that means
+there are no white objects is reachable
+from gray objects and because they
+mutated blackness no do you need to
+rescan it simple so the week invariant
+gives us this very nice termination
+properly
+and when I get to talk about how we
+processed job as reference types I'll
+show you how we did it with both Greg
+mutator and the black mutator and I'll
+show you show you the differences so I
+need to give you a bit of context about
+the collective we've been building we've
+been I mean we've been working with it
+with a collector called sapphire which
+was is quite old now to buy records on
+elliot moss we originally decided to
+work with sapphire because we have a new
+algorithm and we wanted something to
+compare it against so we're comparing
+apples with apples so that our work will
+build sapphire that won't take long two
+years later we finally got it got it to
+be correct and the bugs out of it so how
+does sapphire work well it's on the fly
+it never stops more than one thread at a
+time it uses copying collection the nice
+thing about copied collection is it
+gives you very fast allocation you just
+need to bump a pointer to allocate a new
+object it eliminates fragmentation and
+the subtle part about sapphire is it's
+replicating so it has to copy it
+maintains two copies and a copying from
+space and a copy into space while it's
+doing the collection but for
+synchronization it make sure that the GC
+pays most of the cost of synchronization
+right so it's not putting an much of an
+overhead does put a little bit of an
+overhead but not putting a much of an
+overhead or on the mutator we completely
+re-engineered sapphire in jax lvm and
+Intel was very kind to give us a license
+to do so Jax is a research virtual
+machine is largely written in Java the
+great benefit of it is it's quite easy
+to replace components like you switch
+different garbage collectors and it is
+pretty it's easier than any other system
+i worked with but it's it's not trivial
+so this is how house a fireworks
+operates like all concurrent GCS in a
+number of phases how to start with here
+we are we've only got from from space
+here's the mutator it's reading and
+writing from objects in from space we've
+got a couple of
+objects which point to each other we
+then decide we've got to do it GC so the
+first is that is the mark face and the
+way that sapphire does its mark phase is
+it traces concurrently all the objects
+in the heap and allocates what we call a
+shell an empty region of memory ready to
+put the data from from space in and it
+adds to the header of each of these
+promise both subjects a forwarding
+pointer telling telling you where the
+replica is so you can find it later
+mutators still reading and writing 22
+from space the next step is to do
+copying so the garbage collector is
+responsible for doing all the copping so
+it will take this object and copy the
+contents of that object into here it has
+to do what we called a semantic copy for
+want of a better word in other words we
+make sure that this is a pointer to
+something in from space but we make sure
+that we replace it with a pointer to
+something into space so they only got
+two spaced pointers in here which means
+when you do the when you'd is this copy
+you you've got to do some look up you've
+got to follow that point to say where
+where is your replica no it's over there
+right thinks that's what I'll write
+during this time the mutaters reading
+from from space and writing to from
+space but you've got the situation where
+but suppose suppose the garbage
+collector copies all this data over here
+makes a proper copy of it and then the
+mutated changes something in there well
+it's done that that value needs to be
+changed in there as well and the only
+person who can do it is it is the
+mutator so we have the mutator do a
+double right how can we make sure that
+the this is consistent because you think
+well okay maybe you've got a race
+between the GC trying to write a value
+in here and the mutator trying to do
+write a value in here and the answer is
+we force that sapphire forces the the
+collector to use compare-and-swap
+operations to do those updates
+I'll show you the pseudocode for that in
+a minute when we have copied it when
+we've copied the collectors copied
+everything to to space we've now got to
+start to flip and in the flip phase the
+mutator is now reading from from to
+space but again it's having to write to
+both and the reason the reason for this
+is that is our epochs between one phase
+another a ragged it's possible that one
+collector might be in one phase while
+another one's advance to the next phase
+because we don't want to stop them
+everything and force them all to
+transition atomically so so so we have
+all this I mean that I put the 1 2 3 4 5
+there's a lot more faces than 5 because
+all the it take it take several steps to
+transition from one place to another and
+by the end we finished we've done
+everything all the mutaters are pointing
+in all their stacks are pointing at
+things in to space and so we can throw
+away everything in from space is it is
+that reasonably clear yeah have you take
+any questions I mean do ask questions as
+I go right that it that is the
+background let's get to the meat of the
+talk yep it's one could imagine the
+simplest on-the-fly GC the simply the
+simplest on-the-fly GC will be to be a
+non-moving one something like like just
+a concurrent mark sweep because they all
+you need to do is decide which of those
+barriers that I was talking about you're
+going to implement and there the
+difficulty is is terminal which
+termination alkyls would you want now we
+got out of our way to make it hard by
+being by being fully on the fly and buy
+get copying so yeah
+we have got generations it'd be very
+interesting I think to put generations
+in here but hey one step at a time yeah
+I suppose if I if I was gonna you know
+if I really wanted to defend this oh say
+well what the generations to do for you
+they give you small pools times we don't
+have it we don't pause so so java
+reference types so if you're familiar
+with with with java reference weak
+references your know what these are but
+if you're not let me say something
+briefly so there are four kinds of
+reference in java there's the normal
+reference that we all do when we say new
+object and that's a strong reference but
+they're also soft references which might
+be used for building caches that the GC
+can reclaim when it's under memory
+pressure there are weak references that
+might be used for canonicalize mappings
+the don't present prevent the the
+garbage collector from reclaiming their
+keys or values and there are phantom
+references which are kind of weird but
+can be useful for pre-mortem cleanup
+actions and the way that's more flexible
+than using a finalizer say and i can
+point you if you're interested I can
+point you to a very good tutorial on
+that i mean i'll let you have the slides
+and people who have a look it's but in
+the notes there are weak references
+don't have many methods but one method
+that they they have that is interesting
+I this is the one that we have to deal
+with is a method called get so here we
+have a reference an object over some
+reference type and it has a weak
+reference to a normal object and you can
+call get on it so if you've got a soft
+reference when you call get on it that
+will return you us so I'm gonna call
+soft reference don't get on this object
+and it will give me a
+wrong reference to the target or if the
+GC is decided to clear this reference
+and the GC can decide at any time to
+clear that reference it will return null
+similarly for weak reference their own
+buttons similarly for weak references
+phantom references whenever you call get
+you get null so so there there's a sort
+of marker there to let you know the GC
+reclaimed something you can go deal with
+that's why I take every that you I have
+never written any code with phantom
+references as anyone written okay with
+phantom references I don't know anyone
+who's written code a sense of references
+but I have I the tutorial does provide a
+fairly convincing a rationale for why
+they might be useful now the key thing
+to take home about get is and but this
+is particularly true if you've got a
+concurrent on-the-fly system your
+collector has gone untraced everything I
+traced over the strong references it is
+decided which objects alive and which
+objects are dead and then some mutator
+calls get and suddenly an object was
+dead is now live because you've got a
+strong reference to it and if you ignore
+that things go wrong and certainly it
+was the case that in jax rvm before we
+fixed it that exactly that happened
+things went wrong why hadn't it been
+explored disposed before because nobody
+had stressed Jack salvia and was as much
+concurrency as we were stressing it with
+I suspect so so garbage coach is really
+interested in reach ability there
+following pointers and trying to find
+objects which are reachable so the
+java.lang reference package defines
+reach ability and it's the only place
+you find the definition of reach
+abilities so you know first of all you
+think where we need to think we found
+this problem in Jack's we need to fix it
+so we got out of the Java specification
+looked in the index of the word
+reference died it wasn't there so the
+word so we then looked at the java.lang
+reference package actually is what there
+was a reference to the raffle drawing
+reference package so it's defined in
+there and it says that there are there
+are four types of reach ability
+something could be strongly reachable if
+you can reach it without traversing any
+reference object this is what you'd
+normally expect there's a normal GC
+stuff and in this case the garbage
+collector will not reclaim these objects
+might be be softly reachable which means
+they're not strongly reachable but they
+can be reached by traversing a soft
+reference and the GC may reclaim these
+there's a strong hint given to the
+implementer if these soft reference has
+been created you recently or use
+recently might be a good idea to keep
+them because it's it's somebody to build
+a cache and they'd probably be a bit
+upset if you threw the cash or as soon
+as they created it there are weak
+reference that something might be weekly
+sorry weekly root weekly reachable if
+it's neither strongly door softly
+reachable that you can eat you by
+traversing a soft reference and the GC
+will reclaim this and then there are
+phantom references which are neither
+strongly softly a weekly reachable but
+have been finalized and some reference
+refers to it now one of the difficulties
+for implementation is that clearing
+reference types has an atomicity
+requirement so imagine we have this
+picture we have a suppose this is a week
+or a soft reference and here we've got
+another week or soft reference and these
+a bunch of normal objects so the if we
+would call get on something we get a
+race between the mutator and the
+collector so the mutator is trying to
+make a strong reference of this object
+which the GC would like to reclaim
+because it's not strongly reachable so
+we've got a race
+and the rules are to avoid that that if
+the GC decides to reclaim a softly
+reachable target ditto weekly or
+whatever you've got to not only remove
+all soft references to this object oh
+but when we decide this it this is only
+subtly ritual and we'd like to get rid
+of it so you've got to remove all these
+references but we've also got to remove
+references like this which might point
+through a chain of normal strong
+references to the subject and you've got
+to do that for all of these references
+at the same time or at least make the
+new teachers believe is what happened
+atomically and this is this is this this
+is this is clearly a challenge for
+working with on the fly so at last they
+come to what we've done so we look to
+the specification and the specification
+says an object is softly reachable if
+it's not strongly reachable but can be
+traversed by a soft reference it's kind
+of a vague definition and this is
+probably what you'd expect from seeing
+definitions written in package
+documentation in English I mean
+predicted doesn't specify how many soft
+references we can reverse and it doesn't
+specify that there should be no weak or
+phantom references in that chain and
+ditto for the other definitions the
+other reference types so what we did was
+we formalize this and corrected the
+formal Iser any formal method this is
+trivial formula is not very difficult so
+we have a set of relations between
+objects these these are the representing
+references strong soft weak and phantom
+references transitive closure of those
+so we can then say the set of strongly
+reach of lock objects it's a transitive
+closure starting from the roots under
+the stroke at the strong reference
+relation we then can simply define what
+are our softly reachable weekly
+reachable and phantom reachable
+I think there are no surprises there is
+really really what you'd expect and we
+can state what it means to clear
+references so the this I think is where
+we do make it clear what the
+specification in the java.lang reference
+package should have said so we say the
+if we get if we're going to reclaim an
+object oh and then the soft references
+we have to care or all of these in this
+all the ones that might reach out by
+following one or more strong references
+and similarly for a week to clear notice
+phantom references always return null so
+it doesn't matter so okay we've done
+that it was quite straightforward does
+it really matter does anybody use these
+these these funny references to my
+surprise they used a lot I I selected
+them to be used but it didn't expect
+them to be used as much as they are and
+so here a bunch of benchmarks taken from
+Jack's rvm and what we're measuring here
+this is time so program starts their
+program finishes here and we're
+measuring the number of calls to get in
+millions over that period and very
+common for as a bit as the JVM starts up
+lots of reference types used they seem
+to be used again right at the end we
+suspect that might be the harness but
+some benchmarks lies the land al you
+search use them heavily Jason which is
+an implementation of Python in Java uses
+them very heavily indeed so clearly
+there's something we have have to deal
+with so three options we could stop the
+world we could block any mutator that
+calls get which has been done before or
+we could process objects on the fly
+never blocking and that's what we chose
+to do so here's our we modified the GC
+state so we're in a normal state we
+start tracing happily tracing away and
+then the garbage collector wants to
+finish tracing and
+switch the stage we're clearing but the
+mutator might call get and that's going
+to force the collector to repeat so
+there's a race between calling get and
+the garbage collector finishing so we
+need to deal with that make sure that
+happens atomically where's all these
+other transitions as I said before a
+fairly ragged I'm not going to talk
+about the code integrator but here's the
+code for the collector and the barrier
+the key point is that the collector
+tries to atomically change the state
+from tracing to cleaning and the the
+mutator tries when it when it's found
+some reference that was that was white
+it's changed to change it from tracing
+to repeat to make that us go round again
+and because it's in session barrier we
+get around around around just as I said
+before wearing try to terminate we also
+implement it and problem with that it
+gives us no guarantee of termination and
+we model check this algorithm with spin
+and spin also told us this isn't good
+this is not giving you any guarantees of
+termination however if we use a deletion
+barricade we've got the same sort of
+thing mutators trying to change from
+tracing to cleaning but our barrier
+carry this time again it's trying to
+make you repeat but in the same way as
+when we deleted pointers we colored the
+target we color the target here and this
+does give us a guarantee of progress and
+we terminate so what's that what's the
+result of all this here a bunch of
+benchmarks here these show the blocking
+method so either we do stop the world or
+we do the method that blocks by taking a
+lock on an individual collector so I
+know it's very very unlikely birthday
+when you color it pray after you set it
+to repeat could be of the garbage
+clutter go and completely finished
+racing again before you correct right
+you think there's a race in hairdo
+my needs tracer Holland there before you
+get it I do have instruction we did we
+did model check this and I do have the
+pseudocode reflects what we put in the
+real code I believe I believe this is
+correct but I I can entirely I can
+entirely see your point I think the
+answer is no because we have a handshake
+in there so I think that I think that's
+what what what gets me out of jello but
+it does own if I put my faith in the
+spin model checker for the you know
+bounded model checking right okay so as
+I said stop the world or the lock based
+and you can see these are histogram
+showing you Paul's times with 3 3
+millisecond buckets you can see the the
+pauses and that they some of them could
+be a considerable number of milliseconds
+given how long we would expect maybe
+simply I mean someone mentioned
+generational collection you'd expect a
+good generational collector to have
+pauses less and less than some of those
+so he'll on the right hand side I'll
+show our results for work we're using
+our on-the-fly mechanism on the left
+again the ones we have before and this
+is the length of the entire phase for
+reference pricing see so in the case of
+the lock it's not how long a mutator was
+blocked for with from the start of the
+reference processing close to the end
+which might be different and the other
+thing to notice these scales a
+logarithmic so mostly rrr but all of
+these that they mostly finished quite
+quickly notice some of them Lu search if
+I use the insertion where it takes a
+long time and it has to retry emphatic
+retried 62 times but the key thing is
+the mutaters kept running and what was
+the effect on the overall execution time
+are just looking at the on the fly with
+the deletion
+and the lock with the deletion barriers
+they didn't happen a substantial effect
+on overall execution time and indeed
+processing on the fly was often faster
+or cause the execute the the system to
+finish faster than if we done it with
+stopping the world or logs so I'm
+punchline is that it works now I'll move
+on quickly I appreciate time is passing
+right the other thing we looked at was
+transactional memory so the issue fur
+fur fur as I guess is fairly obvious now
+for doing concurrent GC is consistency
+because there are races but
+translational memories is widely touted
+to be an efficient solution to the
+problem of writing concurrent software
+I'm sure you all know how transactional
+memory works but it allows you to
+execute a sequence of instructions and
+if no other thread makes some kind of
+conflicting access then then your
+transaction commits otherwise it aborts
+and in June has a interpreter hassle
+architecture out which provided this
+restricted version of transactional
+memory it's a very simple programming
+model you start the transaction with X
+begin and you commit with X end and the
+processes read and write sets at a cash
+correct line granularity so it's
+tracking things of cash lying around the
+laboratory obviously there there's a
+limit to how big these readings right
+sets are but it turns out to be quite
+big if there's an abort that you need a
+fork some kind of fall back handler and
+has or will tell you what the course of
+the abort was so my colleague Cole
+measured this straight away if you
+wanted look at the detail paper on the
+performance of has well I recommend this
+one and we found that typically the cost
+of setting up and tearing down the
+transaction was about the same with
+doing three compare-and-swap operations
+we also found the penalty of reads
+within
+transaction but not on rights and the
+reason for that is we think because
+effective reasons penalty on rights
+anyway because of cache coherency we
+could deal with transactions of sizes up
+to 16 kilobytes which is about the size
+of the l1 data cache and abort was
+expensive as you might guess so going
+back to sapphire remember this slide
+where we got this the mutator updating
+from space and two spaces GC copying I
+mean like slices what could possibly go
+wrong and the answer is you could get
+things out of order or something I guess
+it's fairly obvious so I promised you
+the code for the read bear now the
+original version done by Hudson moss
+used compare-and-swap so our read bury
+something like this we do a simple read
+from two spaces simple read from from
+space we compare them if they're
+different we do a compare and swap
+trying to it to tutor to write the value
+and then we we restart in cases of the
+mutaters messed with us again if it yeah
+if they are the same we're finished and
+we're done because because because then
+it that means it is up to the mutator to
+make sure that the two versions are in
+sync obviously using compare and swap
+stories copies is expensive so we can do
+with the transaction that's very simple
+we just load the value from to space and
+write it in sort low from promised let's
+write it into two space actually is a
+little bit more complicated than that
+because you've got you've got to do some
+work to set the transaction up you've
+also got to have deal with the case of
+transactions that might fire might abort
+and also the other thing is our copying
+remember it was semantics we were we
+were reading a value add from space and
+trying to replace it with the equivalent
+value and two space so there's a certain
+amount to look up to do as there's lots
+of translation activity
+so we then try to use Haswell to do this
+in hardwood using the hardware
+transactions and the key thing to get
+this to work fast is we want to amor
+ties the cost of setting up a
+transaction we don't want a transaction
+to replace the single cares so instead
+we would like it either try to replace
+all of the copies for that object or
+maybe all of the copies for a large
+number of objects so we can make our
+transactions as big as possible and
+there are two ways we can do this we can
+either do it in line or we can do it
+with a bit more cunning and planning so
+the inline copying we say we start the
+transaction and then we we add object to
+the transaction as the trace finds them
+and when we decide the transaction is
+big enough we commit it the problem with
+that method is that because you have to
+do all this translational activity
+you're putting too much stuff into your
+read and write sets you're not just
+putting the things you really want which
+is the right of that slot you're putting
+on lots of other stuff in as well the
+alternative is to do it in a planned way
+and here the idea is that you want to
+remove all the scanning traffic and
+translation traffic from the transaction
+so instead we start putting objects that
+we're going to copy into a to be copied
+list when we decide that list is big
+enough then we start the transaction
+copy the objects and commit so we get
+much smaller read and write sets so we
+can do more useful work in the
+transaction so that's hardware
+transactions we also try doing it in
+software as well so here the idea was we
+copy an object and then we verify that
+the copies is still correct so the
+copying is done without using a compare
+and swap we then verify the from space
+and to space against each other and we
+also have to have a buffer because
+because we've done all this translation
+if that comparison fire fails we fell
+back to compare and swap we fell back to
+compare and swap with hard
+transactions as well I should say so let
+me show you some results and the results
+are for the original method using
+compare and swap hardware transactions
+when we just copied one object at a time
+or when we were camping 256 bytes worth
+of objects at the time software and we
+also did an unsafe copy without
+synchronization now you can this is just
+so we could see what the bottom line was
+we did it in these these bitches are
+from from the capo eclipse so here we
+are this is the raw copying speed with
+the mutator stop so it's not what would
+you want to use for a real this
+concurrent collector but just to see
+what's what's what's the baseline so as
+you'd expect doing it the unsafe way is
+the fastest and doing it with
+compare-and-swap is the slowest but we
+got a pretty pretty decent speed up
+using either hardware transactions or
+software transactions and you can see
+that you know the software transactions
+are pretty much the same performance as
+we get with using hardware transactions
+why is this well the real reason is
+because our our consistency guarantees
+are quite relaxed we only need to be
+consistent eventually but at the time
+we've finished collection if there's
+some inconsistency in between that
+doesn't matter now so that's not a
+general transaction or solution we
+looked at what happened if we vary the
+size of the transactions and if we did
+it in line after we got about 256 bytes
+the performance fell off dramatically
+but if we did it in the planned way we
+maintained our copy speed as we decrease
+the size of the transactions we did it
+for real this is where the mutaters
+running so now we obviously can't use
+the unsafe version these are the results
+we got again using compare-and-swap it's
+pretty slow but using any of our
+transactional methods hardware or
+software we get a pretty decent speed up
+for about 48 2 101 percent
+of the rate of copying so we were
+encouraged by that so we thought hey
+let's go and play transactions elsewhere
+and we did an audit of all the other
+collectors and look to the fundamental
+mechanisms and there are two other
+fundamental mechanisms really one is can
+we do parallel copying in a stop the
+world collector so you've got lots of GC
+threads trying to collect at the same
+time and here you want to make sure you
+only copy an object once so you don't
+get a divergent trace and we also looked
+at bitmap marking instead of setting it
+a bit in the header of an object which
+we could do was an ordinary right
+because it doesn't matter of two threads
+do it in different order this play bears
+right one you've still got one look at
+doing it in the bitmap so here you've
+got a bitmap with one bit very jobject
+in the heap and here if two objects try
+try to write to the same word unchanging
+different bits you need to use
+synchronized operations because
+otherwise you might you might miss one
+the answer is it didn't work it didn't
+give us any any kind of benefit and that
+was largely because well there's several
+reasons it was because the overhead of
+setting this up to do multiple
+operations at once because we didn't
+want to just replace one mark with the
+transaction all this overhead of setting
+up multiple ones outweighed the benefit
+it might of course be that Jax was just
+so well engineered for doing it the way
+it does it that we couldn't beat that or
+it might be that the the architecture of
+Jack's which we try to meddle with those
+little boss was was too complicated to
+provided too much overhead so i can see
+matthew looking at his watch last slide
+so we found we could gain performance
+with transactions if we had sufficient
+and concise work so sufficient means
+we've got enough work done in the
+transaction to amortize the cost of
+setting it up and concise means taking
+as much work out of that transaction as
+possible and i guess the interesting
+angela is that using a portable method
+with software transactions gives us just
+as much benefit using hardware
+transactions so we don't need Intel
+after all okay so just type of few short
+questions yeah transactions on the
+racing these in our bones the template
+are you still have racy reads for
+improved performance in the barriers um
+I think sir you'd have to ask cow who
+who implemented it but I think it did
+yeah I mean really we we didn't we
+didn't do a lot more than what I showed
+you on the slides and you know we
+weren't we were careful to take stuff
+after the transaction that we could but
+apart from that transactions within two
+years really sorry we only did it for
+the collectors no locks here we're not
+replacing logs we're replacing these
+these sequence of compare-and-swap
+operations to do the copying it's
+entirely possible that I mean there are
+other things that are interesting we
+could maybe use transactions to replace
+locks in the system where there are
+locks or or maybe we could start from
+scratch and say how could I build a
+collector that just used transactions
+you know really start from a blank sheet
+of paper but that's quite tricky i mean
+we thought about it a bit but it's not
+clear how to do that i mean hang it's an
+interesting challenge yeah that's what
+we do thing and you could say i mean you
+could say well look look at the the
+absent of mosses impression wireless
+what they want to use cats for copying
+what a dumb idea well it works and it
+takes it takes a load off the mutator
+government so when you reduce the
+problem with references I was expecting
+you to say that you heard your
+transaction to solve that I would that
+be crazy I got my head around it yet
+because he want to Atami to clear all
+the references at once yeah yeah I think
+the reason the reason we did do that is
+it's dealing with copying you can put a
+clear bound on where the transaction
+starts and where transaction finishes
+and it's quite limited if you start
+doing it with with reference types it's
+in the sense under the amount of oil
+that might be done on the mantle work
+that goes into read and write sets
+because you've got all you know
+everything all the roads running gets
+very very very much larger and so it's
+difficult to see how you'd do that so we
+didn't I mean maybe there's a way to do
+but it's not obvious to me that there is
+these erases the lottery so how much an
+intermediate erasers you tolerate
+especially in the copying phase right
+okay Jellico that's correct with respect
+to the Java memory model but much more
+right so so if you read the original
+Hudson Tomas paper it says sapphire
+worked properly for data race free
+programs and then it sort of flaps its
+hands about when he talks about
+volatiles well what we did was we said
+well okay Paula tiles are tricky let's
+see how often they used so we measured
+all the these benchmarks and found out
+how often volt owls were actually how
+many objects had volatiles in them and
+the answer is for these benchmarks not
+wall tiles won't use much so we kind of
+passed on that by putting it all objects
+at a blue volatile field into a separate
+non-moving space Jax has many spaces it
+has a copying space it as a large object
+space it has a code space it as a an
+immortal space it has a non-moving space
+so we said well there aren't many
+objects with with volatile fields were
+put those objects into the num
+moving space tick now that I think that
+were as a solution that works very well
+for these benchmarks but you might say
+to me hey the future is massive
+concurrency we're going to be using
+volatiles all the time that solution
+might work maybe we formalized in terms
+of the strong and weak references and
+their trans actors or do you think that
+should become part of the John language
+specification something given that
+references are so intimately tied into
+into the to the language I think this is
+a general question mean I talk to us to
+Scott Owens who used to be here and you
+know does something belong in a language
+specification does it belong in a
+library where does it belong is an
+interesting question which I I i passed
+the theoreticians but it's only struck
+me as odd that something that is it is a
+core part of effectively the language he
+is pushed to this rather informal
+definition in a package does Oracle take
+as much care with writing its text in
+the Javadoc for packages as maybe guys
+ski or echo do in the Java language
+specification I don't know I never I
+know how much most engineers enjoy
+writing documentation and keeping it
+up-to-date okay let's think rich the
+Emperor wonderful talk</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

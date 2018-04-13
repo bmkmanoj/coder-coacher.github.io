@@ -1,0 +1,2127 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Tuning JVM for a VM - Lessons Learned, Directly from VMware | Coder Coacher - Coaching Coders</title><meta content="Tuning JVM for a VM - Lessons Learned, Directly from VMware - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/InfoQ/">InfoQ</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Tuning JVM for a VM - Lessons Learned, Directly from VMware</b></h2><h5 class="post__date">2012-04-12</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/V3o4VNkTyTY" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">this feels a bit like a speed-dating
+event like I feel like I should say well
+I'm Ben Corey I like ponies frolicking
+in the countryside karaoke and cinema I
+have a sense of humor
+so I'm from VMware sprinkles is the logo
+on my slides SpringSource was acquired
+by VMware about a year and a half ago
+and I was part of that acquisition and I
+was little nervous coming here the
+VMware recruiter actually called me up
+this afternoon and said Oh Ben you know
+I heard you're doing some SF drug thing
+this afternoon could you possibly plug
+VMware and like it's a cool place to
+work I'm like why it's kind of you know
+developers and you know but given that
+everyone else has done it I you know
+VMware's a great place to work there you
+go I did come work for us we're
+recruiting so SpringSource was acquired
+by VMware about 18 months ago I was part
+of that SpringSource acquisition it's a
+part of my introduction here and I've
+basically spent my whole career in Java
+I left University 98 went worked for IBM
+when Java was you know kind of just
+starting out it sound like a really cool
+thing to do
+started off testing Java warm on 4 then
+got into JVM development at IBM I
+basically took the j9 JVM from being a
+micro addition to standard edition JVM
+then I developed a class sharing
+capability in that JVM over about 5
+years I won't go into any detail on that
+but it was it was pretty cool it's a
+really good grounding in instead of JVM
+development and that whole area then I
+moved to spring sauce because I wanted a
+change I wanted to get out do something
+different
+learn about stuff higher up the stack so
+I spent 18 months basically touring
+Europe and various places teaching
+Spring Framework and teaching OSGi and
+teaching you know Tomcat and Java and
+all this kind of stuff and then VMware
+acquired SpringSource and they were like
+well we've got this big Java stack and
+we know that there's still some areas in
+which we really want to improve Java and
+so they gave me the opportunity to come
+over here and basically just kind of
+it's really small projects looking at
+how we can make Java perform better in a
+virtualized environment so I spent the
+last 18 months doing exactly that
+basically just spending the whole time
+looking at you know where where is the
+work that we still need to do what are
+the things that customers are still
+complaining about right and one of the
+things I will be talking to you about in
+this presentation is the product I've
+been working on for the last year
+because it's cool you know I'm really
+proud of what we've done I'll be giving
+you a sneak peek of what we are going to
+be doing as well which you know
+hopefully will work I've got a very
+complex demo and the last time I gave
+this presentation the demo very
+embarrassing ly just didn't work at all
+because the network went down so I'm
+hoping we'll get the demo working if we
+do it should be a really good
+illustration the kind of things I'm
+talking about so that's enough of an
+introduction so what I really want to do
+in this presentation is go in-depth
+looking primarily at memory management
+for Java when running virtual now I'm
+going to go into some background on just
+kind of the whole layers of memory
+management in the hypervisor and the
+operating system I'll be going into some
+detail about different types of memory
+management in Java and then ultimately
+tying all those things together and
+looking at how they interact what I
+really want to examine are some of the
+performance pitfalls that you can end up
+hitting and ultimately what we've done
+to help address that by the way do shoot
+out questions observations abuse as we
+go will the we Q&amp;amp;A at the end but you
+know I will try and try and deal with
+questions as they arise and I'm sorry
+this is a little bit dim during the demo
+I will be zooming in and stuff so you
+can see a bit better so I've just got a
+few kind of what is virtualization
+slides hopefully most people are
+familiar with this it's really about
+taking what were physical machines and
+essentially creating a mechanism of
+virtualizing them making virtual
+machines out of your physical machines
+putting them all onto a larger piece of
+hardware to give you these benefits
+so you know we're running multiple
+operating systems of a machine we can
+get high availability you know we we can
+monitor things a whole lot better
+you know the more configurable so really
+we're looking at taking a whole bunch of
+physical machines and consolidating them
+down into much more manageable and
+configurable systems and of course once
+you've done that you know you can then
+take advantage of high availability
+stuff and some of the other cool things
+that virtualization is able to do one of
+the things that is worth mentioning
+about virtualization knows it allows you
+to treat resources in arbitrary ways
+right so you can basically create pools
+of resources whether that CPU whether
+that's memory and you can put VMs into
+those pools of resources and create
+arbitrary constraints around memory and
+CPU to divide up the computing resource
+that you have available to you the
+reason I mention this is because we'll
+be referring to that a little bit later
+on so what I'm gonna do is I'm gonna
+start off looking at the existing Java
+best practices that we have now it's
+really interesting actually the guy that
+wrote our best practices guide he's
+spent quite a lot of time working with
+companies that have been virtualizing
+java in fact he's been doing it for
+years and he's really sort of gone
+through this whole process of
+experiencing problems that customers
+have had coming up with solutions
+finding a lot of the commonly
+experienced problems and at VMworld
+every year he gives a talk on Java best
+practices it's a whole hour-long talk in
+itself he's written a paper that I've
+referenced online but every single year
+it seems like there's exponential growth
+in the people that are virtualized in
+Java
+yeah every year it just doubles in size
+and at the start there's always a show
+of hands it's like yeah we're
+virtualizing Java we have or we're in
+the middle of it and there's a lot of
+interest at this point in ok how do we
+do it without tripping up on the kind of
+common problems so the first thing I
+want to look at is you know some of
+those just a summary of some of those
+things before we start looking in depth
+of memory it's worth mentioning that
+actually hardware does have a part to
+play in how effectively virtualization
+performs there's various different
+you enhancements capabilities that
+appeared from sort of 2006 and the more
+recent CPUs particularly ones that have
+the MMU virtualization give you much
+better performance with virtualization
+so that's definitely something to just
+to bear in mind we do have some really
+good papers though online we have best
+practices so this is a general best
+practice virtualization paper for just
+running anything on vSphere but we also
+have a specific Enterprise Java
+applications best practice guide and as
+I say that is all the expertise of this
+colleague of mine boiled down into a
+paper it's really worth reading if
+you're virtualized in Java are
+considering virtualizing Java so let's
+think about before we are going to depth
+in terms of memory some of just the
+things like pulled out of that paper so
+with memory one of the first sort of and
+and most importance of underlined best
+practices that we've had for a long time
+is always give Java a hundred percent of
+the memory that it needs right don't
+over commit Java right and the reason we
+don't over commit Java is one of the
+things I'm going to explore later on
+this presentation but really it's
+because Java is a special case right
+we're gonna explore why that is later
+but it's like don't even think about it
+because there's potential pitfalls
+second thing try to reduce the Java heap
+if possible to avoid wasting memory well
+that's that's not a good message because
+you know we set our Java heaps to be a
+particular size for a good reason we
+don't want to go out of memory you know
+we want the garbage collection
+performance that we desire so you know
+that's not a good message either right
+using large pages again we'll look at a
+little bit later that does help with
+performance but as I say we're focusing
+mainly on memory in this presentation so
+we'll move on from that now there's a
+whole bunch of best practice advice
+about the number of CPUs because with
+virtualization of course you can select
+how many B CPUs you want and sometimes
+it's difficult to figure out you know
+should I just give it like 16 and
+that'll just make it perform better or
+should I give it to you know it's
+actually quite a difficult question
+generally the best practice that we have
+is you know more is not necessarily bad
+right typically try to match the number
+of CPUs to the number of garbage
+collection threads that you have and you
+can set that on the command line you
+know you can figure that yourself and in
+fact the JVM will should auto tune the
+number of garbage collection threads to
+the number of CPUs you have as well but
+that's the main bit of advice around
+CPUs and there's a bunch more in the
+paper and I recommend you go and look at
+that in more detail the timekeeping is
+an interesting one too it's not one that
+you would necessarily think about but
+actually you know with virtualization
+you can get uh situations where you have
+very fractional sort of sort of errors
+in terms of in terms of extremely
+precise timekeeping and so there are
+particular distributions of Linux and
+Windows and I've actually got an
+appendix in the back of this
+presentation and I'll show you the
+appendix at the end there's there's
+various things that we recommend to make
+sure that you don't run into those
+problems because they are kind of subtle
+you weren't necessarily spot them
+immediately and then there's a whole
+bunch of stuff in the paper as well
+experience gained from scalability in
+terms of you know how do we scale
+vertically how do we scale horizontally
+so I do recommend if you if you are
+virtualizing java you have a virtualized
+it go read the paper because it's it's
+got a lot of good stuff in it okay so
+that's kind of just a very very
+high-level overview of some of the
+things you need to think about when
+virtualizing java but as I say I'm gonna
+focus on memory now the main reason I'm
+gonna focus on memory is because memory
+is the one area that's still not great
+right the best practice advice that we
+just saw which is try and reduce your
+heap size don't over commit memory it's
+not a great message right and we've been
+giving this message here year after year
+and this is why vmware brought me in to
+try to see if i could do something about
+this so this is why we're gonna be
+focusing on memory and what i want to do
+is actually go through sort of a whole
+series of slides explaining how the
+various layers interact because that
+will give good background in explaining
+why java responds in the way that it
+does so when we think about virtual
+memory say we have virtual memory here
+we're thinking typically about the
+application space and the operating
+system
+eight virtual memory the operating
+system ultimately maps out to physical
+memory but then if you introduce
+virtualization you actually introduce
+another level of indirection so if you
+write some virtual where you write some
+memory at this level it gets stored in a
+memory address of that level and then
+gets mapped to a memory address actually
+on the host your VM is living in so
+really we can think about you know
+memory being written to one place it's
+stored in another address here and kind
+of stored actually on the physical
+memory which we call machine memory on
+the host confusingly physical memory
+here is what we describe as the memory
+in the operating system which of course
+when is virtualized is one level of
+indirection above the actual real
+physical memory so when we think about
+what lives at these levels we've got the
+application at the top here the
+operating system and the hypervisor so
+when we think about a virtual machine
+and by the way in this presentation
+those of you who say VM when you mean
+JVM I won't be confusing the two right
+well no when I mean JVM I'll say JVM
+when I mean VM I'll say VM we have so
+much confusion and at work so a VM
+encapsulate those two layers the
+application layer and the it sort of
+based operating system layer so let's
+think about application memory
+management typically an application is
+going to allocate some memory when it
+needs it it's going to do some work and
+then when it's done with that memory a
+well-behaved application is going to
+free it right it's going to free it back
+back to the operating system then when
+we think about how the operating system
+manages memory of course its
+responsibility is to juggle the memory
+needs of the applications that are
+running on it okay so it has a free list
+it basically doles out memory it might
+swap memory to disk but its job is to
+manage the memory that the applications
+need and as I say it defines the
+semantics of what allocated memory and
+what free memory actually is and all of
+that information exists at that
+operating system layer so when the
+operating system wants to actually write
+some memory the hypervisor gives it a
+memory address and the memory is written
+into the hypervisor and that continues
+and continues adding four nights
+so the hypervisors actually the thing
+that owns the memory that's being
+written to and it's managing this level
+of indirection between the operating
+system and itself now the fact that
+there's a level of indirection here
+actually allows it to do some pretty
+cool tricks that we're going to look at
+a little bit later on but the important
+thing to understand here is machine
+memory is lazily allocated as it's
+needed okay which which makes sense you
+know there's no reason you would
+allocate all the memory the operating
+system needs upfront so what happens
+then if the operating system actually
+wants to free memory or the application
+what's a free memory back to the
+operating system well let's say the
+application just here has just freed
+that great bit of memory okay it's freed
+the memory so that memory now appears in
+the free list however the hypervisor has
+no idea that that's just happened it's
+still maintaining the state of that
+memory because of these levels of
+indirection it just has no idea and
+actually there's quite an important
+separation of concerns there that means
+that it really shouldn't know what
+applications own what memory at what
+time right so the memory has been freed
+but the hypervisor isn't aware that
+that's happened so if we actually play
+this scenario out let's say an
+application starts up so the application
+starts up it writes some memory which
+means the memories come off the free
+list and it's been written into the
+machine memory on the hypervisor let's
+say it writes some more memory and the
+same things happened again now let's see
+it frees that memory back so the
+memories gone back on the free list in
+the operating system but the hypervisor
+is still maintaining the state of that
+memory now it's allocated some more and
+now it's freed that memory but you can
+see how the memory becomes basically
+garbage memory in the operating system
+but isn't garbage memory in a hypervisor
+the the the state of it is still
+maintained so what actually happens here
+if we think about the VM as a black box
+what actually happens is that you just
+see from the hypervisors perspective
+that memory is just being written to and
+written to and written to and
+- and written - there's there's no way
+the hypervisor has of actually
+determining what memory it can actually
+reclaim from that VM again because of
+this separation of concerns that exists
+so so over the years various different
+mechanisms have been developed to try to
+reclaim memory from VM I'm going to look
+at some of these mechanisms in the next
+slide we can kind of divide these
+mechanisms into proactive mechanisms and
+reactive mechanisms right a proactive
+mechanism is one that's kind of you know
+very low priority over time it's going
+to try and reclaim some memory if it can
+a reactive one is like I need memory
+give me a memory right so transparent
+page sharing is an example of a
+proactive feature right so there's a
+background thread that just rolls around
+kind of slowly and just looks to see if
+there's any identical pages at this
+level in the hypervisor and I remember I
+told you that level of indirection
+between the VMS and a hypervisor
+allows for some cool tricks so what it's
+actually able to do is it's actually
+able to point identical pages at the
+same machine page and then if any any of
+these pages were actually written to
+behind the scenes there's a copy on
+right it gets its own copy of the memory
+and ultimately what we've done there of
+course as you can see is we've saved
+some memory by sharing sharing memory
+now most of the memory that we share is
+going to be immutable and it's you know
+gonna sit there for a while and
+eventually find this immutable memory
+and share it but that's quite a useful
+feature there's no point duplicating it
+now if the hypervisor actually quite
+urgently needs memory right then a
+reactive technique that it can use is a
+technique called ballooning and what I'm
+going to do is explain a little bit
+about what ballooning is for those of
+you who haven't seen it before let's say
+we have a couple of VMs and they're all
+using memory on the hypervisor or
+ballooning is basically a way that the
+hypervisor has of putting a direct
+pressure on the operating system to
+force it to give back memory okay now
+I'm going to show you exactly how that
+works in this next slide
+let's imagine that the hypervisor down
+here has eight pieces of memory that
+have been written to okay this is a
+machine memory that's been written to
+but you can see this guest app here
+actually only has three bits of memory
+that it's using this means that there
+must have been things running beforehand
+that's left a whole bunch of dirty
+memory here in the operating system and
+that's then still allocated in the
+hypervisor so the hypervisor is
+basically saying I need some of this
+memory back right from the operating
+system and you can see there's actually
+plenty of free memory there so it has
+this thing called a balloon driver and
+the job of the balloon driver is to take
+instruction from the hypervisor and
+allocate memory so let me show you let's
+say the hypervisor says right I need
+three bits of memory well the balloon
+driver allocates a memory and it now
+owns that memory in the operating system
+so the memory has gone off the free list
+the balloon driver then pins the memory
+to make sure that it can't be swapped to
+disk and it can't move what it then does
+is it then passes a message back to the
+hypervisor saying okay I now own this
+memory and I've pinned it so it's not
+going anywhere
+here are the addresses of that memory
+you can have it back so it's like a kind
+of a sort of the balloon drive is like a
+secret agent with a red telephone
+working on behalf of the hypervisor
+undercover inside the VM it makes it
+some more exciting than it is but you
+know it's it's a nice image so so what's
+what's happened there importantly is the
+hypervisors been then able to decouple
+that memory and of course now instead of
+having eight pieces of memory we now
+have five pieces of memory allocated and
+ballooning the first time you come
+across it is actually a little bit
+counterintuitive and that's what we're
+doing is we're actually allocating
+memory in order to give it back so one
+possible side effect of this ballooning
+is that potentially there's not actually
+going to be enough memory for the
+balloon driver to take without causing
+any side effects of that operating
+system all right so let's imagine
+there's loads of free memory the balloon
+driver takes the memory
+everything's good but if there really
+isn't much free memory in that operating
+system and the balloon driver takes a
+bunch of it there's a potential that
+it's going to eat into the buffer cache
+which maybe is what we want but there's
+also potential it might start paging
+other applications to disk the question
+was whether the operating system is
+aware this is going on and the answer is
+yes it is because the balloon driver is
+just a process that runs in there and it
+simply just allocates some pins memory
+and then if the hypervisor wants the
+balloon to shrink it just frees the
+memory they're allocated and tells the
+hypervisor that's happened so the
+operating system is very well aware that
+that's happening and in the sense that's
+kind of the point because what we're
+trying to do here is we're trying to
+make the operating system do the right
+thing within its own framework of memory
+management right we're putting pressure
+on it and if it decides okay I'm gonna
+give up some buffer cache or if it
+decides I'm going to swap this
+application to disk or even if it
+decides I'm going to kill this
+application because I'm completely out
+of memory that's the right thing for it
+to do because we're not telling it what
+to do we're just kind of having you know
+we're putting memory pressure on there
+that makes sense so so let's look at a
+couple more techniques the hypervisor
+has available to it very quickly again
+these are reactive right so if
+ballooning doesn't give us enough memory
+we really don't want any VM violating
+any constraints or using more memory
+than it should and so the the hypervisor
+will come down pretty hard on a VM that
+doesn't behave and one of the ways it
+can do that is by compressing memory so
+here you see this piece of blue memory
+here what it can do is that can actually
+zip it and then sort of have a sort of
+pseudo reference to it and then it will
+uncompress it if it needs to be read
+back in again
+so it's like swapping but it allows
+hypervisor to keep it in memory and so
+it's more performant than swapping to
+disk but of course at the last resort it
+can actually swap memory out to disk
+again it's a way to free memory but it's
+not going to be performant so a really
+important question that that's raised by
+this whole topic of memory reclamation
+is when does the hypervisor reclaim
+memory
+which vm's does it target for this kind
+of reclamation well the answer to when
+it reclaims memory is simply if it's
+under memory pressure right so the
+passive technique that we saw happens
+all the time regardless it's very very
+low cost it doesn't you know there's no
+real no real notice no one really
+notices if that's happening whereas the
+reactive techniques are only employed if
+there is memory pressure on the host so
+remember earlier on we talked about how
+you can create these resource pools so
+let's say for example that I've got two
+VMs that are four gigabytes each so I
+have eight gigabytes of vram in total
+and I put those into a resource pool
+that I say okay I only want you to have
+six gigabytes we've basically then
+applied some memory pressure by saying
+these guys can only consume a maximum of
+six gigabytes on the host and it's at
+that point the hypervisor is going to
+have to start basically putting memory
+pressure on these guys and really doing
+a journaling act under the covers to
+make sure that they only ever consume
+that six gigabytes so that's when
+reclamation occurs which vm's is
+actually another interesting question
+because you don't want to be reclaiming
+memory from VMs that are very active or
+they have you know a lot of memory and
+use and so well the hypervisor does is
+it is it makes a pretty accurate
+estimation of the amount of active
+memory in a VM so we'll look at the
+number of reads and writes going on with
+any given VM it will estimate how much
+of that memory is actually active how
+much of it is in use and it will target
+the least active VMs for reclamation and
+actually this is exactly what you want
+you know you may have two VMs one of
+which is serving one geography and the
+other of which is serving another
+geography that's twelve hours
+you know advanced and so for part of the
+day one's going to be really active for
+the other part of the day the other
+one's going to be really active and
+again that that's a perfect candidate
+for that kind of resource juggling you
+know you'll get memory reclamation from
+the least active one when it's most
+appropriate and the most active one gets
+all the memory that it needs so that's
+basically the tricks that are used under
+the covers to make sure that in general
+it makes the right choices and the right
+decisions I will say though
+things that are very highly performing
+like anything that is you know latencies
+are critical you know any kind of memory
+of a commitment regardless of the
+receiver is probably not going to be
+appropriate right because because
+there's always going to be a small cost
+incurred regardless of you know
+regardless of how big or small that
+actually ends up being so having looked
+then at these memory reclamation
+techniques yeah hi yeah so if you
+weren't to use a resource pool there's a
+couple of different ways that memory
+pressure could occur you could actually
+have the entire host to be able
+committed for example so if you've got
+you know 32 gig and the host and you
+have enough the aims at total 48 gig
+that's one way in which it will try and
+reclaim memory you can also force VMs
+into situations where they have to run
+in less memory than you've given than
+they think they have that's less a less
+of a good idea because you basically
+bypass the hypervisors sort of
+intelligent estimation that point but
+but there are various different ways of
+making that happen yeah and of course
+you know this integrates quite nicely
+with the V motion technology as well so
+if one host gets under too much memory
+pressure it'll start moving vm's off on
+to another host you know that you might
+have the backup so you know that it
+works in an integrated way with that so
+what I want to look at now is Java
+memory management and then we'll sort of
+hook the two together now what's
+interesting when we look at Java is
+there are actually some quite
+interesting parallels between the black
+box relationship that we saw between VMs
+and the hypervisor and the relationship
+between a JVM and the operating system
+okay so let's look at what happens when
+a JVM starts up so the JVM starts up
+let's say the JIT initializes the
+interpreter initializes the garbage
+collection initializes and then your
+application starts so your application
+is going to start writing data into the
+heap and it's going to be of course
+chewing into the memory in the operating
+system so we'll fill up the heat heap as
+we're allocating objects and eventually
+there's going to be a garbage collection
+so the garbage collection occurs and now
+that's great we've got some free memory
+right but the thing is the free memory
+only available to the jvm that that
+memory is now no longer available to any
+other process in that operating system
+okay so the operating system has no way
+of reclaiming that memory in exactly the
+same way as a hypervisor had no way of
+reclaiming the memory from the operating
+system right it's exactly the same kind
+of relationship so let's just play out
+some scenarios then and look at what
+what differences different heap
+configurations could make because this
+is actually quite interesting there's
+quite often you get the question about
+is it better for me to have XM s and XM
+x sector the same thing or is it best to
+have XM s set smaller than XM x well you
+know it actually really depends largely
+on the kind of application you have
+typically when I was at IBM we will tell
+customers never set XM s equal to XM X
+because if you have an on generational
+heap you basically work work work work
+work work work Oh massive garbage
+collection no and that's not necessarily
+what you want but let's have a look
+let's play out a scenario and compare
+the behavior of a partially committed
+heap with a fully committed heap so with
+a partially committed heap here the
+initial size is smaller than the maximum
+size and let's allocate some objects so
+you allocate an object okay and other
+objects oh the heaps of all right so I'm
+gonna have a garbage collection so we've
+had a garbage collection that we've
+collected half of our data in the heat
+so the next object is actually gonna
+overwrite this memory here which is
+which is good so then we've reached the
+maximum size that heap again and this is
+what the JVM will do if well the Sun JVM
+anyway is that when it gets to a point
+where the heap is full that will do a
+garbage collection and it will increase
+the size so this is what it's done again
+we're going to overwrite the garbage
+that was there before and eventually we
+will get to a point where we've done our
+final garbage collection and this is the
+amount of memory we're now consuming as
+our footprint in the virtual machine
+sorry I should say in the guest
+operating system now let's play this out
+again with a fully committed heap
+when we set X MX XMS equal to X MX so as
+you can imagine we're just going to
+basically now at this point remember
+that yellow thing
+has become garbage oh and now the blue
+things become garbage but because we've
+had no garbage collection of course you
+know that's that's not really been
+registered yet so eventually we will get
+a full garbage collection the
+consequence of this heap configuration
+well there's two interesting
+consequences here one is that the
+footprint of this JVM is now bigger on
+the operating system and the way that
+the hotspot JVM works is that it's very
+very reluctant to shrink its heap you
+can force it to shrink as heap but
+generally it's very reluctant to because
+it kind of assumes okay I've got you
+know all this memory I can just kind of
+use it it's fine now there are other
+JVMs that will shrink their heaps very
+aggressively azules JVM for example will
+do that and so that's going to be quite
+different behavior but certainly with
+the hotspot this is what you get now the
+other interesting thing here is that
+it's left more fragmentation in the heat
+which is ultimately going to have to be
+sorted out now I'm not saying that that
+this is always better but it's
+interesting to see the consequence of
+just that different heap configuration
+has had and to a certain extent it's a
+side effect of the amount of live data
+you have at any one time right this is
+how this is ultimately going to behave
+so you know in a few minutes we're gonna
+tie those two things together firstly
+though I want to mention large pages
+because I talked about that briefly
+earlier on we do recommend in our best
+practice guides that you use large pages
+when you use Java a lot of people don't
+in fact most people don't bother to use
+large pages partly because it can be
+kind of a pain to configure and if any
+of you have used Linux and Java I mean
+it's just you know you go around around
+around trying to figure out exactly you
+know which exactly how to make it work
+because the error messages really aren't
+all that helpful if you get it wrong but
+it does actually make quite a big
+performance difference we have put some
+papers out on that that you can search
+for but the reason that it performs
+better is because there's much less
+indirection at least we managed or the
+liyan Direction is at a different
+granularity so it's much much easier for
+the hypervisor to handle those large
+pages than it is for smaller pages so
+let's tie these things together and look
+at how the
+the M and the hypervisor interact when
+it comes to memory management so just to
+recap what we've talked about we've seen
+that the VM is a black box the
+hypervisor we've seen that the JVM is a
+black box to the guest the guest
+operating system we've seen that the
+most efficient way of reclaiming memory
+is ballooning right but ballooning
+basically forces the operating system to
+to give memory back to the hypervisor
+now given that when you're running Java
+the operating system has no way of
+actually getting memory back from the
+JVM we're actually applying the memory
+pressure at the wrong place right and
+and that can have interesting
+consequences right so Java's memory
+management basically breaks this model
+at least with with the hotspot JVM and
+this is why we recommend that you don't
+over commit memory with Java and I'm
+actually gonna do some demos that will
+show you exactly what happens if you do
+that in a second so with ballooning the
+hypervisor yeah so I've already
+mentioned that that's fine so so let's
+have a look at what happens with Java
+let's actually play this out what we're
+gonna do is we're gonna run the exact
+same scenario that we just did in fact
+this is the situation that we left that
+previous scenario in and we're going to
+apply ballooning to that so let's
+introduce the balloon and then let's say
+that the hypervisor says okay give me
+some memory so the balloon inflates
+fortunately there's actually some free
+memory in that operating system and so
+that's all been fine and then you know
+the heaps written some more memory and
+everything's hunky-dory with a fully
+committed heat though remember we left
+it in this slightly fragmented and you
+know bigger footprint state we
+introduced the balloon suddenly the
+balloon is fighting with the JVM for
+memory so what it's likely to do is it's
+likely to swap the JVM heap out disk
+because it can't get access to that to
+that free memory and what's gonna happen
+well the next time a garbage collection
+occurs it's gonna be very slow because
+it's gonna you're going to have very
+high latencies trying to page all that
+memory back in from disk ok so what's
+interesting about this is the only
+difference between these two scenarios
+we configured our heatman right which is
+a really subtle thing but it's because
+of these subtleties that again we say
+you know what the providers are too
+complex don't do it okay
+now what's interesting actually is that
+the behavior of this ballooning various
+with large and small pages now those of
+you who've used large pages on Linux
+well know that the current
+implementation actually they're large
+pages are pens they can't be swapped to
+disk and so what happens is if you back
+the entire JVM with large pages and
+that's the majority of the memory in
+there in the in the VM the balloon won't
+swap memory to disk because it can't
+because it can't swap those large pages
+to disk so actually it simply won't
+inflate and the hypervisor will start
+host whopping it instead it'll start
+trying to compress it and her swap it
+and the performance will suck just as
+badly so it sucks in a different way but
+it will still suck and again we'll show
+you show you there happening again I
+want to stress just in case you know
+this actually gets me fired that I'm not
+saying that VM West performance sucks
+okay we just want to be clear about this
+right what I'm saying is that the Java
+memory model is incompatible with the
+ballooning and that's why we end up in
+espresso it's Javas fault that's what I
+want to say it's javis fault
+so well what about the transparent page
+showing well given that most the JVM is
+is rapidly changing memory most of it's
+not immutable really that's and that
+doesn't help a whole lot so just to well
+we talked about what memory over
+commitment is already so I'm going to
+skip past this page what I'm actually
+gonna do now is just kick off this demo
+just to kind of break the presentation
+up a little bit because it'll take a
+little while to run and we'll come back
+to it afterwards and hopefully we'll
+make sense
+now the last time I gave this demo was
+at spring one and in folk you were
+filming it and it went so wrong and it
+was so embarrassing and I didn't swear I
+did very well did not to swear but they
+posted it on info queue and its really
+embarrassing so what I'm gonna do is I'm
+actually going to log into some VMs that
+I've got running here now there's quite
+a few of them this is why this is a
+fragile demo if this thing shifts up
+slightly it means it's still running
+there we go so what I've got is I've got
+twelve VMs in total running here or
+running Linux and if I log into here I
+have a Windows machine that I'm
+monitoring them all on I can also start
+je console so that I can monitor all of
+the Tomcat servers that are running in
+these virtual machines here we go now
+for those of you at the back I'm gonna
+zoom i zoom in to point into information
+because I understand it's gonna be a
+little bit small so so I'm just going to
+start Jake console on these there's
+Tomcat servers running in all these VMs
+and what I'm now gonna do is talk about
+what is actually in these VMs right so
+each VM is one point four gig and is
+running a JVM with a one gigabyte Haven
+now the JVM is running Tomcat and in
+Tomcat is a JMS message server micro
+benchmark that we have for exactly this
+kind of testing now the reason we have
+this JMS test is because a message queue
+is actually a really great way of
+managing how much live data you have you
+know the size of your message queue
+basically is the amount of life date
+you'll have at any one time you have a
+sender sending messages to the queue you
+have the receiver receiving messages
+from the queue you can control the
+throughput you can control all sorts of
+memory profiles to get sort of effects
+that you want so that's what we're
+running in these Tomcat servers
+what I'm going to do is I'm going to run
+a whole bunch of these tests
+these first ones here you see the first
+one here is just your standard one
+gigabyte heap with no overcommit that's
+our baseline the second one we've got a
+partially committed heap and we've ever
+committed that to 40% so at one point
+before gigabyte vm is going to be forced
+to run in one gigabyte of memory so
+that's our partially committed run here
+we have this same as the first one which
+is fully committed again over committed
+this time so baseline plus over commit
+the next one we're running with large
+pages the next one we're using
+concurrent mark-sweep garbage collection
+algorithm and the final one we're
+actually going to use more live data
+okay so we're actually going to force
+the heap to to grow more so these are
+our scenarios and I'm going to run them
+through we're gonna have a look at what
+happens and then sort of analyze the
+results at the end so what I need to do
+now is actually go into here and I have
+tell our fantastic I'm so pleased that
+this is working great so this is the
+interface to my little app now very
+simple right you can just say what is
+the size of message how many messages
+per second you wanna send what is the
+delay on the receiver what is the total
+number of messages you want to send and
+what is the size of the queue and using
+all of those things we can actually
+manipulate the memory in a very very
+simple way to create various different
+scenarios and we use this very
+extensively in our in our testing of the
+features that I do so what I'm going to
+do is I'm going to run this with a
+predetermined set of values so I'm going
+to kick all these off and what's nice
+about this is that it actually tells you
+in real time exactly what the garbage
+collection is doing all sorts of
+interesting information apologies for
+the I should have automated this really
+so this last one you see the message
+queue is 8 80,000 whereas in the others
+the message queue is 20,000 right and
+then it just goes down here it tells us
+you know what garbage collection is
+happening
+all that kind of stuff so it's just a
+really useful way to look at what's
+going on so what I'm going to do
+actually now is go to this second lot of
+VMs now these VMs are exactly the same
+as the first six but they're running the
+elastic memory technology that I've been
+developing over the last year and a half
+that I'm going to come and talk about in
+a second so we're going to run the exact
+same thing with that and again if you'll
+bear with me for two seconds for each
+tab just kick all these off again
+exactly the same scenario different
+configurations and then we'll move on
+and then we'll come back to it and we'll
+see exactly what's what's gone on what's
+happened cool right
+excellent that's all running so let's go
+back to the presentation and we will
+revisit this we will revisit this later
+on there we go so over-committing memory
+so what I'm doing there is a classic
+example of over-committing memory I have
+a VM that's 1.4 gigabytes and I'm
+forcing it to run in a memory that it's
+just one gigabyte it's just a classic
+case of over-commitment now of course
+this costs as I've mentioned before to
+this memory reclamation right and the
+costs are of course relative to each
+other the transparent page sharing that
+talked about is very very low cost and
+that's why it happens all the time
+ballooning actually when it when it
+works effectively it was very efficient
+you know it can reclaim memory pretty
+quickly
+it's and a lot of companies rely on
+ballooning actually to get efficient
+memory usage out of their hosts a
+classic example of this in fact I was
+talking to a company recently right they
+have the vSphere admins that hand out
+VMs to developers and they say no
+developer how much memory do you want
+developer says yeah eight gig right and
+then they run like a two gig process in
+there forever
+right and the buffer cache just fills up
+and fills up it fills up and the VCR
+admins are able to over commit that
+memory steal some of that buffer cache
+back the developer never notices they
+have a warm and fuzzy feeling
+they have their gigabyte VM but you know
+you're not wasting all that memory on
+the host I mean that's a classic case
+where this kind of technology is is used
+and we talked about swapping earlier on
+it's just important as well to
+distinguish between the swapping in the
+guest and swapping on the host I know
+we've already talked about this but it's
+worth making that distinction swapping
+within the guest is where the guest
+operating system is under too much
+memory pressure and it pages stuff out
+to disk swapping on the host is where
+the host basically goes this guy is
+using too much memory is violating the
+constraints that I've set for it I'm now
+going to start swapping memory from it
+so the guest operating systems not aware
+of that but it will happen under the
+covers now this slide this possible
+workaround slide was well it presented
+at a conference before had finished the
+silastic memory for java feature but I
+think it's still really worth looking at
+because it's the result of everything
+that we sort of understood from all of
+the work we did before we actually
+developed the feature so possible
+workarounds to allowing us allowing safe
+over-commitment of java well as we've
+seen the biggest problem with
+over-committing java is the lazy memory
+management you know where it just
+creates a large footprint may be full of
+garbage nothing can then get access to
+that memory and actually I bet I
+wouldn't want to show of hands but I bet
+there are people here who've worked at
+companies that just recycle JVM every
+night for this very reason you know they
+just or reboot VMs or whatever yes some
+smiles and some nods yeah it's like Oh
+God
+so tuning the Java heap so it collects
+garbage more proactively now that is one
+way that you can get around it as I
+mentioned earlier as those JVM does this
+out of the box it's very very aggressive
+at shrinking its heap but that has a
+very different approach to memory
+management with with the hospital um you
+can force it to do that by setting this
+max heap free ratio the downside you
+have to that though is that you're
+incurring increased garbage collection
+costs all the time regardless of whether
+you're in the memory pressure you're
+always paying that cost when potentially
+necessarily need to using a much more
+gentle in inverted commas garbage
+collection mechanism also makes a big
+difference now what do I mean by gentle
+well the concurrent the concurrent
+collector in the hotspot JVM does
+garbage collection all the time that's
+what concurrent means right it just kind
+of it just so does bits of garbage
+collection all the time
+now if the heap is swooped down to disk
+and it's trying to read bits of that
+swap memory and over time quite
+gradually the impact on the JVM
+performance is not actually all that bad
+because we're not hitting these latency
+bottlenecks of trying to stream masses
+of data off the disk but a classic
+concurrent sorry a classic mark sweet
+compact algorithm that's going to look
+at the heap and just go just try and
+read every single object in it before
+deciding which wants to collect that's
+the one that's going to cause the
+problems because reading in the entire
+heap if the heap is swapped out
+immediately you hit those bottlenecks
+and the latencies and performance goes
+down the toilet so CMS and again I'm
+going to show you this in the demo CMS
+performs a whole lot better off the heat
+gets swapped out it may not be what you
+want for your application but it's
+interesting to see the different
+behavior that it has you can if you want
+to set reservations on a VM and
+basically that says the hypervisor don't
+ever try and reclaim any more memory
+than this right so if you have a
+scenario where you know that you have a
+certain amount of buffer caches so an
+amount of memory that is safe to free
+then you can do that and that's one way
+to get around it yeah that's actually a
+really good question so the question was
+when I'm talking about garbage
+collection am i talking about the young
+generation garbage collection or the old
+generation so this is a really
+interesting question because I mean not
+all garbage collectors are generational
+but the majority the ones that we're
+dealing with here certainly in hotspot
+all of them well until g1 came along
+recently they are right the young
+generation to the hypervisor just looks
+like a very hot area of memory right
+memories being copied copy copy copy
+copy that it's just a very very you know
+it's a very consistent area of memory
+the old generation has a very very
+different profile right with a classic
+mark-sweep compact algorithm the old
+generation part of the heap you know
+you'll have memory being read maybe
+there's a cache that's stored in there
+maybe there's a whole bunch of garbage
+in there but you know there's not a lot
+of memory that's going to be read and
+written to in that old generation part
+of the heat there's going to be much
+much less active than the young
+generation part what's interesting about
+that is when the hypervisor is looking
+at that VM and estimating how much
+memory is active in that VM right it's
+it's quite hard for it to do because as
+soon as there's an old generation
+garbage collection the JVM suddenly
+reads everything in from from you know
+from from memory every single object
+walks all the objects figuring out which
+ones to mark on which ones to collect it
+looks like a huge memory spike to the
+hypervisor because all of a sudden all
+this memory has been read immediately
+and so what it looks like to the
+hypervisor is oh my goodness this
+application is just suddenly just grown
+its memory by 2 X 3 X or whatever it is
+and actually it's not that at all it's
+just a housekeeping operation right but
+it that kind of messes with some of
+these estimations as to how much memory
+is appropriate to reclaim as well right
+and this this is this is part of the
+problem we have with Java 2 is that the
+slightly eccentric way in which it
+manages memory leads it kind of fools
+the hypervisor to a certain extent in
+figuring out how much memory actually is
+really active at any one time so to
+answer your question specifically the
+problems occur with the old generation
+garbage collection because the the
+operating system will never really page
+out the young generation part of the
+heap it's just way way too active so
+that just to clarify that that's
+actually a really really important
+clarification so I was just talking
+finally there about reservations the the
+problem you have the reservations is
+it's a static setting that will
+eventually probably end up screen right
+because you'll set a reservation for a
+situation that you've got and then
+someone changes the heap size and who's
+gonna remember to change that
+reservation you know it's it's it's one
+of those classic cases where when you
+have when you apply static constraints
+to something that may be a dynamic you
+can end up causing yourself potential
+problems so so I want to get on to
+talking a little bit about elastic
+memory for Java because you know it's
+it's
+it's not that I'm here's a big marketing
+thing because quite honestly you know I
+don't care if you buy it but it's just
+interesting because it's what happened
+what I've been working on for the last
+year and it solves this very specific
+problem so elastic memory for Java is a
+ballooning technology that balloons
+directly out of the JVM heap right so
+we're actually able to target the memory
+reclamation in a VM that's predominantly
+running Java and put memory pressure
+where it actually needs to be which is
+in the JVM heap so when the balloon
+inflates it causes a garbage collection
+or potentially causes a garbage
+collection that will cause the JVM to
+give memory back to the hypervisor and
+now one of the design criteria we had
+with the foj is that it shouldn't be a
+custom GC policy it shouldn't be a
+custom JVM it's just a JVM t.i agent
+that plugs into hotspot and just works
+with whatever garbage collection policy
+you have whatever heat configuration you
+have it has heuristics that figures out
+what's going to be the appropriate
+balloon for that particular heap so it
+just plugs into what you have and just
+does the right thing so how does it work
+well remember our previous scenarios we
+had the partially committed heap left in
+this state remember that was fine we
+ballooned fine with that before but if
+we use a m4j and let's see what happens
+now with the m4j the existing balloon is
+disabled right we haven't designed it to
+work with the other balloon because
+coordinating multiple ballooning
+technologies was beyond the scope of
+what we wanted to do so what the
+infantry will do is if it wants to try
+and reclaim memory from the heap it will
+write some data into the heap that is
+just zeros right it's just zeroed memory
+and then the operating system will look
+at our zeroed memory and it's fine it
+just writes it into into into into its
+physical memory but in the hypervisor as
+soon as we've done that we actually have
+a way of saying the hypervisor here's a
+block of zero memory share this as fast
+as you can write and it can share that
+memory at 500 megabytes per second so
+effectively what that does is it very
+quickly reduces the
+of memory on the hypervisor and we'll do
+this again right let's the next one
+we're gonna write is gonna overwrite
+this blue memory and the hypervisor is
+gonna do the memory sharing so it's all
+pointing just to one single page on the
+hypervisor which then has freed up that
+memory again we'll do the same thing and
+it's freed up memory so really what it's
+doing is it's using a combination of the
+ballooning idea with some very
+aggressive page sharing just a free up
+memory on the hypervisor
+now why didn't we pin memory in the heap
+by the way we didn't pin memory in the
+heap so we don't pin memory in the heap
+because that would be a very bad idea
+because pinning memory in a JVM heap can
+cause horrible fragmentation problems
+and it's it's not something you want to
+do so the nice thing about this is it's
+actually completely tolerant of
+compactions so if there's a garbage
+collection we'll see in this one
+actually if there's a garbage collection
+and the balloon data gets shifted around
+it's it's it's actually that's not going
+to have any detrimental effect so let's
+imagine that in this scenario we looked
+at before where we had problems right
+with a fully committed heap let's
+inflate the balloon in that scenario so
+we inflate the balloon we add some more
+add some more and event let's say
+there's a garbage collection right so we
+collect some garbage it's now going to
+compact the balloon down but that's fine
+you know that that is what completely
+tolerant of that and the net effect on
+the hypervisor is exactly the same as
+with with regular ballooning now when
+the JVM shuts down that zerud memory is
+still written into the operating system
+so the balloon doesn't necessarily
+immediately go away right it will go
+away once we've written over that memory
+but that's that's the technique that
+we've come up with to actually get the
+JVM to do the right thing so what do we
+mean then by elastic well let's have a
+look at a scenario where we have two
+jaebeum's running in let's say two
+different VMs on the hypervisor let's
+say we put a load on one and so we put a
+whole bunch of stuff in the heap and
+let's say we put a load on the second
+one now the hypervisor now is actually
+getting a little bit lower memories
+it's like okay I need to reclaim some
+memory now it's gonna try and reclaim it
+from this guy because this guy is now
+the least active remember we talked
+about the active memory estimation so it
+will balloon in the JVM peep so what
+happens is we inflate the balloon in
+other words we actually allocate some
+objects in the heap that are just zeroed
+we get the hypervisor to very rapidly
+pay to share that memory and what's
+going to happen now is the next
+allocations got a force a garbage
+collection which it does and then we're
+going to balloon more in that heap
+eventually we've actually filled the
+entire heat with the balloon here which
+is not normally what you would
+necessarily do but the effect is that
+it's handed alert memory back so now
+this guy is on the load this guy is
+actually now able to use a list memory
+if the load switches back what's going
+to happen well the JVM should be
+perfectly able to write memory as the
+heat without us getting in the way right
+we shouldn't ever create an out of
+memory issue so it's going to try to
+write some memory does a garbage
+collection which kicks the balloon out
+and then write some memory in there and
+as it writes some memory well the
+hypervisor is getting long memory again
+so it's going to balloon in this guy so
+the net effect of this is that memory
+gets transferred between VMs in exactly
+the same way as it as a regular
+ballooning the main difference is that
+we've managed to find a way of targeting
+the ballooning at the right level in
+this this whole equation okay so before
+we look at this let's just have a look
+and see how our demo is going on can
+someone just tell me the time how we how
+we know at the time seven twenty five
+actually that's that's pretty good
+okay so I prefer to test software in
+front of people in a demo because if
+you're gonna find any bugs this is where
+you'll find them all right well that's
+fine J consoles giving me a little
+problem but that's fine
+all right let's go and have a look at
+the the scenarios now let's just remind
+us off
+what these scenarios are right what I'm
+going to do is to shift that up there
+just so that we can see it so the
+baseline let's look at the baseline
+first what is the baseline the baseline
+performance this is with a fully
+committed heap is that we've got one
+full GC 91 mine RG sees the whole of the
+GC time is been basically for three and
+a half seconds right that that's that's
+the baseline run of what we would expect
+to see marioman this is a one gigabyte
+heap so what's the next thing going to
+look at well the next thing we look at
+is a partially committed heat with
+ovarcome in right so partially come into
+the heat with over commit which is the
+scenario we played out earlier let's
+have a look that's not bad now we've
+seen many more GCS full GCS which you
+would expect because the heap has grown
+and grown and grown and grown like I
+showed you in the presentation right and
+naturally yes has overcome it on right
+so that this is number two with
+overcommit on and a partially committed
+heap so what this is demonstrating is
+that even though we over committed this
+VM it's actually performed pretty well
+and the reason it performed pretty well
+is because the heap didn't actually grow
+to any like huge size and didn't
+actually then start conflicting with any
+ballooning right because we use a
+partially committed heap so all these
+GCS kept the heap size down and okay we
+spent six seconds total and GC time but
+that's not you know that's not that's
+not bad so number three which is our
+baseline which is the fully committed
+heap with overcommit let's have a look
+at what happened there okay 53 seconds
+of garbage collection okay one garbage
+collection took 41 seconds now that's
+obviously a really big problem right
+because a single garbage collection that
+takes 40 seconds is the time during
+which your your your server is
+completely unavailable well at least
+again with with the hot spot garbage
+collection stop the world that we're
+talking about that said that's a serious
+problem and with a one gigabyte heap
+that's that's a long garbage collection
+right now what's interesting is if we
+actually go and look at the vmstat
+output of of these right here 21 so yes
+okay so actually this is the one I want
+to look at is this one here now look at
+this right this is all the swapping that
+went on right so everything was fine
+everything was fine everything's fine
+suddenly it was like paging nightmare
+right and and what happened after I
+don't know I mean some of you may not be
+familiar with looking at this format but
+basically what happened here is a
+balloon inflated paged massive amounts
+of the heap to disk and and the garbage
+collection exacerbated that and that's
+why it turned into a mess and with
+number two again this is actually quite
+interesting right with number two you
+can see we still got eight hundred and
+thirty five megabytes free so that that
+actually hardly used they use very
+little memory at all
+number one the fully committed heap you
+see we only have fifty two megabytes
+free so the fully committed heaps left a
+much much larger footprint even though
+it's exactly the same scenario right so
+this is just illustrating everything
+we're talking about earlier so let's
+look at number four which is the large
+pages right so this is exactly the same
+as what we just looked at except we're
+using large pages instead of small pages
+now if we look at the vmstat output
+you'll see there's no swapping there at
+all right absolutely no swapping and
+that's what I would expect to see
+because we can't swap out large pages
+we've got almost no mint free memory but
+the hypervisor basically couldn't
+balloon and so what we will see if we
+actually go and look at this vSphere
+client here and go and look at this this
+VM what is it 23 yeah it's 23 yeah
+actually it's not actually that easy to
+see cuz it's in yellow but there is can
+you actually see that yeah you can
+like that yellow spike is is swapping
+right that's memory being swapped out
+and so it's gonna have a look at what
+the performance was at that sorry did
+you find where where I was though too
+many windows here performance of that
+191 seconds right so we had one garbage
+collection that took 150 seconds that's
+pretty much three-minute garbage
+collection which is even worse than with
+the small pages right this is why we say
+don't overcommit memory with Java right
+because because again it's it's you know
+it's it's a it's it's these incompatible
+models so let's look at how concurrent
+mark-sweep performed with this exact
+same scenario right so we have same
+overcommit same heat configuration and
+what we see now we can't directly
+compare garbage collection times of this
+because because JMX doesn't report full
+garbage collections in quite the same
+way but what we can look at is we can
+look at how long the thing took to
+complete which it should show us whereas
+it shows that it shows us that 6 minutes
+35 seconds right it took six minutes
+that so that's if an effective
+measurement of our throughput so that
+took 6 minutes 35 this one here took 10
+minutes 24 right that's our bad case
+that took 10 minutes 24 our best case
+took 6 minutes 33 so actually the
+throughput is pretty reasonable this
+with CMS and if we go and look at the VM
+step output of this this should bear it
+out that's interesting why is that not
+hmm
+okay that's interesting I would have
+expected to see some some swapping on
+that one I don't think that's
+misconfigured okay well let's not worry
+too much about that so then on 25 what I
+did is they increase the buffer size
+four times the buffer size we have much
+more live memory but I had the scenario
+where we have the partially committed
+heap so remember with the partner number
+two partially committed heap over
+committed it works fine but it's because
+we had quite
+to live memory but if we increase the
+amount of live memory in that scenario
+and go and look at this guy here
+you see we've now got like 27 seconds of
+GC time and it's not awful but again
+it's it's it's starting to degrade
+pretty badly right so and again what
+that happened again let's look at this
+here yeah I mean that happened because
+of this right it's not as severe as the
+swapping we saw previously but it's
+still there so now now let's switch the
+exact same scenarios with the Java
+ballooning and see see what we have
+hopefully it's all still running I
+realized when I left the office that
+this is actually a and in it's not a
+ship version it's actually a different
+version I'm developing at the moment so
+hopefully it should all be good okay
+that's the last one okay so let's have a
+look at this first one so this is our
+baseline again the baseline okay well
+this is it's it's it's two seconds again
+it's neither here nor there this is this
+is without any other commitment that's
+that's that's our good performance you
+know but two three four seconds it's all
+pretty much the same now this is the
+fully committed heap is that the fully
+committed heap no that's the partially
+committed heap I'm sorry thank you for
+reminding me of that switch between
+their the partially committed heap
+you see we've got ten garbage
+collections the GC times pretty low
+everything's pretty happy everything's
+good the fully committed heat was what
+we had big problems the last time around
+with the small pages so fully committed
+heap here you see we have two more
+garbage collections and we would expect
+because the ballooning has been pushing
+the garbage collector a little bit well
+the total GC times actually still pretty
+reasonable is still only seven seconds
+right whereas before it was 59 seconds
+now the large page example now Ian 4j
+works with large pages just as well as
+it works with small pages again here
+we've got five seconds right before it
+was like a hundred and ninety seconds
+you know when we were swapping on this
+one this
+is going to be the concurrent mark-sweep
+algorithm again we can really only look
+at the time it took 6:35 it's a
+reasonable amount of time and then
+finally this this large amount of memory
+now this is an interesting one
+now here the garbage collection time has
+gone up fairly significantly it's it's
+less than we got with the other scenario
+before we got 27 seconds with this it's
+18 seconds the reason for this though is
+we've forced this VM into a situation
+where the balloon and the live data are
+fighting with each other right and so
+the garbage collection time has gone up
+Fairley's know the garbage collection
+frequency has gone up fairly
+considerably because these two things
+are fighting now in this scenario we
+forced that VM to be constantly
+overcommitted and and make those two
+things fight in in a real-world scenario
+as soon as the live data starts to get
+big the hypervisor brings the balloon
+target down the balloon deflates and the
+two don't end up fighting in this way
+right but this at least shows what
+happens when you set the two against
+each other and they have to fight for
+the same space so if we actually go and
+look in in the vSphere console I mean I
+don't know there's not really a lot to
+see here except that you know all these
+VMs behaved as you would expect them to
+the one thing that I will show you here
+is the vmstat output for Low's IAM for
+JVMs as you would expect there is no
+that's the baseline that yeah that's its
+no no significant paging in that one
+again I mean this is what we would
+expect right we're not there's there's
+no there's no reason there should be any
+paging that's why we got you know much
+better performance anyway that's that's
+it I worked really pleased with that so
+thank you
+I don't it's an ambitious demo I have to
+say cuz so you I'm on a VPN to do all
+this and if the VPN goes the whole thing
+is screwed and that's what happened the
+last time around so so what I'm hoping
+this illustrates yeah hi a question so
+it's a good question
+so we put out a 1 dot of the elastic
+memory for Java last September
+as part of the V fabric product it's
+embedded in the TC server which is
+Tomcat we're going to be increasing
+support for other application servers as
+we go forwards there's no reason why you
+couldn't just run it with any
+application server except we want to
+make sure the logging integrates nicely
+that the native libraries in the right
+path and all that kind of stuff but yeah
+it should last September so this is this
+is currently available in vFabric so I
+mean when people ask me about like what
+this might be suitable for it's not
+suitable for every scenario right in
+scenarios where a JVM is only a small
+percentage of the memory in a VM this
+isn't gonna work for you because you can
+only balloon out of the JVM heap and if
+the JVM heap is really small you're
+gonna be very limited right but in cases
+where the JVM is consuming most the
+memory in the VM or you've got a lot of
+JVM because this will work with more
+than one JVM right if you've got a lot
+of je viens or one big JVM it's using up
+all the memory in your VM and you've got
+varying workloads on it on your host an
+example of course is you know different
+geographies different spikes you might
+have a batch thing that runs for a
+particular time the nice thing about
+this thing is that the garbage
+collection happens at the most
+appropriate time which is when the JVM
+is idle right when the JVM is idle the
+balloons inflate it forces garbage
+collection they clean up they have
+memory back ok so that's that's kind of
+my product plug as it were so let's get
+back to the presentation
+yeah so this actually read the question
+if the JVM balloon gets evicted
+does it get a chance to come back as a
+question and the answer is yes it does
+what we've had to do
+in developing this is we have to
+basically say that the hypervisor is God
+right
+if the hypervisor says to the jpn
+balloon I need 500 megabytes you know we
+need to try and get 500 megabytes out of
+that heap as reasonably quickly as we
+can and give that back to the hypervisor
+now inevitably there's a cost to
+actually inflating the balloon because
+the balloon what we it's very it's
+actually very very trivial right we just
+allocate large byte arrays and they make
+their way through the heap and we zero
+them we hand the memory back now we've
+done an awful lot of tuning work to make
+sure that we use the right kind of
+references you know to make sure they
+don't get in the way so you know we we
+manage how hard the balloon is by
+managing a percentage of weak references
+and soft references and hard references
+depending on the scenario depending on
+how much memory pressure we want to
+exert depending on how much we perceive
+the application is you know is pushing
+back all of those things so but we've
+we've spent a long time developing the
+heuristics to make it as transparent as
+we possibly can the downside of course
+is that you know given that we wanted
+this just to work with an existing JVM
+without modifying in any way this is
+really the only thing we could have done
+in order to make this work you know
+there's no other way of actually getting
+the heat to do what you wanted to do but
+it turns out it's actually surprisingly
+effective okay so yeah these are these
+are just byte arrays that live in the
+heap and they get moved around and they
+can get garbage collected but
+essentially the the balloon driver that
+works with the JVM is a mutator just
+like anything else and actually what the
+balloon driver does when it inflates the
+balloon
+in other words allocates these objects
+in the heap to give memory back we
+actually hide that from the main heap
+memory statistic filled with GM X so
+that so that any monitoring tools don't
+look at this and go oh my goodness as a
+massive memory leak right you can switch
+that off but again we want to try to
+make that as transparent as possible so
+we've gone through and actually one of
+the things that I didn't show you but I
+can show you here if I just find the
+right thing
+is I just start with these J consoles
+and we never actually really looked at
+anything whoops
+we have just get rid of that we've put a
+whole bunch of that's the wrong one
+there we go we've put a whole bunch of
+em beans in to help you see what's going
+on so there's this let me just maximize
+this so there's this M being here and it
+will tell you we've got sorry we've got
+the balloon internals M being right so
+the Boone internals I mean it'll tell
+you could tell you exactly how much data
+is in there right it'll tell you the
+various reference types how many bytes
+per seconds being tenured all that kind
+of stuff we have the state that the
+state of the jvm balloons or how big it
+is we've got the state of the balloon on
+the vm expose that as well currently
+that's zero we also tell you there's
+quite a useful and being will just tell
+you if everything's configured correctly
+right so we'll tell you okay yes you're
+a compatible version of ESX you know
+you've got guest tools installed so you
+know we expose data to the server admin
+through a Jo mix if you want to use that
+but let me get back to the presentation
+and then at the very end I'll show you a
+cool new tool working on where we're
+actually exposing Java stuff into the
+vSphere client right because this is the
+first thing this is my first sort of
+project the first thing I really wanted
+to tackle and get right now we've done
+that yes we're putting some improvements
+and we'll put in some new features in or
+whatever but the next thing I want to
+really understand and look at is is how
+do we give vSphere admins more insight
+into what's going on in VMs running Java
+right and we've we've already come up
+with some really cool plugins into V
+console sorry V Center that give you
+really nice insight into what's going on
+in VMs running Java to help you to size
+them help you to see how efficiently
+they're being used or what kind of stuff
+so at the end I'll take you through a
+little demo of that like a sneak peek of
+what we're doing there because we
+haven't released that yet but that's
+that's coming real soon I'll just finish
+off the presentation and we can do some
+Q&amp;amp;A and
+and I think we'll be good so one of the
+experiments we do and this just shows
+you in a much larger context we actually
+take a host that has about 32 gig on it
+and we run I don't know something like
+25 30 of those VMs and we just
+round-robin loads between them for about
+six hours and this is kind of what it
+looks like on the host you can see that
+the memory over commit is the difference
+seen these two lines here this is the
+ballooning here there's a little bit of
+swapping went on here but these two
+graphs show quite nicely the comparison
+between a large page setup that I showed
+you on here which is our worst case
+scenario and the Java ballooning which
+is the best case scenario what I've done
+here is I've actually taken the 90th
+percentile average response time of a
+test case and loaded it from highest to
+lowest for all of these runs that we did
+round-robin on all these servers right
+so it just gives us a distribution curve
+to show as you know the worst to the
+best and what this is showing obviously
+is that there are cases where okay we've
+got horrible performance at 90th
+percentile response time is like 10
+seconds and our average response time is
+like one second and obviously you know
+some of them it perform fine with the
+Java ballooning this is our curve and
+this by the way is using a whole
+combination of garbage collection
+policies heap configurations large pages
+small pages all the things that we've
+seen to try and get a you know this is
+basically the test and we do to test our
+algorithms right just to make sure that
+we've got something that makes sense and
+I know this is kind of a you know sort
+of it's just one graph right then it's
+you know but it's it's it's what we have
+for now and in fact I just written a
+paper on this stuff that I presented in
+London last week that goes into more
+detail on what we did and how we did it
+and stuff so if people are interested in
+that I can I can make that available so
+we've we've gone through the benefits
+there's no need to go through this slide
+so I did put a slide in here about
+future topics not that I'm like asking
+begging to be asked back or anything but
+just something that's definitely worth
+thinking about in terms of what we're
+looking at it being
+and and where our priorities are with
+Java I talked about management and
+monitoring right that's that turns out
+to be a big thing with customers right
+particularly when you've got visa admins
+and server administrators he'll do two
+different people right at server
+administrator goes the v-strom and is
+saying my servers performing like crap
+why right and and when it's Java there
+may be a hundred different reasons why
+that is by making a lot of the Java
+specific information available to
+vCenter which is what we're doing we
+should give this the vSphere admins much
+more visibility into what's going on and
+really empower them to be able to say
+okay well the reason this is performing
+like crap is because because it's
+misconfigured in this particular way so
+I'll show you that at the end for
+whoever wants to stick around have a
+look at that another cool project that I
+encourage you to look at is this thing
+VI Java right and this has been around
+for quite a while it's it's a way of
+actually having a Java API to allow you
+to manage and monitor VMs right now the
+testing that I've talked about that we
+do I have a farm of about 40 VMs right
+and whenever one want to run a test on
+one of the VMs I have an automated
+framework that boots the VM down sets
+the amount of memory I want says he
+might have over commit I want configures
+the operating system configures the JVM
+boots it back up again starts the test
+measures the response times it gets all
+the information that I need writes it to
+CSV and then shut something down again
+right the things you can do with VMs and
+this VI Java API particularly when it
+comes to testing are really really
+interesting right you can do absolutely
+anything you want and automate it and I
+mean I come from a test background and
+that's really exciting to me you know
+the fact that I can just just configure
+I mean j-unit did this for Java right
+with j-unit you can configure what you
+want just run through a whole of the
+tests get the results at the end of it
+but you've never been able to do that
+with with virtual machines right and
+with VI Java you can do that although I
+think maybe in the future a cool spring
+project would be like spring VI Java to
+make it a bit simpler but anyway
+that's not any commitment by the way to
+anything and finally I mean it would be
+interesting as well to look at you know
+there's a high availability story
+scaling story you know one of the things
+that VMware's kind of asked me to look
+at is you know how do we shout about
+vSphere and why vSphere is a great place
+to run Java right and and you know high
+availability scalability all those good
+things all come into that spring source
+actually despite being bought by VMware
+is still very very active in innovating
+in cool new things spring the spring
+data project is is is is is pretty
+recent it's pretty cool anyway enough
+stuff about what what else is going on
+but that's just interesting some stuff
+that you might want to look at might be
+interested in at some future date so
+that is the end of my presentation oh
+yeah if you are interested in any of
+this stuff I am Ben's doings on Twitter
+I know so I actually have two Twitter
+accounts one is me you know sort of on
+sort of drunken night sorry I love you
+and the other one is work stuff right
+that's my work stuff Twitter ID so
+anyway finally I promised you an
+appendix the appendix for the benefit of
+the video just a summary of good
+operating systems for the timekeeping
+thing we talked about earlier how to
+configure large pages on Linux a cheat
+sheet and that's it so anyway any
+questions oh that's a really good
+question so the question was if we're
+scaling up is it better to add more
+gbm's to a VM or add more VMS with us
+whether JVM in the reason that's a
+really interesting question is because
+there's commercial pressures to do it
+one way and there's technical reasons
+why it's better to do it another way
+right you know the commercial pressures
+of okay every operating system we're
+running is a fixed cost so we want to
+load up our operating system with as
+many je viens as we can we see that a
+lot and I completely understand that
+right because every instance of an
+operating system okay you've got to
+patch it and you've got to maintain it
+and whatever although there are ways
+we've developed to make that easier for
+you that's still you know something
+that is a consideration for people
+there's the cost factor as well you know
+having a number of instances of Windows
+whatever you know fill in the blank
+operating system
+the reason it's ideally best not to do
+that particularly when it comes to
+memory management and over-committing
+memory is because remember I talked
+about how the hypervisor makes decisions
+based on active memory right so if you
+load and that's at the granularity of a
+single VM so let's say you load two VMs
+with loads of JVMs and some of those
+gbm's are active at some times some of
+those GM's are active at other times the
+hypervisor is really not going to be
+able to make any sense of you know like
+where do i reclaim memory from right
+because both VMs are gonna have a kind
+of a medium amount of activity that the
+hypervisor seeing right the active
+memory is going to be sort of pretty
+pretty much the same whereas if each of
+those gbm's were in their own VM the
+hypervisor is able to make much better
+heuristic decisions as to where it
+reclaims memory from because because
+it's doing that at the granularity of
+the VM so that's again if you're not
+over committing memory that's less of an
+issue and one of the things you'll see
+when I want to just show you the the
+monitoring management stuff you know
+typically in V Center you have a host
+you have oh you have a cluster then a
+host then VMs you know the kind of tree
+structure within a VM you may have a
+number of JVMs and will actually you
+know list the jaebeum's you got running
+will allow you to get visibility into
+you know each one what's the garbage
+collection look like blah blah blah all
+that kind of stuff so okay good question
+how's the Java bloom communicate with
+the hypervisor each each guest operating
+system has a what we call a back door
+through which vmware guess tools can
+communicate with the hypervisor the
+regular balloon driver can communicate
+with the hypervisor it's a bit of magic
+basically it's just a magic
+communication channel from the guest OS
+through to the hypervisor and the
+hypervisor will save the balloon driver
+inflate to this particular size the
+balloon driver will pass back the page
+numbers and the hypervisor just balloons
+a memory away I do really appreciate you
+know your attend
+- this and the questions were great it's
+been a really good experience I hope
+it's been interesting
+- you do follow me on Twitter as I say
+and I check out what we're up to come
+work for VMware make another plug
+actually I get two thousand dollars a
+time if you come work with me why so
+definitely come work for VMware and make
+sure you drop my name</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

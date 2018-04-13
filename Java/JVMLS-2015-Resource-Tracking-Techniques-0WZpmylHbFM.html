@@ -1,0 +1,714 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>JVMLS 2015 - Resource Tracking Techniques | Coder Coacher - Coaching Coders</title><meta content="JVMLS 2015 - Resource Tracking Techniques - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Java/">Java</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>JVMLS 2015 - Resource Tracking Techniques</b></h2><h5 class="post__date">2015-08-10</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/0WZpmylHbFM" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">ok I think let's get started the clock
+has ticked up to the top of the hour my
+name is Roger eggs I work in the Java
+Products Group in the core libraries
+team and I've done I've been with son
+for well not working for quite a number
+of years the last several projects have
+been working on is the date and time API
+and I embarked on a project with the
+cooperation which bunch of other people
+to add some resource management support
+to support some initial II closed
+applications in the JDK so this is talk
+about the infrastructure and the
+techniques that we use to gather
+tracking statistics about about resource
+use and how it might be is so real
+quickly some goals a bit about the model
+of the API some examples of measuring
+and monitoring the techniques we used in
+the instrumentation and some bits and
+pieces about how it might be applied if
+you were writing a policy mechanism to
+go with it so from the outset the part
+that we envisioned and we implemented
+for for use in jdk was all mechanism no
+policy because it's pretty easy to
+separate the mechanism for the policy
+we're just trying to count research huge
+this is things like you know socket
+opens and file opens and bite usage
+there are a few enforcement mechanisms
+that will get that to just be able to
+say when you might need to be able to
+throttle a resource usage or deny it
+mostly we expect the thing to run kind
+of open loop in terms of the tracking
+mechanisms performance a key goal was
+that it had no performance impact
+whatsoever and not be visible if it
+wasn't in use and that when it wasn't
+used it had a very low overhead the goal
+was five percent we actually beat that
+by quite a bit we'll get to that toward
+the end so the the resources that we
+wanted to be able to track where the
+sort of the typical library ones file
+sockets file descriptors datagrams
+thread CPU and one of the most
+interesting ones is heap in particular
+retained heap usage not just how much
+memory you've been out
+cating but how much you still using an
+typical metrics of opening closes of
+things like sockets that have to match
+and then bites read and written so
+typical use case is something where
+you've got a lot of activities going on
+inside of a server you really could use
+a way to understand oh what resources
+are being used by each of the tasks
+that's going on in the server and you
+want to develop it either you know for a
+couple of uses you either want to
+develop a model of what a particular
+task or group of threads is using so
+that you could predict how how much it's
+going to use for a particular incoming
+service request and at higher level you
+might want to use it for some kind of
+load balancing or control over in
+injecting new work into the system and
+at the limits you want to be able to be
+also be able to monitor whether some of
+these tasks are either using too much
+resources or they're really sort of
+going way overboard and track them that
+way so the model for the resources model
+is there are this is a resource context
+pretty straightforward thing consists of
+a set of threads that are using using
+resources and are contributing to the
+meters that are counting resource use
+within the within the context as
+activities go on whoever supervising
+these the tasks is binding and unbinding
+threads to the resource context and that
+punches down through also into the vm
+elements as we'll see that later threads
+are the things that use resources they
+open files closed files allocate key etc
+resources are requested and released
+open open is the request and relief is
+the clothes some of them are not
+symmetric when you're reading a file
+typically you just say I want to you
+know read ten thousand bytes or gigabyte
+or something though there is a use case
+there to get accurate numbers of
+releasing data you know if you tell it
+to read you know a gigabyte and really
+they're only a thousand bytes of input
+you want to make sure that the counselor
+accurate will only write a thousand and
+it's part of it the requests can be
+approved by
+policy and mechanism denied or there's a
+lightweight traveling mechanism that can
+slow the approval for to use resources
+within the resource contacts there
+meters that accumulate sort of net
+receipt resource usage the requests
+minus the releases and also sort of
+total usage over time so if you want to
+know how much how many bytes have been
+totally requested or how many files have
+been opened that's a separate count from
+the current net number of files that you
+have open the basic mechanism sort of
+that every point is at the point a
+resource is about to be used the current
+thread is mapped to the resource context
+and then the type of research is mapped
+to a particular meter within the
+resource context the resource context is
+a pretty simple interface it's got
+binded unbind of threads you can get a
+set of list of the threads that are
+bound to the context you can add meters
+resource meters of which will get to
+particular subtypes list the meters that
+are in there and then the one of the key
+operations is this get resource request
+is an operation which finds the correct
+meter for the particular type within a
+resource context to add or modify the
+and then if the request accurate update
+is a feature that was added in
+particular for the heap where we'll get
+to this a bit more but with the dynamics
+of garbage collection sometimes you want
+more accurate information than it's
+currently available just as the garbage
+collection normally cycles and then to
+get to the resource context you need a
+little bit of a factory to create look
+up and find out which context exists to
+map the current thread to the right
+context and to do some other
+housekeeping there are two sort of
+special contexts that exists there's a
+total context which lists sort of a sum
+of all resource usage of all contexts
+that exists and then there's an
+unassigned context which is used for all
+threads that are not other
+why's bound to particular resource
+context sort of the catch-all so that it
+simplifies things if there's always some
+resource context which can be dispatched
+to to account for resources resource
+management is is can be enabled and you
+can ask which supported types are are
+supported the get to some other details
+in a bit so here's a real quick quick
+sort of if you were writing an
+application to measure some resources
+you end up getting the the current
+resource factory you can create a
+resource context this one just adds a
+simple meter for file opens and file
+reads and they're added into the
+resource context it binds the current
+thread to the resource context and then
+you know does something the meters are
+updated essentially all the time
+continuously so immediately and at any
+time you can ask this is that total
+allocated is the total number of files
+that ever been opened and the since this
+is the bytes read me the current number
+of bytes that have been bred on that
+meter so this the API is pretty simple
+to use if at a high level the there are
+number of different kinds of meters that
+are useful to keep track of what's going
+on the simple meter just counts it
+counts the net usage and total usage
+then one of the more useful ones is a
+notifying meter which counts but it also
+will call back to to the resource
+approver and through the resource
+approver interface that's been
+registered with you know the current
+value that's being requested in the
+previous value and we'll see a bit more
+of that a minute a couple of you know
+simple meters added into the set where
+the bounded meter that provides an upper
+limit on the bound of something it's
+automatic sort of automatically enforced
+even without a callback just says know
+when you get to the limit
+and the throttle meter is a little more
+interesting it it actually has a keeps
+track of how much has been used over
+time and you can set a limit and it will
+delay responding approving some requests
+until you're back under the the resource
+limit I mentioned the resource types
+that are supported some of them in the
+libraries and the more interesting ones
+sort of techniques wise are in the heap
+there are a couple of edge cases where
+it's really nice to be able to know what
+resource is actually being opened so
+there's this resource ID concept which
+will give you the name of the file being
+opened in the case of threads it will
+give you a little should give you a
+little information about the heap and it
+also includes information about the
+accuracy of the particular measurement
+which comes into play when we're talking
+about the garbage collection and the
+retained heap so simple meter has a
+really simple interface it's got a
+methods to get the current value the
+total value of the type the request is
+sort of the operative method that when a
+resource is being used he calls a meter
+and say I want to use as much use or
+release as much if the amount is
+positive it's a request it's negative
+it's a release and the resize ID that
+the part of actually counting is fairly
+fixed in the infrastructure so the
+methods are final but in order to allow
+sort of modifications in different
+behaviors from the meter this validate
+method can be overridden with a it so
+it's past the previous amount not being
+requested and the resource ID and the
+subclasses use that to modify the
+behavior of the meter so this is
+extensible if you have some other clever
+behavior of the meter that you that
+you'd like to add the implementation of
+the meters is pretty straightforward
+though ask the discussion of long at or
+maybe I should have used that instead of
+the atomic atomic long counters that are
+there but we don't expect to see a lot
+of contention
+in in the meters because they're usually
+used by different threads at different
+times the usual bit of details one of
+the one of the things that's interesting
+throughout this whole process is is that
+since exceptions can get get thrown at
+various points in time you always have
+to be aware of how to keep the meters
+have the correct value even if some
+exceptions thrown something for example
+if the if when the resource approver is
+called to say you know is can we
+allocate this amount of memory it may
+throw an exception and the counter still
+have to be kept reasonably accurate in
+that case the second example sort of
+similar to the first if you wanted to
+actually to have a call back when
+resources are allocated here I I'll show
+in the next page the particular method
+that that can be called it creates a
+notifying meter with this is the
+callback monitor rest of the code pretty
+much looks the same the resource
+approver callback is you know it's
+fairly straightforward it gets the
+current meter the previous value of the
+requested amount and a resource ID and
+then it can decide whether it's going to
+how it's going to deal with allocation
+or deallocation you know logging it or
+accumulating it one of the things that's
+that we've ran into and gets tumbled
+over a couple of times is that since
+this is called back from inside of sort
+of every i/o operation you have to be
+very sensitive both because of
+performance impact and the potential for
+recursion for example you might think oh
+well we'll add a printf in here well
+rights to standard out are also part of
+the resource management system and the
+thing could quickly recurse now we did
+separate out standard in standard out in
+standard error as different resource
+types so that it would be a little less
+easy to bump into this but the biggest
+caution here is is that the performance
+impact of putting something in the
+callback because for example I don't I
+hope nobody's really calling up
+fileinputstream to read it one bite at a
+time but if it did
+the resource management / overhead of
+that individual bite call would be much
+higher than anything you'd expect so
+that's kind of the framework and
+everything the the other interesting
+piece of it may be more interesting and
+was a bitter bigger part of the work was
+the instrumentation that's required to
+actually call into this framework and
+there are two types synchronous types
+that are done by out of the library and
+which is done by essentially using JVM
+TI and and byte code injection into the
+right classes and then there's a a
+synchronous section of things that have
+to be polled because of the way they're
+used so on the library side we had the
+benefit of using some template
+infrastructure that was built for for
+JFR where it we can write the templates
+in as a java class it's applied by a
+mechanism that wraps the the method in
+the template around the original method
+in the class and so the it's pretty easy
+to write a template from the from the
+structural point of view so the
+templates are applied the first time you
+use it so until first time you somebody
+uses resource management there's no
+there's no code there's no nothing
+injected into the classes the templates
+as I mentioned they get wrapped around
+the target methods and I'll show an
+example in a minute the there are sort
+of annotations specific to this
+templating mechanism that are used to
+identify the target methods in the
+target class and some other special
+cases that we're since we want a
+desirable feature is to be able to
+compile a template class normally but
+because of access roles in fact it may
+be did it's a little bit more severe
+with modularity coming you can't just
+refer to everything that's that the
+implementation class that you're trying
+to annotate can access so there's a
+couple special cases there and as
+mentioned a couple other places you know
+since it wrapped around the methods so
+the original method
+and is in line into the template and
+then redefined as them is used to do the
+bytecode munching and then JVM TI is
+used to insert the modified class so the
+template mechanism is not really general
+purpose mechanism so we we didn't wear
+it was it doesn't handle every possible
+combination you know it doesn't handle
+the exceeding class file limits none of
+the Queen run into that anywhere it
+doesn't have a way to instrument
+constructors and one of the biggest
+things is is that would have been nice
+would be a way to add fields because we
+could have gotten some performance
+improvements out of it but as as with
+because of the way this operates the
+template code really has to be very
+sensitive it's very brittle and and
+built depends a great deal on the
+structure of the act of the code you're
+implementing so it's not simple I'm just
+counting the entry point it's you know I
+have to make sure that these the
+original invalid arguments and null
+pointer exceptions get thrown at the
+right place etc so writing the templates
+is can be a little bit tricky in that
+you've got to well some of the
+structures free straightforward before
+the resource would actually be consumed
+you've got to find the right meter and
+the right type it will see example the
+next page and you have to be able to
+deal with the exceptions that might
+happen as part of the original method as
+well as that might have happened is part
+of the template code and then after the
+resources is used then you may you may
+have to deal with residual effects of
+the exceptions and then another
+important one is that you always want
+the opens and closes to be balanced so
+at any time the resource management view
+has an accurate number of of how many
+files or opener or sockets this is too
+small to read sorry about that but it
+goes through the steps of
+those this first section here is if if
+it's going to throw annoying puller
+exception you really want the original
+code to do the argument checks so it
+defers to the original code this is in
+fileoutputstream it needs to map the
+current thread to find the resource
+context look up the the right meter in
+the using the current type of file and
+then if create a resource ID to identify
+the file being opened and then you get
+around to the point where you can
+actually call a resource make the
+resource request which may fail because
+it wasn't allocated and out as much as
+we crested or it may fail because of the
+thrown exception but if it succeeds then
+it actually in this right down here the
+way the template is structured that's
+actually calls the original right method
+of file output stream and then it has to
+go through a little dance to get to make
+sure that it returns any unused part of
+the resource allocation so some of the
+templates they can get more interesting
+than this but this is a simple example
+there are a bunch of corner cases that
+show up in writing the writing and
+templates writing the instrumentation
+some of the the way the implement a pee
+eyes are implemented in the JDK aren't
+very symmetric you can oh it's not you
+won't find necessarily the open method
+in the closed method in same class or in
+the case of asynchronous i/o the place
+where it starts the i/o which is
+potentially in a different file and a
+different structure than then when the
+i/o is completed and so there's they get
+a little bit more intricate to inject
+and and add extra wrappings around
+things for threads that the assumption
+is is that initially you can find the
+the hoovers managing the threads will
+bind bind the thread to the resource
+context threads might spawn other
+threads so the sort of the default there
+is
+is that a threaded sponza thread gets
+automatically bound to the same resource
+context but it's a bit tricky of course
+because the thread object that creates
+creators of Java side doesn't
+immediately cause a OS thread to be
+allocated in it to run so there's a
+little bit of an extra dance there and
+then there's some cases where the model
+for requesting a resource is such that
+you really should know the resource ID
+so you can call it back at the callback
+fee when you're making the resource
+request but you don't know what it is
+yet so in socket except for example
+until the accept actually completes you
+don't know what sockets on the other end
+the connection you don't even know the
+local local enough local information so
+in that particular case it sort of
+optimistically accepts the accepts the
+connection and then if the resource
+management says no you can't do that it
+closes it down so it's a little bit of a
+fiction but typically you know the way
+that we expected this to be pushed into
+existing applications was that sort of
+normal operation was what drives the
+whole system the so just some
+interesting things so on the other the
+other branch of the instrumentation has
+to do with asynchronous events the
+biggest into the most interesting one to
+the to the ws folks that got us started
+on this project was the the use of
+retained heap and we'll talked about
+that in a minute the other two matrix
+metrics about allocated memory and CPU
+they both have to be sampled because
+there's no good place to hook you know a
+synchronous hook so there's a background
+thread that monitors those things at a
+period and it does the corresponding
+look up to get the information back into
+the resource context on the right meter
+I had a lot actually I didn't do
+anything work on the g one collector I
+had help from they did the work but
+instrumenting the retained heap is
+implemented in the g1 garbage car
+sure g1 was a good good match for what
+we're trying to do with resource
+management because it did allocation
+within regions and there was a third
+estate forward mapping to say that all
+the objects for particular resource
+context would be allocated from a single
+region and that the other the other GC
+mechanisms would maintain the the
+invariant that within a region all the
+objects were bound to the same resource
+context and there was a little bit on
+the vm side to add a the VMS idea of
+what a resource context would be and
+associate that with both the threads
+could find a resource context to a
+thread or resource context in the dm's
+view of the world and to propagate that
+through as the resource allocation was
+going on within the regions one minor
+point was that at the time you bind a
+thread to resource context it has to
+allocate a new fed local allocation
+buffer to make sure that all the objects
+that are allocated from that point on
+are associated with the right resource
+context and then at the tail end of
+destroying resource contexts all the
+resources to be held by that some
+resource context has to go somewhere so
+it gets the they all get sort of moved
+on mass to a different another resource
+context there is sort of a magic system
+research context which is used as a
+dumping ground for everything that's not
+otherwise bound so the garbage collector
+maintains his information about
+allocations and regions and as the GC
+phase is complete it generates the
+events that are sent up to the Java
+thread that's monitoring the behavior
+and it retrieves the information from
+from the GC and passes it off to the
+appropriate resource context the battle
+scene is pretty straightforward the diff
+JC phases in g1 have different sort of
+accuracies if you don't do a full GC you
+sort of don't know really how much
+retained heap is attributed to a
+particular resource context and that we
+had a lot of discussion about how to
+deal with the I don't say the in
+accuracy but the varying accuracy of the
+information about what's in the heap so
+in using the API and using the resource
+management the information you get out
+of the library resources are pretty
+clear-cut synchronous model the numbers
+are accurate if that happened in the
+case of heap allocation retained
+statistics the whole thing is pretty
+dynamic as you as probably most of you
+are very well aware of so if you're
+trying to write some policy mechanism on
+top of this it's hard to say that's that
+particular task has reached the limit
+and should be you know should somehow be
+be disciplined more disciplined in
+diffused you really don't even though
+that its desired sort of seems natural
+to say well if somebody's getting close
+to the limit i should do a full GC and
+make sure i got completely accurate
+numbers and know so they aren't
+violating whatever constraints it is but
+full GC is a sort of a dirty word right
+nobody wants to spend the time to do
+that because it's it's both delay and
+slows things down so in terms of writing
+policies you need to find a way to deal
+with much less accurate information as
+things go and and build build on trends
+over time and the behavior and that also
+helps you since the our goal was sort of
+the normal operating sort of providing
+information to enhance the normal
+operating behavior of the runtime you
+really want to build trends and move
+more slowly than just simple simple
+actions
+so the collar right so it all has to be
+done sort of dynamically and be smoothed
+out over time to get good behavior as I
+mentioned earlier there quite a number
+this is a fairly sensitive API because
+it gets called the callbacks can happen
+in the middle of everything it is
+protected by both a command-line switch
+to enable the resource management and a
+security manager permission to enable it
+and actually to use the resource context
+performance as I mentioned earlier the
+performance can be a hits can be
+problematic because of the level of
+injection that you're doing and you also
+have to worry about since the callbacks
+happen from inside the i/o code that may
+happen at a protection level or in a
+protection domain which is more center
+which is trusted in a way that you
+wouldn't expect I mentioned these other
+caveats about worrying about recursion
+and being very sensitive to what you're
+doing in the in the callbacks so when
+you develop if someone was going to
+build a policy engine on top of this
+they have to be a little bit sensitive
+to these issues including that the well
+the mechanism can does have a way to
+deny usage of something and the
+exceptions get called get thrown for
+example in iOS I oh except shins most
+applications probably know how to deal
+with that in some way they might
+probably likely to fail what they're
+doing but they won't have sort of
+byzantium failures there was in the
+asynchronous side of things there's no
+mechanism to deny or throttle heap
+usages GPU usage within this mechanism
+much of that we spent a lot of time
+talking about you know what would happen
+if you if you started throwing out of
+memory errors or if you denied some set
+of tasks either CPU time or or memory
+and all of them seemed to go you know
+total upside down real heart you know
+hurry so because you know we don't know
+if thread dot stop you can't really you
+can't really stop things from the bottom
+so if you want to build a policy
+mechanism that's going to terminate some
+behavior it's got to do it from its
+other mechanisms in terms of not
+starting new work or or denying things
+so and you know it all falls back to
+this thing's there's no good way to tell
+an application arbitrarily you know just
+stop there's no there's no safe anyway
+so the best mechanisms for control are
+sort of back at the top of the at
+whatever system that's controlling the
+workload so in our measurements which
+were sort of we haven't gotten to final
+numbers in there under real
+circumstances but in 11 spec jbb we got
+you know measured that overhead is being
+under two percent it depends obviously
+quite a bit on the mix of cpu and IO
+activities that are going on it fairly
+easy to do the instrumentation because
+of the templates we don't have to deal
+with jb m TI and as m at least at the
+level what I work is able to work by
+reusing these mechanisms and the
+complexities of developing policy on top
+of this shouldn't be minimized because
+they the information you get is not
+really cut and dried in terms of what
+you should do and how you should operate
+your how you when your system to operate
+all right I had quite a bit of help but
+from the hotspot GC team stefan
+johansson and jon coombs stefan Larson
+from the serviceability teamed helped
+with the jvm TI and the templates one of
+my colleagues Brian Burkhalter helped
+with the Iowans limitation and Charlie
+hunt helped us with the performance
+things and so that's what I have to say
+questions yes
+it's gonna be a standard ja late guys
+openjdk right so this is not part of
+openjdk it is a oracle commercial
+feature it was in originally implemented
+in its implemented at you 40 and it's
+all part of the oracle jdk it requires
+command line switches to enable the
+commercial features in that and the
+resource management I want to say yes
+but I don't remember exactly the terms
+of jsr it is a commercial feature it's
+covered under the same this the same I
+believe it's you know for research and
+educational use right right it is
+documented separately from the openjdk
+api's and with the disclaimer on it so
+others okay I'll be around if anybody
+has questions thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

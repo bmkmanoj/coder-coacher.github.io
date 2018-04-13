@@ -1,0 +1,1027 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>In-Memory Caching: Curb Tail Latency with Pelikan | Coder Coacher - Coaching Coders</title><meta content="In-Memory Caching: Curb Tail Latency with Pelikan - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/InfoQ/">InfoQ</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>In-Memory Caching: Curb Tail Latency with Pelikan</b></h2><h5 class="post__date">2017-10-23</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/QH1jr8Y1FTQ" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">today I'm going to talk about in memory
+caching so especially I want to talk
+about how to curb tail latencies and the
+ideas I talk about are summarizing this
+project that I'm right now working on
+which is called Pelican so before we
+start I want to sort of do a bit of self
+introductions tell you why I'm
+interested in this topic and why am I
+qualified to talk about in my opinion so
+I've been at Twitter for six years and
+this whole time I'm pretty much working
+on cash that's a very long time by
+Silicon Valley standards so during this
+time I've been the maintainer of
+Twitter's memcache fork which is called
+team cash and we also have our own Redis
+Fork which we did not open source so we
+didn't bother to give it a different
+name and we we are a small team that's
+both in charge of development and and
+operations so our fleet includes
+thousands of machines that are running
+basically cache servers right there are
+more running cache clients but there was
+a library on hardware that we don't
+control and internally we have hundreds
+of customers as you know you may know
+Twitter is a sort of a Microsoft service
+shop which basically we were one of the
+first few companies who championed this
+idea of micro services so so even so
+even though it whitter presents just you
+know one single product internally we
+have very lots of different services and
+teams and that in turn translates into
+lots of cash users so today's talk is
+mostly going to be about the disasters
+we have seen production as a lot of
+other things in life like relationships
+and politics you learn a lot more from
+failures than from success so by seeing
+all these failures and incidents there
+are some rules that we sort of
+summarized over the over the course of
+several years and that sort of boils
+down to what we decide to do with this
+new generation of cash which is Pelican
+our plan is actually to replace the
+current need for cash at
+Twitter using this single framework so I
+lied I'd like to introduce the problem
+which is cache performance I I think for
+a lot of you that would be that would
+not be a problem because you with in
+cache is very fast very lightweight it's
+a soft problem probably has been thought
+for years if not ten years so when I
+talk about cache performance what do I
+mean right so let's look at a happy case
+you have some kind of service you know a
+web service or some other streaming
+computing and there's a lot of data
+going in and out and these data live in
+some kind of database or HDFS whatever
+you want to have frequent access to them
+or you want to do some computation on
+them but the database does not provide
+enough throughput so easy you just put a
+cache alongside the database to absorb
+the load right this is a fairly standard
+set up and in the most cases that's
+enough to that's it that's basically
+enough for your entire use case you
+forget about it exacts you know it just
+work on your service so that's the happy
+case but sometimes you run into some
+weird situations which sort of
+diminishes the capacity of the cache
+just by a little bit so if you compare
+these two the cache is still working
+mostly fine but it's it just gets a
+little more loaded right what happens is
+if you have a very effective cache let's
+say you have a cache with 95% hit rate
+which is typical then if you lose just
+5% of the data right so now from you
+your a cache hit rate dropped from 95%
+to maybe 90% but what that means is it
+translates to a doubling of the load in
+databases so we have seen even more
+dramatic cases where 99.5 percent of the
+data can be served out of cache so now
+if you lose 5% of your data you increase
+the load to the back end at least
+temporarily by 10x and very very few
+databases are provisioned or designed to
+handle such as big search so when when
+the cache slows down even just a little
+bit and the better you use the cache
+the bigger the problem in this case is
+that the database gets unhappy and
+because this whole service depends on
+getting data from somewhere and and if
+it can now get that from cache and it's
+getting it's very slowly from the
+database the entire service becomes not
+happy right so that affects the SLA and
+if you happen to run a micro service
+with lots of dependencies now is when
+the snowball starts to sort of rolling
+right so so you can have this very
+dramatic snowballing effect from just
+the tiny little glitch in your cache so
+you can go from cache rule rules
+everything around you the cabbie case to
+cash rules everything around you very
+fast in like seconds that means that the
+system by nature is very sensitive to
+the performance of cache and not just
+any performance right because the cash
+was still handling plenty of traffic it
+didn't die it's just a little slower so
+so really what you want from cache is as
+a level up from just having this
+throughput you won't have very
+predictable agencies and especially you
+want predictable tail latencies you want
+that few percent to be right or maybe
+under 1% to be right so the common
+interception for cache is it's really
+just you know this might be not
+everybody will agree it's the king of
+performance but you know just for a fact
+it does handle theoretically millions of
+QPS on the modern hardware a beefy
+machine it has typically has you know
+200 millisecond 300 millisecond and to
+an sorry microsecond end-to-end
+latencies and it's not very hard to
+saturate the entire network if you have
+slightly larger objects however under
+the under the hood if you have if you
+run a large enough operation right if
+you have thousands of machines tens of
+thousands of instances and you run it
+for years sooner or later and you start
+to see these ghosts so it is fast but
+not always it's usually pretty fast
+sometimes there are hiccups that you
+wonder why they happen
+or how to get rid of them and under
+certain sort of predictable conditions
+these head cups or this problems come
+back more regularly or under you know
+some conditions that you think should
+not have impact on performance they come
+back so so these are what I call the
+ghosts of performance and if I look back
+on my entire sort of tenure at Twitter
+you know learning about cash was not
+that hard and you read the memcache
+decode you know
+hold your nose a little bit but you can
+do it and then you you know read the
+Redis code you learn about tamo hashing
+or other can you know cousin hashing and
+you're done you you're you can claim
+yourself to be you know some kind of
+cash expert you know know the thing but
+then what I didn't expect was I spent
+multiple years chasing these ghosts why
+is that because the thing is something
+if you have three cache servers you run
+into a problem maybe once every year you
+know you just shrug it off right life
+goes on I don't care if it comes back
+once in a year but if as we've sort of
+scale we have more instances we have
+more customers then you sort of get
+hunted a little bit more often and it's
+not really fun to be on call and get
+haunted by all these bugs that you
+cannot explain or you don't even know if
+they're bugs but but by these behaviors
+that you cannot explain so so basically
+I was like I do not like the fact that I
+was being hunted the only way I can get
+some joy or derive some fun out of this
+if is if I actually go attack these
+ghosts figure out why they show up and
+see if I can do something about it
+so basically bust all these ghosts so my
+plan of containing ghosts was I want to
+really minimize the the factors the the
+behavior that were that was
+indeterministic right I I'm not sure if
+they're bugs but they show up as
+something that I can explain and I
+cannot predict it I don't like it I want
+to get rid of these things so that's the
+the whole game plan so how do I do that
+first you identify you know what are
+these potential areas that's into
+terminus
+and then you can't you see if you can
+get rid of them not altogether that's
+the that's the happy case if we cannot
+avoid doing those things but then at
+least let's try some strategies to
+mitigate these problems right so so
+that's the plan so first step identify
+how do we before actually going into
+this I'll give you a very short
+two-minute primer of cashing in data
+center because some of the context
+actually applies in the later discussion
+so who will look at it so the context is
+caching is a very ubiquitous concept
+used everywhere but there's something
+special about caching and data center
+because data center itself is a little
+bit special data center machines are
+geographically centralized they're very
+very close to each other either they're
+in the same building or they're in
+adjacent beauties that are connected
+with very high-speed Network right so
+you really can expect you know high
+quality reliable highly commoditized
+networks as well as host set up in this
+environment so the entire infrastructure
+is very reliable and that's why we very
+consistently can see you know end-to-end
+latencies being in the sub millisecond
+range 200 300 microsecond being very
+typical with modern you know Linux
+networking stack as well as Ethernet as
+the backbone right so that's what people
+come to expect or rely on as a fact even
+though them sometimes may be violated
+and the people the way people use cache
+and data centers because you have this
+highly reliable environment people tend
+to create connections and keep them
+right because the cost of a connection
+is slow and is low and then because we
+are gonna pump a lot of data back and
+forth it makes sense to keep the
+connections around instead of tearing up
+and setting up them every time and for
+the most part cash deals with simple
+data structures and the operations are
+fairly simple too we have some simple
+data structures in bredis and from
+memcache it's mostly just a key value
+store so there's not much computation to
+do on the server so these are sort of
+what we know about cache so we mostly
+send request response and if we don't
+have a connection available or no
+connection at all we try to connect we
+try to create a new connection and
+because we're adults here
+running things in production you want
+the sort of the adult supervision of the
+cluster like stats logging health check
+you want to have visibility right it
+cannot just run wild
+so cash from a bird's view is very
+simple you have this box which is a host
+as operating system Network stuff and
+you run basically a high-performance
+event-driven server and then you support
+some kind of protocol most most likely
+memcache D protocol Redis protocol and
+you use some kind of data storage
+probably a memory and and there is your
+cache you know from a high level that's
+it
+and we don't really have much control in
+to both the network infrastructure as
+well as the operating system although I
+believe the person given the Scylla DB
+talk is gonna tell you otherwise so I
+think that will be interesting so so
+that's that's cash so how do we sort of
+find out where all these identify where
+all these indeterministic
+elements are the thing is you don't
+really go find ghosts the ghosts come
+find you right so so how we uncover this
+is basically through incidents so the
+way incidents work at Twitter is so we
+sort of rank incidents by how severe
+they are and over over years we have a
+fairly good definition of of what
+incidents are more severe and what are
+just trivial ones and generally cash
+incidents are quite likely to be the
+most severe which is fzero so so this
+tells you that that the cash thing is
+very sensitive so whenever we have one
+of these big incidents a sort of as a
+team and have teams assemble what
+everybody tries to get to the bottom of
+things and we come up with action items
+that actually would fix things in the
+long-term so so let me tell you some of
+the war stories or incidents that we
+have seen so in one case we know that
+some cache servers has really high
+bandwidth utilization but the request
+rate actually dropped quite a bit so
+there's you see all the Bice getting
+pumped in and out but noth-nothing is
+getting down so so we got into that and
+what we saw is that there's a lot of new
+connections being created but and not
+too many things being down on those
+connections so so what's the problem
+here so I would like to take a little
+bit of a detour and talk about syscalls
+so if you do with that you know
+programming on distributed system so you
+know and programs simple service you
+probably deal with these a fair amount
+and it turns out creating a connection a
+TCP connection is a activity that
+somewhat Cisco heavy so I marked all
+these activities steps involved and each
+one of them translates to at least one
+Cisco so we have four pluses calls to
+create a connection on the other hand
+requests even though take more steps
+they have fairly lightweight computation
+on the other hand they have fewer sis
+calls you will have at most recess calls
+and most of these can be amortized over
+multiple requests or multiple responses
+very effective effectively if you have a
+high request response rate where you can
+sort of batch them together or pipeline
+or things like that so it ends up being
+it ends up using a lot fewer sis calls
+per request and if you look at memcache
+so we benchmarked our we profiled our
+version of memcache which is 2m cache
+but the same conclusion applies to
+memcache T as well if you go through
+down this list then you need to go to at
+least the sixth or seventh function
+before it's not a Cisco right and and
+the big sis calls actually accumulate
+collectively they account for about 80
+percent of all your CPU time so really
+how many requests you can do boys down
+to how many Cisco because you need to
+make in the cache server okay so so
+given this fact what happens in the in
+the first scenario is that if for
+whatever reason the request r/a starts
+to the the request response starts to
+slow down a little bit usually what you
+have is a client that is aware of the
+speed and therefore has a timeout set so
+I'm not going to wait indefinitely for a
+cash request I want to I want to get it
+back in ten minutes
+and otherwise I'm gonna do it as a
+exception right well I will handle it s
+exception so it's very common for
+exception handling logic try to close
+down the connection assuming the server
+has gone away and then later reconnect
+right so this is why we see all that all
+those new connections because if you
+have a little bit of slowdown it's very
+likely for the client to behave in such
+a way that they would tear down existing
+connections and start this very cisco
+heavy connecting behavior right away and
+if you have a very large fleet or a lots
+of lots of clients who open in many
+connections you end up having connection
+storm and connection storm actually is
+really bad for cache because once you're
+in under the attack of a connection
+storm it's very hard to get yourself out
+of it because you're basically being
+ddosed by your clients the clients
+probably won't give up because they
+really want to get the data right so so
+this is number one thing that causes bad
+tail latency slower it doesn't say
+seeing sort of rare scenarios is if you
+are in the condition of introducing
+connection storms another incident that
+is a little more fun than that as we
+have these random pick ups but they
+always happen at the top of the hour so
+if you see this pattern what would be
+your first guess top of the hour so so
+basically it's something that occurs
+regularly right what thing occurs
+regularly things that are scheduled
+right so so we looked at a few places
+but you know you have your usual
+suspects that would happen periodically
+and you know scheduled jobs or cron jobs
+is one of them so what happens is
+because we're adults here we're trying
+to do logging at least every once in a
+while in the server and while we're
+logging we're implicitly making calls to
+the disk but the OS is smart it would
+try to buffer the data you try to write
+to the disk and only it flush it
+occasionally but you have to flush it
+sometime right if you're so unlucky to
+be trying to call flush where another
+cron job acts which happens to be very
+which happens to be packing on the disk
+just non-stop suddenly
+your worker threat can now move on
+anymore because it's it's blocked on
+this implicit call to the disk right so
+you wait here and you see I did a little
+bit of slowdown in the cache and things
+might just start to go downhill from
+there so the other thing is we really
+don't want to do blocking i/o even
+though they happen very infrequently so
+if you have one server or you don't have
+cron job you may never run into it but
+you don't know right someone else may
+schedule background draw job on the same
+highway that you have no control over so
+the best way to do this is just not
+doing blog hire at all so here's another
+one this one is similar we have these
+hiccups but the pattern is different we
+are seeing on them only after cache
+reboot and we see several of them in the
+road but they don't happen indefinitely
+after a while they things sort of just
+calm down and and server chugs along
+just fine so so basically now it's
+basically a good riddle it's like what
+in the cache would slow down several
+times but not continuously and
+eventually go away and the answer for
+that is hash tables function so if you
+have a cache that has nothing and then
+you try to insert one item it will you
+end up with a very small hash table and
+if you give a lot of memory safe 20 gigs
+of memory right old only reasonable and
+you have very small key values you can
+end up having hundreds of millions of
+keys and by default these hash tables
+expand when your key to hash entry ratio
+goes above the threshold so they will
+double the number of entries every time
+you go over a limit and that accounts
+for the several blips right the way we
+found out about this it's like oh these
+blips sort of keep widening up everyone
+is a little happens a little the
+intervals keeps going up a little bit
+and then we pull through a bunch of
+other metrics and say oh look the number
+of keys almost double every time this
+happens so that leads you to the hash
+tables so the reason that the hash table
+doubling
+it's so problematic in the case of
+memcache but stuff like that is when you
+try to move things between hash tables
+you sort of need to lock the entries so
+nobody is trying to copy the same data
+and locking happens to be not quite
+cheap right they're not X expensive as
+this calls for sure they're like 25
+nanoseconds for operation but they're
+they are still fairly expensive compared
+to other operations and it's really bad
+if you actually have contention which if
+you have two processes two threads
+trying to read a hash table will be the
+case so what we found is if we get rid
+of all the locks in chrome cache with
+eight threads we can actually get a 30%
+speed-up so so this is still quite
+significant so so in this case we have
+locking messing with us when we were
+doubling the hash tables and then and
+when things slow down we actually end up
+having connection storms which further
+slows down decline because of locking
+right because the the connection needs
+to be handed over to to the worker
+thread and then the clients start to
+fall over so so the in this incident the
+timeline is really just sort of
+different things compounding together
+until they stabilize so in this case you
+know locking is the problem and then
+there's more okay so we have a long list
+of incidents that can entertain people
+so hosts will or will have cash running
+for a long time everything is fine
+suddenly you're seeing boom in your
+kernel log and ends which ends up
+killing memcache or whatever so cash
+server because they use the most memory
+so that's the preference of the of the
+kernel what happens here what happened
+here is fermentation so after running
+for a very long time and tearing up
+connection no tearing setting up
+connection tearing down connection many
+many times I'm not gonna tell you how
+long we run our cache in one go I'm
+probably shouldn't disclose the number
+it's a little embarrassing but if you
+run a sufficiently long you end up
+having fragmented memory and kernel
+sometimes requires big chunks of
+contiguous memory
+and that's why another application which
+requires that contiguous memory may
+trigger a room that has nothing to do
+with cash but ends up killing cash so
+we've seen that and that's another
+problem we have to deal with or you can
+you know we boot your cache frequently I
+guess and in another case Redis
+instances basically were killed by
+scheduler so we use mesas and Aurora to
+schedule jobs essentially you're using
+these containers that you tell how much
+memory to give it to
+how many CPUs and CPU basically never
+was a problem for cache it has very low
+CPU utilization usually but in this case
+we saw Redis being killed we're like we
+want you know we want 10 gigs of Redis
+data to be stored we actually gave it
+like 12 gigs of memory and why are these
+jobs being killed and if you probe
+around Redis that's a little bit you
+find this metric called the fragment
+ratio which is how much memory you know
+the the kernel thinks you're using
+versus how much memory you think you
+think you're using or how much data you
+think your story right and this ratio
+actually can get fairly large can get to
+be 1.2 1.3 1.5 who knows it totally
+depends on the nature of your object so
+so even if you think you're giving it
+enough buffer you may not end up being
+the case and when you lose your cache
+bad things happen so it turns out memory
+is another thing that we need be careful
+about if we want to get rid of on
+deterministic behavior
+so to summarize you know I've picked the
+the good ones and the big ones and the
+important incidents that I told you and
+over time we realize that these are the
+things if we want really good tendencies
+we have to do something about so what
+are we going to do with them so first I
+want to talk about the things we have to
+mitigate because some of the things we
+cannot stop doing for example we cannot
+stop can accepting connections so they
+will happen and we don't have total
+control of our clients so I cannot say
+for sure whether I will experience
+connection storm or not right so I have
+to be as performant as possible when I
+have a lot of
+and the other thing is blocking i/o you
+have to log you have to at some point
+write to disk
+you just cannot not do it so how do we
+mitigate so here I want to sort of
+borrow a concept from the networking
+community so in computer networking
+there's this concept called the
+separation of data play and control
+playing data plan being the plane that
+handles the IP packets right the only
+task of data plane is to forward packets
+and you leave everything else like doing
+BGP or or configure rules or you know
+handle stray packets or things like that
+to the control plane which is also
+called sort of the slow path right so
+data plan corresponds to the fast path
+handles the capi case and the vast
+majority of the packets and you leave
+the rest of your control plane I think
+this separation is actually quite
+helpful in our case because we also have
+a situation where you have requests
+response with just the dominant case
+which has at least two three orders of
+magnitude more activity than the rest
+right in the in the steady case so you
+really want to optimize for the
+performance of requests response
+handling and you can't afford to do
+other things maybe a little slower so we
+sort of come up with this design
+decision saying we will put operations
+of either of different nature or for
+different purpose of different SLA on
+two different threads and we put a bunch
+of you know tasks that are necessary but
+not exactly performance critical onto
+what we call sort of a main thread so
+this is part of a control play which
+listens for connections that handles
+these activities you can get your stats
+exported on on this thread you can do
+stats aggregation you can do your lock
+dump if it gets blocked it gets blocked
+right it's fine and we then form or what
+we call the data plane which is the fast
+path and in particular we have exactly
+one thread that handles all the requests
+response so the entire flow of the work
+of thread is is shown on the slide
+that's the only thing it does and in
+addition to that we actually put another
+thread into the system which has been
+done by memcache
+so we're not the first one to do it but
+we we Street tweak to somehow but the
+idea is because connecting is expensive
+and you sometimes have to handle a lot
+of connections so you want to give it
+plenty of resource just for the you know
+the corner cases so basically we formed
+this little relationship between three
+three threads or three groups of threads
+in that one handles request want Ron
+hand owes you know connects and they all
+tried to log and just that's update and
+and push those updates to the background
+control control plane front which is the
+main thread and the amazing thread takes
+care of the rest of the tasks so that's
+how we mitigate connection storm and
+connection storm as well as blocking i/o
+so the things to avoid so if you look
+closely of what we are using the other
+things for it turns out a lot of the
+uncertainties in memory and a locking
+can actually build them eliminated let's
+talk about locking first so what we know
+is we do need because we have this you
+know three thread setup right it's not
+like we just have one thread and don't
+need any locks which is the case for
+Redis because we have threads and
+threads need to communicate so we just
+look at the nature of that communication
+and see can we do the the same
+communication without blocking right it
+turns out you can so that so the main
+communication are three there are three
+types you have stats you have logging
+and you need to handoff already
+established connection to the worker
+thread so it can process data and what
+we do for each one of these is for stats
+it's actually quite simple there's this
+thing which is amazing called atomic
+instructions and if you use that on
+basic data types it would sort of do
+locking or serialization add the
+hardware level and you don't have to
+incur any software over half of that
+which is perfect for updating metrics
+right especially a simple metrics tab
+types so now we take care of with just
+atomic instructions what about logging
+so
+for logging we also use another fairly
+common data structure which is a ring
+buffer or a cyclic offer right I'm sure
+many of you know that how this works but
+I will just talk a little bit in that
+you have a reader and writer which
+points to the reposition and ride
+position in this buffer and the writer
+will move the right position forward
+reader will move the reposition forward
+and the way you avoid using lock in the
+setup is again you use atomic
+instruction as well as a locally cached
+by local I mean threat local cached a
+copy of the values to prevent stepping
+onto the the other threads feet right so
+basically you will see oh how much room
+do I have for right by reading both
+counters and then you know how much you
+can safely write or you can read but
+between the read and write positions all
+right so so if you use atomic
+instructions together with the simple
+data structure you can communicate
+between two threads without using locks
+and for connection handout if the story
+is similar except that you know instead
+of ring buffer we use a ring array
+because every object is the same size so
+I'm not gonna say more about that so
+what do we do with memory how do we
+remove our certainties in memory so
+their voice down to a few design sort of
+principles what we know is memory
+compared to other computation is
+actually relatively expensive and alack
+and free cause fragmentation so if you
+get connections turns that cost
+fermentation and we also have control
+over internal versus external
+fragmentation does any everybody know
+what internal fragmentation means right
+so you're basically internal from engine
+is you slice things up in neat chunks
+but you may not use all of it external
+fragmentation means you slide things up
+exactly at at the size that you need but
+you know whoever is providing this
+malloc functionality or the memory
+management library may decide that it
+needs to cut more memory to fit your
+need so so and and the goal is we never
+want to do any swapping because once you
+get to disk and the performance is gone
+and we want to avoid so one thing is we
+really want to control the footprint as
+I said if you go over your expected
+footprint the scheduler or the Machine
+may decide to kill your job or do
+something wacky about it so what we want
+to do is we want avoid external
+fermentation because if you introduce
+external fermentation it's very hard to
+put a lid on that number you don't know
+whether your fermentation ratio is going
+to be one point one or one point two or
+two point zero so it's very easy to sort
+of under a provision the amount of
+memory you need so we want to I would
+take internal fermentation over external
+fragmentation any day I would rather
+store a few fewer keys but that's okay
+and the other thing is you want to cap
+all your memory resources not just not
+just the keys you store because you if
+you have one ten thousand connections
+and each connection takes ten you know
+100k memory just to maintain that's
+memory you have to provision on top of
+whatever you're storing as well right
+and people often forget the hash table
+takes memory connection buffer takes
+memory whatever data structure you are
+using in the interim takes memory factor
+all of them in and put a lid on every
+one of them and to get sort of
+predictable performance or runtime
+behavior what we what we decide to do is
+cache is very simple it doesn't need too
+many data types or data structures why
+don't we just reuse them so you know we
+should just reuse our connection buffers
+and stuff like that so we don't have to
+call malloc or realloc all the time and
+and why stop there if you have already
+capped all your resources you can
+allocate to the maximum extent possible
+or your memory intensive resources at
+the beginning of the process then you
+never need to worry about memory
+performance ever again so these are the
+two things we try to stick to okay so to
+put these together right so we have our
+mitigation scheme and we have things to
+avoid by using somewhat clever data
+structures is we put these ideas into
+our cache which is Pelican and you don't
+have to read the entire trial that we're
+just trying to show you though we do
+follow a modular design
+and the performance go for Pelican
+really is to be deterministically fast
+and to achieve that we've pretty much
+summarizes the things we have learned
+with Twitter's cash operation and put
+the put them in there and if you appear
+interesting the code and how certain
+things are implemented I encourage you
+to go to this link and you can which
+will lead you to the get up repo as well
+as some more blog posts and articles
+about how things are designed and I want
+to do a comparison because the cash
+space is not very crowded right the the
+dominant and use cases are run by
+memcache the rhetta's and I you know I
+just become there for comparison you can
+see that existing solutions do some of
+the things that I talked about or just
+do them to some extent but unto now I
+don't think any of them has sort of
+systematically looked at this Te'o
+latency problem and sort of adopt best
+measures for for all of them although
+I've been talking with the author of
+Redis a fair amount and in the in their
+unstable version they're actually
+starting to adopt some of the things
+like you know moving intensive
+operations on a separate thread and
+stuff like that so I just want to leave
+this chart here so people can do a
+comparison and to give these existing
+solutions credit Pelican cash is very
+young right it doesn't have nearly as
+much feature as the existing memcache do
+especially Redis right I'll have a full
+list of things that patent doesn't do
+but Redis does right so so these are
+things that's basically future work as
+we poured more features into our code
+base hopefully we can catch up a little
+bit with the the other solutions but
+basically because we have a very large
+operation we decide to prioritize
+performance concerns over features while
+some of them for example Redis answers
+to the open source community and
+therefore is much more aggressive in
+adopting new features and maybe a little
+bit more conservative when it comes to
+performance fixes alright so this is
+just if you apply to different contexts
+you will end up having different agendas
+so that's pretty much my talk and I I
+just want to put it out there that I
+think the best cash should be always
+fast never slow and I think that's quite
+possible if if you take care of your
+basic operations so that's it questions
+so you talked about profiling your
+caches and how it mapped to you know
+fragmentation and other over specific
+things how did you profile them like was
+there some tool or basic unix commands
+or so if you basically if you compile
+your code using the mainstream compilers
+like GCC or seal and there are these
+flags that you can enable so you it
+would basically generate the the chart
+the with the function the most
+frequently called functions with
+percentage charts right that chart you
+can get by using existing compiler with
+specific flash turn-on and existing
+tools and from there you can annotate
+however you want so basically if
+annotation is a standard feature in in
+compilers and fragmentation we actually
+looked at either metrics in the case of
+Redis right at tracks what's the
+fragmentation ratio so would you just
+see that and the other thing is if you
+look at the the the slab system it's the
+condition of the slab system which is
+how memory is managed is reported on the
+proc so the system has it if people
+usually don't look at it but when you're
+desperate you were looking at everything
+and and that's how we stumble up
+stumbled upon this we're like oh
+actually it's really really fragmented
+after run it for X days
+so hi do you recommend cache replication
+between multiple regions or data centers
+so I think the the I think the problem
+is very real right so we do best-effort
+cache replication at Twitter as well but
+the the understanding is that because
+here the cache is run as a lookaside
+meaning that the the service is
+responsible for coordinating between the
+cache and the database right the cache
+itself does not really have the ability
+to reconcile with the database so if you
+if you do this in one datacenter you
+already have run into a danger of being
+sort of out of sync it's going to be
+even worse when you extend to a much
+larger to your graphical region because
+now you have much more complicated race
+conditions so what I recommend is
+basically try not to do synchronization
+between caches and different regions but
+instead sort of send a signal that
+doesn't involve data for example you can
+do a read sort of read through cache in
+each data center but if you want to
+update keys in the remote data center
+while right has happened in the local
+data center you can try to invalidate
+the remote key by just deleting it right
+so so at least you avoid having stale
+data but you're not really introducing
+the danger danger of having stale data
+propagated by the caching layer so I
+think that's the the saner approach to
+this
+thanks for the talk I noticed in your
+slide where you were talking about
+growing the hash table and replacing it
+with a lock free table that the max
+latency was still on the same order of
+magnitude as the the walk based version
+and I was wondering if you attributed
+that to like qpi throughput or something
+to do with with Atomics or if there was
+something else queueing in that system
+as well so I think I should clarify a
+little bit I actually didn't even allow
+doubling in the new in right now Pelican
+doesn't even allow you to do doubling
+you've got to pick a hash table size and
+run with it the reason for that design
+decision is first of all I don't want to
+do locking right the second thing is I
+calculate the the footprint for hash
+table assuming you have the smallest key
+possible because even you have you have
+only one byte in key and one byte in
+value storing an object in memory but
+cause a bunch of metadata overhead right
+so you realistically the smallest object
+you can store from memcache and Redis is
+around 64 bytes so if you run that
+calculation very conservatively see
+everything I have is 64 bytes and I have
+a 20 GB heap how am i much storage do I
+need to allocate to the hash table it
+ends up not being a very large fraction
+of that you know it's like it's like
+like 10 percent you know 1 to 10 ratio
+which most people I think kind of can't
+afford so why not just you know
+conservatively estimate how many keys
+you're gonna have allocate the memory to
+the hash table right away and be done
+with it
+so so that's what we did
+okay
+so Redis for example is a distributed
+caching framework right now even it's
+like no cycle in memory so in this case
+if we have to use it from a cloud app
+let's say how would we initialize or
+connect is it same paradigm as ready sir
+so the the goal the code the Redis
+support is due in development the goal
+is to support the the common data
+structures but not the DB part right
+Redis also has a DB so I know a lot of
+people actually use Redis as their
+database we have other solutions for DB
+so we own we're strictly sticking to the
+cache case otherwise it will be similar
+to if you already use Redis for cash
+once we have the Redis support it will
+be the same because it speaks the same
+protocol
+so usually there is a limit for each
+object values so for example one magpie
+so what a limitation for Palika and also
+a pizza for certain use cases in that we
+have to if about that limit is any way
+could create in the to another way or
+yeah so this actually is also possible
+with memcache except that memcache the
+version that I looked at had a slight
+small bug that actually made it quite
+not quite possible to use a bigger than
+1mb object we actually already fixed
+that in chrome cache and we carried it
+over to Pelican so you can set max the
+slab size right so default it's 1
+megabytes but you can set it up to I
+believe 512 megabytes which should be
+plenty for anybody you know practically
+so if you pass in this parameter when
+you start your server you will have the
+possibility to store large keys a large
+value is I should say the key limitation
+remains the same
+all right thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

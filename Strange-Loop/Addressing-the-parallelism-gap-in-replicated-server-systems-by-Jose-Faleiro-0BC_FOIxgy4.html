@@ -1,0 +1,724 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>&quot;Addressing the parallelism gap in replicated server systems&quot; by Jose Faleiro | Coder Coacher - Coaching Coders</title><meta content="&quot;Addressing the parallelism gap in replicated server systems&quot; by Jose Faleiro - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Strange-Loop/">Strange Loop</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>&quot;Addressing the parallelism gap in replicated server systems&quot; by Jose Faleiro</b></h2><h5 class="post__date">2017-09-30</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/0BC_FOIxgy4" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so I'm juicy falero I'm a finally a PhD
+student at Yale and I'm gonna talk about
+addressing the parallelism gap in
+replicated service systems so this talk
+is divided into four parts
+in the first part I'll go into some
+background on multicores
+and replication in the second part I'll
+describe log shipping based replication
+I'll then talk about a solution to the
+parallelism gap which is mentioned in
+the title and finally I'll give a little
+detail on the implementation challenges
+in implementing this solution okay so
+let's just drive straight into
+background on multi-core and replication
+so driven by hardware and applications a
+server code today has two important
+requirements the first is that it must
+exploit multi-core parallelism and the
+second is that it must support high
+availability via replication so in any
+given deployment of server code we're
+going to marry solutions to both these
+sort of requirements together they need
+to coexist
+so multi-core Hardware today is now
+increasingly accessible it's easily
+accessible in the cloud where Amazon
+provides ec2 instances with 128 virtual
+CPUs it's easily accessible on-premise
+where systems with more than 50 cores
+have been widely available for several
+years now so given that this given that
+this parallel hardware is widely
+available we want to have we want to
+make use of it in our server code and
+this has led to sort of we have a lot of
+advances in programming multi-core
+machines today programming models such
+as futures and transactional memory are
+slowly making their way into mainstream
+languages and we have better
+synchronization mechanisms like scalable
+locks and Locker algorithms so in order
+to take advantage of multi course server
+code just you know it has to use the
+right programming abstractions we the
+the facilities are there today at the
+same time our server code also needs to
+be highly available as many of you
+probably are aware this is because
+availability is money and any losses in
+availability can have a catastrophic
+impact on revenue and Trust
+and sort of the standard way to achieve
+high availability is via replication
+instead of having a single server
+sitting there and like dealing with
+requests from clients you instead sort
+of use redundancy so this redundancy
+makes applications highly available
+because when a primary server goes down
+you have a backup that can take over and
+start processing requests from clients
+right and this minimizes application
+downtime and increases availability so
+requests which update a server State are
+typically executed against a primary
+right and the primary logs these puts
+these updates into a log and this log is
+shipped out to a backup right and the
+backup the whole point of replication is
+that a backup should be an exact copy of
+the primary via by sort of playing back
+this log that shipped to it I mean this
+is really important right it needs to be
+an exact copy because if it's not an
+exact copy then it doesn't have any hope
+of being able to service requests from
+clients if the primary goes down for
+whatever reason so at this point it
+seems like it's pretty easy to marry
+these two requirements right because one
+doesn't seem to influence the other in
+any way they seem like two completely
+orthogonal problems so we can get
+multi-core parallelism by leveraging
+parallel programming abstractions and
+good synchronization mechanisms and we
+can do replication by syncing servers by
+sort of shipping these logs around
+unfortunately it turns out that marrying
+the two is complicated due to non
+determinism parallel programs are
+non-deterministic if you're building a
+multi-threaded server then threads can
+acquire locks in arbitrary orders if
+you're using a futures library then the
+order in which your promises return
+results may vary across application runs
+probably the most famous example of non
+determinism in parallel code are
+Heisenberg's so just get an
+understanding of how many if you
+actually understand or know about this
+non determinism show quick show of hands
+for who's heard about Heisenberg's
+awesome this is perfect perfect audience
+okay
+so Heisenberg's are bugs in parallel
+programs that are difficult to diagnose
+because they do not deterministically
+reproduce given the exact same input
+right in this big spiral programs really
+difficult to debug yet we need
+determinism for replication right in any
+replicated system but we I just said
+that backups need to be exact copies of
+primaries so that now this presents a
+problem because given the exact same
+input which of the log if we're not sure
+if the replicas will actually come out
+with the state that's exactly the same
+that's sort of existed on the primary so
+this is a really big problem because the
+parallel programming techniques would
+potentially allow replicas to diverge so
+at this point I just wanted to clarify
+the assumptions I'm going to make in
+this talk how many of you of you out of
+the cap theorem okay how many of you
+you've heard about multi master
+replication great okay okay if you put
+your hand up just forget about the cap
+theorem and multi master replication it
+has nothing to do with this talk so
+don't don't worry about it it's not
+important for the books in this talk so
+the replication mechanism that we're
+going to talk about today is primary
+backup replication in which backups keep
+in sync with primaries via log shipping
+and in a primary backup replicated
+system the primary is typically
+responsible for executing requests which
+update application state right and up
+and request which read application state
+can be serviced by by both primaries and
+backups in log shipping based
+replication protocols or the effects of
+updates as I mentioned before are put
+into a log and this log is then shipped
+to backups which apply the log to
+reconstruct state of the primary so an
+ID now dive into some details of log
+shipping and why exactly doesn't gel
+with parallel programming so logs
+basically serve as a record of what
+happened on the primary right so um you
+if you basically want to reconstruct the
+state of the primary by replaying this
+log and the order of
+records matters right playing rock
+playing log records sequentially is
+always guaranteed to be correct let's
+look at what that might look like in the
+context of an example so we have these
+four requests which are sequentially
+ordered in the log and the black box
+there is the actual state of the
+application so when we execute the first
+request it updates x and y 2 x 1 y 1 the
+second request updates the value of Z 2
+Z to the third requests update the value
+of y and z 2 y 3 and Z 3 and finally the
+fourth request updates the value of W 2
+W 4 right so we end up with this state
+when we sequentially execute these log
+records so now like let's look at
+example of what could happen if we
+executed these requests out of order so
+let's say we first execute request 1
+it changes the state of X and y2 x1 and
+y1 and now instead of executing request
+two we execute the quest 3 right so in
+this case request 3 changes the state of
+y and z 2 y 3 and Z 3 and request two
+now changes the value of Z 2 Z 2 now
+this point it's clear that the two
+states are different right they've
+diverged then this is because we've
+executed the log records out of order
+now the reason that this is real now the
+reason this is this is a relevant for
+parallel log replay is due to the non
+determinism as I mentioned before so the
+tip typically the way that you paralyze
+these things is to associate a lock with
+every object in your system so the lock
+will prevent multiple writers from sort
+of executing their updates concurrently
+so it will ensure that only one writer
+in a time at a time can execute updates
+so in this case we know that requests 2
+and 3 conflict right they both request a
+lock on object Z but the lock doesn't
+actually it doesn't actually guarantee
+that request 2 gets the lock before
+request 3 it could turn out that on a
+particular run request 3 gets the lock
+before request 2 and as a consequence
+this is bad because like as we just saw
+if we execute request 3 before request -
+you may end up with divergent state so
+as a consequence of these problems with
+parallel replication log shipping
+protocols often just resort to executing
+logs si
+really right the first obvious
+limitation of this is that you can't
+exploit a multi-core parallelism to
+really log records right but that's
+that's that's a small concern the
+biggest concern is that the primary now
+can execute requests in parallel but the
+but the backups can only execute
+requests sequentially so as a
+consequence the rate at which of the
+primary can produce these log records
+far outpaces the rate at which a
+replicas the backup can consume them and
+this is really bad it can lead to some
+very serious problems one of the
+problems is that it can lead to
+unbounded replication lag the problem is
+that like since we're pursuing the
+primary is going so far ahead of the
+replicas at a much higher rate it's you
+don't have any hope of the replicas ever
+catching up with the primary in fact the
+gap between the primary and the replicas
+gets worse over time
+second replicas can't really be used so
+queries because they're too stale right
+the problem is now that like if you if
+you redirect a client to a replica it
+may serve data that is you know really
+stale in comparison to what exists on
+the primary finally this slow
+replication might even impact
+availability this is because whenever
+you need to fail over from a primary to
+a backup the backup needs to first
+synchronize to the most current state of
+the primary as of the time it died and
+this process is really slow so this has
+an immediate impact on availability
+right and this then is a consequence of
+this there are several systems out there
+that execute logs serially or newest
+usually these include my sequel in
+Postgres sequel and if you go read the
+documentation in forums it's also a
+problem in no sequel type systems such
+as MongoDB and you don't have to take my
+word for this like here's an excerpt
+from a blog post by Percona
+which is a my sequel consulting and
+support company this is an excerpt it
+says the first glaring problem with my
+sequel is single threaded replication it
+is severe and getting much worse as
+servers get more and more CPU cores the
+replication process executes in a single
+thread on the replicas and thus has no
+hope of ever keeping up with the primary
+even on a moderately busy workload
+here's another example of booking.com so
+this is taken from a slide deck that
+they gave a talk about parallel
+application one or two years ago so they
+say that parallel application is new
+because it is hard it is hard because of
+data consistency running transactions in
+parallel you need to get the same
+results on all your backups and this
+result must be equivalent to what
+existed on the primary so given the
+background for this problem and now dive
+into what a solution might look like so
+before we do that let's just sort of map
+out sort of the objectives of what we
+want to do so first we don't want to
+make any invasive changes to primaries
+second we want backups to exploit at
+least as much parallelism as primaries
+and finally we want backups to be able
+to serve reads so we don't want to make
+any big changes with the primary for
+several reasons the first is that any
+changes to help replication lag might
+impact performance on the primary itself
+right so for instance there's a lot of
+academic literature on multi core record
+and replay techniques which involve
+logging low level scheduling locks and
+like thread preemptions and whatnot
+there also exists other mechanisms that
+are often used in the real world such as
+only acting back to a client when a log
+record has actually been played back on
+a backup and as you can imagine this can
+significantly hurt performance now the
+important point to note about hurting
+performance on the primary is that the
+reason you're seeing left replication
+lag in the first place is because you
+have a non-trivial amount of load on the
+primary now if you decrease its ability
+to handle this load it's not it's not
+it's not a good it's not a good thing
+finally it may turn out that the changes
+to the primary themselves are changes
+the primary are unnecessary because we
+have all the information already in the
+log we just need to make better use of
+it so I'm not going to talk about the
+backup parallelism problem and the basic
+idea is to use the information in the
+log to find out what actually happened
+on the master write and as we'll find
+out it's all about conflicts
+now when I say conflicts I mean that
+whenever two requests attempt to update
+the same piece of data I refer to it as
+a conflict right and I'll show that the
+order in which requests occur
+in which logger.log records are executed
+only really matters for conflicts so
+going back to our example the only
+reason that we got this divergent state
+here was that requests 2 &amp;amp; 3 both wrote
+this object Z right and if you consider
+this request for which rights object W
+we could execute requests for in any
+order relative to 1 2 &amp;amp; 3 and we'd still
+end up with state w-4 right this would
+be perfectly fine because it doesn't
+conflict with anything so the basic
+intuition for how to execute requests is
+for conflicting requests execute them in
+law of order and for non conflicting
+requests log order is irrelevant so to
+determine which execute of which log
+records execution needs to be
+constrained or we can perform a conflict
+analysis on the log records so conflict
+analysis is practical because the log
+records have to declare what they need
+to write I mean you literally have that
+information in the log record because
+that's what a log record is the and the
+output of our conflict analysis could be
+a directed graph of log records where
+the edges determined constraints on
+their execution so let's look at what
+that might look like as an example so we
+first look at the log record r1 we have
+we haven't seen anything yet there's
+nothing to do we look at a log record r2
+we see doesn't conflict with r1 so it's
+just is we then look at log record r3
+now here we see that our three conflicts
+with both r2 and r1 and hence its
+execution needs to be constrained with
+respect to r2 and r1 like r1 and r2 have
+to execute before r3 finally we look at
+R 4 and since it writes W doesn't
+conflict with anything it's not
+constrained in any way now given this
+graph of log records it's quite easy to
+execute them in a manner that is
+consistent with the graph right all we
+really need is that it's safe to execute
+a log record once all its parents have
+been executed that's it now the final
+requirement of any solution to the
+parallel replication problem is that
+we'd like to be able to serve reads on
+backups right this means that any read
+should observe state that at
+truly existed on the primary right now
+we we can allow these reeds to be stale
+because of the laws of physics right
+it's impossible for the reeds to be
+indistinguishable from those on the
+primary because you physically have to
+ship log records from the primary to the
+backup now this point some of you may be
+wondering if the primary and backups are
+always guaranteed to converge correctly
+with our conflict analysis
+why would serving Reed's be difficult
+and it's best to motivate this with an
+example so say we have a social media
+application where requests manipulate
+albums and pictures so every picture we
+want that every picture is always
+associated with an album that actually
+exists and this example talks about two
+requests r1 which creates an album and
+r2 which creates a picture now in the in
+r2 score we also see that there's a
+check that the that the album that the
+picture references it checks that the
+album in which the picture is going to
+be put into actually exists and if this
+check does it and if this check fails it
+doesn't insert the picture right so as a
+consequence there's this implicit
+dependency on pictures and albums
+furthermore because this implicit
+dependency exists we can conclude that
+it's impossible for r1 to ever occur
+after r2 and for r2 to have inserted a
+picture the reason is that if r2 inserts
+a picture then it's necessarily observed
+that album in on the primary state right
+so it's impossible for r1 to happen
+after r2 if r2 is going to insert a
+picture now there are a couple of really
+interesting things about this example
+the first is that the two log records
+don't conflict right they right separate
+pieces of data so our conflict analysis
+would conclude that they can be executed
+in parallel so it's possible on while
+replaying these log records that we
+execute our two but not our one but the
+problem in doing that is if we now
+expose this state to a client then a
+client could potentially see a state
+where there's a picture without a
+corresponding album right and this
+breaks the applications invariant that
+every picture is associated with an
+album right so it's good
+one of the interesting thing to note
+here though is that executing requests
+from the log in order will still
+guarantee will guarantee that these
+implicit dependencies are always
+captured right um so one possible
+solutions problem would be to also just
+put implicit dependencies into the
+conflict graph right if we could somehow
+detect these implicit these implicit
+dependencies you just put them in a
+graph and we're done
+but the problem is untenable because
+it's really hard to detect the implicit
+dependencies because they're very
+application specific so in this case
+this implicit dependency arose because
+of code in r2 right but you could
+imagine another mechanism to do this so
+for example a client could synchronously
+check that the album is going to insert
+into actually exists and then only on
+that check sort of succeeding sort of
+does it perform the insertion now in
+this case it's not even in the code so
+there's no way to tell when these
+implicit dependencies actually occur
+it's very it's very application specific
+right so so so this is so this is a this
+is a serious problem right but as I said
+before it turns out again that the order
+in the log is key and implicit
+dependencies will always be satisfied
+when if we execute request in log order
+so the solution here is to expose stated
+reads when we have explicitly computed a
+complete prefix of the log now it's
+important to note that this doesn't
+necessarily mean that we execute
+everything serially right you could
+still execute things in parallel but we
+just have to wait but we just have to
+wait for a complete prefix to be
+executed right and I'll and I'll cover
+in more detail in the next section how
+we can actually achieve this in practice
+which brings us to implementation so at
+this point I'd like to discuss sort of
+how we did on the ideal outcomes
+so the solution sketch that I provided
+doesn't really do it has no invasive
+changes on the primary's backups can
+exploit parallelism by doing this
+conflict analysis of log entries and
+backups can also serve reads by exposing
+state to reads at complete prefixes now
+there are two important implementation
+questions I think which are important to
+think about the first is that the
+conflict analysis process I mentioned
+is sequential and as a consequence that
+might it might turn out to be a
+bottleneck on a multi on a large
+multi-core machine the second question
+is how to actually ensure that we're
+able to get complete prefixes
+materialized while still executing log
+records in parallel and it turns out
+that the second problem is really
+challenging
+so to recap right we use the conflict
+analysis to figure out the order in
+which we need to execute log records
+this is fairly straightforward to do
+with a single thread right the thread
+walks through the log records in order
+and for each log record simply figures
+out the immediately preceding set of
+conflicting records that's it
+now unfortunately since this is a single
+thread it can turn into a bottleneck on
+a machine with lots of CPU cores so what
+we require to do somehow is to somehow
+do this conflict analysis in parallel
+and there's actually a very
+straightforward way to do this we
+basically partition objects across
+various threads in your system and these
+threads will only analyze the portion of
+a log record that belongs to its
+partition so every thread just maintains
+a map from each object to its last
+writer and we use this map to create
+dependencies between log records so
+let's look at what that might look like
+in the context of our example in this
+case we have a request one which writes
+to both partitions you try to X and it
+writes to Y so in this case both
+partitions will insert this reference to
+this log record in its map next we
+encounter r2 and which only writes to Z
+and in this case the its corresponding
+partition will update its map now when
+we see our three we notice that it
+conflicts with both r1 and r2 and and as
+a consequence like we can insert the
+dependencies at this point it happens to
+be the case that both y&amp;amp;z reside on the
+same thread but you can totally imagine
+this being done regardless of where the
+actual objects reside once it does that
+you update the map and we're done a
+fairly straightforward process to
+parallelize this analysis mechanism on a
+multi-core machine so now let's switch
+into how to execute reads on backups so
+I previously established that the only
+way to correctly expose state to
+is when a complete prefix of the log has
+actually finished executing however it's
+unlikely that this will ever magically
+happen just by itself right the problem
+is that the conflict analysis let's log
+records execute out of order right and
+as a consequence there's no guarantee
+that you'll ever get to a complete
+prefix of the log being executed when
+you know you get a constant stream of
+new log records coming in for the
+primary so let's let's take a look at an
+example of what I mean so this shows the
+order in which log records could
+potentially be executed now we could end
+up executing r1 r2 and r4 without
+executing r3 right r3 could be executed
+after r4 but this is perfectly fine in
+and of itself right the problem is that
+as you get new log records stream into
+the backup it's not clear that sort of
+you know this whole will not just be
+moved to somewhere else somewhere else
+in the log so it's not clear that you'll
+ever actually get to a point in time
+that we have a complete prefix now so
+that it's that we have no hope in
+waiting for complete prefixes because
+it's just really hard to guarantee the
+problem the the problem is that in order
+to get a complete prefix you're probably
+going to have to quiesce all your
+updates in your system until you
+generate that prefix and that obviously
+is gonna hurt that ilysm because you're
+constraining the number of requests that
+can execute concurrently so instead we
+weaken the requirement a little bit and
+instead maintain a low-water mark of the
+of a complete prefix so in this case we
+see that requests r1 and r2 have
+finished executing and this corresponds
+to the low-water mark of a complete
+prefix right so in this case the
+low-water mark corresponds to r2 which
+which which tells you about this the
+longest sort of subsequence of the log
+that's complete right and in addition we
+use or we can use an incremental check
+pointing mechanism to checkpoint state
+corresponding to this complete partial
+prefix of the log right now obviously
+I'm glossing over a lot of details here
+doing incremental check pointing is
+really tricky without questing updates
+but I'm not going to go into the details
+in the stock so we're getting towards
+the end of the presentation
+and I just like to point out sort of
+some of the inspiration of where we got
+these ideas from so the conflict driven
+pre scheduling was actually something
+that was implemented in deterministic
+database systems in 1997 so this was in
+a paper called high-volume transaction
+processing without concurrency control
+two-phase commit sequel or c++ right and
+the idea that these the idea in this
+paper is to just eliminate
+non-deterministic concurrency control
+such as two-phase locking and instead
+just do this conflict driven analysis
+before executing transactions and the
+idea was that this would give you far
+better performance than doing the sort
+of non-deterministic concurrency control
+online so the idea for conflict for the
+scalability of the conflict driven
+rescheduling came about when I wrote a
+paper on multi-version concurrency
+control for a deterministic database
+system this was in a paper called
+rethinking serializable multi-version
+concurrency control there was published
+in 2015 now there's another issue to
+this conflict driven scheduling one of
+the issues is that the scheduling at the
+granularity of a log record sometimes is
+not enough you could still lag behind a
+primary depending on the you can still
+lag behind a primary depending on what
+the primary does to guarantee
+correctness so this talks this paper
+talk about sort of fine-grained
+scheduling of log records so this was a
+paper that was published just this year
+it was called high performance
+transactions we are early write
+visibility and finally since I gave
+absolutely no details on incremental
+checkpointing here's the paper that was
+published in 2016 or called a low
+overhead asynchronous check pointing for
+main memory database systems the idea
+here was to somehow get a consistent
+checkpoint of a system without having to
+quiesce all the updates right so
+multi-core parallelism and replication
+seemed independent and easy to combine
+in practice it's like the scene in The
+Big Lebowski where Walter and the dude
+seem to think that it's easy to coerce a
+teenager into admitting that he stole
+the dude's car on being unable to coerce
+the teen Walter has a complete meltdown
+and destroys a random strangers car
+right mágico
+multicores and replication are similarly
+easy to get spectacularly wrong even
+though the problem seems relatively
+innocuous
+so in conclusion server code must
+exploit multi-core hardware and remain
+highly available via replication and it
+turns out that these two goals are at
+odds with each other this is because of
+the non determinism inherent in parallel
+programs however it turns out that
+everything you need is in the log we can
+use conflict information in the log to
+get parallelism and we can use the order
+of the log to ensure that implicit
+dependencies between log records are
+satisfied for reads this is something
+that we're actively working on we're
+both doing research and trying to build
+this in an existing system so watch this
+space
+so I'm Joseph Alejo thank you for
+listening but before I relinquish I want
+to mention that I'm based out of San
+Francisco and eager to learn about
+examples of this issue in practice so if
+you're experiencing issues with
+replication lag I'm happy to meet up in
+person and chat more thanks</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

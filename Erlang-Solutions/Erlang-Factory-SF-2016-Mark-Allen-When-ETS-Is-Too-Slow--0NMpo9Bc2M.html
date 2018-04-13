@@ -1,0 +1,883 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Erlang Factory SF 2016 - Mark Allen - When ETS Is Too Slow | Coder Coacher - Coaching Coders</title><meta content="Erlang Factory SF 2016 - Mark Allen - When ETS Is Too Slow - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Erlang Factory SF 2016 - Mark Allen - When ETS Is Too Slow</b></h2><h5 class="post__date">2016-03-11</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/-0NMpo9Bc2M" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">yeah I'm hot
+good so my name is Mark Allen I'm gonna
+talk to you about it's today and a lot a
+lot of other things as well I hope but
+thanks for coming to the talk I know
+that all of you are going to be in food
+coma pretty soon so try to stay awake
+this coffee in the hall if you need it
+but yeah so today I'm going to talk
+about when X is too slow no no I feel
+like my mics really hot sorry just see
+if that helps
+does this help I think that's better I
+don't know so I'm gonna talk about when
+X is too slow and I just wanted to
+preview this with a warning I just want
+to tell you I didn't choose the yak
+shaving life
+the yak shaving life chose me so this
+talk is about shaving a lot of yaks
+it's full of razors it's full of blood
+it's full of sharp pointy things that
+will stab you so just be prepared
+there's you know violence that's going
+to be committed against code and erlang
+you know children avert your eyes that's
+all I'm gonna say alright so um what
+even is too slow like people say that's
+slow what does that mean slow in this
+case has a really interesting meaning a
+specific meaning about six months ago
+somewhat randomly we were working on a
+project to speed up reiax footpath if
+you didn't already know react has a
+finite state machine that all of the
+puts run through that finite state
+machine has a bunch of different states
+in it as one might you know assume and
+what we discovered was that if we
+artificially disabled capability lookup
+that we got a 10% performance
+improvement without doing any other work
+so just turning off capabilities gave us
+10% extra put capability throughput
+operations per second
+you know storing bits to disk all that
+stuff capabilities are a part of react
+that essentially allow V nodes to
+negotiate with other V notes whether
+locally on the same machine or across a
+cluster to identify
+what features they support what sort of
+encoding they support those sorts of
+things so they're really important to
+correct application function they're not
+a feature that we can just arbitrarily
+turn off and go on our merry way right
+they have to be part of our application
+but the question that we had was why
+does turning off capabilities impact us
+so much like that's a pretty significant
+performance improvement so we we use ads
+to back that stuff and we have caches
+for Ed's data all over react some other
+areas where it is used is for bucket K
+properties so in react you can define a
+user-defined bucket they can have
+certain properties associated with it
+like how many replicas of data that you
+want to store and all sorts of different
+tunable knobs like if you want to use CR
+DTS and like whether you want the last
+Reiter winds to be on if you allow
+siblings and all sorts of other things
+so that's another area that uses X and
+is all over our application and also is
+subject to this this performance impact
+and of course the other area that most
+people are familiar with is the ring
+state I don't actually have a slide of
+the ring so if you came to the talk and
+expected to see that you will be sadly
+disappointed today there are lots of
+other talks that I've done that have
+that slide in it so if you if you'd like
+just go look me up on YouTube you can
+watch one of them so just just as a
+quick summary the ring state is really
+the the global node state of all the
+members of a react cluster so it
+includes things like who is joining
+who's leaving who's up who's down you
+know all those sorts of application
+management state thinks are part of the
+Ring State also the ring contains some
+other metadata that's not important but
+the the main thing is is that it's a
+very large data structure that it's
+mostly read-only and it's also stored in
+its cache for a while more on that
+coming soon anyway we developed a
+hypothesis the hypothesis hypothesis was
+this if we could speed up all these
+cache lookups
+then we will see big wins across our
+entire application if we get ten percent
+just by arbitrarily turning off
+capabilities what if we could you know
+improve the performance of cache lookups
+even by like 10 percent or 15 percent or
+20 percent that would be an enormous
+impact as you look at you know hundreds
+of thousands of operations going across
+a cluster you know per minute or per
+second or whatever the scale is so we
+had this idea so we want to take a dirty
+hack that we use for bring state and see
+if we could generalize it and use that
+technique to speed up our cache lookups
+for X in other parts of react so this
+talk is really about exploring that
+hypothesis and answering whether or not
+our intuition about that was true or
+false so I'm quick I'm gonna do a quick
+review I assume most of you are familiar
+with X is there anyone that is not
+familiar with Ed's no all right I'm
+gonna skip this slide because I have
+plenty to talk about but the main thing
+is is that it's a term storage it's
+arbitrary uses tuples that's probably
+enough for now the technique that we use
+the dirty hack that I wanted to talk
+about is this thing called Moche global
+and Moche global is still part of react
+core right now
+there was an adaptation that was added
+to react core in the sort of one for 200
+timeframe and the basic idea is that for
+some period of time some number of
+seconds that's tunable we're going to
+take rights onto an X table and those
+rights are going to represent all of the
+nodes updating green state across the
+entire node and then once that quiesce
+is we're going to promote that into this
+dynamically created module at the bottom
+of this slide I have some of what that
+module might look like in this case you
+know it's some random thing is the name
+of the module there's exactly one
+function it's a zero arity and what's
+inside of the body of that is some
+arbitrary data structure in this case
+it's a record called arbitrary and as
+you can see it has five fields
+in the case of the ring it's basically
+the same thing except instead of having
+a record there it's this ginormous huge
+GB tree data structure that has you know
+a lot of metadata about the entire ring
+structure and so there's two things that
+we did to speed that up one is is that
+we build this dynamic module which is a
+dirty hack the other is that we tape the
+entire thing and convert it into a
+binary and do a bunch of binary
+operations on it which is also another
+dirty hack but one that we're not going
+to copy today anyway this is the
+generalized technique that we wanted to
+build into a prototype to do some
+experiments with so as a weekend project
+I wrote this library called fling fling
+is available on github right now if you
+want to play with it it's at bachelor
+labs fling and it it it implements that
+hybrid approach that I described so as a
+tunable parameter you take rights to an
+X table for some period of time by
+default it's five tics of five seconds
+to twenty five seconds and after the
+timer expires if there has been no
+rights in that time period then the
+module will will take the entire
+contents of the Etsy table and build a
+dynamic module load it into the runtime
+system at that point the fling library
+will read all of its data from that from
+that runtime module and if we take new
+writes those go to the edge table and
+the gem server that's in front of the X
+table will actually flush it will flush
+out the it'll flush out the contents of
+the dynamically created module so
+there's this really really interesting
+function that has a lot of features that
+I think are either not well known or
+have dragons in them and one of the
+things that is not especially well known
+is that you could actually give at
+tables to another process there's a
+function called called X giveaway and
+that implements this and what it does is
+it takes ownership of a process sorry a
+table that's in a process and hands it
+off to another process and it comes into
+there as a message essentially
+and after the message is received that
+process owns the X table
+in the runtime system so what what fling
+does is it essentially spawns a gen
+server that sits in front of this and it
+manages all of that now all the reads in
+fleeing circumvent the gen server the
+generator is never involved in reading
+because we don't want to have to go
+through the mailbox for the gen server
+just to look up values we know that the
+cache is static because it's read-only
+anyway so we don't have to ever need to
+worry about synchronization problems
+there the data is going to be constant
+all the time we're never taking writes
+on it by definition if we take a right
+then at that point we've lost our sort
+of guarantee and we'll have to rebuild
+our dynamic module so I built this
+library and the next thing that I built
+was some drivers to test it so patio has
+written a pretty nice benchmarking tool
+called bash of bench there was an
+earlier talk today from this machine's
+own they had their own NZ bench which
+sounds really interesting I haven't been
+able to play with it yet but but it
+sounds very similar Bachelor bench is a
+tool that anyone could use to benchmark
+arbitrary Erlang code if they want and
+it's concurrent like a boss compiles to
+an e script it's really nice has lots of
+built-in generators and you can make
+user-defined generators and there are a
+lot of drivers I actually have a really
+simple driver right here I just want to
+walk through it really quickly because I
+want to show you how easy it is for you
+to you know build benchmarking for your
+own app literally you just basically
+write two functions there's a new that
+kind of sets up your test environment in
+this case it takes one parameter that is
+an ID every batch o bench worker has a
+has a numerical integer ID starts with
+one and ends with whatever concurrent
+value you pick and then you have to
+define what to do when you run so that's
+a four and it takes some operation name
+which is an atom and then a key gen in a
+value gen those are usually defined in
+your config file and the state and the
+states define up here in your new so
+once you've invoked your your
+environment set up your state state gets
+passed through all functions and you can
+return modified state and all that you
+know pretty typical OTP style build
+application in any case I built the
+driver for a fling and started
+benchmarking it
+and this is kind of what we expected to
+see the things we were expecting to see
+was better look up speed so we were
+expecting less latency not only in the
+amount of gets per second but also with
+tail latency so sort of at the extreme
+end if we could lower or capped a
+latency versus X then those would also
+be wins one of the really interesting
+things that I've learned from from going
+to different talks and conferences and
+just experimenting is if you can cap
+tail latency in your in your application
+over time then that's a really a big win
+over time because till you see those
+sort of Martian things that take a
+really long time are things that will
+end up killing your performance in the
+long run I mean you you you want low
+medians to start with but you know low
+means sorry but you know you're really
+looking for
+tailee and see that's capped at some
+maximum value that's not too crazy all
+right so this is what we expected to see
+spoiler alert your intuition is usually
+wrong this is what we actually saw okay
+oh my graphs cut off lovely well so so
+you know play along with me at home here
+what this graph actually shows is
+there's two lines there's a purple line
+and a green line you can see it better
+over on the the the one over on the
+right the one on the right is actually
+showing you the maximum latency for the
+entire operation so the way that these
+benchmarks were run just just to
+describe that and if you go to a talk
+and the people at the talk don't
+describe how they built and tested their
+environment you should maybe take those
+results with a grain of salt so I want
+to do that right now the the benchmarks
+were all run on this workstation that
+I'm giving this talk on right now and I
+also compiled Erlang from source and I
+use a tool called Earl brew that I wrote
+that actually built all the binaries
+it's for OS 10 on El Capitan and this is
+a power book and you know it's a pretty
+standard power book I guess they're
+called MacBook Pros now but anyway what
+we saw was that in almost all cases of
+performed worse than Etzel Casas fleeing
+was more latent at the tail the nets and
+that was very surprising to all of us
+and we didn't understand what was going
+on so one of the things that we
+theorized was that the way that fling
+works is that when you give it a list of
+erling terms that come from ads it just
+iterates over that list and it puts them
+all into a function and the the
+parameter of the function so the pattern
+match that it does is actually the key
+value and the body of the function if I
+could go back to that moki global emoji
+global slide for a second here so
+instead of having an air DZero term here
+we have an air t1 term and the air t1
+term is actually the key and then the
+value of whatever that is actually goes
+in the body of a function and that
+happens as a linear lookup so when the
+airline runtime system starts evaluating
+what function head it should follow it
+just starts at the top of the list and
+it goes all the way to the bottom well
+the problem is is that if you have a lot
+of terms and in this case we were
+benchmarking about 10,000 so we created
+a module that had 10,000 function heads
+with 10,000 values as we did worst case
+lookups we found that that that if you
+fetched values from the very button you
+know tail of that list at the bottom of
+the module those lookup times were
+significantly worse than X because
+that's as you know constant time lookup
+and it has all kinds of other advantages
+like being and C and all sorts of other
+things that are lovely but in any case
+what we found is is that this technique
+did not work especially well for the
+benchmark that we were that we were
+testing and so what we decided to do was
+we started to do some variations on
+flame we decided that yeah question
+Erik you asked about native code
+compiled since I was running us on OS 10
+no I did not do that I I it's it's one
+of those things that we have so I'm
+going to get into the variations that
+we're doing now and and and we also have
+future work that
+to do and that's that's one of them but
+thank you for asking
+right that there are there are some
+things that will make this better on not
+OS 10 hype is not good for OS 10 it
+causes all kinds of problems
+so OS 10 builds of Erlang typically
+don't have hype enable on them because
+they die
+it kills your VM dead what's the problem
+with hype on OS 10 it it goes into a
+memory starvation problem when you're at
+scale or at when the system is under
+stress and there's a there's a certain
+part of of the the VM that basically
+gets to a site fault when it tries to
+get more memory that on Linux doesn't
+cause a sec fault but on that was 10 it
+does so why hasn't this been reported
+somewhere I don't know I don't know what
+I will report it yes so so so some of
+the variations that we decided to try
+were to store our data in a GB tree so
+instead of having this linear lookup we
+were gonna go back to the single term
+with zero arity we're gonna have a
+really big data structure will have a DB
+tree that you know then will traverse
+through the GB tree and theoretically
+that would be a better look up but it
+turns out that's even slower than just
+doing function heads so we had another
+idea and that was well okay so all the
+capabilities all the bucket properties
+those are all atoms so what if we just
+made the the key name the function name
+and then they were all 0 air D and then
+we could just do a direct look up
+through that way and I have a branch of
+fleeing and that implements that but I'm
+getting a weird syntax tools problem so
+maybe I will track down Ricard and sit
+down with them and figure out why but it
+won't compile at least it won't compile
+on on my workstation so so anyway we we
+decided that GB trees were not going to
+be a winner we decided that that using
+keys that were Adams right now is
+something we couldn't test very easily
+and then
+other things that you that have been
+suggested like doing JIT and our hype
+and native computed code and stuff like
+that those are all future things that we
+need to test on a different platform but
+but our good suggestions so we are
+definitely going to to look into that
+but just continuing on with the story of
+what we've been investigating what
+specifically what I've been
+investigating we looked at a couple of
+miss a caching libraries that are really
+interesting the first one is called
+Shirley and it's from the leo project
+leo project is an Earling application
+that's a kind of an arbitrary blot store
+it was written by Rakuten and I don't I
+don't know what the state of that
+project is anymore
+the this particular Fork of Shirley has
+been around for a little while and then
+the other one that I wanted to talk
+about today was is one called e to QC
+this was a really interesting library
+that implements the 2q cash eviction
+algorithm that I'll talk about in just a
+couple of minutes first of all I wanted
+to talk about Shirley so cliff moon
+we're at this in 2009 it used to use a
+port driver it was all emitted in C but
+in 2012 some some developers at Rakuten
+kind of adopted it they turned it into a
+slab allocated off heat NIF they added
+rebar because the original version was
+just straight-up Erlang compiler and
+they've really cleaned up the code a lot
+and you know added more performance
+enhancements and better memory
+management and all kinds of other lovely
+things so that's the version I tested
+and that's the version I would recommend
+that you use so what we saw with this
+was on this slide right here and again
+you can kind of see the green line at
+the bottom that's just straight Erlang
+ads from Basho's OTP distribution and on
+top is the purple the purple is the mean
+so over on the over on this side yeah
+the right side this is the mean and over
+on the left side is the max and you can
+see in general that the straight-up ATS
+wins on both counts so there's less
+latency on the mean and in general
+there's less
+latency at the tail so at the extreme
+tail on the max so you'll notice that
+they're they're pretty close right if
+you were to draw a line here they're
+pretty close but there's definitely a
+separation so if if if you if you are in
+a position where you need to have cash
+this looks like a pretty interesting
+option one thing that straight up Nets
+does not give you is eviction so if you
+need something that has eviction or you
+need better memory control than what
+Nets provides then it seems like this
+would be a very good library to look at
+using in your environment so the second
+the second NIF that we looked at was
+this one called e to Q C to Q is a cache
+of Ixion's a per that came from vldb
+into and sorry 1994 so it's pretty old
+at this point but it's a really
+interesting paper I recommend you read
+it it's available at this this web
+address PDF that's pretty short but it
+describes the algorithm in short
+essentially 2q offers a near optimal
+eviction strategy compared with L argue
+for certain types of data and in this
+case certain types of data are
+controlled by these two tunable
+parameters which is essentially the size
+of the cache slots that you want to
+offer and how much overall memory you're
+willing to allocate for the buffers and
+the paper goes into great detail about
+what tunable parameters should be in
+like what what what the performance was
+versus LRU and another generalized LRU
+algorithm called LRU over K they found
+that lol are you over K in general
+performs best at lr u over 2 which means
+that you don't want to evict until after
+the second most recent access the
+beautifully simple interface so this is
+this library is wonderful because it has
+a great interface it has a single
+function call called cache and yeah so
+you really can't go wrong using it it's
+a it is a lovely interface very easy to
+use so this is the results from that I
+don't have a comparison with Ed's here
+because the the new plot yakked that I
+was shaving didn't allow me to really
+superimpose them very
+you can see that this purple line up
+here is about point one and if you'll
+recall from the previous graphs the
+bachelorettes was rung 0.5 sorry I'm
+point zero five so it's about halfway up
+this graph so it's significantly faster
+and latency and also over here the
+latency at the tail is about the same as
+the other NIF interface well so we'd
+already shaved these yaks and it just
+kind of made me wonder well okay one of
+the things that that we've thought about
+doing is upgrading from OTP 16 which is
+where we're at right now to some newer
+releases maybe if we if we could
+accelerate that right if we can
+accelerate our move off of six to our 16
+on to 17 or 18 you know what's the story
+there
+what does that look like so there were a
+couple of questions that I had about
+that one is so we have our 16 versus 17
+verses 18 and then one of the things one
+of the knobs and dials that that Etta's
+you is this option to use fine-grained
+locking so they have these options
+called read concurrency and write
+concurrency and you can set those to be
+true or false by default they're off but
+my question was well ok so on OTP 17 I'm
+gonna do a run with the locks turn off
+right so by defaults or the default
+configuration and I'm gonna do a run
+with all of the fine-grained locking
+turn on and kind of what does that look
+like compare kind of compare and
+contrast those so here's our Battle
+Royale results and in this case I think
+it's pretty interesting to see it might
+be a little hard to see because it's
+washed out but there's a purple line at
+the bottom that's our sixteen and then
+there's kind of this big blue line at
+the top that's pretty easy to see that's
+our 1800 TP 18 and then all the green
+stuff that's just sort of going up and
+down and crazy like that that's actually
+that's actually 17 that's that's doing
+that so it's it's kind of interesting to
+see how sixteen seems to be the
+performance winner at least in this
+particular benchmark and then over on
+the other side there you can see the
+Layton sees they're pretty comparable
+they're almost all exactly the same in
+fact you can see that the peaks and
+valleys for all
+these different OTP releases are
+basically the same thing so one of the
+things that people ask me and other
+basho engineers all the time is why does
+basho ship their own OTP this is this
+graph is y so on the top this purple
+line is actually stock OTP 17 or 16 and
+on the bottom is Bash's release of OTP
+16 with a ton of performance patches
+that were were developed mostly by
+whatsapp but also some in-house fasho
+work we have an engineer named Ted
+Burkhart who's done a ton of work on
+this particular release batch of ten to
+remove as many locks as possible from
+OTP and and replace them with atomic
+instructions that run on Intel 64-bit
+chips so using using assembly
+instructions instead of you know code
+inside of the runtime to achieve the
+same the same autonomously guarantees
+and so you can really see that
+performance improvements there the top
+line here is probably about point zero
+one the bottom line here is point zero
+zero five so these are all milliseconds
+it would be better if the scale was
+microseconds but you know you can
+imagine basically it's about double of
+what the stock one is the tail latency
+is about the same two so it's pretty
+interesting and then this is the one
+with with and without blocks so on the
+bottom sorry over on the here on the
+left the the green stuff is the ones
+with fine-grained locking and the ones
+with purple that's the one that's just
+sort of by default and I don't know if
+you can draw any conclusions from that
+really in general what I see from this
+is that the green line is a little bit
+better there's a little bit better
+there's some separation there where the
+Green Line is a little bit lower than
+the purple line so you see a modest
+performance improvement by enabling read
+concurrency true write concurrency true
+at least for this specific benchmark and
+this particular test
+alright so my conclusion was is that
+that's is really hard to be all right
+why is it really hard to be well for
+first first
+well it's a built-in function so all of
+the performance critical parts of debts
+are pretty much implemented in C and
+things like insert things like lookup
+those are all C calls that under the
+hood are being handled by the runtime
+system somewhat transparently to you the
+Erlang developer that's a big reason for
+the speed
+another reason is is that in recent
+times so from 16 17 and 18 there's been
+a lot of work to do better locking less
+locking more appropriate locking
+fine-grained locking if they're enabled
+so that X is as performant as it
+possibly can be
+so when I came back to the rest of the
+team and I was like you know this fling
+thing doesn't seem to be working out
+super good you know maybe we should try
+to test this insu to like we need to
+figure out how we want to measure
+performance of of react like in the
+application itself so instead of doing
+these artificial benchmarks that are
+interesting right let's go ahead and try
+to test this where react actually runs
+and what I wanted to do for this was
+just talk about some tools that we use
+to do that I didn't I don't have any
+results to show you today but this is
+again all future work that we need to
+get done the first one is this really
+neat tool called a flame was written by
+my colleague Scott Fritchie it's he
+didn't talk about it early factory last
+year
+it's on YouTube I highly recommend you
+watch it this is a really neat tool that
+he wrote I also have another tool that
+came from my colleague former colleague
+Angel Sanchez he wrote a really neat
+tool that essentially instruments your
+OTP runtime and then outputs a run graph
+and then you can use dot to connect it
+together it's a little bit like the one
+that the machine zones showed this
+morning but it's a little less I don't
+know a little less overhead II I guess
+I'm not really sure how to describe that
+it has less steps at least that I
+thought it was less steps I wanted to
+talk about dtrace too because DTrace is
+a really powerful tool on on OS 10 you
+get dtrace out of the box it's one of
+the reasons why I like to to use OS 10
+as a development platform and so there's
+a couple of really good talks about
+DTrace and Erlang the first one is
+got four G's from dtrace conf in 2012
+that's on YouTube highly recommend you
+watch it and then a couple years ago I
+did a talk at Erlang factory about using
+DTrace in Erlang
+that defines all of the D trace probes
+and kind of how it works one other thing
+I wanted to talk about was there are a
+lot of limitations and observability in
+the early run time system and this is
+something that Scott hits really hard in
+this presentation but the sort of TLDR
+of that is that there is a really tiny
+little straw that's out in your Erlang
+VM that's sucking up all the performance
+events and measurements and stuff and
+there's this giant ocean of data that
+it's trying to suck up and so what that
+means is typically the data that you do
+collect is underestimated so that the
+true the true performance of what you're
+trying to measure is typically
+underestimated and that's just something
+that you should be wary of so when you
+collect benchmarks from Erlang and you
+use observability tools like a flame and
+like some of these other tools I would
+just be wary that you know you don't put
+too much faith in them the way that
+Scott puts it and I think this is very
+wise is that at best these tools help
+you rule out root causes
+they don't necessarily help you identify
+them but they can help you rule out what
+those things might be all hope is not
+lost right this is getting better every
+year it seems like tracing and debugging
+and all those tools that we that we have
+as programmers are getting better but
+right now as you look at observability
+overall in your runtime there's some
+asterisks and caveats you should be
+aware of other results that you get out
+of the system so getting the most out of
+EDS my advice is to always use read
+concurrency and write concurrency true
+unless you shouldn't how do you know
+that there's really only one way to do
+that that's the bottom you have to
+benchmark you have to benchmark there's
+no other way around it you can't go to
+hacker news you can't go to Reddit you
+can't go to your buddy you can't go to
+youtube talks and figure out what your
+problem is the only way you're gonna be
+able to do that is by testing it and by
+benchmarking it by using tools like
+basho bench and just kind of beating on
+it and using observability tools like a
+flame you know with an asterisk
+and the other thing is is that more
+recent OTP releases in general are
+faster than then than older ones though
+the result from from our 16 being faster
+than our 18 really did surprise me I was
+honestly surprised and I don't know if
+that's just noise from my personal
+workstation right small sample size or
+whatever but in general what I found is
+is that newer releases of OTP are faster
+than older releases and I've seen that
+time and time again from benchmarking
+things that aren't sort of artificial
+like you know testing at or whatever
+when we when when John Daly and I
+refreshed for vlogger earlier in 2015 we
+did a lot of benchmarking comparing how
+our changes impacted the run time cost
+of logging in the new branch versus the
+old branch and what we found is is that
+running with OTP 17 versus 16 or OTP 18
+versus 16 was is that you would get
+probably between five to ten percent
+important improvement in logger just by
+switching the runtime system so it's a
+pretty significant boost are there any
+questions so far
+does anyone have any questions that I
+haven't addressed yet the question was
+since I compiled from source have I done
+profile guided optimizations I have not
+done that but but I'd love to talk about
+it because I don't really know what I
+don't know what that is but it sounds
+really interesting yeah so yeah I'd love
+to learn about that are there any other
+questions that yeah
+Ted I I'm not sure if I'm not sure for
+if they're going to be sent as PRS
+upstream and the reason is because it it
+compromises the promise of the Erlang
+runtime to be available on systems that
+are not Linux specifically once once
+this work is completed it pretty much
+will only run on the OS 10 and it will
+only run on Linux and it's only going to
+run at that you know sort of best top
+end speed and there's there's absolutely
+zero appetite within the organization to
+make make those optimizations work on
+Windows as well so as far as the OTP
+patches being available like on github
+yes they are available on the bash o
+Fork of OTP 16 that's on github so you
+know if you want to take bashes OTP and
+use it or benchmark it have at it's
+really really neat stuff but oh good
+yeah it's it's it's really good stuff my
+my auto updater prompt just popped up so
+yeah that's why I said oh good all right
+so I wanted to talk about some of the
+resources and links first of all all of
+the raw data that I have for this talk
+is available at the very top link on
+github my github ID is mr Allen one and
+the name of the repos EF 2016 so if
+you're interested in the raw data you
+can look at it there also a copy of
+these slides are available there the
+next one is fleeing talked about fleeing
+if you're interested in that evaluating
+that for your own use feel free to check
+it out it's a patchy to licensed
+bachelor bench fantastic tool very easy
+to use strongly recommend you know if
+you're looking for a benchmarking
+framework or something seriously give
+some give batch o bench some
+consideration it's it's very easy to use
+the leo project fork of surely really
+neat very very good performance not
+quite as good as Ed's but if you need an
+LRU cache that would be the one that I
+would pick the bottom one is e to QC
+also very interesting
+a little bit slower than surely but also
+pretty interesting
+there's the veal vldb paper about 2q
+algorithm I highly recommend and then
+finally I just wanted to mention two
+years ago also at Erlang factory J
+Nelson did a fantastic awesome amazing
+talk about ATS and concurrency patterns
+with ette so if you are in an
+environment that is extremely high
+performing and you want to store data or
+cache data and at J's talk delivers on a
+bunch of different strategies where you
+can minimize write and write and read
+lock contention across many readers many
+writers it's a great talk if you haven't
+seen it it is an hour of your time that
+you will you know that will pay
+dividends many many times so it's a
+great talk I highly recommend that you
+watch it that's pretty much what I have
+to show you today and I would love to
+answer any questions that anyone has
+okay
+all right well thank you very much for
+your time I really appreciate it thanks</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

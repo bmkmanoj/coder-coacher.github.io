@@ -1,0 +1,803 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>&quot;Zuul's Journey to Non-Blocking&quot; by Arthur Gonigberg | Coder Coacher - Coaching Coders</title><meta content="&quot;Zuul's Journey to Non-Blocking&quot; by Arthur Gonigberg - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Strange-Loop/">Strange Loop</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>&quot;Zuul's Journey to Non-Blocking&quot; by Arthur Gonigberg</b></h2><h5 class="post__date">2017-10-02</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/2oXqbLhMS_A" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">four years ago Netflix's traffic was
+growing at an exponential rate but not
+only was the number of subscribers
+growing but the actual hours that each
+subscriber was using the services was
+growing similarly so this created a lot
+of complexity the growing traffic the
+diversity of all kinds of different
+devices the growing amount of back-end
+services and in order to create some
+flexibility to handle this complexity we
+build Zul if you're a fan of
+ghostbusters you'll know that Zul is the
+gatekeeper and that's exactly what a
+dozen netflix Zul handles all the
+traffic coming into netflix into AWS and
+then primarily its biggest
+responsibility is routing that traffic
+where it needs to go but it also
+provides us monitoring security
+resiliency and flexibility for context
+Zul sits between the AWS elastic load
+balancers and our back-end services so
+since it's the highest point of the
+traffic coming in we have a very good
+place to monitor traffic that's what
+that's the kind of monitoring that
+provides us as well as alerting and
+anomaly detection and then it's also
+responsible for security blocking
+fraudulent traffic mitigating DDoS
+attacks things like that and then
+resiliency things like shielding origins
+from excess traffic throttling and
+finally flexibility with things like
+self-serve routing and Canarian clusters
+and features like that so we built Zul
+using the standard java model it was
+built on Tomcat running java servlets
+with blocking requests so in a blocking
+request cycle request comes in gets a
+request thread does a little bit of work
+maybe makes a network call blocks when
+the network call completes unblocks
+finishes whatever worker was doing and
+then returns a response and if you want
+parallel as
+in that kind of paradigm you need to
+have two of those things so each one of
+these would be a thread and then you
+would scale up to as many threads as you
+need to handle the concurrent requests
+that you want but when we looked at the
+continually growing traffic the trends
+of growth didn't stop right they kept
+getting bigger and bigger
+we knew that we already needed to start
+thinking about the next version of Zul
+so we looked around the landscape of
+distributed systems and all the new
+hotness was functional reactive non
+blocking programming our colleagues and
+Netflix were writing bleeding edge
+software for this for this new paradigm
+things like rx Java or XJS hystrix and
+then others in the industry were really
+big on event loop servers like Nettie so
+the move seemed kind of like a
+no-brainer right we're generally a proxy
+so we send a request and then a wait for
+a response so we should eliminate that
+waiting time so we built a very
+comprehensive test application and then
+we ran some really thorough benchmarks
+with that test application and you can
+see that it was awesome right 73,000
+requests per second that's great so
+let's do it unfortunately the results
+that we saw in the real world weren't
+quite that good it turns out that the
+performance between Zul one and Zul two
+was roughly the same so you're probably
+wondering was it worth it would we do it
+again should you do it you do not do it
+and the answer is something you've all
+probably heard before
+it depends there's actually a very long
+list of pros and cons as you can imagine
+and it's a it's a nuanced decision it's
+not it's not that simple so today I'm
+going to touch on how we rebuild Zul
+using natty and rx Java
+what it's been like operating Zul 2.0 in
+the real world and finally when you
+should go blocking when you should go
+non blocking so the first step was
+rebuilding Zul as I mentioned Zul
+proxies all the traffic coming into AWS
+and that traffic is global from all over
+the world and it amounts to roughly tens
+of billions of requests per day or
+hundreds of terabytes transferred per
+day our team is fairly small so given
+this amount of traffic we like to keep
+things as simple as possible and Zul 1.0
+had a very simple architecture request
+comes in hits a servlet the servlet runs
+it through some pre filters it then gets
+routed to an Origin blocks waits for a
+response comes back hits the post
+filters and then responds back to the
+client
+despite the simple architecture though
+Zul has a lot of responsibilities it's
+actually doing a lot more stuff than
+just waiting for a response from the
+origin so this kind of responsibility
+and operational complexity was tough to
+manage there's three key hotspots for us
+first one was latency concurrent
+connections the second one and lastly
+thread count so in a blocking system if
+our origin had even a minor latency
+spike it would increase concurrent
+connections significantly and then also
+the thread count to deal with that kind
+of uncertainty from our origins we use
+history if you're unfamiliar with
+hysterics it's an open source Netflix
+framework and it does a lot of stuff but
+primarily what we use it for is circuit
+breaking so if a request is taking
+longer than it should we'll cut it off
+and return a reasonable fallback
+that gave us some predictability in
+terms of handling that latency another
+potential scenario is you have a huge
+spike in traffic and your concurrent
+connections go up and then your thread
+count goes up and the solution for that
+is is something pretty common
+we just throttle connections so at a
+certain point once we hit a certain
+number of connections we just don't
+accept anymore and similarly with
+requests if we're getting too many
+requests we'll thrala requests and
+reject any requests from coming in but
+we can only throttle for so long at a
+certain point even when we're throttling
+our CPU will get maxed out a couple
+instances will fall over a couple more
+the remaining instances are not taking
+way more traffic than they were before
+they fall over and it accelerates until
+finally Netflix is down and now that
+we're international you can panic in
+many languages so how can non blocking
+help us here well first let's define
+what I'm talking about when I say non
+blocking non blocking is composed of
+three main building blocks
+the first one is non blocking i/o
+primitives so you need a way to know
+when a socket is ready to write to or to
+read from without having to wait for it
+and that's something that's provided to
+you by your operating system generally
+so on Linux you would have something
+like a poll on BSD you would have KQ in
+the JVM there's also niño and you need
+those primitives in order to even do non
+blocking in the first place once you
+have those primitives in place you need
+an asynchronous programming model to be
+able to handle deferred execution so you
+can use things like queues you could use
+reactive extensions there's lots of
+things you can do but you need some sort
+of paradigm to handle that deferred
+execution and still have a program that
+makes sense and then lastly if you're
+building a web server you need to put
+those two things together and the most
+common way to do that is with the event
+loop pattern and the king of the event
+loop pattern in Java is medi which is
+what we used
+so if you're unfamiliar with what an
+event loop is it looks roughly like this
+at least in a webserver it would look
+roughly like this you'd get a request it
+would get queued up and then scheduled
+on to the event loop when the event loop
+is ready it'll pick up that request do
+some work maybe make a blocking call
+that block and call would then get or
+sorry not blocking call it a network
+call in this case there would be non
+blocking the network call would get
+scheduled eventually it would return the
+call back would then get scheduled in
+the event loop comes back and then you
+respond back to your your caller
+so despite making light of the decision
+to go in on blocking there are actually
+some really strong benefits and for us
+the two main ones were performance and
+resiliency and our goal was to get
+performance by increasing CPU
+utilization and then get resiliency by
+decoupling connections from requests
+however we needed to embark on this
+journey in an incremental fashion we
+were still running Zul one and it was
+taking a ton of traffic so we needed to
+incrementally move this thing forward
+it's kind of like changing out the
+engine of your car while it's driving
+down the highway so we call this middle
+phase Azul one point five the first step
+was switching Tomcat to the APR
+connector and you can think of the APR
+connector as just like a little event
+loop server that runs in front of your
+Tomcat instance and decouples
+connections from requests and this is
+mainly just a configuration change so it
+didn't require any coding but it got us
+a little bit of that resiliency game and
+then the big chunk of work was changing
+the way our filter chain worked so
+instead of having synchronous filters we
+have to create an asynchronous filter
+chain part of the reason we wanted this
+asynchronous filter chain is so that we
+could run the same code in Tomcat and
+nettie once we had this asynchronous
+core we could execute it in either
+container
+and in order to do that we have to
+change the interface from essentially
+from an applied to an apply sink so
+instead of returning an actual result it
+would return an observable of that
+result and then once we put those two
+things together we ended up with this
+really elegant observable filter chain
+where a request comes in it gets mapped
+through all the filters and then writes
+a response out if there's an error we'll
+write an error response and then on
+every event we collect some metrics and
+this is actually very similar to what
+the code in Zul 2 looks like this is
+made a little bit pretty but it's very
+close so shipping Zul 1.5 gave us some
+confidence that we could do this
+incrementally and it set the stage for
+us moving to Nettie's swapping out the
+tomcat container for the neti container
+now if you're not familiar with Nettie
+I've overlaid Nettie nomenclature on top
+of the event loop diagram that I showed
+previously so in Eddie instead of having
+a queue you would have a channel and you
+can take of channel there's one to one
+with connections so you would get a
+channel queued up the channel will get a
+read event the read event gets scheduled
+onto the event loop does some work
+writes a request out to an outbound
+proxy channel reads that response when
+it comes back and then sends out the
+response back to the client so this is
+this is exactly what Nettie does and
+important to note this is all running on
+a single thread so if you have four
+cores you have four event loops so you
+would preferably want to run one event
+loop per thread the first step in the
+netting migration was creating adapters
+so we had to adapt our existing rx Java
+filter chain and vanetti asynchronous
+framework and this is a non-trivial task
+you essentially have to send Nettie
+events through your observable chain as
+observables so instead of sending a byte
+buff you would send an observable of
+byte buff and you would
+have to handle that content properly
+which is particularly difficult if you
+want to maintain the exact same
+functionality and the exact same metrics
+as you have in Tomcat and then the next
+big step was rewriting the proxy client
+so we can no longer block so we can't
+use our existing Netflix blocking client
+we had to write a brand new nettie
+client to do the proxying and we had to
+do all that while maintaining all the
+same load balancing algorithms that we
+had before but once that was done we
+ended up with something that looks like
+this
+this is Zul 2.0 it looks fairly similar
+but the difference is we have an Eddy
+server fronting the request and we have
+an Eddy client behind the requests and
+sandwich between those two is the RX
+Java filter chain so we're essentially
+stitching a nettie incoming request
+running it through some rxjava filters
+creating a separate neti outbound
+requests and then stitching the response
+back through that same observable chain
+so before we could deploy we ran into a
+bunch of issues the first of which was
+underlying assumptions made by our
+dependent libraries the biggest one was
+blocking a lot of our platform code
+that's shared across the Netflix is
+built with the assumption that we're
+running in Tomcat so it's built with the
+assumption that requests block so if
+you're on a thread you can block that
+thread and you're only gonna affect that
+request and it's not a big deal and you
+do whatever work you need to do and then
+you move on
+unfortunately with Nettie you can't do
+that if you block and Nettie event loop
+thread you're potentially pausing
+hundreds of requests at the same time so
+you can never ever block a Nettie thread
+luckily for us there was a great
+framework called reactive audit that
+actually detected blocking at runtime
+and sent us reports to let us know what
+was happening and essentially just
+throws a stacked
+so it looks something like this you can
+see we have an underlying library that's
+calling thread dot sleep and it just
+found it for us the alternative to this
+would have been actually digging through
+every piece of code and trying to find
+some scenario where it might be blogging
+so this was this was extremely useful
+because we have hundreds of dependencies
+that we pull in from other teams another
+underlying assumption was thread locals
+so again if you're assuming that you're
+always going to be on the same thread
+for the entirety of the request you can
+actually set some state on that thread
+and then a different library can pull
+that state out and use it for its own
+execution you can't do that in Eddy if
+you set some state on a thread there
+could be hundreds of requests that are
+pulling that same state and if hundreds
+of requests are setting and pulling the
+same state it's basically useless it's
+basically random so there was no great
+tool for this unfortunately and we had
+to do as much kind of manual inspection
+and or trial and error to figure out
+these kind of problems and as you'll see
+later on we couldn't quite get all of
+them another concern was was debugging
+asynchronous requests so debugging
+asynchronous code is just hard like it
+just is it's it's much it's much harder
+than debugging straightforward blocking
+code tracing request failures is really
+difficult comprehending stack traces
+again they're not particularly useful or
+thread dumps right thread dumps are
+basically useless and another big
+challenge we have is timing these
+requests so we had to essentially create
+a mapping of state changes and for that
+we something inspired by Zach Hellman
+who gave a talk on this at last year's
+strange loop and it's called the request
+passport so what we do is we set this
+passport on the channel which is the
+connection that's incoming and whenever
+we change state whatever
+Qwest changes state to you know doing
+one thing doing another thing we set
+that state and we set a time stamp and
+then me when something failed or there's
+an error or we just want to debug
+something we can make these available so
+that we can trace exactly what happened
+in this failing request so an example
+looks something like this we had an
+issue where an ELB was timing out which
+is unexpected because our timeouts on
+Zul are much lower than the ELB time out
+so we weren't quite sure why this is
+happening and then we looked at this
+passport example you can see the
+highlighted lines the request comes in
+the client channel becomes active which
+means we're making an outbound request
+to the origin the client Channel closes
+with a read time out 45 seconds later
+becomes active again and then about
+another 15 seconds or so later the
+server channel closes which means the
+ELB is now closed that connection and
+another 30 seconds or so later the
+client channel again becomes inactive
+with a retie map so what's happening
+here is we're making a request its
+timing out we're retrying that request
+and before the retry can even get
+halfway through the ELB is closing the
+connection and it's pretty clear to see
+in this timeline right but if we were to
+trace this just using logs or stack
+traces it would be impossible it would
+be especially it would the amount of
+traffic coming in it would be very very
+difficult to trace these kind of errors
+so this this request passport is
+essential to debugging any sort of
+request failure and we're super happy
+with with how much easier is made our
+life so once we got past the initial
+slew of issues we went to production and
+as you can guess there were some long
+tail problems the first and kind of most
+enduring one was direct memory leaks
+so unlike Tomcat Neddie uses direct
+memory to do its processing since its
+using a pole it's actually running with
+J&amp;amp;I bindings it's running at a very low
+level so it's it's not allocated on the
+heap it's allocating direct memory and
+which means you have to free that direct
+memory and if you don't it's never gonna
+be freed so what we would see is the
+servers would slowly use more memory
+over time especially clusters where the
+instances wouldn't be recycled very fast
+and then quietly they would just stop
+serving traffic the RPS would go to zero
+they wouldn't complain or anything they
+just can't allocate any more memory so
+it's done this is extremely difficult to
+debug the tooling around direct memory
+leak detection and Nettie is just not
+great and we found the only thing we
+could do is more or less trial and error
+we'd look through the code we'd find
+something that looked like maybe the
+observable chain was breaking here and
+we weren't closing the request put into
+production okay to fix the leak or no it
+didn't fix the leak and then it's back
+to the drawing board so that was
+unfortunate we still actually have some
+of these issues but you know it's one of
+those whack-a-mole type of situations
+and as I mentioned analyzing async code
+is hard and not only are we analyzing
+async code for one framework we actually
+have two asynchronous frameworks being
+integrated so we have our X Java being
+integrated with Nettie and those
+integration points are extremely complex
+and then when things go wrong you get
+these beautiful stack traces they look
+something like this there's a little bit
+of our X and then maybe Nettie soon yeah
+there's some Nettie stuff so not not
+great not great
+so aside from deep stacks being bad
+it's just unreadable you can't really
+make sense of that exception so we have
+to actually modify our logger to be a
+little bit smarter
+so if we see repeating lines you know if
+there's ten or twenty lines that are
+just like our X observable all it'll
+collapse them all into a single line and
+just put a counter at the end of that
+and that eliminates a lot of that
+repetition that you're seeing and that
+really deep call stack in our X and then
+the other big thing we did that helped
+our performance was we just stopped
+filling stack traces and critical code
+so if we know we're in a piece of code
+that if we're getting hammered at 95%
+CPU that code is just going to be
+throwing exceptions over and over and
+over again we just don't feel any stack
+traces we log a line and that's it and
+that'll help us degrade much more
+gracefully because if you're spending
+all your time generating these stack
+traces and you're getting hammered by
+requests you're just gonna fall over
+just can't do anything about it the next
+scenario is something we like to call
+the Gio shuffle so imagine a request is
+coming in to Netflix from San Francisco
+and that request gets directed to a CDN
+server in Siberia or maybe in India or
+Brazil or South Africa it's probably not
+optimal if you live in San Francisco you
+probably don't want to stream your
+content from Siberia so our CDN team was
+alerted to location issues people are
+being map to the wrong place we're
+sending people across the globe for for
+no reason what's going on so anybody
+have any ideas what happened thoughts no
+very close yeah thread locals
+so as I mentioned this was a very
+difficult issue to debug because a lot
+of it happens in our underlying library
+is not in our actual code so this
+particular call which is a geo lookup
+was getting set on a thread and then
+basically any other request on that
+event loop could pull that geo data so
+if your request came in you could get a
+signed geo data for a request from
+Brazil or from you know Siberia or
+whatever and suddenly you're getting a
+CDN from Siberia so not optimal the
+solution for this was we couldn't
+rewrite all those dependent libraries
+what we had to do is actually set the
+thread locals correctly whenever we
+entered the event loop so a neti you
+have a channel pipeline where all your
+channel handlers get executed and what
+every time we enter that channel
+pipeline we set the thread locals for
+all the code for all the state that
+potentially may run on that request and
+we essentially copy that from the
+channel the other scenario is if we go
+into an rx thread and we come back we
+also have to do the same thing and copy
+the state onto the thread locals this is
+annoying but unfortunately something we
+just had to do otherwise you see these
+kind of horrible shuffling issues but it
+wasn't all bad
+there were there were a lot of benefits
+as well particularly around resiliency
+so during a retry storm we continued
+serving to hundreds even though we're at
+max CPU what is a retry storm retry
+storm looks something like this so we
+have successful requests coming in and
+then we have like a baseline rate of
+errors and suddenly there's an error
+spiked when this happens there's a retry
+storm and the retry storm is actually
+significantly higher than the error
+spike the reason for this is Netflix
+devices are by default
+very aggressive at retrying because
+during normal watching during normal
+operations and everything's fine retries
+solve almost every problem if there's a
+network issue if your device has having
+issues whatever it may be those devices
+are set to retry very very aggressively
+because it'll just keep things running
+very smoothly but when there's an actual
+error when there's something happens
+where something breaks at Netflix those
+devices retry multiple times they send
+us error logs and the users probably
+tapping the screen over and over so that
+kind of thing creates this huge wave of
+traffic and this time scale is roughly
+10 minutes so this wave of traffic hits
+really quickly much faster than we could
+potentially auto-scale our cluster in
+AWS so again normal CPU usage max CPU
+when we were on Zul 1 and the only way
+to survive this kind of retry storm was
+to throttle very very aggressively so
+not only would we throttle the retries
+but we would actually throttle a lot of
+the regular green successful traffic and
+that's just to keep ourselves up just so
+we don't go down but what we noticed was
+a little - is that we could actually
+weather the storm we could continue
+serving that green line at the same rate
+continue serving all the 200s and
+actually serve most of the retries
+without throttling the actual
+degradation scenario between Tomcat and
+Metis in particularly the one in Seoul -
+is very different so it was a little -
+we can handle way more RPS at max CPU
+than we could with Zul one and the
+biggest reason for this is latency Zul -
+is actually doing a lot less work around
+that kind of core connection context
+switching although all the stuff that
+the event loop improves less thread
+contention that kind of stuff that stuff
+matters a lot when you're at max CPU and
+that's what creates this really smooth
+latency breakdown which makes little to
+handle that kind of degradation at max
+CPU much better so this was a game
+changer for us this this kind of
+resiliency benefit was massive it
+allowed us to shield our back-end
+services from these huge storms and we
+actually took it a step further if we
+notice that our origin is airing or
+throttling at a certain rate we just
+throw away all the retries so if there's
+a retry storm that origin won't even see
+it
+if it starts throttling at 5% or
+whatever the number is all those retries
+get tossed away and this has helped a
+lot this has helped keep our back hands
+up because they generally do a lot more
+work than we do right we just kind of
+pass the request along they actually do
+the you know setting up your playback
+session and giving you the right CDN to
+go to and like all this stuff for giving
+you the right movies to see so if we can
+reduce the load on them that's a huge
+game changer for us and it can keep them
+up when potentially they may not have
+been previously the other big benefit is
+long live connections so with Neddie we
+can scale to tens of thousands of
+connections per instance which allows us
+to go to millions of concurrent clients
+and this is allowed us to implement
+WebSockets support which we use for push
+notifications and for other new features
+that our partner teams can come up with
+that implement WebSockets so this was
+again a really huge improvement that
+allowed us to actually push features
+that we wouldn't have been able to push
+otherwise and then lastly relaxed
+latency constraints so we don't really
+care how long a request takes because
+it's not going to increase our thread
+count and we don't really care how many
+concurrent connections we have so our
+timeouts don't need to be as strictly
+guarded as they had to be in Zul 1 so
+our origins and our devices can set
+whatever timeout they want within reason
+obviously and we don't necessarily need
+hystrix anymore because the circuit
+breaking again isn't critical the the
+latency that that request takes doesn't
+really matter because the event will
+just move on to the other
+quests that are not that are ready to be
+you know read or written to get it
+blocking so which one is right for you
+should you go blocking should you go non
+blocking so as I mentioned there was
+only roughly a 10 to 20 percent gain in
+throughput between Zul 2 and Zul 1 and
+these numbers are just to clarify these
+numbers are not from benchmarks this is
+production numbers so same code running
+side-by-side on two servers so the
+reason for this is Zul has a lot of
+responsibilities and fundamentally Zul
+is a CPU bound service so we're not just
+sitting there waiting for something to
+happen we actually spend most of our
+time in CPU not waiting for IO and you
+can see some of the things on there like
+authentication encryption and decryption
+hashing there's there's some stuff in
+there that's actually very
+computationally expensive when you have
+to do it for every single request and
+response going in and out
+so although we improved stuff like you
+know context switching and handling
+connections better and less thread pools
+and all kinds of efficiency the amount
+of work that each request takes didn't
+actually change right we improved the
+stuff around the edges but the core
+functionality didn't get any smaller and
+that's essentially why the performance
+was roughly the same so if you're a CPU
+bound service if you have highly CPU
+bound workloads you probably don't need
+to go non-blocking
+it probably won't benefit you that much
+and then you'll get other benefits
+you'll have simpler operational model
+you have way simpler development model
+everything is gonna be linear and
+particularly if you're running legacy
+systems that are already blocking you
+may not get any it may not be worthwhile
+to rewrite those to be non-blocking
+however if you're highly i/o bound you
+should definitely go a non-blocking if
+you send up a request and then don't
+touch the CPU until that request comes
+back you are i/o bound you should
+probably go non-blocking if you have
+long requests or large files where you
+may have tons of connections coming in
+and just waiting and streaming data you
+should probably go in on blocking if
+you're reading from a queue at your own
+pace you should definitely go in on
+blocking if you have massive amounts of
+connections concurrently things like
+chat room or WebSockets something like
+that you should definitely go
+non-blocking so some other things to
+keep in mind
+benchmark accuracy is important I know I
+made a joke about it before but that
+joke kind of stems from some amount of
+reality right it's important to set up
+realistic benchmarks so you set your
+expectations correctly and you have to
+simulate real-world workloads when
+you're testing out these new frameworks
+right so deciding when to go blocking or
+not blocking
+again it's not a trivial decision you
+should actually verify that these
+assumptions that I'm telling you right
+now are correct you should run it
+against your actual service because
+every service is different and then you
+have to account for the long-term costs
+so going non-blocking has costs
+associated with it as I mentioned
+particularly apps are harder to debug
+there's an ongoing maintenance of async
+code that's more difficult than non
+async code and then a support and
+operations burden and ultimately you
+need to ask yourself what critical
+features do you really need are those
+features worth the costs and what's your
+answer to it depends if your answer to
+it depends is I want to use this cool
+shiny new tech then maybe you should
+reconsider maybe you should run some
+benchmarks maybe you should verify that
+that shiny new tech is actually worth
+those costs
+so we jumped head in we learned some
+hard lessons we learned that our code
+base is more complicated than it was
+before
+we saw some memory leaks we had that geo
+shuffle incident you know there's lots
+of underlying assumptions from our
+libraries that we have to work around
+and handle we have to increase the debug
+ability with the request passport but we
+got huge resiliency gains we're now able
+to ship features that we wouldn't have
+been able to ship before with WebSockets
+and we could configure our timeouts and
+create flexibility for our partners so
+for us it was definitely worth it and
+for you if you decide to use Zul to in
+the future and your service is i/o bound
+unlike ours you could see some huge
+benefits compared to Zul one thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

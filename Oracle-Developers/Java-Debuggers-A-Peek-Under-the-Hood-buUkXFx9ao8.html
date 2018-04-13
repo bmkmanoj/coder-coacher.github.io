@@ -1,0 +1,1605 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Java Debuggers: A Peek Under the Hood | Coder Coacher - Coaching Coders</title><meta content="Java Debuggers: A Peek Under the Hood - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Java Debuggers: A Peek Under the Hood</b></h2><h5 class="post__date">2016-09-21</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/buUkXFx9ao8" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so hi my name is David buck I'm from the
+Java sustaining engineering team here at
+Oracle I mostly fix JVM bugs usually
+j-rock eat bugs up until now I'm also
+when I'm not fixing JVM bugs one of the
+project maintainer z' for the open JDK a
+updates project so sometimes you can
+find me arguing with people online on
+various public aliases about which what
+should or should not go into JDK 8 and
+when I'm not working I'm usually still
+sitting behind a computer coding and for
+extracurricular activities I tend to
+like to do talks like this especially if
+there's some sort of free food involved
+so today we're going to talk about Java
+debugging so I'm gonna cover just a
+brief overview of what the architecture
+the overall architecture is and then
+we're gonna dig down into the wire
+protocol and the JVM t.i side of the
+talk so just to jump in and kind of talk
+about the LF the gigantic elephant in
+the room when we first found out which
+talks did and did not get accepted that
+was kind of when I went to you know kind
+of start making my slide deck and
+everything and I went and I said okay so
+what did I promise them that I would
+talk about you know so I wanna go see
+the the description I submitted so I go
+to the course catalog and I look up my
+debugger under the hood and I'm very
+surprised to see that there's actually
+two debugging under the hood talks
+scheduled for Java one this year so just
+just so I have an idea of who I'm
+talking to
+how many people actually got to see
+Martin's talk yesterday Wow okay wait
+wait less than I expected okay so there
+are two talks this year and you know
+abstence ibly about the exact same issue
+and I to my utter horror and dismay
+Martin's talk is like really really good
+so he set the bar rather high for this
+topic so what to do so ideally we don't
+want to have too much overlap right
+there's you know both people people
+should be able to attend both talks and
+really not have too much time wasted we
+have redundant information so what we
+decided to do was his talk was
+primarily focused on the JDI side of the
+debugging architecture so I was going to
+kind of take everything else kind of the
+lower end and if these kind of terms
+don't seem to make a whole lot of sense
+to you right now don't worry that's kind
+of what we're gonna cover in these talks
+so ideally you should really see both
+talks each of these talks by themselves
+kind of leaves a whole piece of the
+picture uncovered but luckily it's
+available on his talk a previous version
+of his talk that he did is available on
+YouTube and his slide deck is also up so
+I have links to a previous version of
+his talk that he did at the resource
+section of my slide later so I encourage
+everybody who wasn't lucky enough to
+catch Martin's talk live yesterday to go
+check out what he said on on YouTube
+because it'll really complement what I'm
+going to talk about today very well that
+said you don't really need to see his
+talk before mine or vice versa to get
+everything I wrote I wrote all them I
+made all my slides and my content
+assuming that a very large portion of
+the people watching today will not seen
+his talk
+so we'll kind of just tackle things in
+any order we feel like it and hopefully
+get a complete picture at the end so if
+you're you know I'm throwing around
+these terms like JDI and JVM TI and JD
+WP &amp;amp; and I think maybe not a few just a
+few people here really aren't familiar
+with what those terms are or what they
+mean so we're gonna go in and try and
+shed some light on that and go into the
+details of what the architecture
+actually consists of what the different
+components are so these are all part of
+something that is known as the the Java
+platform debugger architecture and it's
+something that's been around as far as I
+can tell maybe around since a 1.3 there
+were there were technologies that were
+parts of it that predate that but just
+kind of you know doing some google
+searching and looking at the wayback
+machine archives it seems that we
+started maybe calling the the whole
+thing that we you know we put all these
+pieces together the Jaypee de a
+somewhere around 1.3 and so let's dig
+into what this actually is so the idea
+was that we would have this kind of
+comprehensive framework for
+writing debuggers and debugger like
+tools for the JVM and there were certain
+goals that we had to try and accommodate
+when we did this one thing of course is
+that obviously Java is we think a really
+great language to write just about
+everything in and that would include
+debuggers themselves so we want to make
+it easy for people to be able to write
+their own debugger or debugging like
+tool in the java language we also want
+to make sure that the impact that the
+debugger has or the active debugging has
+on the target JVM or the application
+running on that JVM is is absolutely
+small as possible you want to avoid the
+observer effect of course and we also
+want to be able to allow a level of
+detail that would not normally be
+accessible to to say an external tool
+like that so obviously what the kind of
+things we want to avoid these heisenbugs
+right where there's the the observer
+effect whereby by attaching a debugger
+and setting a breakpoint or you know
+watching certain fields in a particular
+object you actually change the behavior
+and by running the debugger and the same
+on top of the same runtime as as the
+application you're trying to debug your
+it's gonna be very hard to kind of avoid
+that so this is what I kind of referred
+to as a strange loop problem you know
+where there's a bootstrap issue of you
+know how are you cognizant of what's
+happening at the lower level when you're
+dealing with a higher level of
+abstraction meaning it's very hard to
+kind of get JVM or native level details
+about the the environment that you're
+trying to debug or profile when you're
+actually running on top of that
+environment and so these kind of these
+kind of goals lead to somewhat
+contradictory design decisions
+at least seemingly contradictory at
+first so first to enable people to write
+debuggers in java we need a Java based
+API and that's what JD is the Java
+debugger
+interface so we need something that
+people can write to write again
+in Java and then of course we also need
+to make sure that we are a low-impact so
+we need some way to do this from a
+remote process or an external process
+that's external to the JVM at the same
+time we want to provide all these neat
+little you know kind of native level
+details like the things being able to
+like iterate through the stack and
+things like all right I'm sorry iterate
+through the the heap and things like
+that that normally wouldn't make sense
+to do from from the Java level
+abstraction so we need something that
+actually is in process so you know these
+contradictions here we want something
+willing Nathan what the best of both
+worlds one native we want Java we want
+in process we want out of process well
+why not both so that's when you know we
+all celebrate the hosts a little girl
+above us and and jeer because we now
+have an architecture that actually gives
+us the best of both worlds at the
+expense of perhaps a little bit of
+complication so here's what the the
+architecture looks like and so the idea
+over here on your left is you actually
+have your application that you're trying
+to debug here running on the target JVM
+and is hosting an in process JVM TI
+agent JVM TI is the the JVM Tools
+interface and we'll go into a lot more
+detail about what that means in some
+later slides but there's this impress
+API that allows us to kind of plug
+anything into it and get all sorts of
+nitty-gritty low-level information but
+it also we have an implementation of a
+particular agent that speaks what what
+is referred to as the Java debugging
+wire protocol which is really just kind
+of a serialization of debugging commands
+and events that are sent back and forth
+between the debugging application here
+running as a separate process and the
+target JVM so this like I said seems to
+have existed or you know since at least
+1.3 and one of the main keys here is
+that this is a modular design that every
+single one of these three main
+components that makes it up or three
+main api's the the JVM ti the wire
+protocol and the Java based debug
+interface that these are all kind of
+interchangeable and you can go and kind
+of plug in
+and components and technology into this
+and get some rather cool results with
+that so for example we've actually
+changed one of the components of this
+around the time frame of Java five where
+the old native API the old in process
+API for collecting debug information
+that predates JVM TI was actually known
+as JVM di that was the debugging
+interface and so that was available
+until Java 5 where we deprecated it and
+introduced the JVM TI interface and then
+with Java 6 it was completely removed
+but because we had this fantastic
+modular architecture and you know very
+clean separation between all the
+different components we were able to
+just kind of completely replace the
+internal API wholesale with very little
+impact to the rest of the ecosystem and
+and tools and things that people had
+already built against the other api's so
+we have this amazingly flexible thing
+another thing that we could possibly do
+or imagine someone doing is that you
+don't even have to be using JDI
+so JJ di is over here and the the remote
+process or the debugger process and it's
+the API that you write ups that you
+would have sensibly if you're writing in
+Java be writing against to kind of speak
+the the wire protocol so to speak so you
+can think of JDI as like a translator
+between the api calls in java that your
+debugger program is making and and the
+wire protocol that the JVM t.i agent is
+going to expect to receive but this
+could not even be Java like anything
+could speak this protocol so you could
+in theory write your own completely
+native application you you know in just
+plain c or c++ or or any other language
+python or whatever and as long as you
+you adhere to this wire protocol you
+could interact with and control and
+debug a target JVM so this again it's
+just an amazingly flexible thing another
+thing is that some of these technologies
+can stand alone especially JVM TI so
+there's a lot of you case use cases for
+JVM TI and we'll mention
+few of them today where there's not a
+remote debugger involved so for example
+if you look at the the demos directory
+and a JDK you'll see a lot of examples
+of JDI JVM Ti plugins that will do
+things just if they get like if you try
+and send sync wit to get a threat dump
+for example they can you know produce a
+NH prof dump or there are things like
+that so there's all sorts of use cases
+for just having the internal in process
+agent that doesn't have a need to
+dependency whatsoever on you know
+outside instrumentation or control so
+another really interesting thing is that
+there's the new J shell tool that's
+coming out with a with JDK 9 how many
+people here have a attended that talk I
+know that yeah okay so so J xual J shell
+is really cool and and I don't know
+about you guys but I'm really excited to
+be able to use that in my day to day
+debugging work and playing around
+especially for like learning new api's
+and J shell even know it's not a
+debugger in any real sense it fits very
+nicely into the debugger architecture we
+have so the implementation of JJ shell
+is that it actually sits on top of JDI
+just like a debugging tool would and
+that's what it uses to kind of remotely
+you know run your code against this
+against a separate out of process JVM
+that's actually responsible for
+executing the the snippets of Java that
+you enter into the tool so it's it's an
+extremely flexible architecture that
+kind of let has no end of to the variety
+of things that you can do and expansions
+you can you can make so the Java debug
+interface and again I'm not going to go
+into any real detail here because Martin
+did such a fantastic job on his talk so
+I highly encourage everybody that didn't
+see his talk to check out the YouTube
+video and download his slides on that I
+link to at the end of this one but
+basically it's just it's a pure Java
+implementation so you can kind of just
+you know how have that right once run
+anywhere convenience when you're writing
+a debugger tool and it's it's been
+around for you know since at least Java
+1.3 and it's
+extremely stable and battle-tested and
+hardened and all that stuff and so it is
+is very reliable and easy to use so
+we're just going to kind of skip that
+part of the API and dig into the other
+two major components of the debugger
+framework which is the wire protocol and
+JVM Ti so the wire protocol is is really
+really simple in fact it's amazingly
+simple we can kind of cover it in just a
+few minutes and one of the things that
+makes it so simple is that it doesn't
+specify a transport so that you you need
+something else on like underneath that
+whether that be like you know IP for you
+know socket connection or for on Windows
+the reference implementation supports in
+memory as a transport for you know just
+mapping shared memory between the the
+target and the debugger processes and
+using that to communicate but we
+actually have a service provider
+interface so you could you could code
+your own transport mechanism that would
+this would work on top of but it's
+really just kind of a dumb simplest
+serialization you know at the bit level
+of what the different kind of commands
+and events that a debugger would need to
+to use to communicate with addy buggy
+JVM and if you look at the spec you'll
+notice and you're familiar of JDI you'll
+notice that it's kind of like just a
+direct one-to-one mapping of the JDI
+Javadoc so if you look at the JDI Java
+doc and you'll be like yes so we have
+you know these you know virtual machine
+class here and then there'll be a whole
+bunch of commands in each sub command
+mapping to a particular method of the
+JDI api so it's really kind of a it's
+easy to understand it if you understand
+JDI then j dwp you can see what's going
+on very easily so again you know from
+the the wire protocols standpoint it
+doesn't really care who's talking to it
+or who it's kind of attached to so to
+speak in the sense that the the debugger
+it could be written or implemented and
+anything as long as it's kind of
+speaking the protocol in in some way
+that it understands and the target JVM
+doesn't actually need to really have be
+using JVM TI cuz that's also another
+implementation detail that's abstract it
+away from the wire protocol level so
+obviously you know hotspot
+IBM's j9 bees J rocket all supported JVM
+TI but you can imagine a Java SE
+implementation that might perhaps choose
+for whatever reason to not offer that
+kind of API to its users the JVM TI ATP
+and so it could they could just
+implement you know their end of the wire
+protocol directly without having to have
+the man in the middle of the the JVM ti
+agent and they might want to do that
+just you know save on the cost of
+developing or kind of limit the options
+that the user has for whatever reason so
+it's a really simple protocol it starts
+off from a handshake and the handshake
+literally is it just sends these
+fourteen bytes in ascii the debugger
+comes out and says hey JD WP handshake
+and probably not too surprising the the
+debug ii JVM responds with the exact
+same 14 bytes of ASCII text and once you
+have this you you've more or less
+established a session so now you have
+this this asynchronous connection
+virtual connection between these two
+entities and they can send commands and
+replies to each other so the the
+protocol is really really really super
+simple and the reason for that was to
+make it really easy to implement even if
+you were writing your own implementation
+from scratch for example like like I
+said if you wanted to say make a
+debugger in Python or something that
+would speak to JVMs that would be aided
+by the simplicity of the wire protocol
+so the headers whether you're talking
+about a reply packet or a command packet
+on this one again there's only two types
+of packets that the headers just eleven
+bytes regardless of the packet type so
+all packets have exactly the same header
+size and then they may carry a data
+payload of some variable size so just to
+see what they actually look like so we
+have a you can imagine the width here as
+being third
+two bits so you know we have a four byte
+length and then a four byte ID for each
+packet one byte four flags one byte for
+the command set and command in command
+in a command packet and then for reply
+we just have those two bytes are
+dedicated to an area code and their data
+so the only difference between the two
+packet types is this kind of middle
+section here where in the command ones
+we actually tell the the target what we
+want them to do and the other one
+represents kind of a response to that
+you know how what what the result of
+that action was so the the length this
+is actually the size of the entire
+packet including the header in bytes and
+because it's a 32-bit number that means
+we could have four gigabyte packets
+which obviously is kind of almost
+ridiculous overkill but the idea was
+just to have an extremely flexible
+format that would just never limit us no
+matter how we wanted to kind of expand
+upon it or how people wanted to use it
+in the future so you know you can have
+packets of really any size and whatever
+transport you're going over is really
+going to be the limiting factor and in
+how large of packets you could send and
+then the idea also is a 32 bit number
+and these are just to the IDs are just
+to tie the the command or you can think
+of a command is there like a request and
+the reply to each other so each reply by
+definition is in response to a
+particular command packet that that JVM
+has received and so and not all command
+packets have replied there's certain
+commands that don't require that the
+sending of a reply but for any that do
+the only requirement is that the ID
+numbers have to match but they don't
+have to be unique across you know going
+for each direction in the channel so
+what this means because it's an
+asynchronous protocol is you can
+actually have you know up to four
+billion different packets you know in
+flight so to speak or being processed
+meaning that that they've been sent by
+one side but a reply hasn't been
+received so again probably overkill by
+its it's just an extremely flexible
+protocol that makes sure that no matter
+how we try and expand it or add to it in
+the future
+nothing you know the protocol itself or
+the formats not going to get in our way
+four flags the only thing the only
+flight there's only one flag that exists
+as of today and it just distinguishes
+between command and reply so it's pretty
+simple and dumb and then the command
+sets I'll go into in a second so let's
+just go in this so just to kind of
+reiterate so we have all these different
+header fields so the length again 32-bit
+value that's huge right and it means
+that we could have gigantic packets the
+ID field again 32-bit value and it means
+that we have the this amazing window of
+outstanding requests that haven't been
+acknowledged so to speak with a response
+packet and we can have up to four
+billion over four billion of them you
+know two to the thirty to the 32nd power
+worth of those and the flags ones and
+this is just simply a way to to mark
+packets as being either command packets
+or reply packets and then the command
+fields are obviously where we get to
+interesting things this is you know what
+these these packets are actually telling
+the target JVM to do and as I said
+before if this there's pretty much
+almost a one-to-one mapping between the
+JDI API and the wire protocol so the the
+first 64 sets or command sets each sets
+of bytes so there's 256 possibilities so
+there's 256 possible command sets but
+the top part of that address space so to
+speak is set aside for for possible
+vendor to find extensions
+none of which actually exists that I'm
+aware of but you know that that's there
+if someone wanted to add an extension
+and then the the bottom half of that
+address space is divided between 64 that
+are kind of been going in one direction
+from the debugger to the debug e and the
+other one is the debug e back to the
+debugger so when I say commands it's not
+just from the debugger to the to the
+buggy when an event happens like say for
+example you've hit a breakpoint one
+exception has been thrown in the target
+JVM the target JVM will use a command
+packet to asynchronously notify the
+debugger not running on the debugger VM
+so yet you have you have kind of a full
+duplex address space here so to speak
+but each one of these command sets more
+or less corresponds directly to a class
+in the JDI API and then each one of the
+separate commands which is also in a
+eight bit field so we have 256 of those
+per class so to speak is the individual
+methods and the error field is these are
+just constants that are coded in as part
+of the standard and you can look at them
+directly the data is variable size a lot
+a lot of command types don't require
+anything so for example let's say I was
+going and I said I wanted to in my
+debugger I'm trying to check out the the
+value of a particular field on a
+particular instance then I would use I
+would send a request to send that and
+I'd send the payload so to speak in that
+request would be the ID of the
+particular field that I'm trying to I'm
+trying to inspect and then the response
+would be the value of that field that
+was being sent back and again if you
+look at the this is actually the JDI I'm
+sorry num this isn't this is this is the
+the wire protocol but you can see the
+wire protocol each command set basically
+has you know the there's a there's a
+corresponding class in the JDI API
+called virtual machine and it has
+methods that are very similarly named
+these methods most of them it's just a
+change of camel case to get to get these
+so there's a direct one-to-one
+correspondence between the command sets
+and JDI classes and then the individual
+commands and
+methods within JDI so you can think of
+it as a really cheap lightweight thin
+serialization of the JDI api so for
+transport like I said we don't actually
+define that or require anything in the
+wire protocol spec itself and this has
+the somewhat unfortunate consequence of
+you know we have all this loose coupling
+between all the different components but
+if your two components don't support the
+same transport then you can't make them
+talk to each other so in practice the
+debugger program whether that's you know
+something written in Java
+running on top of a JVM or something
+completely different it needs to agree
+with and and and speak the same language
+so to speak to be able to set up a
+connection wave and communicate with the
+target JVM the current ones that the
+reference implementations support are on
+Windows only we have a shared memory
+transport and then on all of our
+supported platforms for Oracle SC we
+have the socket transport notably the
+the JVM tih and only still doesn't
+support ipv6 although the the Java side
+of the equation the JDI implementation
+does so I just kind of showing you the
+the kind of limitations that you can hit
+because of the lack of requirement for
+transport there but also the other way
+of looking at that is that it gives you
+a lot of flexibility to you know kind of
+roll your own implementations and stuff
+so this is probably one of the more
+important slides of this entire talk the
+wire protocol is inherently insecure
+it's not intended for real use in a
+production environment I've been kind of
+shocked to see certain users or
+customers that will you know set up the
+the JVM Ti wire protocol agent and have
+a running in production you know on the
+off chance that something would go wrong
+in their production environment and
+they'd want to be able to attach with a
+Java debugger and try and either work
+around some sort of issue or even
+resolve it by by just using debugging
+commands hey I think that's that's just
+a very unlikely scenario to actually
+take place and we're
+life I don't think that you know I've
+never actually heard of anyone
+successfully doing that you know usually
+people would just want to try and reboot
+or something or or handle the issue some
+other way but also it's it's a huge
+security risk there's no authentication
+whatsoever on the wire protocol so if
+you say if you set it up and say I want
+to listen on the socket that means
+anyone can connect it to it without any
+authentication and it's absolutely
+trivial once you have you know kind of
+debugger access to a JVM to completely
+on the system the only thing you
+actually really need to do to execute
+arbitrary shell commands is you need to
+be able to set a breakpoint on a
+particular method that you are confident
+that that target JVM is going to execute
+so as long as you know like if you know
+that they're running about logic server
+then you can just pick some particular
+method within WebLogic server or even
+within like the the niño framework that
+you know will be called sooner or later
+and then set a breakpoint on it and then
+once you have that breakpoint it's you
+know you and you own the system and you
+can run arbitrary code and there's
+exploit you know proof of concepts
+available online if you google for this
+so if you have if you have open to the
+world a white you know a debugging wire
+protocol socket then you were basically
+saying you know please run arbitrary
+code on my system and yesterday when I
+was putting this slide together I went
+to show it on and and just searched and
+there were even two instances of ones
+that were you know configured to send
+the outgoing handshake you know so they
+were literally announcing to the world
+you know please own me you know run
+arbitrary code on me so but in in
+practice there's you know I I've seen
+this kind of I would say a terrifyingly
+high number of times in the field that
+people just kind of set this up and and
+you know I think it'll be convenient to
+have enabled at some point in the future
+but don't really think about the
+security implications of it okay so
+that's the wire protocol like I said
+it's very straightforward and simple
+it's just kind of a dumb serialization
+of the JDI API probably the more
+interesting part of this talk is the
+tool interface because that's really
+what lets us do all sorts of crazy
+things
+so the the the understand the tool
+interface you have to have a little bit
+of background of the history involved
+and originally there were there were two
+very different api's both of which
+existed from jdk 1.1 you know from more
+or less than the very beginning and a
+met with kind of different amounts of
+success in terms of usability and
+stability there was the JVM debug
+interface which I had already mentioned
+it's the thing that we were placed in
+JVM R and JDK 5 and it was fairly stable
+and actually it's the the parts of JVM
+ti that come from JVM di are very
+similar so it was not a very difficult
+migration for people to update their
+code to to work with JVM TI if they had
+some pre-existing code that they wrote
+against JVM di the profile interface was
+was unfortunately a dumpster fire it had
+all sorts of problems it was fairly
+stable and worked well with kind of the
+original VM the pre hotspot vm but once
+say once it was ported over to the
+hotspot codebase it was just never
+stable it was very difficult to use with
+J and I couldn't really mix you know J
+and i usage with it with it without a
+whole lot of effort and it was very
+invasive into the design of the JVM
+itself so basically what it offered you
+kind of all these really at least
+seemingly convenient functions that you
+could call that would give you all sorts
+of interesting profiling information
+about you know what kind of objects were
+on the heap and histograms and things
+like that but the problem is that meant
+that we had to actually implement that
+functionality for every single garbage
+collector and so you would have cases
+where yes you know you could use the
+profiling interface to try and collect
+profiling information about your
+application but then you'd be limited to
+the subset of garbage collectors that
+actually happen to support that this
+this particular functionality so we had
+to actually add it to every single
+garbage collector that was implemented
+and and jyg compilation also it didn't
+play with very nicely in all sorts of
+different circumstances especially C 2
+it was
+not good so if you can't do profiling
+running the JVM in a somewhat similar
+circumstance or configuration that
+you're gonna actually run your code in
+production then there's not a whole lot
+of value from the profiling data that
+you're gonna pull from that so it was it
+was unstable it was hard to use it was
+never officially supported it was always
+labeled as experimental it was just not
+a good solution so the replacement here
+is obviously JVM ti so around the Java 5
+timeframe sun came in and said ok you
+know we need to have you know one one
+ring to rule them all so to speak and so
+while the single API it'll replace both
+of these older API is it'll be
+officially supported and they kind of
+learned from the mistakes that were made
+with the profiler interface and did
+things very differently so this brings
+us to JVM ti so like I said it replaced
+the the older two profiling and
+debugging interface
+and so that naturally gives us a whole
+lot of interesting use cases outside of
+just debugging and that's kind of one of
+the major points of this talk is that
+you know we have these really amazing
+and cool api's and technologies and you
+know so don't think about just debuggers
+because there's already a whole lot of
+great debuggers that are already out
+there and that work really well but
+there's a whole bunch of other kinds of
+tools that people haven't even thought
+up yet that these kind of api's make
+make possible so there's all sorts of
+different things you can do besides
+debuggers with JVM ti it's fully
+supported on like the the profile into
+interface wise and one of the most
+important things is that unlike the
+older debug and and the profile
+interface the ones that were placed I
+mean it offers what I call pay-as-you-go
+performance impact meaning that if you
+don't use specific functionality with it
+you don't have the overhead the
+performance overhead cost for that and
+I'll go into more details about
+specifically what I mean by that in a
+few more slides and the other thing to
+note about this it's very important is
+that it's based off of J and I just get
+an idea here how many people here have
+feel comfortable like like looking at J
+and I code understanding it ok so a fair
+know
+maybe about a third okay and won't be
+required for the coming slides but it
+certainly would be handy
+so for jjv MTI we write what are known
+as agents and and an agent is native
+code that runs within the address space
+of the JVM itself so just like regular
+J&amp;amp;I code you have to know what you're
+doing if you if you make a mistake you
+will very quickly bring down the entire
+JVM what's interesting is that you can
+have multiple agents loaded and running
+all at the same time and to at least as
+much as possible you can they can be
+separated and not step on each other's
+toes to a large extent they can even you
+can even have a JVM TI agent that's
+statically linked into the JVM so if you
+were like downloading the the open JDK
+source code you could use JVM TI to kind
+of you know have a hard wired agent of
+some kind that did some sort of either
+debugging or profiling or whatever you
+might want to do into your own specific
+build of the JVM and it's it's launched
+from the command line with this flag
+which I'm sure people have seen before
+this this agent Lib thing and so the
+idea is that you put the library name in
+here and then you can pass an arbitrary
+number of arguments to the agent so it's
+very flexible you can give it startup
+commands and and let it you know just
+interpret those however you you want to
+program it to interpret them it's kind
+of like almost like a separate command
+line utility so this is the most common
+scenario is where the agent will get
+loaded at startup time and I'll go into
+why that that's the most common scenario
+in a few slides but that's not the only
+way that you can do this other ways that
+it's perfectly valid to load a JVM T ID
+library during during runtime with you
+know system load library and so you
+don't get exactly access to all of the
+functionality that you would get if the
+library was loaded from JVM startup but
+you still get that gives you an extra
+degree of flexibility for being able to
+kind of load it on demand so just one
+thing is I'm talking about agents here I
+want to avoid confusion because this is
+a fairly overloaded war
+not just in the Java realm but just a
+nighty in general there's all sorts of
+agents out there so to be really
+specific of what I'm talking about when
+I'm talking about an agent here I'm not
+talking about a Java agent at JDK 5
+there were actually two agent API so to
+speak that were introduced there was the
+java.lang instrument that give it
+allowed us to do bytecode
+instrumentation where we could you know
+replace the implementations of methods
+in classes and things like that and do
+all this with pure Java implementations
+which is really cool and really useful
+and and it's it deserves its own talk by
+we're not going to cover that today but
+and that's loaded from the command line
+with the Java agent so what I'm talking
+about with JVM Ti is the other option
+the the native agent and so the native
+agent is based off of the JVM t.i API
+that we'll talk about in a few slides
+and it's loaded with either agent Lib or
+agent path and these both basically have
+the same functionality it's just the
+only difference is how they look up the
+the agent with agent Lib which is kind
+of the recommended way the platform kind
+of default behavior in finding libraries
+is used to convert whatever name you
+pass it in to say like on Windows you
+know blah blah blah dll or if you're on
+a Linux or Solaris it'll be like Lib
+blah blah blah ah so so so that kind of
+change or lookup it does automatically
+for you whereas an agent path you would
+actually specifically give it a direct
+path or an absolute path right to the
+file that you want to load so if you're
+on Windows you would say you know C
+colon blah blah blah blah blah you know
+blah blah blah DLL and tell it exactly
+what to load but pretty much the same
+thing so this is what we're gonna be
+covering and in here just in in terms of
+the debugging architecture and the
+reference implementation for all this
+stuff the JVM TI agent that will most
+often be working with for the
+pre-existing one is this the the Java
+debug wire protocol agent so depending
+on the platform it has a different name
+right so you know
+on on plastics platforms you get the the
+standard libbed whatever ISO Windows and
+then OS 10 as always does that this
+thing's a little bit differently but you
+know these are all basically the same
+agent depending what platform you are
+but but I can't stress this enough this
+is just one kind of configuration or one
+kind of use case scenario JVM t I had
+can lets you do all sorts of other
+amazing and cool things in addition to
+just being kind of the mouthpiece for
+debugger you in the same way that JDI is
+kind of a translator between your Java
+debugger application and the wire
+protocol these agent libraries these JVM
+agent libraries are kind of a
+translation between the wire protocol
+and JVM ti so G probably the most
+important thing to really understand or
+to be able to code against JVM ti is to
+understand J and I because it's based
+off of it some people sometimes refer to
+it as an extension of the j'ni interface
+but or api but it's it's not really
+technically an extension there are some
+important differences but the nice thing
+is that you can mix calls you know but
+with them so you can have J and I or I'm
+JVM ti agents that use J and I and and
+that's pretty much expected there's a
+lot of functionality in JVM ti that
+seems to be missing until you realize
+that no the assumption is that you're
+going to be using J and I calls in
+addition to the new stuff that JV JVM TI
+makes possible but but you know like all
+the standard data types that we have in
+Jay and I are used in JVM ti we use the
+same kind of strange modification of
+utf-8 or we don't have null values and
+things like that that Jay and I uses so
+if you're used to coding in J&amp;amp;I you'll
+be very comfortable and you'll be able
+to pick up jb m TI very quickly if
+you're not used to coding in J and I you
+know Jay and I itself is not that
+difficult to learn but that that's going
+to need to be the first step you take
+before you you start taking on JVM ti
+agents that said there are some
+important differences just to do a brief
+review though of what J and I looks like
+the you know if I was a summarize j.j
+and I in like three slides which is what
+I'm about to do here and the most
+important thing is that there's an in
+there's an environment pointer so to
+speak and that's that is different for
+each thread and it basically gives you
+access to a table of all you know
+pointers to all of the the
+implementations of the different j'ni
+functions
+so most of J&amp;amp;I coding really is just
+about you get called you know usually
+from the from the JVM and you have that
+environment pointer and then use that to
+access the j'ni functions and that kind
+of lets you call back into the JVM and
+get things like the values of fields and
+make calls into Java and why not
+so does that look like at the code level
+usually most J&amp;amp;I codes written in C++ or
+straight see this is a straight C
+example I just want to point out so it's
+just you know we have you know kind of
+corresponding versions J&amp;amp;I versions of
+Java primitive types it's like a Java
+primitive double is now a J double in J
+and I speak and then but the key here is
+that this environment is being passed in
+and then we use that to get access to
+the Jain IEP I itself so it's fairly
+straightforward and if you're
+comfortable of C it's not that bizarre
+of an API to use you just have to make
+sure that to do error checking very well
+that seems to gets most people caught up
+so that that's that's j9 that that's
+kind of what the JJ and I environment is
+that you always hopefully have access to
+that that pointer that can get you
+everything else and similarly JVM ti
+also has an environment that it takes
+the form of a pointer that you get
+handed and that environment as far as
+the information it contains so to speak
+represents the event callbacks you know
+do like like what you want to do when in
+a certain event happens you you express
+that by registering a callback you
+enable or disable particular events that
+you were going to be interested in you
+know the kind of events that you want to
+either instrument or profile in some
+sense and we have capabilities that you
+can turn on and off
+I'll explain what capabilities are in
+just a second and also there's um
+there's JVM ti specific memory
+allocation and de-allocation hooks so
+that the libraries can can be kind of
+managed by the JVM as they're loaded and
+unloaded so one kind of very important
+difference between the environments and
+this is why I say that's not purely just
+an extension of j'ni is that you you
+basically have one environment per agent
+with JVM Ti so you can have as many
+agents as you want there's no limitation
+on how many agents can concurrently be
+loaded by JVM and running an instrument
+encoder doing whatever but each of them
+has its own environment and only one
+environment unless something's going
+horribly wrong
+whereas in J&amp;amp;I you actually have a
+separate j'ni environment per thread so
+that's that's just an important thing
+that you know a lot of J&amp;amp;I programmers
+get caught up in when they when they
+start running JVM ti code now
+capabilities this is actually one of the
+the core parts of the JVM TI api this is
+what sets it apart from from the kind of
+older and less efficient things and
+basically it's just a bunch of flags
+that say what that this agent is allowed
+to do so usually what happens is there's
+a negotiation between an agent when it's
+loaded whether that be during JVM
+startup or you know dynamically if the
+library was loaded during the runtime
+where the JVM you are the agent we
+usually just start off and say ok so
+what capabilities you do support like do
+support capturing exceptions that are
+thrown or do you support you know
+walking frame stacks and things like
+that and so it'll last the JVM what it
+supports and the JVM will come back and
+say these are the capabilities I support
+and depending on what that agent needs
+to do the agent might just decide at
+that point that well I can't really be
+useful on this JVM this JVM doesn't
+support the kind of functionality I need
+and so it might just bail
+I know as very often is the case
+actually there's a lot a lot of JVMs
+will run with a sudden they can have run
+with a subset of all the possible
+options that they're capable of using so
+they'll say that you know these options
+are required
+I'll refuse to load to fight I can't get
+them but these other capabilities you
+know if they're available then that's
+nice and I'll use them but otherwise I
+can live without them so it gives you
+this kind of what I would referred to
+early as the you know that pay-as-you-go
+thing where as an enabling certain
+capabilities you know as the agent you
+know the JVM says I can do a B and C and
+you say ok well I want you to do B and C
+for me I'm interested in those types
+events and things then only then you
+incur the cost and you only incur the
+cost ideally for the particular
+capabilities that you enabled so it's a
+very powerful mechanism to allow you to
+it's not this all-or-nothing approach
+like what we used to have with X debug
+and and the really old you know the pre
+1.4 versions of the of the debug
+architecture where basically if you're
+saying debug the JVM just ran completely
+an interpreted mode and we're really
+really slow because it just assumed that
+you know it had to make all of the
+debugging features and all of the
+profiling features available to you
+whether you're going to use them or not
+but capability says you know you just
+you can probe the JVM to ask what it
+supports and then you can tell it which
+of those you actually plan on using now
+it's important to understand here that
+there's actually kind of two levels of
+cost because just because you you
+declare to the JVM that hey you know I
+want to use the I'm interested in using
+this capability that doesn't necessarily
+mean that that you're going to use it or
+that you're going to use it against all
+of the different kind of target entities
+that it could be targeted against so for
+example you could say oh I'm I'm
+interested in being able to you know
+iterate through the heap but I only want
+to be you know I only will iterate
+through the heap to collect some sort of
+you know histogram or something like
+that under very rare and strange
+circumstances so there is often a cost
+of just saying you know just declaring a
+capability you know for example there
+might be certain optimizations that the
+JIT compiler will avoid to make sure
+that if you do come back and say ok I
+want to now enable this event and
+actually you know right now I actually
+want to you
+that that will be available to you but
+very often there's a very different
+level of overhead between just saying
+just declaring the capability and versus
+using it
+another thing that's that's very
+different from JVM ti versus what we had
+with the previous with the previous
+api's was that it depends very very
+heavily on bytecode insertion or a BCI
+is you know people will argue till
+they're blue in the face about whether
+it's bytecode injection or bytecode
+instrumentation or bytecode insertion
+and and I don't think many of you and
+certainly I don't care which of those is
+actually correct but basically it's a
+way to stick by codes into methods and
+so you know we can take a class file as
+we're loading it and modify it before
+the JVM actually gets its hands on it
+even say before the verifier runs and
+change things around or we can take
+classes that have already been loaded
+and are in use by the JVM and and
+dynamically at runtime just arbitrarily
+change the class now there's there's
+limitations on that of course we can't
+change like say the the the layout of
+fields and things like that because we
+have to be able to guarantee that
+objects that are already on the heap are
+still valid even if we change the
+definition of the class but well we can
+change we can actually change the code
+in the methods and we can't change
+method signatures but we can change the
+implementation that they run and this is
+very useful for things like say if we're
+gonna profile something say I want
+vocation counts of how many times a
+particular method is called the this API
+will allow me to come in and just create
+my own you know standalone class that
+has some static fields that that
+represent you know invocation counts and
+then I can use by code injection to
+inject an hour access or at the very
+beginning you know kind of like right
+after the prologue of each of those
+methods that I'm interested in profiling
+that will increment those counters for
+me so it really lets you do anything and
+a lot of people look at this thing go
+well this is so much harder than say the
+original profiling interface was and in
+this sense they're right because you
+know you have to kind of roll your own
+for everything you have to be very
+familiar with how to generate correct
+bytecode and have it pass verification
+and all that other things and so there
+is kind of a cognitive overhead that you
+as a developer who's using JVM Ti has to
+deal with when you're when you're trying
+to instrument things with byte code
+injection but the other side of that is
+that just because whatever you're doing
+is is Java bytecode it's automatically
+compatible with everything within the
+JVM so it doesn't matter what garbage
+collector collector you're using it
+doesn't matter what JIT compiler you're
+using or anything it doesn't in the
+license as long as JVM Ti itself is
+support it doesn't matter what JVM
+you're using by definition you know all
+of these technologies are able to run
+and understand Java bytecode
+so by using by doing rolling your own
+implementations for all this stuff and
+putting it into the application at
+points where that you're interested in
+in profiling or debugging or whatever it
+lets you kind of speak the lingua franca
+of the Java ecosystem and every you know
+JVM or runtime implementation
+understands that so you no longer have
+the case where it like you had with the
+old profiling interface where you're
+limited to only a subset of particular
+Java collectors that we bother to
+implement that functionality in because
+it doesn't actually depend on other
+functionality within the JVM the only
+thing it depends on is the JVM support
+of JVM TI which says you can you can
+stick new byte codes into pretty much
+any method and also lets you do I mean
+there there's so many other uses use
+cases outside of this there's there's
+fixing continued debugging you know
+where you could actually some IDs would
+allow you to actually you know modify
+the implementation of the method replace
+that without restarting the system and
+then just just keep running and continue
+debugging
+this is kind of the sky's limit so what
+does an agent actually look like when it
+when it's being used so there's an
+initialization phase when it starts off
+and that there's two functions that will
+get called automatically if it's one
+that if you specify it on the command
+line on the onload load will get called
+or if you attach it dynamically at some
+time during the during the runtime then
+unattach will get called but both of
+these methods are both these functions
+basically have the same role that their
+job is to kind of initialize and set up
+the agent and so when we're being set up
+what we want to do is we want to you
+know kind of ask the JVM okay so what
+capabilities do you support and then JVM
+will tell us and then we'll decide if we
+want to continue or not if we do want to
+continue then we'll ask the JVM for a
+specific subset of those capabilities
+maybe all of them who knows then will
+actually say okay so you know a for
+particular events that I'm interested in
+you know the way that I'm as an agent
+I'm informed of those events is that the
+callbacks are called by the JVM and so I
+have to actually register my callbacks
+during initialization and then I enable
+enable particular events and all this
+can can change dynamically so later I
+could be I could be interested in one
+event during the beginning like like
+warm-up phase of my application and then
+later I could be like I'm no longer
+interested in those events I want to
+look at a different event or whatever so
+all this can be dynamically enabled and
+disabled and then just it's kind of
+almost like a GUI event dispatch thread
+or something you just kind of process
+your events as they happen but they'll
+they'll happen on the individual thread
+where the actual of the event occurred
+and then finally when when the JVM shut
+down usually in most cases because it's
+for most implementations it's difficult
+to unload a library once you've loaded
+it there's an agent unload where we
+could do things like perhaps like
+persist data that we've collected to
+disk or do anything else that we might
+want to some housekeeping chores and
+want to do before the JVM dies so a
+typical example of what this would
+actually look like in practice is most
+jvr most JVM ti agents have the the mob
+where they want to be active from
+startup and the reason is is because
+there's a whole lot of things that the
+JVM does when it's starting up that it
+wants to do differently if certain
+capabilities are enabled so if you wait
+until the JVM is actually up and running
+Java code it's too late to be like ok I
+actually wanted this capability or I
+wanted this functionality so you want to
+be able to get in there and and declare
+you know capabilities that that would
+otherwise be disabled by the time the
+JVM got up and running you also want to
+be able to change the environment so for
+example some aid agents although I think
+this is rather odd but they can go in
+and change the the system properties so
+they could do anything they can modify
+files I mean the JVM literally is not
+even running yet you know classes have
+been loaded no Java code has been
+executed at this point so at the all
+node thing it gives you this kind of
+primordial state of the JVM so that you
+can set things up to make sure that
+you're able to capture profile or debug
+everything so you've even the most you
+know kind of basic classes that are part
+of you know what we referred to as like
+the system classes there's a couple
+dozen classes that are loaded you know
+at the very very beginning even before
+we start loading you know the standard
+classes that show version would load and
+and you know if you wanted to somehow
+instrument those or interact with with
+the class loading you would need to be
+in the very beginning so a standard
+agent or the most common form of agent I
+guess see it kind of this and so on it
+sets its callbacks and then it sets just
+a few events to enabled and the reason
+it does this is because there's actually
+a lot of limitations of what you can do
+for example you really can't call J&amp;amp;I
+most J&amp;amp;I functionality because the JVM
+is not running yet so you kind of set up
+what you want to do and you know kind of
+put everything in place and then you you
+know usually they'll register like like
+thread death JVM start and VM in it seem
+to be the big three but kind of the one
+more muster just as VM in it because
+that's when the VM comes back and says
+I'm actually started and I can run Java
+code and you know I'm awake now so then
+we returned from onload then we we get
+called back from the
+the VM hopefully immediately to say that
+the VM has actually started and that's
+when we can go on and kind of turn
+everything else on and really start you
+know doing whatever it is that agent
+wants to do and again of course when we
+actually are unloaded there might be
+some kind of cleanup that we want to do
+so we can actually look into and see all
+of this when it's happening on the VM
+there's a really nifty option it's like
+one of many I mean hotspot has well over
+a thousand different options almost all
+of which are undocumented and one of
+those undocumented occupant adoptions or
+barely documented options is this trace
+JVM TI and it'll show you you know
+usually what thread that the processing
+is running on or even before you know
+like when you're being run from the
+primordial thread before the JVM is even
+really up and started and it can show
+you basically everything about the
+interaction that the JVM TI agent is
+doing it's very simple to use you just
+have this on your command line and you
+have one or more descriptors which I
+will describe so a descriptor basically
+has three separate fields there's
+actually no spaces between them in
+practice the domain says we can kind of
+what you're interested in like so you
+can say all calls to a particular
+function if you name that that
+particular JVM TI function in there then
+it'll this descriptor will catch all of
+those there's kind of strange how you
+have func which is all the major
+functions and then like every every
+function is a function but not all
+functions are functions so it's kind of
+an Orwellian thing going on there but um
+you can basically specify what what
+types of events or interactions across
+this this API boundary you're interested
+and getting debug out in play and then
+you can add or remove tracing to that
+and the reason why you'd want to be able
+to remove tracing is that you might want
+to use in a previous descriptor you add
+everything and you're like I want
+everything except this one little part
+that happens very frequently and I'm not
+interested in so by by kind of combining
+multiple descriptors together and adding
+and removing in chunks you can really
+narrow it down to exactly what you want
+to trace and then
+for each individual interaction or event
+for lack of a better word you can say
+okay so what do I want to actually send
+to the standardout about this and so I
+can see what the agents passing in what
+it's returning all that stuff so I
+wouldn't really go as far as to call
+this a demo because it's it's really a
+pretty straightforward thing but let's
+say I just have a a simple I just have
+some Java program that does nothing but
+calls thread sleep and but it has this
+thus enabling so it's basically saying I
+want to enable everything and I want the
+input
+I want the event data I want you know
+just every all the data that we can
+possibly trace for JVM Ti and I'm here
+I'm loading the wire protocol agent so
+this is something a lot of people are
+interested in because they want to know
+okay so if I don't use it like I'm not
+like there's no part of this demo that
+includes a debugger I'm not actually
+going to attach to it but just the fact
+that I'm starting the JVM with with the
+wire protocol agent there's going to be
+a cost to that because certain
+capabilities are enabled and so you can
+see here the you know off the bat so the
+the agent is querying the JVM saying
+okay what are you capable of the JVM
+responds with some subset of
+capabilities and then we go ahead and
+add those based off of what it said
+we've obviously decided that will
+continue and then we wait till the JVM
+actually starts up you know we set our
+callbacks wait till it starts up and
+then we go ahead and enable a whole
+bunch of Numan events that were
+interested in but this if we see and I'm
+just one more minute so if we see when
+we actually ask for the capabilities
+this is fairly hard for a human to read
+but each capability is represented by
+single bit in this struct of its here so
+to actually make sense of that or it's
+you know you can kind of take it apart
+by hand but I've done that for you in
+this particular case
+so we can see what the the debugger
+depends on and we can see that the
+required ones is there there's quite a
+lot of capabilities that we require but
+there's also a whole bunch that that are
+are optional we may or may not have and
+this goes back to the final topic and
+we're about 30 seconds out from the end
+here but around the time of Java 1.4 Sun
+came out and said that we now offer full
+speed debugging meaning that you can
+enable debugging and and basically I
+don't know if I read this I kind of
+think that they're saying that there's
+no cost and this isn't exactly true the
+the idea was that you know with 1.4 or
+1.41 depending on which which of the two
+JIT compilers you were using that there
+would no longer be an overhead to
+running a debugger and this is kind of
+where I think we saw a whole bunch of
+users start just randomly enabling the
+the wire protocol the debug wire
+protocol in their environments without
+thinking about the security implications
+or the performance implications so okay
+is it really full speed this is because
+I really wasn't sure about the
+intellectual property implications of
+the Spotted or the the winter owl or
+whatever the snow owl the snowy owl that
+is usually associated with this meme you
+know but it's it's kind of doubtful it's
+hard to believe that this is you know
+really full speed and in fact the reason
+they called it full speed was just
+because compared to what what it used to
+be it's so much faster it's several
+orders of magnitude faster because what
+used to happen in the bad old days of
+you know 1.3 or before everyone 1.3 with
+you know hotspot you expect it to jet
+compile all of your hot methods but if
+you told it that you were gonna use
+debug if you're using this like X debug
+flag which today is more or less just to
+no op it would basically disable all of
+your jet compilation and so you'd be
+running in a pure interpreted mode and
+the JVM did that just because it wanted
+to be prepared just in case you set a
+breakpoint in some method at some point
+so when they say full speed debugging
+what they mean by you know after one
+point four you know pretty much all of
+your methods except a method that you
+set a breakpoint in will be
+Jek compiled now so relatively speaking
+it's almost as fast but again you know
+we're still setting up all these
+capabilities even if you don't attach
+with a debugger you know just by loading
+the JVM TI library all these
+capabilities are enabled by the agent so
+these capabilities do have a cost and we
+have seen users hit those for example
+very heavy use of reflection and can
+sometimes trigger certain edge cases
+where there's performance repercussions
+to having those capabilities enabled
+even if you're not doing debugging so
+you know usually there's not a
+noticeable impact but you know that
+there's no there's no guarantees there's
+no such thing as a free lunch so wrap up
+final slide I just really wanted to
+point out I mean I I'm obviously not
+going to be able to talk to you for 50
+minutes and have you just immediately go
+out and start writing JVM TI code or
+writing a client for the the wire
+protocol or anything like that but
+hopefully now you have a sense of how
+the three different components of the
+debug architecture now fit together and
+what you can do with them so that if you
+did want to write a JVM T I wonder if
+you're interested you would know you
+know where to start so to speak and
+where to look for more information but
+you know one thing though stress is not
+just for debugging there's so many
+different things one of the things that
+when I was preparing for this talk I was
+surprised as when I started telling
+people I was going to talk about this so
+many people told me stories about JVM ti
+clients that there are agents that they
+wrote and it seems like it's a lot more
+common to write like one-off agents you
+know just for a particular strange
+troubleshooting scenario that someone
+had came across then I ever anticipated
+so it's it's much more flexible and
+useful than I think people realize and
+so there's a lot of power there so just
+be aware of it because you might run
+across a situation where you want to go
+and explore it more and use it these are
+the resources especially martin's talk i
+highly recommend it he has a lot of
+really fantastic demos really enjoyable
+and he does an excellent job of
+explaining JDI and some of the basics of
+debugging and what the different IDs
+offer so definitely have a look at all
+this stuff and Kelly O'Hara's blog also
+is very worth reading there's a whole
+of great gbmt I articles thank you very
+much I very much appreciate your
+patience</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

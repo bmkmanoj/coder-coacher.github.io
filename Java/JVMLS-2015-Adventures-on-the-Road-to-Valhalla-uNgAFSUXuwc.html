@@ -1,0 +1,1228 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>JVMLS 2015 - Adventures on the Road to Valhalla | Coder Coacher - Coaching Coders</title><meta content="JVMLS 2015 - Adventures on the Road to Valhalla - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Java/">Java</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>JVMLS 2015 - Adventures on the Road to Valhalla</b></h2><h5 class="post__date">2015-08-12</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/uNgAFSUXuwc" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">what I'm going to talk about today is a
+little bit of a status report on the
+language features that I started to talk
+about last year at this time so last
+year john and i did a jvm / java
+language roadmap and we talked about
+value types and we talked about
+specialized generics and over the last
+year we've been working on prototypes
+for for generics over primitives and
+generics over values and so this talk is
+a little bit about what we've learned
+and how the design has evolved and how
+we've implemented it so obvious
+disclaimer slide this is all
+experimental don't believe anything I
+say so I've organized this as a sort of
+play in three parts to illustrate sort
+of each of the each of the phases of it
+so this is the sort of background
+prologue this is a line from the Major
+General song play on the line from a
+major general song and a pirates of
+penzance the if but the idea here is we
+want to expand the scope of parametric
+polymorphism in Java we want to have
+better generics we want to have generics
+over primitives and over value types so
+what's wrong with generics we have why
+why isn't it good enough well if you
+want to have a list of integers you
+actually have to have a list of boxed
+integers and from an expressiveness and
+a functionality point of view that's
+just fine but from a performance
+perspective that's not so fine what
+people really would rather have is it a
+list of int and if you have an array
+list you'd like it to be backed by a
+real inter a and not an array of boxed
+integers and the reason for that is when
+you box a number to an object that takes
+a lot more memory you have space for an
+object header you have space for a
+pointer but it also is much less cash
+friendly you take in directions every
+time you try to get to your actual data
+and if you take an array of boxed
+integers and you try to do a parallel
+operation over them on those systems
+you'll find that your don't get any
+actual parallelism at
+that because you're bound by memory
+bandwidth with all those interactions
+you're spending all your time cash
+missing and not at any time adding
+numbers up so we'd like to be able to
+flatten data out and if we're adding
+value types to the language they need to
+play nicely with generics and it would
+really be terrible to say well we're
+adding value types over here for
+performance but if you wanted to notify
+over them you have to go back to boxing
+that would kind of undermine the point
+so we want generics to play nicely with
+value types and primitives our form of
+value types so as a refresher generics
+in Java use technique called erasure
+which means we throw away the type
+information we'd so if we say list of T
+where T has a bound usually object we
+erase all occurrences of T to object so
+if you try to do generics over our
+primitives you run into a couple of
+roadblocks one of them is you know has
+to do with the type system and another
+of them has to do with the the bytecode
+instruction set so from a type system
+perspective you you know the bound of a
+type variable should be a super type of
+all the possible instantiations well
+there isn't a common super tight between
+int and string so that's kind of a
+problem and from a bytecode perspective
+when we compile a program down to
+bytecode if you want to move a ref you
+use a load and a store if you want to
+move it in to use I load and I store
+there's no byte code that can move both
+an int and a ref and this was well
+understood in 2004 when we did generics
+and as an expedient compromise we said
+all right I guess you can't genera Phi
+over primitives and that seemed like a
+reasonable compromise at the time and as
+hardware has evolved that's become more
+and more of a painful compromise and
+with value types on the scene it becomes
+an untenable compromise so we've got to
+go back and fix this so parametric
+polymorphism has a lot of trade-offs
+inherent in it one of the biggest
+trade-offs is your trading off type
+specificity which compilers love against
+footprint so different languages pick
+different points on this spectrum
+so in C++ you take a very
+straightforward template approach list
+of int list of string list of float
+completely different types you just
+stamp out the templates this is great
+for interacts nicely with operator
+overloading and all of that great type
+specificity terrible code sharing so
+your applications balloon up in size
+dotnet took a different approach and
+their approach is quite nice where they
+push the parametric city into the byte
+codes so they have parametric byte codes
+so when you where we have a load and I
+load and a store they have parameterize
+load and store by codes where you're
+saying load at East or a tier eternity
+and that's good for type specificity
+it's good for sharing it's not so great
+for vm complexity so that was a big cost
+that they took on existing Java generics
+sort of our this you know middle
+compromise where we get good sharing
+with a race generics because we have one
+class file for all the instantiation zuv
+ArrayList but as we've said before it
+doesn't play nicely with primitives and
+we want to fix that and so the question
+is of the various approaches that other
+languages have taken which which one is
+our approach going to look most like and
+obviously there are others besides C
+sharp and C++ but these are examples ok
+and all of this has to be done following
+the prime directive which is
+compatibility we need binary
+compatibility existing class files have
+to continue to work they have to
+continue to mean the same thing source
+compatibility existing source files have
+to continue to work and have to continue
+to mean the same thing we can't change
+their semantics when we recompile them
+just because the language has changed
+and more we need that but wait there's
+more we need migration compatibility we
+need to be able to take a existing
+generic type hierarchy like collections
+a which is currently now restricted to
+reference instantiation 'he's and
+migrate it so that you can have value
+instantiations without forcing the
+clients to also operate so you need to
+be able to upgrade your library
+separately from upgrading your clients
+so that's a lot of constraints
+and at the same time we would like you
+know to be able to take advantage of
+things the vm can do for us we're
+willing to add vm features to support
+this but what we don't want to do is
+take java's type system and impose it on
+the vm we don't want to force other
+languages to deal with our own bizarre
+notions of wild cards and things like
+that and so there's a lot of constraints
+were under so let's take a look at what
+are our first approach was which is the
+approach that we described a sort of
+last year at this time which was largely
+a templating based approach very you
+know very similar to the the C++
+approach and you know this was I think a
+useful experiment we learned some things
+from that so let me explain how it works
+so in this approach we say when we
+compile an any five generic class the
+compiler continues to generate an erase
+class file so the class the bike codes
+generates is the same by codes it
+generated in Java 8 but we augment that
+class file with tight metadata so that
+the class file kind of does double duty
+as both a class file and a template and
+so if you want a list of string it just
+takes the erased list class and loads
+that and use it that no problem but if
+you want a list of int it takes the
+erased list class that's been augmented
+with as metadata uses it a template and
+stamps out a specialized list of int'l
+ass so that actually works pretty well
+um and then as a sort of temporary hack
+this is obviously not the long-term plan
+will use name mangling to describe what
+the specialized classes would look like
+so if you have a class foo of tea oh we
+have this name mangling scheme a food
+dollar 0 equal I meaning instantiate the
+first type variable with wouldn't good
+enough for a prototype and then we
+hacked this into the class loader where
+if you go to load a class that has a
+mangled name and it can't find into the
+file system it calls the specialized ER
+it you know so when you go looking for
+food dollar 0 equal I it doesn't it
+doesn't find that so it goes loads foo
+specializes it and loads that class and
+that all works fine prototype technique
+so let's take an example so we've got a
+class a box of any tea it has a field of
+type T it has a get method that returns
+a tea so straight
+for data holder class and when we
+compile it we erased eat object same as
+we always did so the signature of the
+field and the signature of the
+constructor argument and the return type
+of get get a race to object when we
+specialize that we need to specialize
+the signatures so we specialize it where
+you know I giving it a new name we're
+specializing the signature of the you
+know the the valve field and we're
+specialized in the signature of the
+constructor and the get method to take
+or return int instead of instead of
+objects that's pretty straightforward
+but there's more to it ok because we
+can't just specialize the signatures we
+also have to specialize the bytecode if
+we've changed a method to return into
+instead of objects it had better execute
+and I return instead of an a return
+otherwise the verifier will complain so
+we and we also have to be careful about
+which occurrences of object do we
+replace with end we can't replace them
+all obviously maybe the you know the
+user actually used objects in the
+signature of one of their methods maybe
+there's multiple type variable so we
+have to be a little bit careful about
+which a loads we turn to I loads and
+which objects returns to end so we need
+some generic information about what the
+signatures of the various you know
+various types were in terms of uninst
+anshi ated type variables in our class
+file it turns out that the signature
+information is already mostly there the
+compiler already mostly emits that so we
+just need to add some extra information
+to annotate the bytecode about what
+types are being moved so we added an
+attribute to the the class file called
+bytecode mapping it's basically a table
+indexed by by code index to metadata
+about what that by code does now this is
+a terribly brittle technique we wouldn't
+do this in production because you know
+you run this through some bytecode
+mangler and all your bike code into
+indices have been changed and then the
+specialized ur will do the wrong thing
+so we're well aware that this is not a a
+great technique for production but again
+perfectly fine for prototyping so all
+right so example of specializing a
+signature i have a class foo of any t
+extends bar of T and the compiler
+already today generates a signature
+attribute for us that says the super
+type of foo is is bar angle bracket you
+know type variable T this is this since
+Java five we've had signatures like this
+in the bike code and so the specialized
+ur when it's going to specialize t4 int
+it can take advantage of that it can
+substitute an int for that TT and then
+say oh I know the representation of bar
+event is really bar dollar 0 equal I and
+do the substitutions and that's that's
+really straightforward stuff so when we
+specialize this class we have to
+specialize you know not you know the
+signature of for example it's super
+types and we do that by straight forward
+substitution on the the signature
+metadata so that part's easy what about
+the bytecode well different kinds of
+bytecode need different treatment so the
+simple bytecodes the ones that move data
+around a load a store a return things
+like that they're just one byte byte
+codes they don't have any place to put
+type information so we used the bytecode
+mapping attribute as a place to put side
+information so ah you know you if you
+have this this method that just takes a
+tee and returns its argument it compiles
+down to buy code that looks like this
+just to a load one a return and you see
+the bytecode mapping attribute has two
+entries one for the a load instruction
+one for the a return instruction that
+says here's the type of the thing being
+moved by this instruction so when we
+specialize the the class we're saying
+alright well a load one is moving at e
+tu specialized as in so I have to turn
+that into I load and same thing for the
+a return so when we specialize this
+class the specialized er takes the
+bytecode mapping takes the type
+parameters folds everything together and
+then adjusts the the byte codes this
+isn't hard it's just fiddly gets more
+fiddly ok so different kinds of byte
+codes need different kinds of metadata
+so let's say we're instantiate an object
+I'm saying I want to create a new foo of
+tea well what's the class name of what
+I'm going to create well that depends
+based on what T is because we're using
+this name mangling technique we want to
+instantiate a food dollar 0 equal
+I if T is int so again we use the
+bytecode mapping attribute where we say
+here is the uninst a nice peschel eyes
+this can you guys see the code in the
+back there alright so when I when I
+specialize this for t equal int i'm
+going to you know i i'm going to
+substitute in for TT i'm going to turn
+that into food dollar zero gly and when
+i specialized the class the the operand
+of the new instruction is not foo but
+food dollar 0i again fairly
+straightforward you know not not too
+nasty gets better okay supposing i have
+a method that's going to access a field
+so the get method fetches the t field
+and returns that so when we compile that
+we have a much more complicated by code
+mapping attribute for the bytecode index
+that's corresponding to the gift field
+and that's because we have to specialize
+two things there are two of the operand
+to a gift field instruction is an a is
+an a man name and type and we have to
+specialize potentially the type and the
+name of the class holding the the the
+field because both of those might change
+and so we encode two bits of information
+in the bytecode mapping the first is the
+uninst an she a type of the receiver and
+the second is the uninst anti of the the
+thing being moved and when we specialize
+it we turn this get field of food t
+which is object into food dollars 0
+equal i dot e which is of type int so
+we're just cramming two things into one
+bag here but it's in theory no more
+complicated than the previous one I'll
+just show you what it looks like for an
+invoke dynamic I won't work through the
+details because it's a pretty
+frightening ah but essentially what's
+going on here is we have to capture the
+type information for all of the elements
+of the invoke dynamic argument list and
+again this really isn't very hard it's
+just you know the you get the point the
+complexity level is going up and up and
+up and we have to do something different
+for each kind of bike code and
+fine but it's a fairly straightforward
+game so we got that working in a few
+days that did not it was not that hard
+you know the the compiler basically just
+didn't throw away a lot of information
+that otherwise would have thrown away
+and the specialized ER is a
+straightforward bytecode mangler that
+uses this type information does some
+substitution and string you know
+manipulation and figures out what new
+signatures to emit and what new bike
+codes to admit there's a little bit more
+to it so that was about specialization
+of generic classes what about generic
+methods generic methods are trickier
+because for any given generic method
+there may be many instantiations of the
+same method and while we have a
+straightforward way of saying take this
+class and specialized it into this class
+as Vladimir pointed out you know earlier
+we don't really have a way of saying
+here's a free-floating method just
+install this in the class we always have
+to wrap classes and methods but we can
+do that so we use invoke dynamic here
+where if you're invoking a generic
+specialized well method the compiler
+generates an evoke dynamic the bootstrap
+is generic method specialized er the
+arguments are what are my specialization
+parameters and after that it's pretty
+much the same turn the crank as
+specializing a class you go find the
+class that has that method you get its
+by codes you run the same specialization
+game that that we ran on the whole class
+and then we have to do something to
+actually install that method so we use
+unsafe to find anonymous class and we
+use the clever host class trick that
+defined anonymous class gives you that
+essentially lets you treat that new
+method as having all of the
+accessibility context of the class that
+it was it was part of so that way access
+to private you know private members and
+all that works just fine generic
+instance methods are are more
+complicated because in order to know
+what method to specialize you also have
+to know the receiver type and that means
+you have to do this dynamically you have
+you know rather than saying oh I'm going
+to specialize this this method
+statically and install
+constant call site there's an extra
+level of indirection in the bootstrap
+where it does a resolution of given this
+receiver type what method what I call
+let me go specialized that and then it
+uses a polymorphic in line cash to on
+the other type of the receiver at the
+call site so I know that was you know a
+lot of fast hand waving the point is
+this is straightforward enough but
+there's lots of fiddly little bits of
+complexity where each byte code has to
+get its own treatment and all of that
+and then there's like nasty corner cases
+like super calls and interactions with
+other compiler artifacts like how we
+translate lambdas which are all doable
+but they're you know they each require
+their own treatment Andre sound like you
+to question so the quick the question is
+how do you know you can always get the
+by other bytecode so right now what
+we're doing is we're not worrying about
+that problem we're asking the class
+loader loaded the resource you know food
+class and give me the byte codes
+obviously there's more work to do you
+know the sofa so for we're going to have
+to make some tweaks in the class loader
+so that the class loader can record
+whether it loaded it off disk and can
+reload the bike codes for you or if it's
+a specialized well method and it hasn't
+you know and it's not loading it off to
+ask that in the you know it may have to
+cash the but that's all that's all
+doable ok so we're not actually done
+there's more fun here so the bytecode
+set isn't perfect and it's not fully
+orthogonal so there are some byte codes
+like you know a load which are nicely
+orthogonal a load I load you know f load
+etc but some by codes like the compare
+and branch like if a comp there's no
+corresponding if I comp so I can't just
+replace an F a comp with an if I comp I
+have to replace it with a combination of
+an if a comp and a branch and the
+problem with that is now I I'm not
+keeping my bike code indexes all nicely
+lined up which means my line number
+tables all screwed up and all of that so
+that's unfortunate but you know that's
+that's doable to and accessibility is
+also a little bit a little bit tricky
+because you know if you reference a you
+know a private field of some other
+instantiation from a source perspective
+it looks like you're just accessing
+something in the same class but from the
+vm perspective you're accessing across
+class boundaries and we need to generate
+little access or methods to help you out
+on that so you know plenty of plenty of
+little bits of complexity so how will
+you move into a production quality and
+non-white index dependent solution for
+this um next year's talk okay so so to
+sort of so sum up Act one here I'm gonna
+take questions at the end I because I
+just some of act one here we got some
+pros and cons this technique works yay
+it works on the vm that we actually have
+not the theoretical vm we imagine we
+would like to have so that's that's huge
+right ah so is his success well I was
+kind of a complicated set of you know
+details to manage in this transform and
+lots of things that we punted on and
+haven't even done yet right so you know
+it's kind of a messy experiment but also
+we're not so thrilled with the resulting
+a type system that we get and this is a
+bigger problem so for example right now
+if you have full of string and full of
+integer they have a common super type
+that isn't object it's foo of question
+you have a way to describe any foo in
+this model there is no common super type
+other than object you said there's no
+way to describe any instantiation of foo
+and if you actually try to write
+libraries with this you'll discover this
+as a big impediment you know so if you
+look at existing Java libraries they all
+have to cheat a little bit you know Mark
+Martin order ski was saying how
+important it is to have an escape hatch
+sometimes you know real world Java
+libraries cheat all the time with wild
+card types or worse and to not have that
+tool is a huge impediment and still we
+get terrible sharing characteristic
+right it's just like the C++ solution
+there's no ability to share code between
+arraylist event and ArrayList afloat
+even though so much of the code really
+would be the same so I would call this a
+mixed result you know some things worked
+some things didn't work so well nothing
+impossible lots of small complexities so
+I the next problem that we addressed
+ourselves to is all right well we've got
+this problem of not having wild cards
+let's see if we can work wild cards back
+into the system so it's kind of funny
+experience we had where on the one hand
+the thing people complain most about in
+Java is wild cards but actually they
+complain even more when you try to take
+their wild cards away and we kind of
+discovered this the the painful way but
+the reality is wild cards are often
+needed it's a technique that a lot of
+real-world libraries especially our own
+libraries like collections and streams
+use and wild cards become even more
+important when you have a heterogeneous
+translation model here where you know
+right now fool event and full of string
+or not the same class so if they're
+represented by different class you want
+to have some way to express their
+essential commonality there their basic
+Funes as it were so alright so let's
+imagine we did have a wild card that
+worked over any types how would it work
+so all right let's say I say class foo
+of any t extends bar of tea so what's
+subtyping relations would we want well
+certainly we would like to have fool
+event be a subtype of foo of ? and also
+fool event has to be a subtype of bar
+event so already we've discovered that
+we can't represent the wild card as a
+class the way we do with existing
+reference generics because you can't
+extend to classes and barve into
+certainly a class so full of int would
+have to be something else and from an
+interpretation perspective we have as a
+sort of can't win situation where if you
+ask users what is full of question mean
+they'll tell you oh it means full of
+anything from a compatible
+perspective foo of question has always
+meant foo of question extends objects
+and we would like it to stay that way
+and obviously we can't satisfy both of
+these at once so the answer is well we
+punt we distract people say look over
+there and and pull a switcheroo and the
+switcheroo we pull here is say alright
+we're not just going to have the the
+trusty old wild card foo of question
+that we've always had we're going you
+know the foo of question will continue
+to mean what it always meant we're going
+to rename it from poo of question to foo
+of ref to make it clear that this is a
+wild card over reference instantiations
+and we'll introduce a new wild card foo
+of any which means foo with any
+instantiation and possibly maybe over
+time we'll deprecated the old syntax to
+be less confusing and will certainly
+encourage IDE vendors to encourage their
+their users to substitute things to the
+shiny new syntax and all of that but all
+right let's see if we can make this work
+so representationally foo of ref means
+the same thing poof question always did
+it's the erase type and that's easy for
+foo of any we it can't be a class so
+because we wanted to be multiple
+inherited so the obvious solution is
+well it should be an interface so we
+create the synthesis synthetic interface
+food all or any to represent the foo of
+any wild card and then we make that a
+superclass of both fool event and foo of
+string and then we lift all the methods
+of foo to foo of any and we might have
+to box you know that T is along the way
+and well interfaces can't have field so
+we can turn fields into field accessors
+and implement accessors in both the
+erased and specialized instantiation and
+modulo the fact that you will do some
+you might do some boxing when you
+reference a member through a receiver of
+typos of any it works pretty cleanly you
+shouldn't believe me it gets complicated
+but it's a good story we'll keep going
+alright so how does this work we have
+our trusty box class we generate the
+synthetic interface box dollar any it
+has some synthetic methods again erana
+Center for the
+uh the the vowel field and the erased
+implementation has an object valued Val
+field and the obvious accessors just you
+know set and return the field when we
+specialize we're specialized in the
+valve field to int and so the access our
+implementation since they have object in
+their signature are going to have the
+box and that's easy too easy enough to
+do and so the upshot here is if you're
+dealing with and instant I do a concrete
+type pool of string or fool event
+there's no boxing you go straight to the
+field you get exactly what you want you
+have the type that you expect if you're
+working with a wild card you might have
+a more circuitous path to get to the
+member you're looking for and this is
+actually kind of nice because all of the
+preferment performance costs of having
+wild cards is borne by people who use
+wildcards and people who don't use
+wildcards get exactly the performance
+model to expect so this is actually
+pretty straightforward and not too bad
+no generic story is complete without a
+digression into bridge methods so I
+won't disappoint you'll notice that we
+have this object you know with all
+rights we have this T valued get method
+when we erase it we get an object value
+get method and the erased implementation
+has that but the specialized class needs
+to get methods it needs the in valued
+one which is the one that will get cold
+if you have a reference of foo of it a
+box event but it also needs a boxing
+bridge so that if you call the object
+version you get the boxed version and
+you know Java Sea is used to generating
+bridges you know rurichiyo loves to
+write bridge generation code so you know
+not a problem all right a few more
+examples of how the translation works
+here supposing i have a class box of any
+tea and i have a couple of fields one as
+a box of string one as a box of int one
+is a box of any and then last is the the
+legacy wild card box of question how
+does the compiler translate these it's
+actually pretty straightforward the the
+things that existed in Java 8 translate
+exactly the same way both the box of
+string and the box of question get a
+race to box the
+you types get translated either to their
+specialization so box event gets
+translated to box dollars year ago I and
+the any wild card gets translated to the
+interface box dollar any it's pretty
+straightforward so some of you are
+already thinking wait a second classes
+can have protected or package or private
+fields and interfaces can't have those
+what do we do so this is one of the
+areas where we need a little bit of help
+from the vm probably access it the
+accessibility rules may need a little
+tweaking one way to get there might be
+to allow private and package method
+members and interfaces there are some
+other ways that we're experimenting to
+get there as well so right now we don't
+have a full story for accessibility we
+also have an issue with accessing
+private member's which is something that
+we ran into in Java 11 when we added
+inner classes right so the language
+interpretation of what private means is
+I can access anything in the same
+top-level compilation unit the vm level
+interpretation of private is i can
+access anything in this class so there's
+a mismatch there and historically we've
+generated Ridge methods when we detect
+that a you know one class in an inner
+class nest wants to access a private
+member of another class in another class
+nest we generate a little Brit access
+bridge for it this would get much worse
+with what when you have specializations
+where you have something in fool event
+wants to access a private member and
+fool float so we're looking at finally
+John has been wanting to do this for
+years in probably 18 years now defining
+a notion of nest mate and defining the
+the rules of that private member
+accessibility where two classes and the
+same nest can access private members of
+each other it's it's a logical thing to
+do because the users notion of private
+access is tied to the whole bundle of
+classes that are all sort of you know
+inner classes and specializations that
+are sort of all all together in a bundle
+and if we can align the language notion
+the vm notion there it's a fair it's a
+fairly simple tweak you know would make
+things a lot cleaner and a lot fewer
+extraneous methods
+okay some somebody in the audience is
+probably thinking what about a raise
+right so we talked about how if we have
+a tea valued member of the of the class
+we're going to lift it to an object
+valued member of of the you know of the
+any interface because you can always
+convert an object to an object and you
+can always convert through boxing a
+primitive to an object or valued an
+object it's not quite so easy with
+arrays there's no common super tight
+between inter a and object array and we
+don't want to do a boxing conversion
+between arrays because we're not just
+boxing one value would be boxing a lot
+of data that would be a terrible
+terrible idea so we're not going to do
+that um but you may have recalled the
+talk John did two years ago about a
+raise to 0 and that approach lines up
+pretty nicely with what we want to do
+what we need here is we want to have a
+common supertype between an inter and a
+string array so let's say we define an
+interface called let's let's say it's
+called java.lang array and it's an any
+generic interface it has a type
+parameter of what's your element type
+well we could inject array of int as a
+super type of inter a and inject raw
+array or a ray of object is a super type
+of object array and then they by the
+previous trick they have a common super
+type which is array dollar any so if we
+have a tea valued field of an any
+generic class when we lift it to the any
+interface we translate that as array
+dollar any and if you're accessing you
+know through the sharply typed instance
+there's no translation everything's good
+if you're accessing it through the wild
+card you're going to go through the
+array methods maybe they're all these in
+boxing of the elements but everything
+still works so a lot of what's going on
+here is if we want to extend generics to
+work over primitives and references we
+have to find common super types or at
+least common coercive all targets
+between things like in San object int
+array an object array fool event and foo
+of object etc so
+this actually works pretty cleanly it's
+not so bad so so the array interface
+might be as simple as I'm an array of
+any tea I've got a size method I've got
+to get method I've got a set method and
+you can still use a a load and a a store
+if you have a sharply type reference and
+if you have an abstractly typed array
+reference you go through the the
+interface okay so if i have a class that
+has a field that is of type T array in
+the in the synthetic any interface it's
+going to be typed as a raid already okay
+so this is kind of where we are now in
+terms of our prototype and the good news
+is this all works you can go download
+this project Valhalla build the the JDK
+image it's a much more reasonable
+programming model we've been prototyping
+with this to port the streams library
+from you know java h and erics to
+valhalla generics and it's just really
+smooth it's exactly what you want about
+seventy percent of the code just
+evaporates because all of the hand
+specialized primitive stuff just goes
+away and then a lot of them the complex
+machinery to support the hand
+specialization that goes away and it
+becomes this simple library that like
+you know a third-year student could
+write so we consider that to be a pretty
+successful you know successful
+experiment and its library experiments
+or would validate the language design
+features right you can't design a
+language in in the abstract you know you
+have to actually try to write some code
+of it ok so the pros are we get good
+compatibility with existing code it
+works we have a pretty reasonable
+program model that you can write
+sophisticated libraries with we still
+haven't done much about the code sharing
+part fool event and foo of string are
+still totally different classes we
+haven't gotten there yet and the
+language story is actually pretty simple
+type variables can either be ref or any
+wild cards can be ref or any in the
+absence of any everything is the same as
+it was yesterday and then if you have
+any variables there are some
+restrictions on what you can do like for
+example you can't assign an old to a tee
+because maybe
+ciated as a type that doesn't have known
+its domain like it so when you're
+porting an existing generic class to any
+generics you might have used idioms that
+assumed he was an object the compiler
+will bark at you when you when you break
+those rules and then you figure out how
+to migrate it most of the migrations are
+pretty straightforward okay so how are
+we going to get to sharing right how are
+we going to get to something more like
+the way dotnet represents things where
+when when they're jit runs they
+specialize want you know what one set of
+native code for you know list of 32-bit
+stuff and one for list of 64-bit stuff
+and they can use the same code for a
+list of double and list of long we want
+to get there right so how are we going
+to get there so much of this is being
+prototype sort of now as we speak so we
+don't have an implementation we have
+ideas on a whiteboard and and some
+partially written code the biggest
+problem what we got so far is we don't
+have a story to let the vm manage the
+sharing because we're generating the
+bytecode so early that the quad the vm
+just sees them as the specializations
+different classes erasure gave us good
+sharing across reference instantiation
+we don't want to give that up and what
+that means is we have to push some of
+this into the vm but we don't want to
+push so much into the vm that we make
+the VMS job too hard and specifically
+the horrible complicated death by a
+thousand cuts specialization story from
+act one I wouldn't want to push that
+into the vm and i see the vm guys you
+know making horrible faces in the back
+room there so we need to find some way
+to make the specialization transform so
+brain dead simple that the vm guys won't
+complain when we dump it on their desk
+so the existing class file format is
+sort of where things landed the week
+that Java shipped in 1995 there's a lot
+of ad hoc pneus so that anybody noticed
+this am I the only one who's noticed
+this there's a certain amount of ad hoc
+pneus in the class file format and an
+awful lot of useful information is
+thrown away
+and it's understandable at the time we
+didn't know we were going to need it but
+a lot of that could be worked back into
+the class file in a less brittle way
+than what i showed in the first section
+in a way where if the vm wants it it can
+use it and if it doesn't want it i can
+ignore it no but clearly asking the vm
+to modify every field signature every
+method signature and every byte code on
+specialization is too much so we're
+going to get there in steps so like to
+sort of the intermediate step between
+here and where we want to be is can we
+somehow change the problem so that
+instead of specialized in the whole
+class file we only have two specialized
+the constant pool constant pool and then
+we could share the rest right that would
+be a good step towards getting better
+sharing so let's see if we can do that
+part of the challenge and we had talks
+last year from both Charlie and Attila
+on this exact subject is the fact that
+the byte codes are so strongly typed
+makes it difficult to describe generic
+you know code and by codes you have a
+load and I load and if you want to
+specialize a class to end you have to
+swap your a loads for I loads when we
+add value types let's say we we do so by
+adding v by codes v load V return V
+store then the we still have the same
+problem so we need to have some more
+polymorphic byte codes so we have a lot
+of different ideas that we've been
+kicking around for how we might do this
+but the simplest one is to say let's
+have some Universal byte codes let's
+have a you load which abstracts over a
+load and v load and I load and f load
+and it just has an extra operand and
+that operand is a reference back into
+the constant pool of what's the type of
+thing that I'm moving so if we have a
+constant of the constant pool that holds
+an i and I say in slot number three and
+I say you return with operand constant
+three it goes to the constant pool and
+says oh this is an I return this would
+be one way to do this I don't want to
+get too bogged down in the bytecode
+details this is more of a approach to
+how we might get there so one of the
+cool things that comes out of this is
+now instead of having to specialize
+every
+a load I only have two specialized one
+slot in the constant pool and all the a
+loads that point to that same slot have
+all been specialized in one swoop that
+seems like progress it's also fairly
+easy to verify right the verifier says
+well you pushed an eye you popped an eye
+everything's good so this is nice we
+don't have to touch all the type 1 by
+codes we only have to touch you know one
+constant pool entry for all of the type
+1 by codes that's pretty good and we
+could conceivably if we had these you
+buy codes we could retire a load and I
+load and just treat them as you know
+legacy overly specialized I'm not sure
+not saying we necessarily would do that
+but we could do this this abstracts over
+all the byte codes we have okay well
+that's not enough is it right we have
+some non-orthogonal byte codes like the
+comparison byte codes we would need more
+you know Universal shapes for those we
+would need maybe a you comp equality by
+code that could compare references or in
+sore values but that's not terribly hard
+to do and if we did both of these things
+at this point we would be able to
+specialize all the type 1 by codes just
+by operating on the constant pool one of
+my guys prototype this yesterday and
+said to my surprise even after adding in
+these type 2 byte codes and these extra
+constant pool indexes and you know these
+extra two bites on every a load and I
+load the class files got smaller because
+it was still smaller than the
+specialization metadata we were
+generating before so that was kind of a
+surprising a little bit of encouragement
+there but but clearly there are
+trade-offs I mean you know the fact that
+I load is one bite is certainly a nice
+thing throwing that out the window is
+not necessarily you know a great idea
+but alright we're making progress well
+what else would we need to do to be able
+to do specialization just by operating
+on the constant pool well I kind of wave
+my hands a little bit when I said we
+just change one constant in the you know
+in the constant pool and you specialized
+all the you know the type 1 byte codes
+because well what if i have a class that
+has multiple
+variables how do I know you know I most
+compilers do pretty aggressive in
+turning so if you have to string
+constants that say I they'll get they'll
+get mashed into the same thing and we
+don't we lose the information of which
+ones came from used and which ones came
+from these so what we want to do is up
+level what's in the constant pool to say
+well there was a type variable in the
+source language let's have a
+representation of a type variable in the
+constant pool so we could have a
+constant type for type variable and what
+would it have well who declared the type
+variable this class this method what
+have you what's the name of the type
+variable and what are its bounds t
+extends you know comparable of tea or
+something like that so this is pretty
+straightforward with you know this this
+took us about a half hour to put this
+into the compiler and these Universal
+byte codes could point back to one of
+these type variable byte codes where
+it's saying I'm moving at E and you know
+the default would be the you know T must
+be an erased object so I'm moving an
+object and then when i go to specialize
+it i just replace the type variable
+constant with a string constant for I
+and I'm done all right that seems
+plausible well right now we have this
+name mangling mechanism food dollar zero
+guy I said you know all along that was a
+temporary hack for getting the prototype
+so how would we represent a reference to
+the class fool event in the bytecode
+well this is fundamentally a structural
+type right foo parameterised with my
+first type variable equal it all the
+other types in the JVM are nominal so we
+would need a constant to describe a
+structurally derived class and that's
+actually pretty straightforward what's
+the class I'm parameterizing how many
+type variables do I have an
+instantiation 'he's which are constant
+pool references to water my
+instantiation so we could represent the
+description of list event not with a
+class constant but with a parameterised
+type constant and all the places you
+could put a class constant like the
+operand of a cast by code or this or the
+you know the superclass who's my super
+class could point to one of these so
+this is actually kind of a small
+juggling of the the constant pool forms
+and then the last one where the class
+file format we have is kind of a
+mismatch for what we want is dealing
+with these complicated concatenated
+types like when you describe the
+signature method you just glom the type
+signatures together el objeto a coal and
+L object semicolon etc and if some of
+these types are non nominal this doesn't
+play very nicely but there's a fairly
+straightforward way to to put some
+structure back on that and you know so
+for example we could represent this
+signature not as these specific types
+but something that describes its
+structure it takes two arguments and
+return something and then have a list of
+constant pool references of what to
+substitute into the holes and if the
+things that substitute into the holes
+can point to those parameterize type
+constants we're actually kind of done so
+and done in a very abstract sort of way
+the point the point is what we can do is
+we can turn specialization of the class
+which is nasty into specialization of
+the constant pool which is more
+tractable and we can actually take that
+one step further where we can turn it
+into specialization not of a cut of the
+constant pool but of a distinguished set
+of constant pool entries which are the
+type entries in the constant pool and
+now if specialization is just
+specialization on types the language
+runtime can hand up a function to the vm
+that says here's my type specializing
+function apply this whenever you have to
+specialize something and the vm doesn't
+have to know anything about the mapping
+between instantiated types and
+representations it just consults the
+language runtime and says alright if i'm
+going to make the substitution what type
+do i get and the language runtime hands
+up a class so it seems that there is a
+path to being able to let the vm manage
+all of this specialization without
+having to without having to go through
+all the horrible details that i went
+through in Act one and now the vm gets
+to decide how much sharings do do i
+specialize early and get it
+the way but I have a lot of duplication
+or do I specialize late until I have
+profiling information about which
+specializations I really care about well
+now the vm gets to make that choice
+right and that's a choice that VMS are
+very good at making so this gives us a
+path to sharing as much of the
+representation between the Stan Shih
+ations as the vm feels it is you know it
+is appropriate to do so so how would
+this actually work if we have a class
+constant whose payload is a parametrized
+type how does the vm resolve that
+constant well it has a lot of choices it
+could take the really dumb choice which
+is run the specialized er you know uh
+you know from our prototype just turn it
+into a new class don't try to do any
+sharing just load the class as quickly
+as possible that's probably a reasonable
+version one implementation but that's
+all behind the scenes that's an
+implementation detail and the vm can do
+better I it wants to and then it can ask
+the language runtime questions about how
+do i specialize this type so different
+languages can have different mappings of
+instantiating signatures to
+representational glasses and so Java may
+choose to do its have have a race
+generics but one could use the same
+machinery to generate reified generics
+and you know that's not something that
+the vm has to pay attention to it's just
+asking the language runtime what's the
+representation class for this type
+string so sort of to sum up we're
+actually like getting in decent shape
+now we have a pretty reasonable
+programming model we have really good
+compatibility with existing code and we
+have a path to a rich rich sharing
+approach are there cons well there are
+still some cons most of the cons are
+consequences of compatibility which is
+always the stone around our neck
+generics in this model are neither
+erased nor reified there a little bit of
+each the reference generics are erased
+like they've always been the value
+instantiation czar reified that's a
+little confusing but it's sort of like I
+said it's it's the option we have left
+available to us without breaking
+compatibility
+yeah no it's it's it's not it's not
+terrible it's just you know people
+people will throw rocks at us right
+people will say oh you guys managed to
+come up with the only thing that's worst
+with an erased sometimes erased all
+right throw your rocks right you know
+it's not so bad I've been writing code
+with this now for a few months you can
+write some pretty nice libraries with it
+it's really not so bad so anyway um
+that's all</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

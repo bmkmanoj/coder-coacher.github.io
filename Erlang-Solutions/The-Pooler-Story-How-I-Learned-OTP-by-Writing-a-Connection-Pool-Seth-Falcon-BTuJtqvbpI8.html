@@ -1,0 +1,951 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>The Pooler Story: How I Learned OTP by Writing a Connection Pool - Seth Falcon | Coder Coacher - Coaching Coders</title><meta content="The Pooler Story: How I Learned OTP by Writing a Connection Pool - Seth Falcon - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>The Pooler Story: How I Learned OTP by Writing a Connection Pool - Seth Falcon</b></h2><h5 class="post__date">2013-04-30</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/BTuJtqvbpI8" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so it's 2010 and I'm riding home on the
+bus with a couple of my colleagues from
+Opscode and we're discussing a project
+that I'm planning to build in my
+backyard that weekend I've got my
+notebook out and we're discussing how I
+should join the corners of this thing
+and we're building whether we should use
+bolts and a corner block or screws or
+nails conversations going on we're kind
+of nerding out on it time for our stop
+to get off and there's a passenger that
+was sitting next to us who kind of gets
+up the courage to admit that he was
+eavesdropping on us this whole time is
+like excuse me but I just I've got to
+ask what are you what are you guys
+building it sounds really interesting
+and complicated to which the answer was
+a sandbox for my son in my backyard so a
+sandbox right four sides no bottom no
+top gets put some sand in it doesn't
+really get any simpler than that but as
+I said I'm not much of a handy person
+and I realized that there's a lot of
+questions that I had to answer what type
+of wood should i use i live in seattle
+it's rainy there I don't want it to rot
+out right away screws or nails how
+should I join the corners not really
+sure should i use bolts or whatnot how
+much sand do i need so each each simple
+feature is is attached to complexity
+it's like there's this special kind of
+unbreakable thread that that is
+connected to any given feature to this
+complexity that it drags along into your
+system
+and I needed almost 2,000 pounds of sand
+to fill this little sandbox which didn't
+look like much in the sandbox but when I
+went to the store to purchase that much
+sand it looked like a lot so this is the
+story of pooler which is a exclusive
+access connection pooling library that I
+wrote and its journey as a simple
+project that got more complicated as it
+went along but what it really is is a
+chance for me to share some of the
+secrets that I uncovered for building
+robust OTP applications so kind of the
+heart of my discovery I'm about to to
+reveal and after this you know if you
+want to leave I suppose you could you'll
+probably have gotten like the main core
+of the point i'll just cry later so as
+I'm building these features the the
+realization I had was that thinking
+about the supervise the supervision tree
+of your application as kind of a
+first-class concept for for adding
+features for working on the design is a
+really useful construct and and was
+really helpful for me so supervisor
+driven design it also turns out to be a
+really useful way to understand code
+that you're not familiar with so if you
+get an erlang application that you
+haven't seen before if you can visualize
+the super super vision tree that can be
+a good way to understand what it does
+how it behaves under certain kinds of
+failure conditions and so on so if you
+haven't already you should start here
+and read these books there they're all
+really useful in their own ways and but
+the thing is that until you go to build
+your own system or your own your own
+sort of larger application it's it's
+hard to come across some of the tricks
+even if they're hidden in these books
+and live there because as you're
+learning for example you really can't as
+you're learning focus on the the
+supervisors first because
+too many other things to worry about so
+my claim is that you aren't using enough
+supervisors and that you aren't using
+them as effectively as you can and so
+I'm going to be telling you kind of some
+of these some of the ways that that I
+did this and some some tricks of the
+trade kind of kind of stuff that I
+picked up and these aren't my inventions
+certainly but but things that that I've
+learned going along and seem to be
+working and all of that said I certainly
+expect to learn something here and
+feedback is welcome kind of hoping that
+it's not hey did you realize you could
+do all of that with Jeep rock and 10
+lines of code but if that's the case
+then let me know that too um okay so
+once upon a time it was in September of
+2010 at Opscode we were experimenting
+with react as a back-end data store and
+as such we needed a connection pool to
+pool the react protocol buffer clients
+and so I started in writing pooler
+didn't need it to do a whole lot right
+um we I needed exclusive access to to
+the pool member so we had to maintain a
+pool of members and track which ones are
+in use and which ones are free and this
+is a relatively simple thing to do
+simple and an ER line gives you great
+primitives for doing this sort of task
+but then you realize that there's a few
+more features that you need and so if
+the consumer crashes that that's the guy
+who takes a member out of the pool you
+you want you don't want to leak that
+resource you want to return the member
+to the pool and if a pool member crashes
+well you better also you better create a
+new member to put in the pool otherwise
+your pool will drain over time I wanted
+to have a notion of multi
+whirlpools at least four for this
+initial inspiration of pooling react
+clients I was thinking about how I was
+going to have multiple nodes of the
+database and I was thinking I would have
+a pool of connections for each one and
+then do some naive load balancing there
+there's yet more features you could
+imagine wanting so you you might decide
+that you want to grow the pool
+dynamically and be able to add new
+members asynchronously and not block the
+pool while while you're adding members
+you might also want to do that in
+parallel depending especially in some
+use cases as I'll talk about some once
+you do that and doing that
+asynchronously you want to think about a
+timeout so that if you go to start a
+member and it never comes back you kind
+of want to deal with that case I decided
+it might make sense to have an initial
+pool size and then be able to grow the
+pool to handle a burst of capacity but
+then once you've done that you want to
+think about well maybe you want to
+reclaim your resources after after the
+traffic subsides and so then you need a
+mechanism to cull members from the pool
+that haven't been used in a while so all
+of that adds little features none of
+them kind of earth shatteringly
+difficult but the things sort of grew
+and grew in complexity as it went so
+here's the story of how it went some of
+the first part is kind of for
+illustration purposes but there you go
+so kind of imagine version 0 as as not
+something that we actually used but just
+kind of a first attempt was you've got a
+pool supervisor sorry pooler supervisor
+pooler soup at the top level and a
+simple gen server pooler that that you
+know contains the state for which
+members of the pool are in use and which
+are free and you talk to this gen server
+to check out a member and check in a
+member the the pooler gen server is
+going to call some MFA start link for
+starting the member so it can pool any
+sort of thing and that was an important
+thing that I wanted to have happen as
+part of the design of pooler is to be
+able to pool any kind of generic OTP
+application
+just to kind of illustrate the the flow
+just in case I don't know just so it's
+clear kind of so we've got pooler's the
+gen server and you've got a consumer
+that comes along and sends a message to
+it saying hey can I have a member and
+pooler you know creates a assuming it
+has a free member it's going to create a
+link to that process and then send back
+a pit of the member and then the
+consumer is going to do some work talk
+to a database over this connection and
+then return it and at that point cooler
+frees it up and breaks the link with the
+consumer what's the problem what's sort
+of the thing that's missing at this
+point it's that we're not supervising
+these members the gen server pooler is
+starting them directly and unsupervised
+children in your OTP applications is
+something that you should try and avoid
+if you can so that was kind of a rule to
+come across like let's try and not have
+any unsupervised processes sounds good
+so why you want to know you want to be
+able to find all of your processes that
+are in the system and you want to be
+able to know where they came from and
+when you when you have processes that
+you're just spawning off willy-nilly
+even if you think oh it's not so bad
+they won't they won't be long-lived and
+how do you know that they won't be
+long-lived you can get into situations
+where if you're not if you have this
+kind of process and it hangs around that
+can consume memory and over time grow
+and be hard to detect and then finally
+the squid will come after you if you
+have too many unsupervised processes
+okay so we add a supervisor doing this
+kind of thing straightforward member
+soup here is a simple one for one
+supervisor which is a good pattern to
+use when you have when you want to
+supervise a collection of things that
+all look the same and that's great that
+that gets us that rule one
+just a couple of like kind of details as
+that because that will help sort of as
+we as we progress so the member soup so
+he's supervising the pool of members and
+the kind of important piece there is
+that you pass into him the in through
+the init args the mfa that describes the
+type of pool that you're the type of
+member that you're starting and so that
+that sort of information about the the
+thing that you're puling is encoded in
+the supervisor and then and then inside
+pooler when you want to start a new
+member at a member to the pool pool or
+calls supervisor start child and talks
+to that member supervisor and that
+creates a member and that's great and
+and kind of the last thing of making
+that transformation happen is wiring the
+member soup into the supervision tree of
+this pooler application and so that's
+what you're seeing here static child's
+back here's the number soup spec and
+that just gets wired in and so then
+that's that's where you get that arrow
+at the top generalizing this in terms of
+something that might be useful for you
+to apply to your own applications is
+that when you when you're looking
+through your code and you see places
+where you're calling start link or
+especially spawn or spawn link that
+could be an opportunity where you could
+add a simple one for one supervisor and
+then replace those calls with a call to
+supervisor Starchild cool okay we could
+do that so that still didn't kind of
+satisfy our initial feature set which
+which among other things was to have
+some support for multiple pools
+and so the member MFA is encoded in that
+number supervisor there so one way that
+we could achieve multiple pools is by
+having multiple member supervisors one
+for each type of member type of pool
+that we want to have and one way that we
+could get those those multiple member
+supervisors is to create such
+supervisors dynamically so we can kind
+of apply this same trick that I just
+talked about if you could call it even a
+trick to create the supervisors
+dynamically so just as you can create
+worker processes it works just as well
+to create supervisors in this simple 141
+pattern and so then you end up with the
+supervision tree that looks like this
+where there's a there's now a new
+supervisor that supervises this new set
+of things that we've introduced so pool
+soup and pool soup supervises the member
+supervisors and everybody is supervised
+and we've satisfied that rule just to
+kind of get the to illustrate sort of
+the message flow what happens so we're
+all on the same page so pooler during
+its initialization phase is going to
+read its config and know that it needs
+to start a pool of a certain type so
+it's going to call start child message
+over to the pool soup soup there and
+then he's going to call start to create
+a member supervisor and that whole
+process sort of results in the in the
+pit of the member soup coming back to
+pooler and now cooler has that pit of
+the number soup and can call new member
+on that member soup the member soup
+creates member sends back the pit and
+restore it and life goes on and that's
+great cool so that sort of represented
+the the first iteration on on pooler I
+mean it really started as kind of this
+small like do the simplest thing that
+would work kind of a project and in part
+to be honest it was a project that I
+undertook so that I could have a chance
+to kind of build a complete OTP
+application from the ground up myself
+and
+kind of have that and it was a great
+exercise for that so we had multiple
+pools everything supervised I added in
+support so that you could specify in the
+config an initial count of members and a
+maximum count and and and it does a very
+simple thing which is that everything's
+in this gen server loop so so as you're
+going if you if the pool is full at it's
+in it counts eight in it is ten members
+initially in Max's 20 and then you ask
+for the eleventh member it starts the
+11th member in line with the request
+returns the pit and kind of keeps track
+of it I added with a simple timer that
+goes and records basically you record
+when when members of return you record a
+timestamp and so then it's easy to have
+a timer process go through and fire and
+identify members that haven't been used
+in a certain time out range that's
+configurable and those get clean but you
+maintain the pool such that it's always
+at least in it counts eyes so I did all
+of this work and then we actually
+decided to move in a different direction
+at Opscode in terms of the back-end data
+store as you may have heard Opscode chef
+the server we rewrote it from Ruby into
+Erlang and then the the back-end data
+store is now postgres and so time passes
+dream sequence it's now 2012 and the
+team at Opscode got some really great in
+exciting news which was that facebook
+was going to become a customer for us
+that good news kind of came with some
+bad news as well so we had this
+work-in-progress port of of the the
+server the chef server API to Erlang and
+talking to a sequel database and it was
+you know it was very far along but it
+wasn't shipped yet and we needed to ship
+it really quickly so at the time we
+actually were using a different
+connection pooling library that is also
+a good choice called pool boy and when
+we were load testing our stuff we were
+ran into
+I hang with with a pool boy library
+where there we could tell it had members
+in it but it was locked up and confused
+and it would just hang it turned out I
+think to two weeks and or so later that
+the folks at basho were doing some of
+their quick chek learning stuff and put
+pool boy under quick check and
+identified I believe this bug and
+perhaps some others and subsequently fix
+them but we were under at time
+constraint and I had this library and so
+I said hey let's let's give this a shot
+and that worked pretty well it didn't
+have that same problem partly because
+pooler took a simpler approach to the
+behavior when the pool is full it just
+returns an error message and says hey
+I'm full if you you can check back later
+and where's what pool play does is it it
+maintains a queue and and gives that
+request the next the next available and
+sort of a first-in-first-out fashion
+which could be a good feature and is
+useful but we didn't need it for our use
+case but we did notice as we are testing
+it is that occasionally the whole system
+wouldn't start up and yeah so we had to
+fix that the the problem was was that
+pooler would would be we were pooling at
+that time my sequel connections and
+pooler would be starting up and trying
+to start them but the e my sequel
+application itself hadn't been started
+and the the issue was one of sort of a
+lack of formal dependencies so since
+pooler doesn't know anything about the
+members that it's pooling it doesn't
+depend on them and so then there's
+nothing in the system that was
+specifying hey like the you my sequel
+application better get started before
+pooler starts and tries to start those
+members so we had to find a way of
+fixing that and that led to a discovery
+of a not often used feature of the OTP
+systems called included applications so
+if you haven't seen these before it's
+it's a fairly simple idea and that's
+pretty fun because on the slides for me
+there's white and grey and I'm thinking
+that's pretty much white and white huh
+yeah okay that's cool so on the left two
+applications so these are two
+supervision trees of two separate OTP
+applications and I think fortunately the
+shapes are different enough that you
+guys can probably solve this puzzle but
+what's happening then on the right is
+that we've included this this guy in
+into this application and so what that
+means when you do that is that you're
+responsible for starting the top level
+supervisor of the application you're
+including and among other things that
+gives you some nice control over the
+startup ordering so anything that that
+you then depend on is going to be
+started before you start and then you
+start this other thing that that maybe
+doesn't have dependencies wiring this up
+just to kind of illustrate how that goes
+in your application instead of listing
+say pooler in the application list you
+listed in the included application list
+and then you wire it into your
+supervision tree somewhere so you you
+wire pooler's top level supervisor into
+your supervision trade in pooler didn't
+really need any changes to be used as a
+included application but it was an
+opportunity to learn a little detail
+about pulling things out of your
+application environment with application
+get env so there are two era tease of
+this function at least an era d one
+where you just specify the key and the
+name of application is inferred as the
+currently active application and then an
+era d to form which is explicit where
+you specify an application name and key
+for the config and initially I had used
+the era d one version and the problem
+with that is that when you're when
+you're used as an included application
+the active application is is that guy
+that included you and so I couldn't find
+pooler couldn't find its config and so
+it was a one-line change and
+and I moved on but it was it sort of
+drove home that that like that more
+explicit form i think is really the way
+to go pretty much always one it lets you
+do stuff with included applications but
+also it makes sure that your your
+configuration is always namespace i mean
+sure you could sort of inject config for
+one app into config for another but but
+i don't see any benefit so that whereas
+if you keep them separate everything is
+always namespace then you don't have to
+worry about configuration keys
+conflicting and so on as we load tested
+it there are a couple of points that i
+think are worth kind of chatting about
+so the first the first thing was that i
+had decided to make to make the return
+member call well to make return member
+that that part of the API cast in the
+gen server because i was thinking
+somewhat naively like oh well I don't
+you know as as a consumer of a member of
+the the pool when I'm returning it like
+I'm done and I don't need to wait around
+and I don't really care about the pool
+who cares so I'm just going to make that
+a cast and that'll make everything go
+faster and that's that's not a good way
+to make things go faster and the we saw
+some problems under load and we got
+easier to reason about behavior and more
+regular behavior by changing that return
+member call into a into a call instead
+of a cast and sort of the key takeaway
+point is that by making a synchronous
+call your you're feeding some back
+pressure throughout your system and that
+overall gives you a more stable thing to
+go and so I would say that you know that
+the the time to use cast is when you
+need the a synchronicity to avoid a
+deadlock so you're trying to send a
+message to yourself or something like
+that more really for the structure of
+the a synchronicity and that and that
+you should sort of if you're in doubt
+and you don't need that you should use
+call and if you have performance
+problems you should measure and if
+you're too slow you probably should
+redesign something else rather than
+trying to
+go faster by casting because while that
+will make the guy sending faster it it's
+very easy to then overwhelm the mailbox
+of the receiver and bad things happen so
+the other kind of performance-related
+thing we learned had to do with timeouts
+and what we saw with pooler was that if
+the if under certain error conditions if
+starting members got slow enough and
+these were happening in line that they
+such that they exceeded the the gen
+server default time out that you know
+the systems under load starting to slow
+down and then all of a sudden we just
+fall off this cliff where everyone
+crashes everything in the pool is
+crashing the pool ends up getting torn
+down and you try and recreate it but
+you're already under load and so things
+are already slow and it kind of forms
+this death spiral where it's really hard
+for the system to recover and while I
+was kind of hesitant initially to
+consider setting infinity for the time
+out cause I was like well then it's just
+going to hang forever it turned out that
+in some cases this is a useful strategy
+where you know the system is still going
+to degrade and perhaps still fall over
+but it does so in a way that is a little
+more graceful because because you may
+still be able to make progress and maybe
+some of the time you're able to get
+through some kind of traffic burst and
+yet get past it and and at least it also
+gives you a little bit more time to sort
+of understand the system and maybe see
+where things are really going going
+wrong where's with the everything
+crashing all at once it's so noisy it's
+a little bit hard to know what's
+happening at least initially
+okay so almost time to ride off into the
+sunset so some more time passes its 2013
+we're using pooler in production it
+turns out that we're now actually using
+it to pool connections to postgres
+rather than a different database and we
+got some great help testing and
+validating our system as a whole from
+our friends at Facebook but given that
+so that the way that we're using cooler
+is actually very different than what
+motivated the initial version to be
+written there are some things about it
+that are kind of lacking so I want to
+run through a couple of those and talk
+about some of the work that I've done
+over the past a couple of months taking
+a stab at improving the architecture of
+cooler in making it better and this is
+code that hasn't been yet tagged to a
+release but is now on master and you can
+go check it out and give it a try so the
+first thing that I wasn't so happy about
+is that I had a single gem server
+serving all pools this could be a
+problem in terms of a bottleneck but
+more importantly I'd like to be able to
+use pooler to pool different types of
+things so I'd like to be able to pool
+Redis database connections alongside
+Postgres database connections or maybe
+I'd like to pool connections to two
+different independent Postgres database
+servers and I don't want those to be
+related in terms of the failure domain
+so coming back to the idea of thinking
+about the supervision tree I don't want
+it to be the case that if one of those
+services on the back end starts having
+problems or falls over that those
+crashes caused the pool for the an
+unrelated database server to become
+unavailable or slow down I wanted to be
+able to dynamically add pools that
+seemed like a better way to go I had
+tried very hard for I'm not really sure
+why to I think just to try and keep
+pooler as simple as possible to have the
+pool config be something that you
+specify in app config
+I can kind of leave it at that and i
+think it was time to add that feature
+not even even with breaking out into
+multiple gem servers the the strategy
+for how members are added is it is in
+the present version that we're coming
+from is synchronous and in line with the
+gen server and so that's fine if the
+startup doesn't take too long but if you
+start getting into a case where the
+member startup time takes any
+appreciable time or if you want to be
+able to dynamically add capacity to the
+pool and do so in say batches where
+you'd like to be able to add ten new
+members then you you don't want this you
+don't want to do that synchronously in
+block the access to the pool while
+you're doing that so that leaves us with
+22 items to tackle here give it true
+multi pool support and and make it so
+that we can add members asynchronously
+and we'll also do it in parallel so I
+come to the supervision tree so this is
+where we're coming from and kind of
+based on what we've talked about in
+terms of wanting to have multiple pools
+what what you can kind of visualize is
+that this whole you kind of want this
+whole you want a bunch of copies of that
+thing in a sense so this is the super
+mission tree that I ended up with and so
+each pool has a kind of a supervisor at
+the top level that supervisors a a pool
+specific gem server and then also
+supervises a pool specific member
+supervisor and then there's also this
+starter supervisor hanging hanging off
+to the side there which aisle which I'll
+get to but that gets used for starting
+members asynchronously in terms of
+implementing this another little way
+that you can create supervisors
+dynamically so this is this is dynamic
+supervisors take two so instead of doing
+the simple one for one trick another
+thing that you can do is you can create
+the child's back that you normally would
+see
+I've hard-coded in your in your
+supervisor module you can create that
+whenever you want and then pass that to
+supervisor start child so um not
+difficult at all there was a point where
+I just didn't I guess quite realized
+that that was a thing you could do in
+that it was easy so I made these the
+supervisors are registered and that
+gives them nice named processes for the
+sizes of numbers of pools I'm thinking
+that's going to be reasonable but i'd be
+interested on feedback if if someone
+thinks that's a really bad idea and you
+know so you can have a function that
+takes the config pool name and you know
+Mudge's lunges the name to give you to
+give you the atom pool name that you
+want to register with and so pool soup
+named cool one and pool to result in
+these and to pool names and then and
+then and then we can have a function new
+new pool that that and a helper function
+to define the supervisor spec that calls
+then that you know dynamic name
+generation so really super easy and and
+not not deep magic at all but kind of
+it's good to know if you don't that you
+can create supervisors in this way
+dynamically as well so with that we have
+gay multiple pool support so that was a
+big increment of feature and I think it
+was made a lot easier in the direction
+was a lot easier to find by focusing on
+what I wanted the supervision tree to
+look like rather than it sort of getting
+two down in the weeds on some of the
+implementation of the feature if you
+will okay so a sink start so what's
+currently happening in the gem server is
+we're calling supervisor start child of
+the the pool member supervisor and
+that's going to block until the the
+member is is started and so if we want
+that to be asynchronous the solution as
+is often the case in Earl I Gnaeus to
+put that work off into a separate
+process
+so I thought about having a so that
+process is I termed so creatively a
+starter and it's it's a little very thin
+worker gem server pooler sends it a
+start member message and it returns
+immediately with a reference saying like
+cool I got your message and then goes
+off and tries you know talks to the
+member supervisor to start a member and
+that takes however long it takes and
+when it comes back it then sends the the
+pit of the member that got started back
+along with the reference so it can be
+identified and that reference also makes
+it just makes it easy to track which
+which is coming from which into and to
+set up a time out so that if you kind of
+clear out the starting members if a
+given member takes too long to start and
+then if you receive such a message later
+you can ignore it kind of a refinement
+of that overall picture though was to
+introduce yet another supervisor see I
+told you it's like all about supervisors
+right so so starter starter soup is a is
+a simple one for one supervisor for
+these starter guys and what I wanted is
+that I wanted to to give the starter gem
+server everything it needed to do its
+job at at when it was started in its in
+it and that it would kind of wake up do
+its work and then exit cleanly and be
+done and be a short-lived thing so
+that's how that works and that takes
+advantage of another little subtlety in
+the gem server API that if you don't
+know about you should which is that the
+all of the gen server callback functions
+that you implement you can one of the
+ways that you can return is to set a
+timeout value as an additional argument
+in the tuple that you return and then
+you can also do that from in it so if
+you add a timeout then if you don't
+receive any messages that server doesn't
+receive any messages f when that timer
+has expired the gem server is sent
+a timeout message that it can then take
+some action on and in particular you can
+set that timeout value to zero in in it
+and then when the process starts it
+immediately gets a timeout message in
+its mailbox which it can then take
+action on and so this is a way of kind
+of triggering this one off short-lived
+worker process so that's a nice thing to
+know about just one more time with all
+of the members in play right so pooler
+sends a message to the starter soup
+starter soup starts a starter and then
+sends a reference back to pooler and
+then meanwhile the starter talks to the
+member supervisor who starts a member
+and time passes and message comes all
+the way back then to pooler and then
+poof the starter guy exits cool so so
+we're like ninety-eight percent done so
+we did the multiple pools which was
+which was fun and now we've got a sink
+and parallel start but we only have it
+once we're running because this message
+that's coming back to to pooler to
+accept the message is it is a gem server
+call so in order to to kind of do this
+this messaging and have a synchronous
+stuff working pooler has to be running
+and live that works fine for dealing
+with you know like if a member crashes
+and you need to replace it that's cool
+because now we can now we can add back
+that member in an asynchronous way and
+we can also do the dynamic adding of
+capacity in an asynchronous way so so we
+can add a batch of new members which is
+cool but what we can't do is that
+startup if we want to if we want to
+paralyze the the start of members we
+don't have a way of doing that because
+while we're in in it we can't receive
+messages and if we started before we had
+pool members available then people could
+ask us for things and the system would
+be sort of pretending to be available
+and live except we wouldn't have the
+members and then errors would happen in
+we'd be sad
+okay so so I kind of struggled with this
+one and and so I kind of ended up using
+a pattern that I imagine a lot of you
+have seen before and said okay well just
+i'll i'll just use spon and and a
+function that gathers the pig so i'll go
+in my in it I'll spawn a bunch of calls
+to start members and then i'll await
+them all to finish and like well at
+least it isn't very much code to do that
+so so that's good right and so i thought
+i was done but you know then i was
+thinking about coming and giving you
+this talk and talking about how all
+children are supposed to be supervised
+and then you would look in the code and
+see that i hadn't supervised all of the
+processes and that just wasn't going to
+fly so i took an attempt at at sort of
+fixing this and it led to all sorts of
+complexity and i really hated it and had
+to throw it out and so I came back to
+well I mean it's just an in it like
+maybe just once that'll be okay and and
+it's it's really not for very long yeah
+and then I realized no I really had to
+fix this properly so kind of coming back
+to how how the asynchronous stuff works
+i was thinking about well so what i want
+to have happen is it's like I want to
+send and start messages and then somehow
+have a way of waiting for n replies but
+then again just to reiterate this can't
+work because in order to receive the
+replies I have to be running and so I
+want all of this to happen during the
+the init phase when when the pooler gem
+server is inside in it and so that led
+to me going and reading the source code
+for gem server and that stack of things
+which is a really great resource
+incidentally to go and just dig in and
+when you have a question like well I
+wonder am I allowed to do such and such
+you can go and look in the code and with
+a little puzzling
+Willie determine if you can do such and
+such so it turns out that in in it
+nobody knows your name and your server
+loop hasn't been started and so that's a
+reasonable place to do some some raw
+message sending and receiving so that's
+that's how I solved the the kind of
+parallel start issue 44 pooler is that
+in in an it it's set up so that the that
+member soup has an alternate start
+function where you can pass it instead
+of using the kind of gem server
+mechanism for the reply you can pass it
+a pit explicitly and have and use raw
+messaging to send the accept message and
+so and so that that gets us this picture
+and that seems to work and I thought
+that was kind of a fun thing to learn
+about because sometimes in a gem server
+you have more complicated work to do
+that where you'd like to do
+inter-process stuff to make it happen
+and you don't want to you don't want to
+become available and sort of start your
+loop before you're done and so this is
+one way to achieve that so with that
+we've got the multipole support we've
+got everyone supervised who we've got
+the dynamic pool size we can have got it
+set up so that it adds batches of pool
+members in in parallel you can do
+dynamic fool creation now and that
+actually provides a kind of a easier in
+the end solution to the included
+application and start up ordering thing
+if instead basically with once you have
+once you have the ability to just create
+a pool on demand then you can start the
+pooler application with nothing and and
+wherever at ever whatever point in your
+application code can then add pools as
+you go and I think that's really the
+better model because what I'd like to
+see happen is I'd like to make pooler
+kind of a back
+you start it up and then different
+things can use it they don't you know
+multiple different apps could could use
+the same pool or instance to pool
+different things for example with this
+model so codes on master kind of overall
+takeaways and you know think about the
+supervisors and and what what the tree
+looks like and how you want the the
+failures to work and and think about
+that shape as a way of driving your
+design I think that's really useful make
+sure everybody supervised I think that's
+it's useful for technical reasons but I
+think it's also useful in that it helps
+drive your design to something that is
+cleaner and easier to reason about you
+can use the zero timeout trick in it to
+make worker things happen you can send
+raw messages in in it to do more
+complicated work and that's it so thanks
+yeah as I was learning I you know
+followed some of the different books
+that were available and did some of the
+examples and those sorts of things and I
+think well this wasn't this wasn't like
+the first gen server stuff that I had
+written so that maybe doesn't serve as a
+good example but i guess i would say
+that I kind of learned sample projects
+where I did some of the raw raw stuff i
+mean that's useful to understand and to
+go through but at the point that you're
+ready to build a thing that you're going
+to use i would say to jump right into
+the gem server stuff straight away and
+then if that's sort of still at the
+point of too much i would i would keep
+hacking on some smaller things perhaps
+any other questions does anyone here use
+pooler no that's cool that's okay oh
+yeah well my colleagues cool well thanks
+very much for coming</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

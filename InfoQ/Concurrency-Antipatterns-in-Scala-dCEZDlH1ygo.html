@@ -1,0 +1,712 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Concurrency Anti-patterns in Scala | Coder Coacher - Coaching Coders</title><meta content="Concurrency Anti-patterns in Scala - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/InfoQ/">InfoQ</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Concurrency Anti-patterns in Scala</b></h2><h5 class="post__date">2013-03-14</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/dCEZDlH1ygo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">all right thanks a lot for inviting me
+today I really appreciate it
+my name is Blake Matheny I'm the VP of
+engineering at a tumblr
+the only shameless promotion you'll see
+during this is our jobs page if you're
+interested in scholar development we're
+in New York so today's talk is largely
+about things that have failed in the
+year and a half that we've been using
+Scala's our primary back-end development
+language I'm gonna spend a little bit of
+time talking about what I call the seven
+sins of back-end development but a
+little bit of background on tumblr so
+tumblr does about a billion and a half
+HTTP requests a day that doesn't include
+our back-end service stack and for a
+long time was a large monolithic lamp
+app that worked okay until about two
+years ago and we started having my
+sequel fall over and so we built out a
+few early back-end applications to
+support some use cases that PHP wasn't a
+great fit for and initially we built out
+the backends and C and then after a
+couple of fun projects like that
+we switched over to Scala so we've been
+using Scala at tumblr since mid 2011 and
+primarily we use finagle and there's a
+talk after this that goes into a bit
+more detail about what finagle is we use
+it primarily as a alternative to akka
+but we do have some play applications
+that are developed using akka as well so
+this is an after-lunch talk after lunch
+talks usually there's a lot of droopy
+eyes and the crowd so I'm gonna try
+something a little bit different today
+so for each of the seven sins of
+distributed systems I'm gonna show you
+guys a piece of code or a graph I'm
+gonna ask you guys anybody in the
+audience to say what they think is
+probably wrong with it
+some of these are obvious or maybe to me
+some are a little bit less obvious
+the other thing is the code comes from
+myself because you know that would be
+unfair to just pick on people on the
+team
+Moses who's sitting right there Moses
+their hand up and keep through sitting
+right there so if you want you know
+design critique you can ask them
+afterwards so the the seven sins will go
+through these individually initially
+they started off just with sort of like
+the general problem that I saw and lots
+of pieces of code and sort of ended up
+tying that to well I realize it was
+called anti-patterns and generally
+patterns have names
+so those names ideally are a little bit
+memorable so I tried to stick with
+things like you can remember gluttony
+it's a little bit harder to remember
+maybe like factory pattern so when
+you're writing your own code
+particularly in a server setting you can
+think back and be like am I being a
+glutton or you know am i doing this the
+right way alright so we'll start with
+lust I want all the abstractions so this
+is a project internally it's called
+Redis cover and what Redis cover does is
+it's a
+it's a shorting middleware for Redis so
+clients connect to it using normal Redis
+protocol it handles things like it has
+key space knowledge it knows you know
+what backends to use it can potentially
+handle like winged migrations things
+along those lines so this is some code
+from Redis cover and it's a lot smaller
+on this screen so I'm guessing some
+folks can't see it but it says object
+Twitter to akka and what this is doing
+is it's taking in a Twitter future and
+handing back akka future or promise in
+this case anybody want adventure as to
+what the issue is with this code so
+there's a few problems with this one is
+there's sort of a general readability
+issue implicit I prefer explicit
+implicit then ones where you call to
+Twitter
+or things along those lines as opposed
+to magic happening and you're not
+totally sure whether magics coming from
+outside of that the performance penalty
+on this is actually pretty significant I
+only included a little bit of this but
+you know as you can imagine there's you
+know the reverse process this is
+something that's happening all the time
+it's coming in via finagle because it
+speaks Redis it's converting it into you
+know
+acha futures it's going out and doing
+its thing converting back before it
+hands at the client there's a lot of
+objects being generated here the
+performance is well the GC profile for
+this application is not a generally
+desirable one and I mean part of the
+problem is you know until Scala 210 and
+this is a little better now you had at
+least four options for you know this
+type of abstraction you had Scala
+futures akka futures Java futures
+Twitter futures who has their own future
+implementation here I know there's
+LinkedIn guys so maybe they do all right
+here's another one
+so there's five options so the problem
+with this outside of some performance
+issues one is it can lead to really hard
+to spot bugs and the primary driver for
+those bugs is they're really dramatic
+semantic differences between the
+implementations in terms of what things
+mean so one of the most common ones that
+I see in our code base because we use
+Twitter futures our Twitter's future
+implementation provides an on success
+and a on failure the problem was the the
+type signature for that returns a unit
+so people generally think on failure
+okay this is how I'll hook into like an
+exception that's been thrown and I'll
+recover that that is not what it's for
+it's for knowing that there was a
+failure and potentially logging it or
+incrementing a stack counter or
+something along those lines but these
+are things that end up being pretty
+different between implementations you
+have different language and then in some
+cases the same named methods and
+slightly different implementations so so
+this is a one issue that's hopefully not
+going to be in our code base forever all
+right so we have a another application
+called Buster
+what Buster provides our note counts so
+if you're in your Tumblr dashboard and
+you're looking at a post and you see the
+little number for how many people have
+reblogged it like things along those
+lines
+that's a service provided by Buster and
+I can't actually show you the code and
+and you'll see why I'm going to show you
+some graphs so this is a production
+failure that happened in early January
+and what you can see here is Buster's
+happily doing right around 30,000
+requests a second in total and then for
+some unknown reason you see this huge
+increase in errors so the errors are
+about 25,000 a second and successes
+during that time are about 10,000 a
+second so in aggregate it's doing about
+35,000 requests a second so really if
+you were just to look at total requests
+it would do something like a big jump up
+here so we see this and then see service
+latency really increase and get a lot
+more jittery it's typically a lot more
+normalized and then this is heap so you
+can see where we had to restart it does
+anybody want to venture what the issue
+was here it's a back pressure so
+services can handle a finite number of
+simultaneous requests even if you have
+an amazing piece of software that can
+handle the C 10k or C hundred K problem
+at some point your system should start
+refusing connections it's the only way
+that your back-end system is actually
+going to stay up when something's going
+on so in this case there was no
+configured this is the maximum number of
+requests that I can handle the maximum
+number of connections I can handle so we
+had enough capacity to handle roughly
+33,000 requests a second when we
+surpassed that the system just
+completely fell over so this is sort of
+a question of you know
+would you rather would you rather
+completely fall over or would you rather
+refuse the connection and leave it to
+the client to retry so one of the things
+that's a bit challenging here is this is
+different for each of these abstractions
+so between
+if you're building applications with
+akka or finagle in particular those to
+how you configure this is pretty
+different and so if you have developers
+from these different backgrounds you
+know maybe somebody who's really
+familiar with akka coming to finagle or
+vice versa they assume things are done a
+particular way and when they're not you
+see these you know nice graphs so sort
+of the few things are you know applying
+back pressure is usually pretty easy
+doing a little bit of capacity planning
+to understand soar the bounds of your
+service but the one thing I'll say is
+capacity planning typically what people
+will do is they'll write a little load
+generator and they'll throw low data as
+fast as they can and that misses two of
+the most important things that determine
+what your throughput will be in
+production and that's how slow your
+clients can be and how slow your
+backends can be so most load tests it's
+really sort of on my dev box or on the
+test environment how quickly can I throw
+things at you in reality and production
+you're gonna have systems where you know
+the client the load on the box is maybe
+70 and it's taking a second for it to
+actually connect so you know if you're
+gonna go through the you know exercise
+of a bit of capacity planning also go
+through the exercise of you know writing
+reasonable load tests for your
+environment all right so this is my code
+this is from a system called Oscar
+Oscars a memcache proxy that sort of
+knows about like shard pools and parses
+the request and this code in particular
+basically when you you know fan out and
+say I need a bunch of values associated
+with these keys you get back here you
+get back a sequence of values so any
+values just like a response that was
+associate with a key and what I was
+trying to do here was count for a given
+key whether there was a hit or not so
+that I could expose some stats that was
+basically like hit ratio miss ratio
+things like that so I noted also that in
+you know this code making this method F
+apply is the same as you know calling
+future get so this one may be one of the
+more obvious ones what's an issue with
+this code
+thank goodness I was like no one does
+this but me yeah blocking and this is in
+like the main event loop so basically
+requests would come in and before I sent
+them back to the client I would do this
+kind of calculation so I couldn't find
+this is a older code and I couldn't find
+a graph from that time but what you'd
+see is essentially it would do about 24
+requests a second we have about 24 boxes
+or cores per machine so this would just
+literally block from you know allowing
+work to proceed so you know
+instrumentation here was good but you
+know not doing stupid things with your
+code is also good you know and this is
+one of those cases where you know all of
+these abstractions provide methods for
+dealing with this case and at this point
+I just actually didn't know what they
+were and it was hard to do so I just
+like cut corners and did this but you
+know use map use for eh use whatever
+abstractions available to you avoid
+blocking your event loop it'll improve
+your throughput and I mentioned this
+already but you can hook into either a
+successful or a failed of future at
+least with finagle and akka has
+something similar so that you can
+basically defer any kind of stats or
+calculation until after the request has
+been handled all right so sloths when
+not to be lazy and and there's a little
+bit of discussion about one of these
+issues these are the top one is a piece
+of code it's from a internal utility
+library called service util that all of
+our services hook into the one below is
+an exception from system that's open
+source called Collins it's fixed so
+don't worry about using it so the
+service util one we have the supply
+method that's part of an object and
+basically what it does is given some
+client config do I already have a
+connection to the back end or not and if
+not create one and you
+put it in this map and the next one is a
+says caused by java.lang dot exception
+and initializer error no it's you know
+amazing error logging does somebody want
+to take a guess on either of these for
+the top one there's two sort of bigger
+issues one is you know so you can end up
+with stale connection handles this is a
+recipe for a memory leak depending on
+what ends up in that map the one that's
+a little bit of a bigger problem is
+depending on how complex your back-end
+services shutting it down properly can
+be non-trivial so in this case the
+process for actually needing to iterate
+through that map pull out all of the
+clients call the shutdown method on them
+individually it does not exist in the
+codebase so what that means is if you
+use this method you're gonna end up with
+you know either a JVM that won't shut
+down or you know a bunch of connections
+you're ending up forcing a closed on and
+then the the last one that one that
+that's definitely class initialization
+problem so in this case it was a lazy
+Val and it was something that didn't
+manifest itself until a particular load
+was applied against this system in which
+case it exposed a subtle bug and in our
+code but you know the two big things
+were I think Daniel talked a little bit
+about this morning there's pros and cons
+to lazy vowels there's potentially some
+some performance issues it can end up
+blocking but also I think the the thing
+that's a little bit worse about this is
+it violates anybody remember what's the
+principle of getting back an object that
+hasn't been fully initialized yet
+there's a name for it so if you throw
+exceptions in your constructor it's
+generally somewhat bad practice and in
+this case it's not even an intentional
+exception it's one where you know it's
+being thrown on your behalf so in this
+case we move to using a static
+initializer private constructor so that
+we could guarantee that things were set
+up in a particular way but in this case
+you know sometimes the lazy valves are
+easy to spot in your testing sometimes
+you run into issue
+use due to deadlock other things when
+you're operating in a highly concurrent
+environment alright so this is a another
+project it's called Wentworth so if
+you're ever in your Tumblr dashboard
+you'll see these little notices laid
+into in between posts so you see a post
+then you'll say I see a little notice
+that'll say someone's so followed you
+so-and-so reblogged your post so this is
+a Redis backed service that provides
+those notifications and so what this
+code is for is we have generally the the
+weeks was a thrift interface for this
+service when we get a request that
+there's been a new notification the
+client doesn't actually need
+acknowledgment for the right so we queue
+the request and then sort of in batches
+we write those two discs so this code
+class Redis writer gets a handle on a
+Redis client and then it has a write Q
+which might be like a blocking Q or
+something similar it extends runnable
+has a run method and then says while
+true drain Q I simplified the drain Q
+part but that's sort of the gist of it
+anybody want to venture as to what the
+issues are for this one there's no way
+to shut it down so this one isn't
+certainly isn't a Scala specific thing
+but it ties a little bit to how you mix
+your abstractions so if you're using
+something like akka maybe you send
+poison pill maybe you send a particular
+message type things like that wait for
+it to drain finagle that's sort of
+similar you know facilities but you know
+that's the question you go through that
+shutdown process how do you make sure
+that all of those messages get written
+you stop accepting connections and all
+of these abstractions offer slightly
+different ways of solving that so this
+is a subtle bug because unless you're
+actually tracking messages received and
+messages written and
+looking at that Delta you're probably
+not gonna notice because you're getting
+you know millions and millions and
+millions of these a day and it's a data
+loss issue right so in this case
+notifications they're not like I
+wouldn't say it's like cherish data
+because we only we only keep a finite
+amount of them but if you can avoid
+losing data that's a pretty good
+practice so you know in this case yeah
+there's no way to shut it down and
+there's a few ways to do that right so
+if this was a pure Java app you might
+interrupt it catch that exception shut
+down if you have akka available to you
+might send a particular message type but
+this is also something that isn't
+completely trivial oh the cake pattern
+made me think I was just doing things
+wrong you have a bunch of things to shut
+down right so when you're when your
+process needs to restart and some people
+like to use OSGi you know reloading I
+prefer just treating it like sort of a
+system process I think it simplifies a
+few things but you have to handle a
+whole bunch of shutting down there's
+stop accepting new connections drain out
+your current work you wait for your
+clients to disconnect disconnect from
+any backends that you're connected to
+and actually finish shutting down so
+this is just sort of one example where
+that small part of it which is draining
+your work queue there's actually no way
+to do this this will just keep running
+forever and even if this is a daemon
+--thread it doesn't actually help you a
+lot because it's entirely possible for
+the JVM to exit before the queue gets
+drained so yes it means that you
+probably won't get stuck with a JVM that
+you have to kill - 9 but it does mean
+you're probably going to lose messages
+when the JVM exits
+so this one I took from Philip Haller
+emailed me it was nice enough to send me
+over a presentation that he'd done on it
+was a bit more focused on sort of mixing
+the the different concurrency
+abstractions and there's a link to it
+there and this was an example that I'm
+sure we have in our code base I did not
+have time to find it and he already had
+a good example so in this case you have
+some some actor it has a you know state
+variable when it gets a request it
+replies with some future handle requests
+hooks into the state and then change
+state you know says set the state to
+this new value what do you think the
+issue is with this yes so this is fun
+with closures in a future so you
+actually are going to whenever this
+block gets executed you're gonna have a
+handle on whatever the value of state is
+at that time and not the value of state
+when you actually made the request so
+this one's actually you know fairly easy
+to fix potentially if you wanted to do
+this you can just actually bind the
+value so that within that closure you
+have a value that is the one that you
+actually wanted you can do fancier
+things you can use you know
+atomic ref or a STM or things like that
+but I didn't really try and not decorate
+my code I usually like to do things sort
+of as simple as possible as readable as
+possible and avoid abstraction if I
+don't need it so this is a case where I
+think people generally sort of have a
+distaste for VARs and like you know
+that's a code smell in itself
+I probably I definitely fall into that
+category there are times when that's a
+really simple thing to do it's the thing
+you're gonna use you just have to be
+aware of what are the semantics for the
+abstraction that you're using and is is
+this thing actually doing what you want
+or not the other thing I said is this is
+a bit of you can't completely hide from
+the Java memory model so we have a lot
+of this isn't actually specifically an
+issue with it
+that's something that'll run into
+occasionally particularly with people
+using volatile Zoar things like that is
+at some point it's all running on the
+JVM and having an awareness of what that
+looks like is going to help protect you
+or at least inform you when you're
+making decisions about how do I do this
+stuff what am I thinking about all right
+so this one's called pride why mess with
+perfection this is from a system
+internally called reef raagh and the
+problem that this is solving is so we've
+been keeping these notifications for a
+short period of time if we want to keep
+these for like a year we need a system
+that's architected slightly differently
+and so there's a feature of this that
+basically says and this is something
+we're rolling out in test mode right now
+so this is pretty I think this is
+actually still in a pull request so this
+is really fresh code so what this is
+doing is saying if there is more than a
+thousand notifications or there's more
+than three days in data purge the data
+that's older than that so what this code
+is doing is saying it's gonna randomly
+decide to run you know say it's you know
+choosing a random number between zero
+and a hundred and you know if it's one
+it's gonna run it gets a count of the
+number of elements associated with a key
+if the numbers stored is less than the
+specified count which is out of scope
+it's going to use one method for purging
+which is the date based one otherwise
+it's going to use the the value based
+one and if it shouldn't randomly run
+it's gonna return a future unit so
+there's a couple of problems with this
+does anybody want to venture a guess all
+right so there's a few things
+does this ever run so there's a there is
+a probability that that code block will
+never execute for a given key right so
+yeah you'd say given enough runs that
+probability is very low but what if the
+user is really inactive and
+they end up with one key do you just end
+up sort of never purging any data so
+there's no there's no logging there's no
+stats there's no way to actually know
+whether that case has ever hit it's just
+something I can talk about and it's a
+thought process so something else is
+we're we have these two different ways
+of purging data one is date based and
+one is sort of if accounts been exceeded
+it seems like those are good things to
+know right which of those is happening
+more often is it usually date meaning
+that were were not having lots and lots
+of notifications or is it usually
+threshold based in which case we're
+almost never hitting the date one
+without the instrumentation you're just
+sort of lost and then the last thing is
+the you know calls to the these are
+reticles z REM range by rank zero range
+by score and then also the z count flat
+map what if one of those errors we want
+to log that do we want to include it as
+a stat so that we have better analytics
+part of it is once something goes to
+production yeah you can always push out
+new code but it you know generally
+you're not just gonna say like oh hey
+let's flip on the instrumentation for
+this like it's part of what the coding
+exercise is right what are the types of
+things you need to know about so you can
+really look at your systems and
+understand whether they're functioning
+well or not so in this case you know
+there's sort of a few things you can do
+one is it's really great if your
+protocol handler has built-in stats
+that's one of the reasons I like finagle
+so much is all the protocols they
+support you get more stats
+instrumentation than you could possibly
+want number of connections by it's you
+know you get percentiles for all of
+these values you get counters you just
+get a ton of information for us that all
+submits into a central stack cluster and
+we can look at this stuff and pretty
+close to real-time and it's really
+helpful for for Diagnostics but part of
+it is actually like doing it right if
+you're not actually collecting the stats
+there's nothing to look at so this isn't
+particularly a scholar issue although
+that's part of the code but I do think
+it plays into your choice of which
+abstraction you decide to use
+I like the fact that finagle bundles in
+there their stats stuff you don't have
+to use it but you can but you know
+there's sort of that paradox of choice
+right so thing that I like about finagle
+in particular is you don't have a lot of
+choices it's not a particularly fancy
+framework you know you get some stats
+you get some futures you get some
+protocol support you know that's kind of
+it there's no like remoting there's not
+a lot of support for like serialization
+there's no support for actors you know
+they just expect you'll pull that stuff
+in if you need it from somewhere else
+but you know whether you're using akka
+whether using finagle sort of doesn't
+matter it's are you thinking about you
+know sort of the data you need to
+collect to effectively diagnose any
+production issues you might run into
+something that's not covered here but I
+think is additionally important is how
+do you do your distributed tracing so
+there's gonna come a point in time where
+you have a or you already do have a tier
+of services so you know your front-end
+makes a request to this system that
+makes parallel requests to this other
+back-end system that makes requests to
+these other back-end systems and all you
+know from the front-end perspective is
+that took a really long time and that's
+not helpful information if you've ever
+gotten a bug report saying it's slow you
+know how frustrating that can be so one
+of the things that we did is a lot of
+our codes instrumented using dapper
+style tracing which basically means you
+have these notions of span IDs and trace
+IDs and those persist throughout the
+lifetime of all of these requests so
+that you can go back and look and say
+okay that took a really long time where
+did it take a really long time the great
+thing about that is because we've also
+provided instrumentation at the protocol
+level we know specifically like if it
+was a back-end storage system we know
+which one it was and we know why it was
+and things along those lines so these
+are things if you can do it upfront
+that's great and if your abstraction of
+choice supports it that's even better so
+a few of the things that I've picked up
+over the last year and a half or so of
+working on this stuff
+you know I don't think that there's a
+better or worse for you know finagle or
+akka or the other systems out there that
+solve some of these problems it's just
+you use the one that makes sense for
+your environment
+I do think you should be really
+consistent in the application of that
+because I've basically seen nothing but
+problems and trying to mix these
+together and that's really just because
+you know when you do that you have these
+subtle differences and depending on the
+knowledge level whether it's akka or
+finagle or whatever it happens to be
+their expertise in it is you know gonna
+be a variety of levels and on top of
+that you know more abstraction you have
+the more overhead not just performance
+but like time to learn that time to fix
+bugs things like that
+avoid blocking in your futures and I
+brought this one up already but you know
+most loading stress tests are useless
+they depend on fast clients and fast
+backends so if you're going to implement
+these account for that it'll make your
+life much easier</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

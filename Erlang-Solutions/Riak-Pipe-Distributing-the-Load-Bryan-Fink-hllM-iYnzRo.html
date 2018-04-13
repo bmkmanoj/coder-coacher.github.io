@@ -1,0 +1,842 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Riak Pipe: Distributing the Load - Bryan Fink | Coder Coacher - Coaching Coders</title><meta content="Riak Pipe: Distributing the Load - Bryan Fink - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Riak Pipe: Distributing the Load - Bryan Fink</b></h2><h5 class="post__date">2013-07-22</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/hllM-iYnzRo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">I said I'm Brian
+and we're going to talk about some
+pipe so what is react pipe is probably
+your first question and what it is is an
+abstraction on top of react or and if
+you don't know what react or is i'll go
+over the important parts in just a
+minute but the abstraction it provides
+is one of staged computing so you might
+be familiar with the the fetch and
+render sort of application flow so you
+know you get a request comes in you have
+to look up something in the database you
+have to render it into something that
+the clients going to want lots of
+applications do this just you know the
+process that picks up the socket that
+takes the client requests grabs the
+thing from the database and does the
+render itself but there's an alternate
+way to do it which is to set up
+processes one process for doing the
+fetch from the database and one process
+for doing the render why did we create
+react pipe is your next question and
+we'll come back to why it's structured
+the way it is after this react pipe is
+the thing that powers our MapReduce
+thing our query system in react kv react
+que veas MapReduce is a stage computing
+system it's a query system that allows
+you to express a query in stages of two
+types one is a map type which is very
+much like the functional map it takes
+inputs that are keys into a database and
+applies a transform to the value that
+are that is associated with each of
+those keys and passes that on to
+whatever stage next reduce type stages
+aggregate whatever came in from the
+stages ahead of them and produce one
+unique output from all of the you know
+funneling that came into it and reacts
+MapReduce is a very old thing that has
+grown in fits and spurts as we've needed
+things in it it started out as something
+that we called link walking if you're
+familiar with react which was way too
+Express sort of relations between keys
+and values in react so you could say
+that you know a person owns these
+documents and these documents came from
+these sources and then instead of having
+to query sources for who created them
+you could say I want to look at sources
+from a user by saying we're going to
+start this user object and follow all
+the links to all of his documents and
+all of the links to all of those
+documents sources the problem with that
+sort of you know slowly growing and
+aggregating feature set is that it ended
+up basically a mess of her lying
+processes that you know we just fired
+messages off everywhere to say go get
+this thing and do this thing to it and
+whatever so we needed a much more clean
+abstraction such that we could debug
+things we could monitor things and
+especially so we could provide back
+pressure mahesh give a great
+introduction that was fantastic and if
+you were here for it you'll see a lot of
+those topics come up but one of the
+problems with Erlang processes is that
+their mailbox is very much like a queue
+and unbounded q so if you have processes
+that are consuming inputs very slowly
+but receiving inputs very fast their
+mailbox grows and grows and grows and
+grows until your airline node falls over
+so this is the conceptual problem with
+all of these processes that we had going
+on we were just spawning processes
+everywhere well we had no control over
+how many of these processes respond at
+any time we had no control over how big
+their mailboxes gots and because their
+mailboxes were getting so big we had no
+control over how long it might take some
+input to make it all the way through the
+system you know and like i said if your
+queue is getting longer and longer and
+longer the time for any one input to get
+all the way through the queue is getting
+longer and longer and longer so we
+started looking for a solution and we
+happened upon a paper that came out over
+ten years ago by the name of staged
+event-driven architecture this is a
+really great simple simple simple
+solution that is this sort of staged
+processing so it consists of two pieces
+after you've got this you know stage set
+up that you're doing little pieces of
+whatever it is you're trying to do
+independently you set up a queue for
+each stage you send the input to the
+queue and then you set up a thread pool
+that consumes elements from the queue
+what this allows you to do is tune in
+very to simple parameters how fast
+things are moving through the queue and
+how much how parallel that can be and
+and what the maximum latency is because
+you can tune how large those cues are
+allowed to grow if you have control over
+the queue instead of the Erlang mailbox
+you can say I know there are too many
+things in here I should you know drop
+things on the floor or I should tell
+things that are producing my inputs to
+slow down and you can change the size of
+that worker pool consuming inputs out of
+that Q so you can say you know I have
+bandwidth I may as well consume more
+things to get them through faster or you
+can say you know I have this thing that
+is under high contention so I should
+have fewer workers so they're not all
+trying to gather I'm sorry all trying to
+use it at the same time what react pipe
+does is apply this SATA architecture to
+react or I set out explain react or what
+react or is is a way to model
+distributing work across a set of nodes
+a set of computers the wave react react
+or does this is to define a hash space
+we happen to use 160 bits we break the
+hash space up into segments so there's
+one segment from 0 to a million another
+segment from million or two million
+obviously much larger numbers because
+we're dealing with 960 bits but and then
+each of those partitions we give to one
+of the nodes in the cluster so there is
+some node that is responsible for
+handling anything
+to do with that partition when react
+pipe gets an input or when react kV gets
+a key and value react kV also operates
+on react or we hash that key or that
+input wherever the hash lands in the
+hash space we send the input to the node
+that is responsible for that partition
+it makes it really simple to add more
+nodes and just have them take over some
+partitions instead of having to you know
+negotiate that okay now you have from A
+to B and that kind of thing and the
+consistent part of consistent hashing is
+just that you know especially in react
+kV we're hashing on the key instead of
+the value the keys never going to change
+so even when the value changes it's on
+the same node or it's at least on the
+same partition and if we've changed
+which nodes own that we're still going
+the right node that kind of thing so
+like I said react pipe is on top of rack
+or the way react core applications work
+is for each partition a node spits out
+an erlang process that Erlang process is
+what you're sending the input to so you
+figure out which partition it's going to
+which node owns that partition and then
+you send it to the process on that node
+owning that partition react pipe puts
+the sate accuse and the state of workers
+connected to that we call it a vinodh
+it's a virtual node that owns that
+partition the vino de is responsible for
+managing the queues that that stage is
+you know receiving inputs into it's also
+responsible for starting the workers to
+consume those cues so when we send our
+input to the partition it looks up which
+q we tag the input which with what stage
+it's for it looks up the queue for that
+stage puts the input into the queue and
+starts a worker if there's no worker
+ready for that cue the worker eventually
+consumes things from the queue and we'll
+go into how that works in a little bit
+but what this means is that if we think
+about it as
+each stage is you know a different cue
+in the ring we kind of can get we can
+define this stage of processing that
+fetch and that render and what or the
+map and the reduce and we can route
+around the cluster we can send an input
+in and it will go to the partition
+that's supposed to handle that input the
+output that that stage produces is the
+input for the next stage so we can route
+that input to whatever partition is
+supposed to own it for the next stage
+where the next worker lives and so on
+and so forth but I don't mean to say
+that each each stage operates on only
+one partition we're not going to send
+all of the inputs for that stage to a
+single partition necessarily in fact the
+way we define the thread pool is by that
+exact hash of the input so if the inputs
+are not all sent to the same partitions
+then we have different workers on
+different partitions doing work for that
+same stage so we could in fact route you
+know all of the inputs for the first
+stage to one partition and use a
+different hash on that on the outputs of
+that partition I'm sorry on the outputs
+of that stage to route to different
+partitions for the next stage so on and
+so forth we can aggregate again later
+down the line and that hash function
+like I say is exactly what defines how
+parallel or how many how many worker
+threads are working on the inputs for
+this stage so I'm going to go through a
+few hash functions and and how they
+apply right now to get kind of a the
+idea for it the simple one is just to
+hash with you know and sha hash all
+that's going to do is spread inputs all
+over the cluster you know sha has a very
+good spread an input that is just
+slightly off of some other input will
+end up somewhere completely different in
+the cluster this is great if what you're
+trying to do is just you know get as
+many workers working on things as
+possible with this kind of you know nice
+spread hash you'll basically light up
+the entire cluster so however many
+partitions you have going
+will be how many workers you have
+working for that stage the other reason
+we use the SSH a hash quite often for
+react pipe inputs is react pipe is often
+running next to react kv react kv is
+also using the sha hash to define where
+values are stored for keys so if the
+inputs to our pipe stage our keys for
+react kv then we send that input to the
+same node where the data is stored for
+that key that means if our stage is
+doing a read from react kv it's a local
+read we don't have to take the value of
+that key across the network so in
+addition to defining how parallel our
+system is working we also define data
+locality and we can you know reduce
+network load by making as much stuff
+happen local to the data as possible
+this is kind of the basic idea behind
+MapReduce that's why the system kind of
+works this way but the other side is
+reduce so sometimes you need all inputs
+to go to the same worker such that that
+worker can decide something about the
+set of inputs instead of each input to
+do that you could still use an sha hash
+but hash on something that you know is
+going to be common between the inputs
+for example if these were you know
+bucket and key tuples we might hatch on
+the bucket and we would get all keys for
+that bucket in one worker we might use
+this to source or to slice to find the
+top n keys or you know some bit of data
+like that or we might you know just use
+it such that we only have one worker
+going there might be something that we
+really just want a singleton on you can
+also been results so slightly different
+if your hashing on something that is
+common to a few inputs but uncommon to
+others you can sort of separate inputs
+so for instance if we're hashing on the
+first letter of some string will get all
+inputs that start with 0 at
+one worker and all inputs that start
+with T at another worker this is
+somewhat like the classic MapReduce
+shuffle phase so you could you know do
+kind of this keyed reduce where you
+would find the top end of the T strings
+and the top end of the o strings or
+something like that this is not how
+react kV doesn't reduce in fact riac kV
+takes the very short cut and picks a
+random hash at the start for reduce so
+we send all inputs to one worker such
+that you can do some you know total
+aggregation over all of the results at
+that reduced stage one other interesting
+kind of one still exploits data locality
+and we call it follow so what follow
+says is if you have two stages in a row
+you said the second stage is a follow
+stage that means that any outputs that
+workers in the first stage produce stay
+local on the node where they were
+produced for the next stage this one
+comes in really handy for reduce and
+I'll show why a little bit later but
+computing how follow would work from
+input to input is so difficult you have
+to know where you're operating and sort
+of kind of you know fudge the the hash
+such that it looks like it's on the same
+node you're on that we just created this
+nice shortcut for it that just says
+follow it's just the atom and I'll show
+where that goes and the next slide as a
+matter of fact I can see people are kind
+of glazing over so I'm going to show
+some code that demonstrates how it works
+such that you can get kind of a tangible
+feel I've discussed kind of the
+conceptual bit of it actually using it
+is a very tiny amount of code so i hope
+this will kind of make things a little
+more concrete this example as a matter
+of fact sets up a pipe sends inputs to
+it gets outputs from it and this is all
+the code that is necessary for it except
+for the modules that are named but i'm
+going to show those on the next slide
+anyway they're very small so if we can
+step through this real
+quick you can see it's kind of three
+stages the first stage defines the the
+pipe on the pipeline and each stage I
+called it a fitting I got a little you
+know overboard with the pipes and the
+pieces that fit the pipes together so
+each stage is called a fitting and the
+thing you'll notice first is that C hash
+fun that's that thing that I've been
+talking about about how we hash the
+inputs so you can see that you know this
+is a fetch and render stage and the
+first one is using the C hash fund that
+react kv is using so we're going to send
+inputs to this stage that are keys for
+our key value store and it's going to
+get those key to get the values of those
+keys for us the second stage is the
+render stage and you can see we're using
+the C hash fun follow there's no reason
+for us to take all of those values
+somewhere else to do the render we'll
+just do the render on the nodes where
+the values are some other things to
+notice are the module definitions that's
+going to tell react pipe how this
+fitting operates have a stage what the
+stage does and this argh in the second
+one is just a static art that will pass
+to the in it for the worker so we've
+defined you know two stages in a nice
+list all we have to do to start the pipe
+is tell react pipe that this is a pipe
+we're going to use this is kind of like
+creating an EDS table it's going to go
+create some some metadata somewhere and
+give back a handle to the pipe that will
+use to send inputs to the pipe so the
+second big chunk here is just sending
+inputs you'll notice that we don't have
+to do any hashing we just send it the
+input and the pipe that it's going to
+react pipe handles all of that hashing
+stuff and figuring out which node
+descend to which partition on that node
+where that kid is all that kind of stuff
+we just say here's the input tend to
+that pipe please this is just sending
+three inputs real simple the last bit of
+that section says eoi that stands for
+end of inputs so a pipe can stay up for
+as long as you need it to stay up but
+sometimes it's useful to say I'm not
+going to send this pipe any more inputs
+like I'm
+done and that allows some you know it
+allows pipe to shut down workers so you
+know along the lines of you know load
+regulation and whatnot I said that we
+had the problem where we were spawning
+too many workers in our MapReduce react
+pipe has a limit on the number of
+workers that it will spawn such that if
+you try to start at the pipe with you
+know too many workers it will say no
+this is not okay please go away come
+back later not going to allow you to
+overload the system end of inputs allows
+react pipe to say there are no more
+inputs going to this worker as soon as
+it's cut as soon as it is consumed all
+of its kew go ahead and shut down the
+worker that allows other pipes to start
+up later some workers even will wait
+until the end of inputs to know that
+it's seen everything it's going to see
+before it sends input before it sends
+out puts down the line that's what our
+reduce phase uses but that's all that is
+it's just informing the pipe that you
+can shut down when you're done and the
+final stage is just collecting the
+outputs we could have in the spec up
+above told that second stage to send to
+some specific pit somewhere or even some
+other pipe somewhere since we didn't
+tell it it's just going to send outputs
+back to the process that started the
+pipe and that's all collect outputs is
+going to do is look through the mailbox
+and find all of the pipe output messages
+and hand them back to us the tuple that
+it's returning is saying that I did
+actually get an end of inputs and all
+these outputs so we'll talk about the
+the render stage and how to implement
+that module because the react kV pipe
+get stage does some special stuff for kV
+because kV has a lot of you know nooks
+and crannies but this is the basic form
+for any Parker all it needs is three
+functions an it process and done and it
+is called as soon as a worker is started
+we give it that argh and say you know
+create any state you need to some things
+open files that they'll keep open for
+life of
+the worker some things you know do some
+pre-computation so they don't have to do
+it on processing process is called for
+every input so when an input arrives in
+the queue we wait around and as soon as
+it's ready to come out of the queue we
+call process on that input and process
+is where the the stage does what it's
+going to do process is completely open
+do whatever you're going to do this one
+happens to call the modern fund that we
+passed in the argument to the stage the
+react kv-1 goes and talks to a react a
+vivir no to pull out the value for a key
+it is also the the fitting the stages
+responsibility to decide when it's going
+to send outputs this is not a functional
+thing it's not a process give me you
+know the outputs that you're going to
+pass on this is you're the you're the
+stage decide when you're going to send
+outputs so sending outputs is as simple
+as sending inputs we just called the
+send output function with the fitting
+details the details we passed in in the
+in it also include a handle to the next
+stage so all of that hashing is done
+automatically again and the final
+function that a fitting needs to
+implement is just done so as soon as
+done returns we know we can shut down
+the worker so done could send more
+outputs or it could close files or
+anything like that but the important
+thing is you're about to shut down
+finish up and this is just what that
+module and function might look like that
+we passed into that generic worker this
+is just you know render so it's really
+simple code to write actually you don't
+have to do any of that hashing and
+whatnot it's mostly at this point just
+you know thinking about how you want to
+distribute that workload across the
+cluster and to help you think about that
+I wouldn't I want to go through
+specifically what react kv does in a
+MapReduce query so if you send a very
+generic MapReduce query it has one map
+stage one reduced stage we translate
+that into three react pipe fittings the
+first fitting gets values from the key
+value store the second fitting applies a
+transform function to that value and the
+third fitting does the reduce so we take
+all of the values that were produced
+from the transform and aggregate them in
+some way this particular definition is
+actually used in react CS we use
+MapReduce to compute how much how many
+bytes and how many files each user is
+storing in our reacted storage rs3
+compatible system so we send in you know
+all of the keys in a bucket and it goes
+and looks up the the file metadata for
+each of those keys and pulls out you
+know the size of the file and the fact
+that it is a file and sends it onto the
+reduce and the reduce you can't see it
+in this function that just happened to
+be how Erlang printed it out but it's
+basically you know count up the number
+of instances you got and some the bytes
+very simple but you can see you know the
+hash funds we've talked about the first
+one is using that react kv hash function
+to do the local read the second one is
+using a follow function to do the
+transform locally so we don't have to
+send all of those file metadata all the
+way across the network and the last one
+is using a constant such that we can do
+the sum and have the total sum instead
+of having to send all those results to
+the client you can also see in here that
+I've actually specified the Q limit I
+believe this actually is the default q
+limit that's used but it can be useful
+to say you know this Q is allowed to
+have more space especially in the reduce
+we can up the Q limit and allow the
+queue to grow and have the the reduce
+run just every once in a while kind of
+thing but that is how we tune the you
+know whether work is being dropped on
+the floor actually some of what react
+is instead of dropping work on the floor
+we do actually say to the upstream
+worker please hold on for a minute don't
+send me anything more whenever a worker
+sends an output it's waiting for a
+response saying okay it's it's fine to
+send me more and I know that's the bad
+idea the tail drop that Mahesh just
+talked about but this is sort of the
+first idea we're actually experimenting
+right now with ways to do that better so
+we'll be looking into red and kodell and
+all that kind of stuff but the
+interesting thing about this practical
+example and kind of the aha moment about
+how see hash funds can apply is like I
+said we're using this for react CS what
+we can do is we can duplicate that final
+reduce fitting and actually use it twice
+but the first time we'll use a follow
+function a follow hash function the
+second time we'll use this the constant
+what that means is will actually run
+that same reduce function locally on the
+nodes where the transform is happening
+so we can do several sums and then send
+them to one final place for a total sum
+visually this kind of looks like this so
+the top one is our three stage get map
+reduce or get transformed reduce and we
+we keep things local that's what's
+showing in that first stage and then the
+second transition is the funnel down to
+one partition the second one with the
+four looks like I've just complicated
+things you know I i I'm still have more
+arrows going on there's another stage in
+there the funnel is narrower that kind
+of thing the interesting thing about
+this is realizing where the node
+boundary is so I said have been keeping
+this data local the node boundary is
+across that funnel so if we're computing
+storage for someone's has millions of
+files that transform stage would have
+sent millions of file metadata or you
+know that simple one with it with the
+size of the file to that reduced stage
+with that follow reduced stage in there
+do all of that locally on each node and
+then send
+a constant number of messages across the
+network to that final reduced stage so
+in a standard react setup we're using 64
+partitions in that setup we would send
+64 messages instead of millions of
+messages across the network to the
+reduced stage this is incredibly
+effective you get to do that parallel
+some before doing a very small sum we
+can using this we can compute the
+storage that each user is using in like
+half the time that we did before and
+there's some other optimizations that
+will probably throw in but that alone
+just duplicating that stage in using a
+different hash function was kind of the
+aha moment that this was probably right
+so I've talked a lot about MapReduce I
+do that because this is the practical
+thing this is what we already have built
+I can actually say you know this is code
+you can go read I could say this is how
+it works but people want to know about
+other apps they might build with this
+because you know it's not just MapReduce
+it's a general staged computing system
+and I think it's a pretty wide range I
+think almost anything you could build on
+react or you could build on react pipe
+you know if what you're doing is talking
+to partition saying hey give me this
+thing probably makes sense to talk to
+just react or if what you're doing is
+something that has several steps to it
+it might make sense to use react pipe
+such that you're not you don't have you
+know things being overwhelmed you don't
+have unhandled parallel amounts of work
+that kind of thing I actually think we
+could even do parts of react kv our key
+value store as a react type app if you
+know anything about react kv you know
+that the get stage is sort of several or
+the get operation is sort of several
+stages we actually fetch several
+replicas of the data from different
+places around the cluster and then we we
+reconcile those pieces of data so we say
+you know which one's the latest which
+one's the most up-to-date and then any
+of them that were
+out of date we go and talk to those
+nodes again and and repair that data
+this is a pretty you know obvious three
+stages of things I think we could do
+this as a pipe app and that might help
+us with you know making sure that all of
+the work we're doing to reconcile things
+isn't causing you know all isn't causing
+slowdowns to clients because they can't
+you know fetch things and that kind of
+thing we'd be able to tune how much
+reconciling is going on at any one time
+or how much fetching is going on at any
+one time same kind of thing with put
+other apps I'm not sure about I get a
+lot of questions about someone just
+wrote a demo app that does it fetches
+items from reddit so it looks at a
+subreddit and grabs all the URLs and
+grabs all the content from them I think
+his name is Eric Moritz and open source
+it on github it's called react
+underscore pipe test or something and it
+sets up an entire cluster with pipe and
+and code to go so that might be
+something to look at but yeah I think
+anything stage computing that you want
+to distribute might be a possibility
+current things that I'm working on on
+react pipe honestly is mostly about you
+know making MapReduce better because our
+MapReduce system is something that
+people want to use more and more and
+making it better and better would be a
+great thing but specifically I already
+alluded spacious talked several times
+but that interworking interwork or
+messaging efficiency is something we
+want to work on the back pressure the
+simple it's you know a tail drop system
+like he said we put back pressure
+immediately on every message or we drop
+messages immediately as soon as the
+queue gets full and that was needed
+simply because we transition from a
+system where it was just her line
+processes and blowing up those message
+boxes mailboxes was taking the system
+down so even just getting the tail drop
+was a giant leap forward for us I know
+this interline conference so everyone is
+happy to write inner line to get this
+thing working
+but other people do want to have stages
+that are defined in other languages you
+know especially Java you know there is a
+boatload of text analytics and image
+processing and whatnot in Java there's a
+boatload of scientific mathematics in
+Python and see people would love to
+write fittings in those so we're working
+on you know ways to get out to that we'd
+like something general so we don't have
+to you know implement it over and over
+again it might be some simple TCP
+connection or some simple Erlang port
+hopefully that will work out by the same
+token you know right now you have to be
+on a react node to start up the pipe and
+send inputs and whatnot so we're looking
+into an external interface probably
+something you know protocol buffers
+shaped where you connect and then you
+have messages that you can send back and
+forth to get inputs in and get out puts
+out still up in the air long running
+pipelines is another thing I said you
+don't have to send the end of inputs and
+I said that it's just setting up
+metadata like a net stable but kind of
+like an EDS table if the node that you
+started to pipe on goes down the whole
+pipe goes down because those metadata
+processes are only on that are only on
+that node so we're working on stuff to
+do that something that will you know a
+distributed fsm or something if you've
+been catching up on distributed papers
+there's a new one called raft that does
+distributed finite state machines that
+are reliable and tolerate failures and
+stuff so something like that might be
+able to keep pipelines up across node
+failures so we think that'd be pretty
+cool but other than that I think that's
+about all I have to share with you if
+you want to know more all the code is on
+github and in that github repo github
+bash shell react pipe there's also a
+readme that goes into all of the
+supervision trees that are doing this
+all of the message formats all of that
+kind of thing so there's lots of data
+there we also published a paper at the
+CFP last year and if you have an ACM
+membership you can go look up the paper
+is titled
+distributed processing something about
+dynamo something about red pipe sorry
+like it's a long thing that they talked
+me into if you don't have an ACM
+membership you can go to my page be
+right calm / Brian dot HTML and scroll
+down until you see that little eight a
+cm rectangle and it's a link to a free
+copy of the paper that the ACM will give
+you I'm hobbyist on Twitter so if you
+want to throw tomatoes at me go nuts the
+slides I also tweeted just before this
+talk so if you would like to go back and
+review those they're up there you can
+always find the bachelor team on Twitter
+but that's all I have so I'm happy to
+take questions if there are any
+the inputs are Erlang messages so it's
+across distributed Erlang right now I'm
+sorry what was the first word listener
+oh we are so in the rear cavies
+mapreduce it provides the interface to
+submit those queries on HTTP and
+protocol buffers and part of those
+queries include an input spec and that
+input spec can either be a list of keys
+or a command to go find all the keys
+somewhere and that's how we generate
+inputs right now is either just by you
+know it ring through that list or
+sending off some worker to generate less
+to iterate through but no there's no
+generic TCP input right now I have a
+question yeah please I forgot how to
+correctly phrase that in English how
+resource-intensive is starting a red
+pipe it's very real how I mean can you
+sort of just fire them up and shut them
+down like thousands a second or
+something right or not so um firing up a
+react pipe is kind of a two-stage
+process the first thing is just you know
+that executes that tells react pipe that
+this is my definition that is a handful
+of supervisor calls so we heard Joe say
+that you know supervisor startup is slow
+so yeah that's some number of
+milliseconds the second stage of it is
+react type doesn't actually start up
+workers until a V node receives an input
+for a stage so your first inputs for
+each stage will require a little extra
+startup time to get that or lying
+process started but then other inputs
+are just you know consumed the queue so
+I don't have numbers like on me at the
+moment but yes there is there is a
+start-up costs shutdown is a little bit
+lighter because it's just you know
+any vinodh that I know is already
+running a worker just send it the
+message it does have to wait to
+synchronize and then send it on to the
+next one such that we know because any
+worker can send any other worker message
+so we do have to wait until one stage
+shuts down before we start shutting down
+the next stage so as far as time to
+start up and shut down those are
+actually you know kind of big things to
+get across so longer running pipes will
+be more efficient than shorting rough
+types okay hey you said you a question
+Oh excellent fantastic thank you thank
+you thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

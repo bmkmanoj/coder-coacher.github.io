@@ -1,0 +1,1263 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Cutting tail latency in cloud data stores via adaptive replica selection | Coder Coacher - Coaching Coders</title><meta content="Cutting tail latency in cloud data stores via adaptive replica selection - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Microsoft-Research/">Microsoft Research</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Cutting tail latency in cloud data stores via adaptive replica selection</b></h2><h5 class="post__date">2016-06-21</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/t1PmsYt9TME" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">each year microsoft research helps
+hundreds of influential speakers from
+around the world including leading
+scientists renowned experts in
+technology book authors and leading
+academics and makes videos of these
+lectures freely available
+you
+is a pleasure to introduce mark Oconee a
+marvelous faculty at UCL away invention
+he's been doing a lot of work in the stn
+space and today he's going to be telling
+us about recent work on replica
+selection so over here all right thanks
+very much for interpretation so as you
+mentioned you might have known me for
+Sdn but today I'm going to talk about
+something completely different so
+specifically I want to talk tell you
+about some work that i did with the PhD
+student the lead by suresh that I
+advised with onion fun meant to be and
+with the Stefan Smith who's also a tu b
+NT labs so let me start by saying that
+as users of interactive web applications
+with certainly all about value very much
+low latency it's really good to have a
+snappy user experience every time we use
+interactive web applications and low
+latency is so crucial that the point at
+which integrates user experience
+actually directly impacts revenues as
+well so increasingly system designers a
+company like Microsoft Amazon Google
+Facebook's and so on are starting to
+clear when they do design their systems
+about the long tails in the latency
+distribution even at the 99 or the
+ninety-nine point nine percent eyes
+however it's actually very challenging
+to deliver consistent low latency and in
+particular to keep the tale of the
+latency distribution short and let's see
+why there is actually fundamental
+problem behind this so this interactive
+web application are typically structured
+as multi-tiered large-scale distributed
+systems what I'm showing here is an
+example of a small section actually of
+the architecture architectural diagram
+of the Obama election campaign from 2012
+but if you recall Obama was making
+extensive use of AWS services now this
+type of architectures of loosely coupled
+clusters of communicating components is
+nowadays becoming the norm across
+industry and what it means is that even
+serving a single and user request may
+work contacting tens if not hundreds of
+servers and for example if you consider
+when you when you contact Facebook and
+you want to render a single web page
+that request involves contacting the
+social graph search server and it
+involves contacting making hundreds or
+thousands of data accesses and across
+tens or hundreds of servers so if you
+have all these many components the
+probability that something may go wrong
+increases exponentially so even
+temporary latency spikes from individual
+nodes may ultimately dominate the end to
+end latency observed by the users so
+it's actually challenging for
+application providers to keep the tail
+of the latest distribution short for
+these interacting services especially as
+the size and the complexity of the
+system scales up or the overall system
+use increases for example it was found
+by a study that was done by your
+colleagues in the other side that
+impacts of being over thirty percent of
+the analyzed services have 95 percentile
+latency three times higher than the
+median okay so that is that is
+potentially making a lot of people
+unhappy and because these applications
+are built out of many components and
+they spun entire clusters it is natural
+that the variability of response times
+are the system components could inflate
+these end-to-end latencies and lead to
+high tail in the latency distribution so
+this point you may actually be curious
+but what are actually the causes of
+these performance fluctuations that
+happen so the reality is that this
+performance fluctuation turn out to be
+the norm in many of these settings and
+many data centers it can actually arise
+because of many reasons so let's review
+a few of the causes this is not going to
+be an exhaustive list the first one
+certainly is a resource contention so
+here we have machines that are going to
+be shared by many different applications
+that are contending for share resources
+like CPU cores processor caches memory
+bandwidth metal band in and so on and so
+forth or even they are contended by the
+same applications different parts of the
+same application contending for this
+shared resources in addition we may
+typically skewed access part after
+because the variability here arises from
+the fact that the popularity of given
+objects are not uniformly distributed
+then we have several queuing delays
+because work lots of these applications
+typically entail some level of
+burstiness and therefore produce valuing
+degree of queuing either and the network
+switches or system buffer or the storage
+layer and finally last but not least we
+also have a plethora of background
+activities taking place all the times
+this may include for example a periodic
+law compaction in the storage systems
+like a Sandra where they want to take
+whatever was whatever was written to
+memory compacted and install it to this
+more efficiently or for garbage
+collected languages such as Java you
+have periodic garbage collection that
+introduced a clearly identifiable
+latency spike so all these causes
+essentially make performance of
+applications less predictable and the
+questions that we want to tackle in this
+project is how can we enable data center
+applications to achieve more predictable
+performance now let me remark here that
+what the observation that we make is
+that the workflows of this application
+involve accessing large volumes of data
+so we regard the storage layer as a
+component the seats on the critical path
+to to serve the request therefore we
+focus for this work on low latency data
+stores such as key value stores and we
+hence based our study on the popular
+Cassandra distributed system
+distributable database which is designed
+to store and serve larger than memory
+data sets however let me remark that the
+ideas and principles are going to
+present our more general than just their
+application to Cassandra okay so in
+particular this is what we focus on we
+focus on the problem of replica
+selection wherein you have a client node
+that has to make a choice about
+selecting one of one of out of multiple
+servers that are all replicating the
+same data object that can be served for
+a particular
+West now there's been recent efforts
+that have tackled the problem of
+reducing tail latency and they made use
+of techniques such as giving
+preferential resource allocations or
+guarantees or duplicating or radiation
+requests if for example the request does
+not return we didn't within a certain
+time out or perhaps trading off the
+completeness of the request for latency
+or in other cases creating performance
+models that would predict the stagger
+the stragglers in the systems and
+typically however the this type of
+system make they want to achieve very
+high availability levels and in order to
+achieve very high availability they use
+replication so there is essentially the
+ability to exploit replication at an
+underlying layer which is basically
+sitting below all these approaches that
+for example duplicate requests and this
+is where we focus in this works in a
+sense we're also complementary to other
+approaches and we exploit the
+redundancies that is typically built
+into each of the tier of the application
+architecture so what we focus on is the
+specific replica selection algorithm and
+as you might expect this turn out to be
+quite challenging in particular there
+are two major challenges to this
+approach in the in the settings that we
+consider the first one is that this data
+center applications as i mentioned
+exhibit service time variations there
+the performance is not always
+predictable the second problem in
+creating replica selection algorithm is
+that we want to avoid the so-called her
+behavior wearing essentially you would
+have a plethora of clients focusing on
+even server because they perceive that
+that server is the fastest at the moment
+so we want to avoid this type of loading
+balances so let me discuss in detail
+what these challenges entail so the
+first one is with respect to the service
+time variation so I mentioned that all
+the servers in this data center settings
+or tinley expiry formats fluctuations
+due to multiple reasons
+and in the settings the replica
+selection necessarily has to adapt to do
+the ether agility of this condition okay
+which means that over time what we may
+observe may actually be changing in
+terms of the service time that we're
+going to to see so in the settings a
+strategy that that is commonly employed
+in systems that are in production today
+is the so-called list outstanding
+requests strategy so for each request
+essentially the client would select the
+server to which it has the least number
+of outstanding requests towards and this
+is a very simple technique requires only
+local a only requires local information
+because each client can make is on
+decision independently of any other
+client however this is not ideal for
+targeting a specific problem of reducing
+the tail latency because many of the
+realistic workloads are skewed in
+practice and the access Panthers would
+change your time and underneath these
+service times are also changing so we
+want something that can adapt more
+quickly than just a list of send a
+request good on the other hand if we
+want to design a robust replica
+selection algorithm to be adaptive and
+stable well that turns out to be very
+challenging because if we if we do not
+carefully design it we run into this
+problem where multiple clients are coax
+to director path towards the least
+loaded server and this necessarily
+degrade their particular service
+performance which subsequently causes
+then the clients to erupt repeat the
+same procedure with a different server
+so there is the risk essentially of
+synchronizing the behavior in the
+cluster and introducing load with load
+imbalances so for example I want to
+illustrate this with with some
+experiments that we did using cassandra
+on amazon web services where we were
+measuring the 99.9 percentile which
+turned out to be 10 times higher than
+the median latency what I'm showing here
+is the requests that are measured as in
+intervals of 100 milliseconds and you
+can see that
+this is one given server so in every
+service order in the cluster would would
+show you a similar behavior over time
+you have but you have a major trend
+which is serving you know around 300
+hundred fifty requests every 100 seconds
+however you have all this data points
+here that make it so that if you just
+consider the 99.9 percentile you have
+ten times the median latency and just to
+tease what's going to happen with our
+approach this is the type of load
+balance that we were looking for how to
+for how to condition the in the cluster
+behavior so what I want to talk now is
+our scheme which is called see free this
+is an adaptive replica selection
+mechanism that the disturb us to the
+service time at virginity and it adapts
+to the varying conditions so in
+designing c3 we have to clear and
+distinct God's the first place the first
+one as I said is to cope and quickly
+react to the heterogeneous and
+time-varying service time across all the
+servers the second one is to be well
+behaved so we put a specific effort in
+making sure that the clients performing
+a replica selection avoid this type of
+her behavior in order to meet these two
+girls we have two components that we
+introduced in our strategy the first one
+is replica ranky and the second one is
+distributed rate control and now I want
+you what I want to walk you through
+these two parts so let's start with
+repeated ranking so the idea here is
+actually quite simple we want to use a
+minimum an approximate feedback that we
+get from the server's of our system to
+let clients rank from their perspective
+each server in the cluster according to
+a certain scoring function and then pick
+replicants based on the score values
+that they obtain so let me give you an
+example consider this system where we
+have essentially two servers with a
+difference
+this time okay I use the notation mu
+which is the service rate and 1 over mu
+is refers to the service time and then
+we have three clients in this case which
+are accepting requests they may come in
+for example this could be the
+application servers of the application
+because this could be the storage layer
+and the request may refer to the request
+that the user generated from the browser
+or some other advice to come into the
+system so in this and they may arrive in
+burst so in this case assuming a static
+scenario where the service times are not
+changing then it's quite easy to see
+that there is no better solution than
+balancing the request across the two
+servers in such a way that we obtain 12
+milliseconds as the maximum latency and
+this gives us essentially a basic
+intuition which is that if we want to
+target the tail latency and minimize it
+then we want to minimize the product of
+the queue size and the service time so
+the challenge here is to do this however
+in a decentralized fashion without
+having clients to actually coordinate
+with one another while also adopting
+adapting to the service time variations
+and the main idea is that we use this
+replica ranking that is the clients will
+individually rank the servers according
+to a scoring function and use the score
+valued as a proxy for the latency that
+they would expect yes from every base so
+in this in this context we are targeting
+servers that are acting at the providing
+a storage layer so we have results for
+Cassandra which is designed to serve
+larger than memory data sets okay and we
+have done experiments by using both
+spinning head disks as well as SSDs and
+we specifically target the the settings
+where the service time for serving
+particular request changes for both
+internal or external conditions to the
+system design we in doing that we have
+not considered workloads that just read
+out of ran out of memory for example in
+systems like cloud Ram where the entire
+data set is served spray the way out of
+memory and they have specific system
+design such such that the service time
+to respond to any particular quest is in
+the order of micro seconds rather than
+milliseconds so we have not extended our
+study to those settings the other this
+time will be a function of users it can
+it can be affected by the queue size the
+accused yes you model them or will you
+do so we want to avoid actually deep
+queues and I'm gonna get to that while
+discussing the second part of the
+approach it was there another question
+but if there is involved in the system
+will also be a functional are just a few
+size but what's in the queue it's also
+functional the type of request and
+potentially of the popularity of the
+objects etc so we do not model them one
+explicitly we fundamentally we raise the
+obstruction here and consider the fact
+that the server has an overall capacity
+that is being estimated and we want to
+add up to that and the rationale for
+this is that the servers are as a set
+replica of one another and they can be
+chosen alternative as an alternative
+however what matters is fundamentally to
+reduce the tail latency rather than
+finally the best allocation of all the
+rapacity to the servers so there is more
+details certainly they can be included
+in the model
+okay so it going back my point here is
+that we want to do this in a
+decentralized fashion about in the kinds
+that they need to coordinate with one
+another and the main ideas then is that
+we have clients to rank the servers
+individually and then use this scoring
+function to determine a value that
+corresponds to the expected latency if I
+were to send a request towards that
+server so now the question becomes how
+do we actually compute the server scores
+so intuitively we should start by
+estimating the queue size and the
+service time because those are the two
+components that we use for selecting the
+best server so the idea then for us is
+to use some feedback from servers so
+that we can estimate this value so we
+assume that the server will be capable
+of piggybacking piggyback the queue size
+and the service time for every response
+in particular when I send a request to
+the server then the server will send
+back how much time is spent serving a
+particular request okay so that does not
+account for the waiting time in the
+queue and the queue size as recorded
+after the request has been serviced and
+so of course here there is a little bit
+of delay so it's a reactive system right
+that is being fed information that have
+the word precise a particular point in
+time in the past okay but I don't but I
+need to use these to actually make a
+guess about the condition of the system
+in the future and we want to essentially
+maximize the light load that we're going
+to make be making the best decision so
+the way works at this point is that the
+clients actually Smoove in this signal
+so they maintain exponential
+exponentially weighted moving averages
+of the metrics that are piggy backed by
+the servers and at this point we may be
+tempted to simply use these estimates
+and compute the product of queue size
+and service time okay but the point is
+that this is just delayed delayed
+feedback from the service and it gives
+clients only in a
+see my view of what's going on in the
+cluster so they don't have a precise
+information about the load across the
+servers and so we find that this is not
+sufficient by itself particular uses
+this is the case because clients are not
+aware of the existence of other clients
+in the system and as well as what are
+the requests that are currently in
+flight okay these are not being
+considered yeah the servant standing by
+the exponentially weighted moving
+average of its own behavior not what the
+client is like an exponentially weighted
+moving average of what the server was
+sent the second one the client takes the
+exponentially weighted moving average of
+what he receives so why are you assuming
+that the client is better placed to do
+the smoothing and server so you could be
+doing this movie other server and send
+just an aggregate value that represents
+the conditions of the server overall we
+found that by maintaining the the signal
+add the client the client gets a
+perception of what is actually asking
+the server to do rather than getting
+information that is across the entire
+server utilization usage sorry it could
+be that both ways are both ways perhaps
+work in different settings we found this
+to be sufficiently good in our settings
+but I don't have like an answer as for
+which one will be better in which case
+for the server's do the waiting on the
+client
+because the server has strictly more
+information what what's happening in the
+server there is very correct ultimately
+what I can say is that this are
+approximate measures for which all that
+we want to do is we want a client to
+produce a relative ranking of the
+replicants and the settings double
+consider are trying to replicate the
+common production settings for which
+replication factors are in the order of
+three or four replicants so ultimately
+what we're trying to do is to say is
+this server better than another one for
+my own workload at this particular point
+in time yes kisses we take a difference
+of love the different clans the next two
+very different estimations of the server
+load because they may receive updates
+very different rates and so on so then
+we see very deep in the different clans
+bases in the different youth the load of
+the servers and that may introduce you
+stability in the allocation of clergy
+soon so that is a good observation and
+in fact I'm going to basically cover
+that in just a second so we defined
+fundamentally that this is still not
+sufficient to avoid the synchronization
+and what I'm going to discuss in a
+second is the mechanism that we use to
+essentially trade off the if you wish
+the optimality of the siege of the
+decision based on the on the feedback
+that the client hands versus the
+discounted probability of essentially
+hitting a bath server yes
+us with the disconnection Everest
+project but we also take it back to
+feedback like that other things we found
+was I keep the service with the worst
+muse end up giving you the lowest
+quality information because they're not
+sending responses back quickly so you
+guys have bad information about the
+service you really most want to know
+it's not really very stable system yes
+that is not stable enough that is true
+we also we also experienced this so
+essentially the problem that good news
+travels very slowly mind if I believe
+some server to be horrible and not going
+to send any requests African a feedback
+therefore if it has actually on gel but
+a bit know about it so there is a trick
+that we use here which is exactly
+addressing this problem the problem is
+that it would seem as though essentially
+if you stop using a server you're not
+going to refresh any information about
+the behavior that's ever you may not be
+interested in using it anymore so what
+happens is that in several of the
+systems that are deployed as a storage
+layer there is this concept of repair
+operations due to the due to the
+consistency model that this distributed
+database use which is not strongly
+consistent but eventually consistent and
+therefore with a certain probability
+which is configurable and we find in
+typical usages it's about ten percent a
+given request is actually being sent to
+all of the replicants rather than just a
+single one and so we exploit this as a
+way to gather information from nodes
+that otherwise we would not be excessive
+okay so now that we have discussed this
+problem with just using the e WA of the
+feedback from the servers so we found
+that this is indeed not sufficient by
+itself the reason is we are not ready as
+a client we're not only aware of what's
+going on in the system so what we want
+to do is to introduce a term in our
+scoring function and this term is
+something that we call the concurrency
+compensation which going which is going
+to account for the potentially
+concurrent and in-flight
+request to the server's the way that we
+do so is that we actually come up with a
+simple formula that is our estimator for
+the queue size as to the particular
+server s in the future so every time
+that the client is about to make this
+the decision about which replica to pick
+you will basically estimate the queue
+size of the server according to this
+formula where he accounts for his own
+request and then he accounts for how
+many outstanding requests he has towards
+the server as well as number of clients
+in the system that we assume is an
+information that is available because
+these are deployed applications in data
+centers and ultimately also the qsr term
+which is the e WMA of the qsr as
+inferred from the measurements of the
+server and so the intuition here is that
+this design will provide a certain
+degree of a robustness to the
+synchronization among the different
+clients because the clients here would
+always account for the possibility that
+there are multiple clients concurrently
+submitting requests to the same server
+and a particular client that has a so
+when estimating this concurrency
+compensation a client that has a higher
+number of outstanding requests toward
+the server will ultimately implicit in
+implicitly give a higher value for the
+queue size estimate okay and when we are
+going to feed in this into the scoring
+function lower value means better better
+servers so how your value for the queue
+size estimate means that this particular
+server maybe consider may be ranked more
+poorly than another one so the clients
+that I have that have different
+workloads okay will actually work they
+will they will work in a coordinated
+fashion towards finding out for
+themselves which which server would be
+better yes yes you're gonna have to keep
+thousands of plants and hundreds of
+servers so that n going to be order
+2,000
+but 990 and the rest of them will not be
+talking to a given server a given time
+so that term is going to dominate that
+seems wrong there is a millimeter if I
+what I mean by clients so what I mean by
+clients is not the users of the website
+okay what I mean by clients is the the
+front end okay so these are application
+servers you know an example thing you're
+talking with your content servers you're
+talking hamster so we are well I'm not
+aware of the applications in which you
+would have literally thousands of
+clients so thousands of application
+servers sharing the same Cassandra
+cluster probably this is not the
+settings that we've been considering so
+motivating examples were playing
+analysis have you changed to different
+motivating examples tell us no I'm not
+changing so the motivating example is
+that applications are structured as
+multiple layers of clusters of
+components so when we talk about
+clusters or components will talk about
+tens or hundreds of servers that are
+communicating I'm not aware of a system
+where you would actually have thousands
+of application servers or all talking to
+the same Cassandra custom but I'm happy
+to be proven wrong here if okay so what
+I can say is that the results that we
+have ok answer we're done we have scaled
+up the term and here to hundreds but we
+we have not ever waited it with
+thousands are you keeping hundreds of
+requests outstanding at a given server
+the request the way we find is said the
+request typically are in a closed loop
+fashioned from clients so the primitive
+foreign point of view of the application
+logic okay when they do submit requests
+to Cassandra it's a asynchronous
+operation or a batch operation of
+several requests that would count as one
+in this case up until the server returns
+the response and then the application
+code precedes the outside world changes
+yes yeah yes so adept so if they offer
+load from the external world changes
+right at that point you there is going
+to be so there's going to be essentially
+something that has to do with the
+scalability of the system one thing that
+I I was going to mention later but I can
+mention it right now is that the the
+settings that we are targeting okay are
+high utilization settings for the
+underline storage cluster in which we do
+assume that we're having utilizations of
+eighty to ninety percent of the
+underline castle so we basically
+consider that if extra scalability is
+necessary okay that is not necessarily
+our problem to adapter so it means the
+new capacity has to be provisioned into
+the system so I'm sorry really frosted
+so the typical value for outstanding
+requests from the point of view of the
+client we assume that this is actually
+quite small because of this closed loop
+for submitting requests so it's it's I
+would say it's in the order of 1 to 10
+the qsr we we basically have small
+values here because we as i'm going to
+show in the in the next part of the talk
+we actually introduce an element of rate
+limiting based on an estimation of the
+server capacity so that we aim at
+maintaining short queues are the servers
+middle term man yes but let me make one
+or not that this um so we have struggled
+a little bit with with this queue size
+estimate and perhaps is not the best way
+to to actually term it because indeed
+it's not really an accurate estimate or
+the queue size but it's something that
+we plug into the scoring function um
+whose outcome is just to be able to
+produce a total order of the replica
+servers from the point of view of the
+client and it's not going to be used as
+in equator say as the rate limited value
+okay so this is just for us to be able
+to say which server do we believe who
+provide us a faster response time and if
+you do have ideas about you know
+changing this just come and talk to me
+at the end and be happy to to if you can
+share that every time is going to make
+the decision based on happy outstanding
+the question I have because the end is
+going to be large kind of almost I'm
+fine seeing in real-world term how's
+this different from 15 you described
+before which is least a standing request
+so see the rest of signs yeah okay let's
+come back to that that's a very good
+observation um okay so okay so so the
+point here to continue is you know now
+that we have a particular value for this
+Q hat s and we know what the service
+time would be should a particular client
+given client just choose the minimum of
+that ratio or not and well we find that
+essentially if we were to use such a
+scoring function okay you would not be
+very effective in the way that clients
+would rank the server's among each other
+and to see why consider this example
+where we have two servers that have
+different service time one is four
+milliseconds so it's much faster and the
+other one is is 20 millisecond meaning
+this is much slower server and work for
+me from what you can see in this graph
+essentially here the trade-off is that
+any any particular client would only
+choose to pick this lower server okay if
+the queue size estimate for the fastest
+error was above 100 okay record that we
+will basically use this as a scoring
+function and pick the lower value so
+this essentially causes the clients to
+build up and maintain long queues at the
+faster servers which is actually
+something that we want to avoid the
+reason that we want to avoid is that if
+the faster server was to become
+significantly slower for example due to
+a garbage collection or some other
+background activities then all the
+requests that are at that moment in that
+queue that will suddenly experience
+higher waiting times okay so this this
+scheme would hamper the activity of our
+approach and to solve this this issue
+what we do is we designed the replica
+scoring function around the idea of
+performance proportionality what I mean
+by this is that we aim to find the
+balance between keeping the queue
+lengths
+proportional to the service times but
+also penalizing excessive queuing to
+discount the inability to react quickly
+to the service time variations in the
+future so in practice what we do is that
+we build a scoring function that
+penalizes the longer queues by adopting
+a non decreasing convex function of the
+queue size estimate which in our case is
+the cube of the of the queue size
+estimate and so if you consider again
+the previous example this means that
+with this scoring function C free with
+will treat the above two servers as
+being equal in score if the queue size
+estimate of the server or the fastest
+server contains around 35 requests
+instead of 20 and the reason here they
+would choose the cubic the cube in in
+the function is because for us it
+presents a good trade-off between
+clients preferring faster server and
+providing enough robust and stood at
+this time varying service times TS you
+can put a lot of effort in avoiding the
+piece problem synchronization and you
+know another approach would be to hear
+the client rather big a small set of
+random search subject more subjective
+round of service at random and then pick
+the best one or you know take the top K
+and then pick a random from the top K
+and I shall seem to be better kind of
+curation explore voltage and forgive you
+yeah so that is very good observation so
+that is the the power of 2 by missing
+matter so we have considered that
+however fundamentally the motivating
+case for that work is that you have you
+know hundreds of town for thousands of
+replica servers available and you you
+basically don't want to sorry yes yes
+but the replication factors that we
+consider is in the order of 3 or 4
+meaning that you can only choose among
+four so the the cost of actually ranking
+all the four choices relative you know
+to the case of ok is is much smaller so
+we don't need to I'm not
+is that cost for my life you want to
+give it why are you not just measuring
+the queue size in in milliseconds for
+example so the queue size sorry
+listening to measure the queue size in
+milliseconds like they did amount of QE
+time you yes you are you want you you
+have reached blog metroid which is that
+if you if you're not the queue size
+become too long but a fast server then
+it's hard to respond to them and well I
+guess that CSS just dividing through by
+the the rate which is servicing was is
+just isn't measuring YY cubic y naught
+square or yes so it is a bit of a trade
+of there okay so we have not fully
+explored the space of that value we we
+have done essentially simulation
+experiments with armed with basically
+taking the pedrotti or cubic or even
+raising it to the fore and again this is
+essentially a threat often that needs to
+be explored we are now conducting a more
+analytical study tool to understand this
+but it's very hard to find I mean we
+don't believe that there can be a closed
+form expression to this to be able to
+derive what's the optimal exponent to be
+put in there given a particular work
+with West ago this is why is the rtt
+between the client and the server toxic
+figure in this
+because there's a certain delay in the
+server reporting effectively what's been
+behaviour of the server right so why
+does that not figure in yeah yeah that
+toughness so in will that it will um so
+what I suggest is that I move quickly to
+the next part okay because I noticed
+that we're quickly running out of time
+but I'm available to discuss this in
+more details afterwards alright so this
+is the second part which is indeed
+related to taking into account more
+information and that is not an explicit
+feedback from the server either so this
+is about doing distributed rate control
+where the eye level idea is that every
+client will rate limit ragni need the
+request destined to each server based on
+an estimation of that server capacity
+and it will adopt the rate in a fully
+distributed manner okay so let me
+describe well I think we had a lot of
+discussion why we need this okay but the
+main point here is that we want to keep
+cute I'm shorts and avoid especially
+overwhelming a particular given server
+if clients another where of each other's
+decisions so what we end up doing is
+that to account for the service
+performance fluctuations the clients
+need to adopt the estimation of the
+server capacity and adjust their sending
+rate towards the particular server as a
+design choice in inspired by the cubic
+TCP congestion control scheme we use a
+decentralized rate adaptation algorithm
+for clients to estimate and adapt the
+rates across the servers based on a
+cubic function again so essentially here
+the clients would track the receive rate
+as perceived when when talking to a
+given server so this is just passing
+information that is that is being
+measured at the client and we we check
+whether basically the number of
+responses being received from a server
+in a given time interval delta
+milliseconds and then we use this
+information to adjust the rate limiter
+we
+the cubic function which is which is a
+function of the delta T and this is how
+long it has been since the last rate
+decreased event so the reason that we
+pick this cubic graph function is that
+it has the desirable property of having
+a saddle region here in the middle so
+fundamentally what happens is that the
+client would first in this lower rate
+region try to a ramp up its sending rate
+over the server and then when it gets
+around the southern region okay it will
+it will not be as aggressive in growing
+the rate and if he has spent enough time
+in the center region then you will
+optimistically probe again for
+additional capacity at that particular
+server if the surgery if the receiving
+rate isn't increasing further right then
+we have a multiplicative decrease as
+anticipate the way that we combine this
+by putting everything together
+fundamentally raft envision that c 3 is
+a client-side library with a few
+modification to the servers and it
+contains a back lock you.here a replica
+selection component and then ray
+limiters towards each server so it gets
+the feedback and then it will sort the
+clients the sorry will sort the replica
+servers by the ranking function every
+time that there is a request it will
+pick the replica that is ranked the best
+for which the rate name that is still
+within the right minute and then send
+the request to that server and if we are
+in the conditions that all the servers
+have exceeded the rate limiter then it
+would retain the request in the back
+lock you up until the first of the
+replicas becomes available yes
+very shares laser systems and we have
+the object is to be fast to do this
+capacity estimation and what they
+observed was a single glance estimate is
+actually not very noisy and they had to
+do coordination between client and I
+guess so somebody we did here that's why
+we actually move to solving this problem
+using a centralized controller and I'm
+wondering what's changed here that let
+you solve this problem in a distributed
+fashion I don't think I've been answered
+for that um you should look at the
+product people because they are very
+important so we are aware yeah we're
+aware of the work and the fact that they
+were using the fast fast disappearing
+inspired mechanism so on my feet I I
+don't know what would have changed in
+the settings so there is one difference
+of course in the settings which is that
+what actually trying to do is not to
+share the storage bandwidth to of the
+servers but in a proportional fashion
+but we we are actually trying to not
+overwhelm individual servers based on
+the estimate that we have so I guess one
+difference that stands out for me here
+is that there is no notion of
+proportionality across the different
+servers sorry between the different
+clients of the service and that aspect
+may not matter so what all that matters
+is that we aim to keep queuing delays
+short other servers but we can discuss
+this more fly yes this is just real
+quick was recently the roots so this is
+a little sedation so so far I did not
+mention but we do target rate directory
+operations the reason for that is that
+the right operations typically do
+involve more than one right okay into
+the service layer so at that point
+you're going to have to write into into
+all the replicas anyway so there isn't
+much
+choose but it's a good observation and
+we we want to we want to study
+essentially the issue of assuming a
+different consistency model than just
+write n and read one from it and to see
+whether this could also help the same
+size so we have done experiments in
+which we have a lead the field size I'm
+going to get to that during the
+experiment but we do have experiments
+and the the bottom line is that we still
+observe that our scheme is able to beat
+the baseline which is the dynamic
+niching algorithm within Cassandra okay
+so speaking of Cassandra so we tested
+and implemented and tested c 3 in
+Cassandra just to make sure that
+everybody is on the same page cassandra
+is a distributed database ok and a
+fundamentally resembles the way that
+chord introduced introduced the concept
+of assigning different portion of the
+talking space or the key space and
+distributing across on the other on the
+ring and so you have replication factors
+typically of one two and three and you
+make as a simple as a simple example
+follow just the ring it's not the only
+policy there's two different policies so
+the way that Cassandra works in turn is
+that any client can contact any server
+for a new request and then if thats that
+server that is contacted acts as the
+so-called coordinator meaning that he
+can you can see that the request
+completes even though he is not the
+replica server for the particular data
+item so the way that it works is that it
+is aware of the talking space and then
+you will make his own replica selection
+the way that this is done within
+cassandra is to inform the coordinator
+not ask for which replica to pick it
+will use the module called dynamics
+niching now the way the dynamics nation
+work is that it will constantly
+empirically having
+in a second acquire information from all
+the nodes of of the ring as for what is
+their value of I await that were that
+were spent during the past 10
+milliseconds inside that server and this
+is essentially a proxy of how loaded
+that node is in terms of i/o activity
+and then the coordinator also tracks is
+own network latency to all the other
+nodes in the cluster so at the end
+basically the coordinator can just ask
+the snitch who is the best replica and
+make a decision so what we did is to
+implement see free we replaced the
+anonymous nation component so we
+essentially implemented see free as a
+client library within Cassandra itself
+rather than outside this also goes back
+perhaps to why you see such great
+results is because also the experiments
+that we conducted have in the order of
+the experiments in on Amazon having the
+order of tens of nodes of the Cassandra
+cluster so we have not tried yet with
+hundreds of nodes but it is in on the
+road map specifically it's in the
+roadmap to adopt the Aston acts
+Cassandra client to implement the sea
+free logic inside the clients of
+Cassandra rather than inside a
+coordinator and yeah it was it wasn't
+easy to write school but lalit did the
+reaction job and it turns out is also
+not the mini lines of code so in order
+to evaluate our approach we conducted
+experiments of the implementation both
+on amazon ec2 as well as a control test
+bed and then we built a discrete-event
+simulator but i'm not going to present
+the results for this latter tool so I'm
+go to today focus on the Amazon
+experiments where we set up a cluster
+with 15 notes and we used the Y CSB to
+generate workloads and specifically here
+we created three different workouts
+where the request for the keys were
+distributed according to as if Ian
+access pattern rather than a uniform and
+then we had read heavy which is
+ninety-five percent reads five percent
+rights update having that is 50-50 and
+then read only which is
+so essentially 100% read operations and
+we compared this we compared to three
+against the dynamics nation approach now
+what we found is the regardless of the
+workload that we use c3 improves the
+latency across all the consider networks
+namely the mean the median in
+ninety-nine ninety-nine point nine
+percent client latencies and we found
+specifically that at the 99.9 percentile
+we would have 2x to 3x improved
+latencies when compared to dynamic
+snitching furthermore we saw that by
+controlling actually the waiting times
+across the replica c3 makes better use
+of the available system capacity ok
+resulting in an increased throughput
+across the consider workloads this is
+because the Lord conditioning the
+cluster is better and so we found that
+even the throughput is increased between
+twenty six to forty three percent across
+the considered workloads we also verify
+whether seyfried fulfills the design
+objective of essentially avoiding the
+Lord pathologies so as I said we do use
+as if Ian distributed key access pattern
+and what we focus here is on the load
+over so we observed a lot over time for
+the node that observed the highest
+number of brains across each run of the
+experiments so here every experiment was
+repeated 5 22 10 times and we focus on
+the most utilized node and so what you
+can see here is that fundamentally as a
+CDF you can see that the most utilized
+node would actually end up serving fewer
+rate requests because then then the
+entire load is more fairly distributed
+well it's more balanced across the
+entire cluster than what the nomination
+would end up end up doing and this is
+also a contributing factor as for why we
+find that we over
+we increase the system throughput as
+well as a further confirmation of this
+if you remember I showed you earlier the
+Lord as as witness at a particular node
+where we were using dynamic niching and
+this is instead what we find with
+Cassandra we have an improved or
+conditioning where the load is more
+evenly distributed in the cluster yes so
+everything is rightly in the c3 taste
+the requests per second but the doors
+the system throughput is lower but in a
+more controlled this the per node system
+throughput is lower that is correct but
+the overall cluster throughput is higher
+and one contributing factor to that is
+indeed that you have lower per node
+throughput for the most highly utilized
+node in the cluster so it means that we
+have this is just an idea cellular it
+was the old ridiculously Joe Venus will
+talk about it simply just because reads
+if you're just considering greens are
+really cheap right to send over the
+network it's just a little bit of a
+header yep so sending them to all right
+because waiting for the first one to
+reply the chasm address is one of the
+things he was proposing and i think is
+implemented the goal right but is this a
+fair comparison it's not I think it's
+not a totally fair comparison but we did
+run this experiment so let me remark
+that um in Cassandra the reason is
+readily available in plea of
+implementation of requests cancellation
+so what we're talking what you were
+talking about was what's called request
+ratio so you send a request you wait for
+a certain time out that is typically set
+to some high percentile of the
+distribution and then if the timeout
+expires you send a request to another
+replica okay and I bet at that point
+would you what you can do is when you
+get the request back from one or server
+the earliest one you can cancel the
+other one
+or in a more clever version of this
+which is what I believe Google
+implements the servers would talk to
+each other to actually cancel the
+request at the other server so this is
+not currently implemented in Cassandra
+however Cassandra dance implement the
+ability to do the request ratios and we
+did experiment with that version of
+requests ratios that is implemented in
+concern now we don't know whether we
+stumble on some kind of bug that affects
+that code path in Cassandra but we found
+it was that actually the overall
+performance of the cluster was degraded
+and we'll even worse than enemies nicci
+because they might be buzzed put some
+sort of the flower you are working on
+similar so they think the last
+experiment I want to show you is
+reacting essentially to dynamic worker
+changes in which here we have as we were
+discussing before potentially more
+worker being brought to the system so
+here we were starting with a tea ready
+having worked with generator so 80
+instances of YCS be operating in this
+closed loop fashion and about six
+hundred and forty seconds into the
+experiment we got in 40 update heavy
+generators and then we observed again
+the latency profile with and without c3
+and this is what we were observing the
+sony contrast to the dynamic niching
+which is here on the right the series
+latency profile degrades more
+aggressively after this 640 seconds and
+we have a lack of this synchronized
+spikes that instead far more visible in
+the case of the dynamics energy so we
+also had run several other experiments
+in in ews including higher system load
+stood record record sizes and using SSDs
+instead of spinning disk and overall we
+always found that a list there was a 3x
+improvement
+the 99 third world el cerdo is about
+ninety-nine point nine percent higher
+latency and also with SSDs there is a
+further improvement to the throughput
+thanks to much faster disks so in
+summary today I present the sea free
+that combines careful replica ranking
+and distributed rated control to reduce
+the tail mean and median latencies in
+cloud data stores and improve the Lord
+conditioning and throughput so this is
+11 Sophie I did my job okay thank you
+very much for your question and
+attention and all the feedback thanks</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

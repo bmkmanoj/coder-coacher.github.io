@@ -1,0 +1,746 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Building Riak CS on Riak - Reid Draper | Coder Coacher - Coaching Coders</title><meta content="Building Riak CS on Riak - Reid Draper - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Building Riak CS on Riak - Reid Draper</b></h2><h5 class="post__date">2013-04-17</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/KtC_Vhha1oA" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so when we talking about building react
+CS on react as Scott mentioned I'm REE
+Draper I'm a software develop software
+developer at fasho where I primarily
+been working on react CS so we xes is an
+erlang application that exposes the s3
+API on top of react and as of yesterday
+it is totally open source and apache to
+licensed I get a bachelor react CS you
+can go check it out I download the
+source code use it never tell us tell us
+you know totally free for you to use the
+quick overview of some of the
+dependencies we use i'll be talking
+about a few of these throughout the talk
+some of them are tools from the Erlang
+community that we use others are ones
+that we've developed ourselves and I'll
+go into a little bit of detail about
+some cool things that we've done with
+them so to start with I'm going to give
+you sort of just a big high level
+overview of what we axios looks like it
+is a stateless proxy that your external
+HTTP communication goes to it speaks the
+s3 HTTP API and then behind the scenes
+it communicates to a process called
+stanchion which is a singleton that is
+occasionally used to serialize requests
+across the data center but most of the
+traffic goes through your normal react
+cluster all right so it uses a stock we
+at cluster there is some config that we
+require for it but it's just a regular
+install of react and all of the
+persistence throughout the whole system
+goes into react so other than logging
+the react CS and the stanchion nodes
+don't persist anything to disk so I'm
+going to do a little bit of a different
+talk then might have been on the
+schedule there's a few other places that
+where you can read about sort of the
+overall architecture of react CS the
+process for building it and stuff but
+since this is an early audience I sort
+of wanted to talk about some things that
+I think other Erlang programmers might
+appreciate that we learned or that we
+thought were cool techniques on this
+so let's dive in the first one is
+immutability we already know as Erling
+programmers and it's functional
+programmers how important and mutability
+is to reason about a system but we often
+don't think about that in the context of
+a distributed system we have our single
+erling node where all data we work with
+is immutable but once we leave that
+realm and start working at a distributed
+system we not we may not be as quick to
+demand immutability so we have done that
+with react CS all of the blocks for
+large files are immutable they are
+written once with a uuid key and only
+retrieved or later deleted and it turns
+out this makes the whole system much
+easier to reason about especially when
+it comes to things like eventual
+consistency so I'll talk a little bit
+about what this looks like as far as
+large files and then some more of the
+advantages of designing a system this
+way so each large file has a manifest
+this is just a subset of the metadata
+that we keep for a particular file so
+each concurrent right to a particular
+file is going to have one of these that
+has a uuid QE so let's say user a and
+user be both right to object foo we're
+actually going to create two different
+uu IDs and two of these manifests and
+it's just some simple metadata the
+content type 2 content length a check
+some of the file the cluster ID it was
+written to but then each of these
+manifests which are keyed off of these
+uu ids is going to point to a completely
+different set of blocks and each of
+these blocks represent some small chunk
+of the file they're written across the
+react cluster and they also have ye uid
+keys as i mentioned before these are
+never rewritten so one of the nice
+properties that this gives us is that
+even though we're working in an
+eventually consistent system like react
+we don't have to worry about conflicts
+because something that's immutable
+either correct or it's not found the
+replicas are never going to disagree
+about what the value is since we've only
+written one value to it so we take the
+immutable view of the world only at the
+very very top level which is where we
+have these manifests and we go into the
+this immutable view as soon as we can so
+another nice advantage of this is that
+immutable data can be cached forever we
+can just use a simple LOL simple LRU
+cache if we like we can never expire
+things if we don't think that they're
+going to be deleted but the cache is
+never going to be wrong since again a
+piece of a value for a particular key is
+either correct or not found so it
+dramatically simplifies caching strategy
+which is a really nice thing because
+normally cashing in a distributed system
+can be a tough thing all right so it
+turns out in a system with a real amount
+of data in it 99 actually point a few
+more nines percent of the data is
+immutable it's only those manifests
+which are a few hundred bites were a few
+k each that actually mutate and for the
+most part they actually tend to just
+grow monotonically it will add another
+manifest into this set of manifest which
+are the ones that have been written to a
+particular key something I didn't
+mention so far is that there's also a
+state associated with each of these
+manifests which talks about sort of the
+life cycle of it so when you first start
+put operation on one of these manifests
+it's going to be in the writing state
+the TCP connection might close and it
+might never get finished or the more
+likely scenario is that you'll go and
+you'll write all the data for that
+manifest and then turn it into the
+active state later you might issue an
+HTTP delete operation to that key and
+take all of the manifests that are there
+that are in the active state and put
+them into the deleted state which
+controls how our garbage collection
+process works
+but this turns out to be a really really
+useful thing all right so the next
+lesson is thinking about back pressure
+from day one so here's an example of a
+put fsm in react CS so in a few
+different places where react itself will
+have a put fsm react CS will have a
+corollary put episode of like ways for a
+good episode so in this case the end
+user is writing HTTP traffic directly
+into the react CS node the reacts TS
+node has multiple connections in to
+react and this put episome will have
+some buffer that's a configurable sighs
+maybe eight megabytes or two megabytes
+or 16 which basically represents the
+amount of outstanding data that we've
+not written to react yet that we're
+going to buffer in memory from the
+client and when that buffer gets full we
+stopped reading off the socket which
+allows us to use TCP s back pressure to
+make sure that the the end user isn't
+writing a bunch of data to us if we
+can't keep up so we're able to keep
+constant memory use here as we write to
+react and if one of these rights fails
+another worker might take over but we're
+sure to never use more than that amount
+of memory which is really nice because
+we can plan for how much memory match
+the system is going to use it's not
+going to grow unbounded so if you just
+flip all this round the get fsm more or
+less does the same thing we can actually
+retrieve all of some number of these
+blocks in parallel from react if you
+have a quick connection here and you're
+able to keep up with three connections
+to react that we can actually start
+prefetching blocks and again we have
+some buffer in here which controls how
+many blocks you can prefetch if this
+gets full and the user isn't reading the
+data off the pipe quick enough then we
+stopped doing the prefetch and we wait
+until that buffer source to drain before
+we start to issue new get requests
+another kind of cool side effect of the
+immutability is that if you're familiar
+with react when we issue these get
+requests we can issue them with our is
+one which means we only need to wait for
+one replica to respond before we send
+that data back to the user because again
+immutable data is either correct or not
+found so we issued the request to all
+three replicas but the quickest one to
+respond we can send that back to the
+user while react weights back here for
+the other two to do things like read
+repair which ends up helping a lot with
+tail latency since we only have to wait
+for the quickest of 3d nodes so the next
+thing I'm going to talk about is our use
+of web machine how many of you are
+familiar with web machine all right so
+I'll give a little bit of a of an
+overview of what web machine is and then
+how we're using it in a little bit of a
+different way than you might ordinarily
+use so web machine is an erlang library
+for writing restful HTTP applications
+and it works in a pretty different way
+than most web frameworks tend to work
+instead of responding to a combination
+of a path and a verb you express in your
+resource how you respond to different
+HTTP conditions so the first thing that
+might happen is web machine will ask
+your resource which is implemented as a
+module that has a bunch of callbacks is
+the service available it's going to ask
+is the object found so it's going to ask
+you these questions going through a
+decision flow diagram to construct the
+correct HTTP responses so the really
+nice thing about this is that you get to
+describe your resource in a
+significantly more declarative way than
+you might otherwise and web machine
+takes care of generating the correct
+HTTP responses so you describe your
+resource and different HTTP operations
+on it come and web machine figures out
+how to
+turn that into the correct HTTP response
+so it's great if you have a restful api
+but s3 is not a restful api it turns out
+there's a bunch of of nasty bits of it
+that don't map really well to a system
+that is trying to get you to describe
+your system in a restful way so the
+first version of reacts yes that we
+built we had to bend web machine in all
+sorts of nasty ways and it was a bit of
+an impedance mismatch because we're
+trying to mimic the s3 API but there's
+some things in the SS 38 in the s3 as3
+API they're not particularly restful at
+all in which case we don't get to play
+nicely with web machine we have to bend
+the rules a bit and that made for some
+ugly code so one of my colleagues had a
+really smart idea which has actually
+worked out well for us I'd like to share
+with you guys which is actually when we
+get a request in to react CS we rewrite
+it to this made-up restful api that s3
+should have been more or less so for
+every s3 URL we have an internal one
+which is mapped to a significantly more
+restful interface this mapping happens
+before our resources actually get called
+so our resources get to act like s3 was
+restful from the very beginning and we
+have a corollary mapping that goes the
+opposite way so in error messages and
+stuff we use the internal mapped URL and
+a translation layer maps it back to what
+s3 thinks so I'll go through a few
+examples of this at the top in white is
+the ds3 URL and the bottom one is what
+we rewrite it to so forward slash foo is
+just bucket foo we simply rewrite that
+two buckets Phil here's the first
+example that s 3 starts to get a little
+not so restful I uses query strings in
+this case policy to denote a sub
+resource what we originally had to do
+was deal with both the foo bucket
+resource and the foo
+a policy resource in one place and look
+at the query string to decide how to
+treat this request but there are
+actually two different resources so what
+we do is we actually have a new real sub
+resource instead of using a query string
+that goes to the policy instead of just
+having foo bar for bucket foo object bar
+we rewrite that two buckets foo objects
+bar likewise with ackles so this is a an
+access control list for a particular
+object we get to rewrite that two
+buckets foo objects bar eckel so each of
+our resources now get to do one and only
+one thing so in this case a particular
+resource might be only concerned with
+access control lists for objects so we
+don't have to deal with two different
+concerns in the same module and this
+improved things a lot it made the code
+dramatically simpler if you went into a
+resource you knew exactly what type of
+request it was dealing with but there
+were still a couple issues so imagine
+these are three web machine resources
+module a B and C we started noticing
+that there was still quite a bit of code
+duplication in here so the green bits
+here might be a shared function across
+these modules the yellow ones we had
+some other code you know that wasn't
+shared but there was a lot of shared
+code in here and if you're familiar with
+how I callbacks for implementing a
+behavior in Erlang work the first thing
+you might think is all right well I'll
+just have each of those callbacks call
+into a helper function which would
+certainly improve the situation a bit
+but we'd still have these duplicated
+bits so in these three modules let's say
+that the service available function was
+the one that was duplicated we'd still
+have to implement service available and
+then immediately call into some helper
+function so that helped things a bit but
+we really wanted to take it further we
+wanted to only have these modules
+express the parts that made them
+different amongst some fixed set of
+common
+we wanted to only have to express these
+dark grey bits web machine lets you do a
+little bit of this in that it has
+default answers for a lot of the
+callback so by default service available
+just returns true unless you export the
+service available function and your
+resource but there's only one set of
+defaults if you want anything other than
+that default even if you want to share
+something other than the default in five
+modules you have to implement that
+function in each of them so what we
+wanted was custom default functions at
+the same time we wanted to get this done
+quickly we didn't want to change the
+semantics of how web machine worked I
+think we came up with a pretty clever
+idea so imagine for a moment that your
+resource is a dict that map's function
+names to functions themselves so at the
+atom service available to the function
+for service available you might imagine
+that f is your particular resource or
+sorry I f is some function that we're
+going to pass to dicked merge all it's
+going to do is just prefer values from
+the first sticked we have our resource
+and then we have the defaults so with
+this we get emerge our own custom
+defaults with the logic you've
+implemented but that's not how web
+machine works it doesn't want you to
+give it a dictionary that map's function
+names to function values it wants you to
+give you a atom that represents a module
+name so what we do is actually as far as
+web machines concerned every single
+resource and react CS uses the same
+module and that module is parameterised
+by the functions that make that resource
+distinguished from its peers so in the
+case that we want to override service
+available we implement service available
+and are in our module and if not we get
+the default that's in our custom default
+and if it's not in there we get the web
+machine default so what are the
+what our module does is it looks at the
+module info for exports for the module
+that you pass in and any time that
+you've explicitly any time that you've
+explicitly implemented something it uses
+that implementation otherwise is it
+otherwise it uses a default one and
+what's nice is that we have a lot of
+default resource callbacks that are
+specific to our domain they're not
+things that web machine would have ever
+had a default for so a good case in
+point is for service available the first
+thing we try and do is grab a connection
+to react from a connection pool if we're
+not able to do that we want to say no
+the service is not available we want to
+do that across all of our modules
+another cool thing is that let's say
+that we wanted to have the pool that we
+asked for the connection from to be
+different per module well we also don't
+have to necessarily override service
+available in each module we can use our
+state information in the request to look
+to see if there is some information
+about what pool to use so we can still
+differentiate between different modules
+based on the state data that we're
+passing around that we're passing around
+and web machine so the next thing I'm
+going to talk about is how we test our
+conflict resolution code so i mentioned
+that most of the data is immutable but
+there is that bit where concurrent
+rights to the same key are going to
+generate two different manifests and
+that's going to end up being written to
+a single key value in react if you like
+you can have react tell you when
+causally you have two rights that are in
+conflict so let's say we have our
+distributive system and actor a and B
+both right two different nodes but at
+the same key react later we'll say hey
+there's a conflict here where actor a
+wanted to write this value an actor be
+wanted to write that value and if you'd
+like react can present that with you you
+can choose to use some domain-specific
+logic
+to resolve that conflict this is one of
+the ways that that you implement a
+really highly available system but the
+problem is you want to make sure that
+regardless of the order that these
+actions come in your conflict resolution
+code ends up with the same result so
+I'll talk a little bit about how we test
+that and how we sort of think about
+writing that kind of code because it can
+be a little bit tricky so the first
+thing we do is we implement a binary
+resolve function so it takes two values
+that are in conflict and resolves them
+to a new single value the simplest
+example of that might be if both of the
+items are set set Union might be the
+function that you implement to combine
+them together one of the things we've
+been able to do is mandate that our
+resolve function be associative and
+commutative and if we know this we can
+test it in all sorts of nasty ways to
+prove to ourselves that it is
+associative and commutative so here's an
+example we know that plus is associative
+and commutative so we can say that
+adding the numbers in this order you
+know pairwise here and with this set of
+ordering is equivalent to adding them up
+in this way you notice what I've done
+here is I've just reversed the whole
+list and this looks an awful like awful
+lot like we're doing a fold so first we
+combine these two numbers which becomes
+our accumulator then we add it to this
+one becomes our new accumulator which we
+add up to three likewise we're doing the
+same thing but we're doing our
+accumulation and the order in which we
+apply our binary function in a different
+order all we've done is reverse the list
+so all we're saying is that fold L with
+our function is equivalent to fold are
+so fun is the binary function under test
+that we're trying to convince ourselves
+is associative and commutative what's L
+l is a random created list of values
+that represent the conflicts that we
+might create in our domain so we use a
+quick check for this so quick check will
+generate a list of these manifests that
+have been manipulated in different ways
+it'll start off with a short list and
+eventually grow that to a list that are
+mapping to our domain again represents
+conflicting rights to the same manifest
+so what we're saying here is that for
+all lists of manifests so for all L
+eleazar generated listed manifests it
+should be that lists fold L with our
+binary resolve function is equivalent to
+lists fold our or we could just simply
+reverse Alan you know use photo again
+this is turned out to be a really really
+useful testing strategy one of the nice
+things about it is that it's totally
+pure originally I was talking about
+testing eventual consistency making sure
+that regardless of the order that I some
+particular set of replicas got the data
+and we want to make sure it's the same
+and you know your first thought might be
+too all right start mocking out these V
+nodes and testing this in a really
+stateful way but once we knew we were
+sort of able to map those same ideas to
+commutativity and associativity it
+dramatically simplified how we were able
+to write these tests both in terms of
+making sure the test was correct and
+this test ends up being just a few lines
+of code which is really nice all right
+we can get quick check to generate us
+tens of thousands of examples to try and
+prove us wrong and we found a few nasty
+bugs that way that was a really cool
+thing so the next thing we'll talk about
+is HTTP 503 or how I learned to stop
+worrying and say no so in a server-side
+system a common thing that can happen is
+if you start to get above a certain
+amount of requested work instead of
+failing gracefully you start to fail
+badly for everyone
+so instead of starting to say no to some
+work and still having you know great
+tale Layton sees on work set a that you
+can handle you start to to do bad for
+everyone and using HTTP 503 which is
+service unavailable turns out to be a
+really really nice way to say no to
+extra load that you know you can't
+handle and one of the ways it's nice is
+that HTTP 503 conveys exactly that back
+to the end client who likely is going to
+have some retry logic that is going to
+have some number of retries maybe some
+exponential back-off so the way we
+implement that is in that shared default
+web machine resource in our
+implementation of service available the
+state for that request is going to tell
+us all right for this particular request
+here is the pool boy pool that you want
+to try and grab a react connection from
+if you're not familiar pool boy is a
+process pooling library that's written
+that's written in Erlang and in our case
+we're pooling processes that represent
+connections to react that is a scarce
+resource in the sense that we don't want
+it to grow unbounded we might want to
+say all right we only have up to 128 I
+persistent connections to react and
+during peak times we can go up to 256
+but never more than that pool boy allows
+you to without blocking ask for a
+connection from at the pool and if one's
+not available because the pool is
+totally empty it'll just tell you know
+it's not available so what we do is
+simply return back to the user at the
+service is not available right now we're
+not a situation where we can handle any
+more load without risking degrading
+performance for everyone I the next
+thing we did is we went a little bit
+finer granularity so react CS different
+operations from an end-user perspective
+have a different cost associated with it
+so listing all the keys in a five
+ki bucket is going to have a different
+cost than receiving a 1 kilobyte value
+so in order to make sure that we don't
+treat those the same we have different
+pools that we can configure how many
+concurrent operations can happen doing
+that amount of work the next thing I'll
+talk about is versioning of Records so
+right now our persistence format for
+manifests is just termed a binary on a
+record writing it directly to react when
+we upgrade reacts yes we might add some
+new fields to a manifest and we're going
+to name that record a different name so
+we have a version ID both in the
+manifest and as the record name but we
+don't want to have code strewn
+throughout our whole codebase dealing
+with different versions of Records we
+want to be able to deal only with the
+most recent record and all of our code
+except for a single place so what we've
+done it's actually really simple is you
+implement an upgrade function it
+basically looks just like this so v1 v2
+and v3 will be the three different
+versions of our record we pattern match
+on v1 and we upgrade it from v1 to
+whatever version view v1 upgrades to
+likely just directly to v2 so that in
+this case hasn't gotten us all the way
+so we wrap it in another call to upgrade
+likewise if we get called with v2 we
+upgrade v2 to v3 call upgrade right here
+we bail out of our recursion and we have
+now have been working with the most
+recent version of the manifest it does
+mean that every old version must be able
+to be mapped on to a new one but that's
+not a constraint we can easily get out
+of so our read path from react we
+upgrade all of the manifests so in a
+case where there have been several
+concurrent rights and
+we have multiple conflicting values from
+react we're basically mapping that
+upgrade function to all of the manifests
+so now for men on Al in the rest of our
+code base we can deal with only the most
+recent one then we resolve all the
+siblings which is doing the conflict
+resolution I was talking about testing
+earlier now we have a single value that
+we can pass around and it dramatically
+simplifies the rest of our code base so
+we've contained that complexity just to
+that at the very the very outer edge of
+the code base and the rest of it doesn't
+have to worry about that all right we're
+getting toward the end this is the list
+of people I found quickly who have
+contributed to react CS so it is
+definitely not just me I'm just the one
+who happens to be up here talking about
+it so thanks to Kelly Scott Jared Andy
+Brian the rest of the team who helped on
+this like I said all of the code is
+available on github now it's apache2
+license so you can check it out and next
+I'd be happy to take questions yes so
+the question was whether we implement
+the soap api know right now we just
+implement the the rest HTTP a rest HTTP
+API
+we don't have numbers for who uses the
+soap vs REST API for the real s3 but we
+haven't had any customers or users who
+have complained so far we have tried to
+take the the sort of user facing web
+machine bits of react CS that deal with
+the rest s3 HTTP API specifically and
+keep that as separated from generic
+handling of large files and access
+controls sort of as much as we can it's
+a little bit more tightly coupled than
+we'd like but it is something we thought
+about of it so in the future we're
+definitely open to having react CS be
+able to speak multiple different
+protocols to external users which all
+gets translated into operations like
+create large file and that that would
+open things up to not just the s3 soap
+api but the api that other object stores
+use if that's something that users would
+like
+yeah so the question is about the
+consistency model with react CS in some
+data centers so in s3 it's a global
+system that is available a bunch of
+different data centers and since they've
+rolled that out over time the features
+and the behavior in each of those data
+centers is not exactly the same and in
+one of the region's you get a certain
+class of consistency called read your
+rights which means that even though s3
+is and eventually consistent system a
+single actor from an external
+perspective if they do a right and they
+read something later they'll never read
+an earlier causal value than what
+they've seen themselves before so right
+now we do not implement that there are
+some changes that are likely going to be
+in react 1.4 that will make it easier to
+implement that so right now the the
+restriction is that we make we can't
+make that guarantee at the react level
+and there's a recent change that it may
+have actually made it into 13 okay okay
+so the very next patch version of react
+will provide the building block that the
+xes can take advantage of
+like when there's client day that
+creates a new bulb check in reactors
+access um well it depends on what you
+mean by immediately after in most
+running systems it absolutely will be
+the word after does not have specific
+meeting if you're not allowed to work I
+put another way it's not as simple as
+thinking about after just with wall
+clock it's not guaranteed to be globally
+visible but it is a tonic so it's
+possible that you might do a read from a
+replica that's not yet seen that version
+so the guarantee that you're asking for
+is more general than read your rights
+read your rights is only for actor a
+that did that right
+after we have created an object in s3 it
+will be visible to everybody else
+settings and consistent operation
+whereas of course over rugged is not so
+we're running till eventually consistent
+but I mean new object ensure that line
+catcher okay yeah that's all right
+that's something that we can definitely
+take into account that is not a
+guarantee right now anyone else all
+right thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

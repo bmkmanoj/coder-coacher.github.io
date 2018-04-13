@@ -1,0 +1,2012 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Hartmut Kaiser “The Asynchronous C++ Parallel Programming Model” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Hartmut Kaiser “The Asynchronous C++ Parallel Programming Model” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Hartmut Kaiser “The Asynchronous C++ Parallel Programming Model”</b></h2><h5 class="post__date">2017-10-24</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/js-e8xAMd1s" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">Hello, everybody.
+My name is Hartmut Kaiser,
+I am working at Louisiana
+State University.
+The title of my talk
+emphasizes asynchrony.
+If you look at the conference website,
+they put the talk on
+concurrency, but actually,
+I will talk about parallelism.
+So I hope I don't disappoint you.
+If you came to hear things about mutexes
+and this kind of thing, you are definitely
+in the wrong room.
+What I want to do today, or
+what I want to try today,
+is to derive a couple of governing rules
+for writing applications
+so that those applications
+run very efficiently in parallel.
+And by running efficiently in parallel,
+I mean that if I run my application on
+four more cores than before,
+I want it to run four times faster.
+And if I run it on 100 more cores,
+I want to run it 100
+times faster, and so on.
+I also will try to show that
+if you derive those governing rules or
+those governing principles,
+if you implement them
+in a library or in a runtime system,
+which can manage the parallelism
+for your application,
+and you use that runtime
+system to write your code,
+that it's possible to do that.
+And if you add a asynchronous interface
+on top of that runtime system,
+which, as an add-on, is 100% compatible
+with what you know from standard C++ 11
+or certain documents which are being
+pushed through standardization right now,
+then you end up with a way of writing code
+where you essentially write code
+very, very similar to sequential code.
+If you take your textbook algorithm,
+write your code, which looks almost like
+your textbook algorithm,
+and the system will be
+able to parallelize that
+for you automatically.
+Almost automatically.
+And I hope, in the end,
+that I can convince you
+that this is possible.
+So that we finally have
+a way to write C++ code
+such that you don't have to
+worry about concurrency issues.
+You don't have to worry about
+how to parallelize things.
+All you have to worry about is to get your
+sequential code correctly written up.
+And I think that is, if it really is true
+and if it really works,
+and as far as I can see
+it worked from the
+applications we tried it with,
+that is a major step forward.
+And that is what I mean
+by the asynchronous C++
+parallel programming model.
+And that's where asynchrony
+meets parallelism.
+Okay, let's start.
+If you look at the landscape of today's
+parallelization tools we use
+to write parallel applications,
+that's mostly a set of parallel libraries,
+parallel facilities, like
+OpenMP with the pragmas
+or with the tasking.
+For distributed applications,
+we have MPI as a standard API
+to do communication in
+the distributed world.
+If you look at that landscape,
+you will quickly see
+that it's actually a
+pile of building blocks,
+which are written in a way that
+they don't fit with each other.
+You can't just take OpenMP and
+write your parallelizer code
+and then mix that with a MPI call.
+I don't know if anybody
+has tried to envoke
+an MPI API call from an OpenMP thread.
+If you would have, it
+probably failed miserably.
+Or you can't just take
+CUDA as the major toolkit
+for, at least for the video GPUs,
+and combine that easily
+with OpenMP or even,
+well, with MPI there is
+some integration there now.
+What I mean is that these
+tools have been developed
+for 25 years, and each of
+those tools has been developed
+independently of any other tools,
+and it's very, very
+difficult to combine those
+in a single application.
+The other thing we see,
+and that second image
+on that slide shows you
+what happens when you use
+most of the available tools today.
+So what you see here
+is a utilization graph
+of, I don't know, 15 or 20 CPUs.
+Each horizontal bar
+represents the utilization
+of one of the CPUs on a node,
+and the greener area means a CPU is busy
+and the light area means the CPU is
+waiting for something to happen.
+It can't make progress
+because it has to wait
+for other things in the system.
+This is a very typical expression
+or a very typical picture you're getting
+when you're looking at
+applications which are
+written with OpenMP,
+where you have a for loop
+with is parallelized and
+then you have a piece of code
+which is not parallelized,
+then you have another for loop
+which is parallelized
+again, and so on and so on.
+And so you have these
+very limiting join points
+in between the for loops,
+which make your application
+scale very badly.
+So let's try to find a way
+how we can circumvent that.
+I promise to derive some
+parallelization rules,
+or principles, from those
+principles, so let's start
+with the absolute fundamental thing
+when it comes to
+parallelization and scaling.
+And I promise it's the only
+formula I will show today,
+so you don't have to go
+back to your graduate school
+to understand this talk.
+Everybody probably has heard
+about Amdahl's Law, right?
+Amdahl's Law is a expression
+of the theoretical limit,
+how far we can scale an application,
+and by scale I mean how
+faster can an application run
+when I run it on more compute resources.
+And this law gives us a theoretical limit
+of that scalability, how much
+faster can an application run
+under the consideration
+of how much of your code
+have you actually parallelized?
+So in a simple case, let's
+say I have an application
+which I can parallelize to 50%.
+So 50% of my code is parallelized,
+50% of my code is not parallelized,
+because I wasn't able to do that.
+And Amdahl's Law will
+tell you that in that case
+you can't speed up your application
+more than a factor of two.
+You can run it on a million of cores,
+it will not run faster than
+twice as fast as before.
+And that's clear, right?
+Because when you parallelize
+only half of the code,
+you can squeeze the execution time of
+that parallelized half of
+the code almost to zero
+when you add more resources,
+but the other half of the application
+is still 50% of the runtime, right?
+You can't get rid of that.
+So Amdahl's Law gives
+us a theoretical limit,
+and just to give you another example,
+if you parallelize 95%
+of your application,
+and that's for many applications
+already, a very large part.
+Just think about initialization,
+IO, synchronization,
+all of that, which limits parallelization.
+So if we are able to
+parallelize 95% of our code
+it still can't run faster than 20 times
+than the sequential version.
+And this is a serious, serious limitation,
+because you can throw, I
+don't know, 60 thousand cores
+at that application, it will
+not run faster than 20 times.
+And that only if you're lucky.
+So the people who are really
+trying to use resources
+in an efficient way and parallelize things
+in an efficient way
+are severely limited by
+the fact that they have
+to try to parallelize,
+essentially, everything
+in the application.
+And that is very difficult.
+So rule number one, I
+pose, is that we should try
+to parallelize applications
+as much as humanly possible.
+In the end, we have to parallelize 100%,
+if you really want to
+have perfect scalability.
+And I will get back to that,
+and we'll try to concretize that a bit
+and show you how we can
+actually achieve that.
+Unfortunately, the
+theoretical limit defined
+by Amdahl's Law is not
+all we have to deal with.
+There's always the Four Horsemen,
+which are sitting
+everywhere in this world,
+and what I call the Four
+Horsemen of the Apocalypse
+are four additional things,
+four additional limitations,
+which limit scalability
+of our applications
+just from the practical standpoint,
+on top of what Amdahl gives us.
+The first of those factors
+is what I call starvation.
+Starvation means that we
+have not enough parallelism
+in our system to keep all
+the resources running.
+So half of our cores
+just sit there and idle
+because I only have, I have 16 cores,
+but I only have eight things
+to do at the same time.
+So I clearly, eight of
+the cores just idle,
+they don't have nothing to do.
+The next one is latencies.
+Latencies is everything what's limited by
+the speed of light, so the time needed
+to establish a network connection.
+The time needed to pull
+data out of the memory.
+The time needed to send
+data from the cores
+over to the GPU or back.
+And all these things are latency-bound.
+So it's the time distance
+delay of remote resource
+access and services.
+And that severely limits our scalability,
+because in the end it adds some kind of
+sequential pieces of code everywhere,
+spread all over the place.
+Overheads, those are the worst
+ones, the really bad guys,
+because overheads are
+something you don't have,
+in the sense I'm talking about,
+overheads are something you don't have
+when you run sequential code.
+Overheads is that time
+which need to be spent
+in order to manage parallelism.
+So it's those things which you add,
+and kinda only when you
+really add parallelism
+to the application.
+And last but not least, waiting
+for contention resolution.
+It's kind of the opposite of starvation.
+You might just have too
+much work in your system.
+Well, you all have been driving
+on the interstate, right,
+and there's no apparent
+accident or anything,
+but everybody's driving slow.
+Why?
+Well, because there are so
+many cars on the streets
+that everybody's driving slowly.
+That is contention.
+And the same happens in
+parallel applications.
+If you have too many things to do,
+then suddenly the performance goes down.
+False sharing is one of those factors
+which falls into this category.
+And as you can see, our
+four horsemen kind of form,
+if you just look at the
+first letters of those,
+you see why our applications
+are actually slow
+when you start parallelizing them.
+That's our four factors.
+As I already said, those
+impose upper bound,
+additional upper bound,
+on weak and strong scaling
+of our applications.
+Okay, enough of theory.
+Let's look at some real-world problems
+which everybody probably has encountered
+when you were trying
+to parallelize things.
+And I already alluded to that.
+If you look at the
+programming models which
+people use today, OpenMP, MPI,
+you will see that those programming models
+impose additional
+limitations on your ability
+to parallelize things.
+Just as an example,
+OpenMP enforces a barrier
+at the end of the
+parallel for loop on you.
+There's a reduction operation,
+and, I apologize.
+And everybody has to wait for,
+A, for the slowest guy in the execution,
+and B, everything has to
+go through a single thread.
+So all parallelism has to kind of stop
+and everything goes,
+like, through a funnel,
+through the sequential piece of code,
+which comes after the loop
+before you again spread things out.
+And these pieces, well,
+add additional sequential
+pieces of code to the execution,
+and again, Amdahl comes along
+and whacks you over the head,
+because, well, he rejoices, right?
+Because there is sequential execution.
+You can't get the scalability you want.
+Other problems with those
+models we have today
+are that they tend to
+oversynchronize more things
+than are required by the
+algorithm in order to go forward.
+If someone has worked
+with MPI on clusters and
+distributed systems,
+you know that MPI kinda,
+at least in a simple
+case, enforces a lockstep
+between the nodes.
+So all nodes do always the same thing.
+Then they communicate, then
+they do the same thing again,
+then they communicate, and
+as long as you have only
+four or five of those nodes
+involved, that's not a problem.
+But as soon as you have
+thousands of those,
+there will be definitely one slow guy,
+one node which lags behind,
+and everybody else has to wait
+for that slow guy to catch up.
+So something which a programming
+model enforces on you.
+And there are ways to
+work around these things,
+but these models have been
+written for 90% of the use cases
+and the 10% of the use
+cases we are interested in,
+namely using our resources
+really to the fullest,
+is something which is perhaps doable
+but very, very difficult to achieve with
+the existing tools we have at our hands.
+Also, as I already mentioned,
+there's insufficient
+coordination between on-node
+and off-node parallelism.
+There's a thing the DUE calls MPI+X.
+The funny thing is that nobody
+actually knows what X means,
+so they want to combine
+MPI with something else
+to get off-node and on-node
+parallelism combined,
+but it's a crutch.
+And last but not least, we have
+distinct programming models
+we have to deal with for
+different types of parallelism.
+Off-node, MPI, on-node,
+OpenMP, Accelerators, CUDA,
+or OpenACC or other things.
+And as I already alluded
+to in the beginning,
+those are usually not very orchestratable,
+if that's a word.
+Somebody might say, yeah, but we have the
+standard algorithms in C++ 17 now, great.
+I'd say it's like with
+regular expressions.
+If you think you have
+a problem you can solve
+with regular expressions, you
+have two problems afterwards.
+Parallel algorithms are very similar.
+They are very simplistic,
+so you can quickly solve,
+perhaps, 80% of your issues, but when you
+really want to control parallelism and
+really want to do utilization,
+increase utilization of resources,
+parallel algorithms will limit you,
+and mostly because they are, well,
+fork-joined, again, right?
+You have to fork many threads and you
+have to join them at the end of the loop
+before you can continue.
+And that picture kinda
+depicts that, right?
+Instead of running things sequentially,
+you kind of spread them out,
+then you have a piece of sequential code,
+then you spread things out again,
+then you join them, then
+spread out again, and so on.
+And those sequential
+pieces is what's killing
+the scalability of your application.
+Believe it or not.
+Another example which demonstrates that,
+in this example, in this image,
+time goes down from top to bottom,
+and you can see that
+things are spread out.
+Then many threads work on the
+tasks in the parallel loop
+or in a fork join region.
+Then you might have a reduction operation
+where you have to wait
+for the slowest guy,
+half of the cores are
+already done, and they wait,
+and one of the cores just
+takes a little bit longer
+than everybody else, all the other cores.
+So all the other cores have to wait
+for that slowest guy
+before you can continue.
+Again, that's sequential
+pieces of execution
+which are so bad for scalability.
+So my rule number two is, try to use
+a programming environment
+that doesn't fight SLOW,
+but that embraces SLOW.
+And by that I mean, for instance,
+how do you embrace starvation?
+Well, I already said in rule one,
+let's parallelize as many things as I can,
+and if I have many,
+many things parallelized
+and many, many, a large
+amount of work in the system,
+then I can avoid starvation,
+because I always have
+more tasks pending to be executed
+than I have resources at
+my disposal, which is good.
+How can we embrace latencies?
+Well, latencies, what you need to do,
+you need to utilize the
+inherent parallelism available
+in the hardware, right?
+You can do things on
+the GPU at the same time
+as on the cores.
+Has anybody tried using
+CUDA and still do things
+on a CPU while the GPU
+is churning your numbers?
+Some people have done it,
+it is definitely possible,
+but sorry for my French, it's
+a pain in the neck, right?
+So nobody is doing it in the end,
+because it's so difficult to achieve.
+I'm not saying it's impossible,
+I'm just saying that the
+main model programmer
+has a big, big problem
+when it comes to that.
+So if we have a problem
+model which allows us
+to easily overlap the work on the GPU
+with the work on the CPU,
+or to overlap the ongoing
+network communication,
+which was useful work on a CPU,
+or even create hardware which allows us
+to overlap memory access latencies,
+then we get a program model
+which is much more suited
+for parallelization.
+Overheads I will mention
+specifically on the next slides,
+and you might say, how
+do I get rid of that
+waiting for contention?
+Well, one of the reasons
+for the contention
+or for the waiting we are seeing is that
+the program models tend to force you to
+synchronize on more things
+than you actually need
+to go to the next step.
+Very often we have a parallel for loop,
+and you could already start
+with a code afterwards
+for the first iterations
+which have already
+finished executing while
+the other iterations
+are still ongoing, but
+no, the program models
+enforce that you have to
+wait for everybody to finish
+before you can go to the next step.
+So if you find a program
+model which allows us
+to express fine-grain synchronization
+by making sure that as
+soon as all preconditions
+for a particular
+computation have been met,
+I can go ahead with that computation,
+then we can get rid of
+a lot of contention,
+because you kind of distribute
+the contention over time
+so you don't pack them in the same amount
+or same spot of time, but
+you have a lot of things
+which go on which are
+very nicely distributed.
+And that helps with
+mitigating those factors.
+Okay, let's do a thought experiment.
+Let's assume we have 10 million tasks,
+and each of those 10 million tasks takes
+100 nanoseconds of time.
+So overall it's one second of work.
+And let's assume I have
+a system which allows me
+for these tasks to run in different ways.
+I can either run all the 10
+million tasks on one thread,
+so we'll get essentially
+sequential execution,
+or I can run these 10 million tasks
+each on a separate thread.
+And then we try to analyze,
+what is the run time
+I'm getting out of that?
+So what this yellow curve gives you
+is essentially the run time,
+when you vary the amount of
+tasks run on a single thread.
+On the left-hand side, you have the case,
+you have a grain size of one.
+That means you run one task per thread.
+And since threads impose
+overheads, as we all know,
+your execution time will
+go through the roof,
+because that yellow line
+assumes you have one microsecond
+of overhead per thread.
+So the runtime for one task is
+not 100 nanoseconds any more
+but 1.1 microseconds,
+so as you add that up,
+you get, I don't know, 10
+seconds of execution time,
+where 90% or 99% is just overheads.
+On the other hand, on the right-hand side,
+you see the case when you run
+everything on a single thread.
+And you might wonder why
+it's still a bit slower
+than the sequential execution,
+and this is an artifact
+of effects of contention and
+false sharing in the scheduler.
+And you see that very
+quickly, when you decrease
+the grain size from 10 million down,
+you very quickly gain speed up.
+And that's what you normally
+would expect, right?
+When you run, when you
+parallelize a for loop,
+what is your kind of, the
+first intuition you have?
+Well, I know I have a piece,
+a certain amount of work,
+so let's split it up equally
+for all cores I have.
+Let's say I have 10 cores, so each core
+gets 1/10 of the work.
+And that's a common way of
+how people do parallelization,
+but as you can see, that doesn't give you
+the best possible performance.
+The best possible performance is here,
+when you run around 10 thousand
+threads with, I don't know,
+yeah, 10 thousand, probably
+10 thousand tasks each.
+Things get even worse when
+you increase the overheads.
+This is a theoretical model, right?
+It's really just a crude,
+qualitative modeling
+of what's going on in a system.
+The blue line gives you the
+resulting execution time
+if you have 100 microsecond
+overhead per thread,
+and you see you are
+severely limited already
+in terms of what you can
+achieve and speed up.
+And if you get, just say, hey,
+one thread has 10 millisecond overhead,
+you essentially are dead in the water.
+And if you think about it,
+10 milliseconds overhead
+is essentially what you
+get when you use a pthread,
+because you have operating
+system time sizing
+which in the best case
+gives you 10 millisecond
+latencies or overheads
+for a single thread.
+And in that case, you can't even get to
+the optimum any more, not even close.
+So for even relatively
+small amounts of work,
+we can benefit from splitting that work
+into smaller tasks.
+That's what we learn here.
+And you will end up with a
+possibly huge amount of threads.
+10 thousand, in that case.
+And the best possible
+scaling we predicted here
+would be reached when we
+used 10 thousand threads
+for one second of work.
+Isn't that amazing?
+That just tells us that there's possibly
+so much parallelism in our applications,
+and we can split them in very small tasks
+that we really can create enough work
+to keep everybody, every
+computer resource we have
+in our system, busy all the time.
+Okay, it's a bit theoretical,
+because there's not
+synchronization, no dependencies,
+anything, but you get the picture.
+But there are several problems, right?
+A, it's impossible to work
+with that many kernel threads,
+pthreads, obviously.
+It's impossible to reason
+about 10 thousand threads
+at a time.
+I can't reason about
+two threads at a time.
+My wife can, probably.
+She claims, at least,
+she can, but I can't.
+So how do we deal with that?
+Again, we need a higher-level
+programming model
+which allows us to reason about the code
+even if it's underneath using
+a humongous amount of threads,
+billions of threads.
+So rule number three is allow for
+your grain size to be variable.
+Write algorithms in a way which allow you
+to modify the grain size of
+the algorithm at run time,
+because that will alow us
+to do adaptivity at run time
+and to decide at run time how much of work
+you actually want to
+execute on a single thread
+to get best possible performance.
+This is a graph, the previous
+graphs were theoretical,
+this is a measured graph from
+a 1D Stencil application,
+a very simple application
+which just computes
+heat diffusion on a 1D ring.
+But still, if you modify the
+grain size in that algorithm,
+namely the number of
+data points you calculate
+on a single thread, you get
+that very same dependency.
+But what's so beautiful in
+this graph is that you see
+the minimum is actually
+very close to the left edge
+and not on the right-hand side,
+and that's very
+symptomatic and we see that
+essentially for any
+applications we analyzed.
+So what you want to do,
+you want to make your tasks
+or your threads as small
+and short-lived as possible,
+but not shorter.
+Because if you make them too
+short, bang, you hit the wall,
+and things go up in a very steep curve,
+and your performance goes down the drain.
+This is a result only a
+few people think about,
+because mostly you are kind of on
+the right edge of the thing, right?
+All these graphs are kind
+of done for 16 cores,
+so if you divide the
+100 million or whatever
+that big number is by 16,
+you would get to the point
+where you get that
+equally splitting of tasks
+for cores I was mentioning.
+But we have to go far, far to the left,
+and note the X axis is logarithmic,
+so there is a lot of room where we can
+decrease the amount of
+work on a single thread.
+On the other hand, as you have
+seen in the previous slide,
+it's absolutely crucial
+that you have a system
+which gives you minimum overheads
+for the thread creation,
+otherwise you're dead
+in the water as well.
+So rule number four, oversubscribe, A,
+create more work than
+you can possibly handle
+with the resources you
+have, because that gives you
+always enough work for
+the resources to work on
+so that avoids starvation
+and both balancing,
+and balance adaptively.
+Build your system in a way that you can
+control the grain size or other aspects
+of your system at run time.
+So what challenges do we have?
+And I need to speed up
+a bit, so I might start
+skimming a bit over it,
+otherwise we will not
+get to the results today.
+We need to find a usable
+way to fully parallelize
+applications, I said that already.
+We need to expose asynchrony,
+and that's what I propose here.
+Expose asynchrony to the programmer
+without exposing additional concurrency,
+because if you have 10 thousand threads,
+you don't want to deal
+with 10 thousand threads
+on a single mutex of this kind of thing.
+So we want to have a programming model
+which kinda encourages you
+to write code which is,
+data runs free by definition.
+There are semantics,
+functional-style programming,
+and so on and so on.
+And if you have such a program model,
+then you can deal with billions of threads
+without even, okay, I
+have a bit of gray hair
+because of that, but normally you can just
+write code as if you were
+writing sequential code,
+and I will give you an example.
+The other important thing is that
+you have to make data
+dependencies explicit.
+The goal, remember, in the beginning was
+to write sequential code
+but still have the system
+parallelize things for you.
+How can a system parallelize things
+if you don't tell the system which things
+have to run in what order?
+What depends on what?
+So we have to tell the system, somehow,
+what are the dependencies
+for the next step?
+What does it have to wait for
+before it can make progress?
+And I will show you how you can make that,
+make these data dependencies
+explicit in an easy way.
+Well, obviously, we want to provide
+manageable paradigms for parallelism.
+If you deal with 10 thousand
+threads, you might say,
+hmm, that's what I get, right?
+But I really hope to convince you that
+there is a way out and that
+we can avoid these situations.
+Proposed solution,
+asynchronous program models.
+We want to for objects to interact through
+asynchronous function calls.
+Remote calls, by the way, can
+be done as active messages
+and can be integrated so that you end up
+with a system where remote operation
+is completely semantically equivalent
+to local operation, and not
+only entirely coupled system
+like clusters but in things
+like distributed applications,
+service-oriented applications
+on modern clouds.
+Same thing, same principles apply.
+What we will do, we'll use futures as
+to represent those data
+dependencies, and I will show you
+that essentially what we have in C++ 11,
+plus some extensions
+from the concurrency TS,
+are completely sufficient
+to achieve all those goals
+I was mentioning.
+We want to look at the entire machine
+as a single abstract machine.
+That's more for the
+people who are interested
+in distributed computing.
+So we want to have a global address base
+where all the notes kind of
+work with the same addresses.
+And tasks operate on C++ objects
+in the distributed system,
+but that's kind of just
+the general data lots.
+I mentioned the semantic
+and syntactic equivalents
+of local and remote operation
+is important for us,
+at least for us on the HPC environment.
+I will present a futurization technique,
+which achieves all of that and tries
+to overcome these
+problems I was mentioning,
+and we want to be fully-conforming
+to the C++ standard API
+so that you can just go in and jump in,
+even if you don't know anything about HPC
+or about parallelism, but you know C++ 11,
+you can start right
+away and work with that
+and write highly efficient,
+scalable parallel code.
+Okay, what is the future of computation?
+I talked about the universal
+answer in other talks,
+I thought that slide is
+nice, I can bring that back.
+Everybody knows that
+the universal answer to
+the life, universe, and
+everything else is 42,
+but the problem is that
+calculating that answer
+takes 7.5 million years,
+literature tells us that.
+So what will we do?
+We construct a computer,
+which is called Deep Thought,
+and the first thing we
+do, we asynchronously
+launch the function which
+gives you, eventually,
+the universal answer.
+I use the C++ 11 async here,
+which launches a new thread,
+which runs the function,
+and that gives you back
+a future object, a future
+event, in that case,
+which is a promise that the answer
+will be delivered eventually.
+It represents a result which
+has not been computed yet.
+Then we do something else
+for 7.5 million years,
+because we don't want to
+wait for it to happen,
+and when we come back, we say, okay,
+now I want to have the
+answer, give me the answer.
+I want to see it, I
+have waited long enough.
+So I call get on my future,
+and two things can happen.
+Either the computer has, the function has
+returned the value and the
+future will give you the value
+and say, yeah, here, go
+away, here's the answer.
+Or it might, if the answer
+has not been computed yet,
+the future will suspend inside get
+and will come back out of get only
+once the answer has been delivered.
+It's a beautiful model to
+decouple produce consumers.
+You don't see any notion
+of thread, nothing.
+You don't even see any
+notion of synchronization.
+It's just a beautiful
+way to make asynchrony
+available to the user.
+And the good thing is, essentially,
+a future represents a data dependency,
+because the data dependency means whenever
+that future becomes ready
+and the value's available,
+I can continue with my computations,
+because now I know that
+the answer's actually 42,
+which I didn't know before.
+Oh.
+You might have known it, but.
+So what a future gives us is
+a transparent synchronization
+with a producer, which is nice.
+It hides the notion of
+dealing with threads,
+which is absolutely
+crucial when you're dealing
+with tens of thousands of threads.
+It makes asynchrony manageable,
+well, any beginner C++
+programmer can write that code
+and calculate the universal answer.
+It allows for composition of several
+asynchronous operations, and I
+will show you how that works.
+And the beautiful thing
+is it actually turns
+concurrency into parallelism.
+It's not doing that
+literally, but it encourages
+a programming style
+which, when you follow it,
+will avoid any data raises.
+This is the good part.
+Okay, let's look at some example,
+and I just thought, hmm, let's
+look at recursive parallelism
+because that is a problem
+even in OpenMP, right?
+You have to be very careful
+not to have nested for loops
+and this kind of thing, so
+recursion in OpenMP is a problem.
+Okay, with a tasking API OpenMP gives you,
+it might be possible,
+but recursive parallelism
+is always an interesting
+problem to look at.
+And no, I will not use
+Fibonacci number calculation
+to show you what I mean.
+I just want to traverse a recursive tree.
+Let's say I have an r-tree.
+An r-tree is a tree where a node either
+has no children at all
+or it has eight children,
+and just goes down.
+And different ends of the tree might have
+different depths, so
+it's not balanced also.
+How do you do that?
+Well, that simple traverse function.
+In the simplest case, we are, at the leaf,
+so all we have to do, we have to
+compute the result for the leaf.
+So let's say our compute
+result just counts a number,
+or we want to return
+just a number of nodes
+we have in our tree.
+So in that case, a compute
+result will just return one,
+because it's a leaf node, so
+the leaf node counts as one.
+If I have children, what I
+do, I just create an array
+of eight values, and I
+recurse into all the children
+of that tree and collect all the results
+and once I have those I
+combine all the results
+and return the overall answer
+for that particular node.
+Very simple traversal of an r-tree.
+Now the question is, how
+do we parallelize that?
+Well, in the simplest case,
+just let's apply what we learned
+from the universal answer.
+If everything's okay, if we are at a leaf,
+we just have to compute the
+result, same thing as before.
+If we have children, what we do instead of
+collecting the actual result,
+we collect the futures
+representing the result for each traversal
+into one of the children
+of my current node,
+and they spawn a new thread.
+Let's assume those threads have
+no overheads, at this point,
+just to get the semantics clear.
+So I launch eight new
+threads, each of the threads
+traverses into one of the
+children of my current node,
+and I collect the futures
+in my result array.
+Then I kick off my local computation,
+because I want to overlap
+the local computation
+with the ongoing work
+on the eight children,
+and once I have my local computation done,
+I wait for all the
+futures to become ready,
+with the wait_all function,
+and then I combine the results as before.
+Easy.
+And you might say, hey, great,
+I parallelized my traversal!
+Well, you did, but you didn't.
+Because what you did here is introduced
+fork-join parallelism
+on each level, right?
+You spawn it off, you wait for them.
+You spawn it off, you wait for them.
+And that's exactly what you would do
+when you use Augment
+P tasks, for instance.
+Because Augment P tasks are not allowed
+to leave the current
+context they are created in.
+So you have to wait for the task to finish
+before you can exit that
+function which created the tasks.
+Fork-join parallelism,
+over and over again,
+and that adds these nice contention points
+all over your iteration,
+which makes things, well,
+slow as hell.
+So what can we do?
+Well, there's a very simple technique,
+and that's what I call the
+futurization technique,
+and we will see that over and over again.
+This what if traverse actually
+returns a future itself.
+And now things get interesting.
+So traverse returns a future itself.
+What we do now, and let's
+assume compute resolve
+returns a future
+representing the computation
+for that child node.
+If you have children,
+then we launch threads,
+again, with async, but this
+time we collect the futures
+and don't wait for them,
+but we pass our futures
+to a function which here, for simplicity,
+is called when_all.
+And when_all is essentially
+taking from the concurrency TS,
+which as we discussed
+and is standardization,
+and when_all does the following.
+It takes a bunch of futures
+and gives you another future
+which will become ready when
+all of the input futures
+have become ready.
+Right?
+No computation happens, it's really just,
+I will become ready
+when all of my arguments
+have become ready.
+And still nothing is being computed,
+it's really just a
+dependency which is defined.
+And when_all gives us a future,
+and then when I do dot then
+on the future return from when_all.
+And dot then means please
+call the function I give you
+whenever you become ready.
+So the dot then takes a
+lambda, and the lambda
+is being called with
+whatever the arguments
+of when_all have been.
+And the lambda is called
+when all the input futures,
+a result array and whatever t
+compute result has returned,
+have become ready.
+So inside that lambda, I
+know that all the futures
+have become ready, and now
+I call combine results.
+And the beautiful thing that
+the lambda returns a value
+and that value comes out packaged
+in a future from dot then.
+So dot then gives you
+a future representing
+a result of the computation
+which is attached to the future.
+Sounds a bit complex, it's
+a future all over the place,
+but hey, we want to solve
+the problems of the future,
+so this is only appropriate.
+If you think about it, what have we done?
+This function doesn't
+compute anything any more.
+It gives you a future
+representing the result
+it will eventually compute.
+So the future return from that function
+is representing a dependency
+tree of other futures,
+because a future return from the function
+will become ready when
+all the input futures
+have become ready, and
+those become ready when
+all the input futures of
+those have become ready,
+and so on and so on.
+So the topmost traverse
+function gives you a future
+which kind of will become ready when
+all of the tree has been traversed.
+So what we have done, we have
+turned our initial function,
+the initial function was computing things.
+But now we have a function
+which doesn't compute things
+but which gives us an execution
+tree, a dependency tree,
+which, when unraveled,
+will give you the result.
+So it's kind of monadic transformation.
+I don't want to talk about
+monads, but it's a monad,
+believe me.
+So what we did, we created the compiler,
+which will, at run time,
+generate a dependency tree
+which corresponds in structure
+to my algorithm I executed.
+And that's so beautiful,
+because a dependency tree
+can be executed in full speed,
+because there are no
+synchronization points.
+Everything happens asynchronously
+in that execution tree.
+When the lowermost features become ready,
+they just propagate through the tree,
+and those attached continuations
+are called on each level
+and eventually the outermost
+feature becomes ready.
+So we get rid of all the synchronization.
+No mutex, nothing.
+But we still get the same result.
+And you might say, hey, I don't
+wanna write this nasty code
+with when_all.
+I understand you, I hear you.
+Luckily, there is something
+like a co-routines proposal
+currently, is it a TS already or not?
+I don't remember.
+It is a TS now.
+And that co-routines
+proposal has a facility
+which is called co_await.
+And co_await is a very flexible
+tool which can be extended
+in all directions by your facilities.
+And if you use co_await on a future,
+it will do the same
+transformation under the hood
+as we have done explicitly.
+So if we use the co_await representation,
+look what we get.
+I essentially just inserted
+co_await in front of
+all the futures, and in
+the end, a co_return,
+because they decided that those functions
+can't have a return statement,
+they have to have a co_return statement.
+Okay, let's call it co_return.
+And now this code looks essentially like
+our initial sequential
+code of traversal, right?
+Do you remember that?
+So all that's changed is
+that instead of calling
+the traversal of the children directory,
+I now use async, and
+instead of having nothing,
+I put a co_wait in front
+of where the futures are.
+That's the only transformation I do.
+And that's what I mean.
+We write code which looks essentially
+almost like sequential code,
+but which is fully parallelized
+and runs as fast as it can
+and on as many resources
+as you have available on your system,
+without you doing anything.
+Okay, let's go on.
+Sometimes, or very often in your systems,
+you don't have just one function
+you want to parallelize,
+but you have to communicate
+either across nodes,
+between NUMA domains,
+between the GPU and the CPU,
+there's a lot of communication going on.
+And what we were implementing,
+what we were playing with,
+was to building a synchronous
+communication mechanism
+which kind of plays very well with that
+future asynchrony model
+I was referring to.
+What we did was just looked at Go.
+Go has, some of you probably know Go,
+that language, Google, Go language.
+And Go has a language built-in facility,
+I have 15 minutes left, okay.
+So I have to really speed up,
+because I'm not even
+half through the slides.
+Thank you.
+And those Go, Go has channels,
+and channels allow it
+to do a kind of pipeline
+between two points
+in your application,
+where you can send data in
+on one end and get data
+out on the other end.
+But what we did, we
+made them asynchronous.
+Just by having a channel
+which has two functions,
+a get and a set, and
+both give you a future
+representing the operation
+they're working on.
+A simple, quick example.
+Let's assume we have a 2D problem,
+where we split up our computational space
+into 2D batches of data points,
+where each of the data
+points could be distributed
+in a system, on different NUMA domains,
+on different localities,
+across the system.
+But we still have to
+communicate between those.
+And the thing is here that
+each of those computations
+are done cyclically, timestep wise.
+So you do it, some
+computation, then you have to
+exchange the boundary nodes in order to
+propagate the information
+to the neighboring
+computational domain,
+and then you can continue
+on the next timestep
+for diffusion problems
+or for all kinds of
+scientific computing problems.
+So those vertical and horizontal bars
+are the communication buffers,
+and the arrows represent channels.
+What normally happens in
+high-performance computing
+is that you do that with
+MPI and all of those
+computational domains always have to be
+on the same timestep.
+They do computation,
+then they communicate,
+then they do computation,
+then they communicate,
+and so on and so on, so
+they have that flip mode
+back and forth between
+communication, computation,
+which keeps everybody
+nicely on the same timestep,
+which kills our performance.
+So on that image, the
+patch C has not done,
+is not done with the computation,
+but A, B, and D are done.
+So B and D and A can
+already start communicating
+their boundaries to their
+neighbors, through channels.
+Now B is the only one which can continue,
+because the others have to wait for
+their communication to come in, right?
+But B can go ahead, because
+all the communication,
+all the boundary exchanges,
+have been performed,
+in order for B to continue.
+So B goes on on the next timestep.
+And eventually B is
+done and sends its data
+back to the neighbors.
+The point of this image
+is just to show you
+that you can nicely use
+channels to decouple
+computation in the
+system, and you can let,
+go hey, let go every piece
+of the computation ahead
+as far as possible without having to wait
+for everybody else who might lag behind,
+because of some, I don't
+know, thermal problem
+in the node or phase of moon is wrong
+or something else is going on
+on the network in the system
+which keeps back that node, and so on.
+Okay.
+So let's do asynchrony everywhere now.
+And we are going, coming
+along quite nicely.
+What I want to show you is
+such a 2D Stencil application
+which does, essentially,
+what I just depicted in code,
+and how that can be made asynchronous.
+Well, you have a timestep loop for
+a certain number of steps,
+but instead of having just a loop,
+what we do, we create a
+future which represents
+C computation on one timestep.
+And then we use that future and attach,
+whenever it becomes ready and
+a continuation is executed,
+which does the next timestep computation.
+And whatever that then returns,
+we assign to the initial
+future, and repeat.
+So essentially that gives
+us a linear dependency
+of all timestep operations
+in a very asynchronous way.
+Well, what's left is, you have to perform
+one timestep, right?
+And so instead of having the loop,
+which directly calls one timestep,
+we've wrapped that into the
+continuation-based model.
+And we could do that very
+same thing with co_wait,
+but I'll leave it at the
+futures on that level,
+because it's kind of a
+bit more understandable.
+Now let's have a look at the
+perform_one_time_step function,
+which is inside that loop.
+Well, what we start off with,
+we have four channel objects,
+in all four directions.
+Four incoming ones and
+four outgoing ones, right?
+And each direction, one
+channel object, as depicted.
+First of all, we have to wait for the data
+from the upper neighbor to come in.
+It gives us a future, so that
+is a top boundary future.
+Once that top boundary
+future becomes ready,
+that continuation will be executed.
+So we attach a lambda to that,
+whenever the data comes
+in from the top neighbor,
+we execute that function.
+Oh, and that function, we
+just do the boring math,
+we do our ghost zone, we
+just handle the first row
+of our patch, and once that's done,
+we send back the result
+to our upper neighbor,
+because that's all we have to do there.
+So there's a channel up
+to and a channel up from
+which do the communication
+in that direction.
+We do the same thing for
+all four sides of our patch.
+I'll just show one code.
+Then we want to apply the
+stencil to the partition, right?
+We want to actually do the operation
+on the rest of the patch,
+besides the boundary nodes.
+All that is probably
+just a parallel for loop,
+which is going over all
+the points in our patch
+and doing some computation.
+The trick here is that we made that
+parallel for loop asynchronous.
+That is kind of the C++
+17 parallel for loop,
+except that instead of the
+first argument being par,
+which means run in parallel,
+the first argument is par
+task, and in our case,
+that means run that
+algorithm asynchronously
+and give me a future
+representing the execution
+of that parallel algorithm.
+And now I have five futures,
+four from the boundary exchange
+and one from the central computation,
+and I pass all of them to when_all,
+and the result, I get back to my caller.
+Bam.
+That's exactly the same
+principle as I applied
+for the traversal, just for
+a fairly complex operation
+on a timestep-based
+stencil, 2D Stencil code,
+with full communication,
+and you don't care
+whether the communication
+goes over the wire
+to the neighboring node,
+everything's asynchronous.
+And in the end you get the same thing.
+You get a dependency tree
+which, whenever unraveled,
+with full speed, without
+any synchronization,
+gives you best possible
+performance in your application.
+And this technique of
+transforming a straight code
+into asynchronous code is
+what I call futurization.
+So it's a technique which
+allows to automatically
+transform code, delay direct execution
+in order to award synchronization,
+turn straight code into futurized code,
+code is no longer calculated directly
+but generates an execution tree which will
+calculate when unraveled.
+And the execution of the tree is performed
+with maximum speed, because no
+synchronization is happening.
+It only depends on the
+dependencies, on nothing else.
+So that's a simple scheme,
+how you do the transformation
+from straight code to futurized code.
+One remark, when you
+async a function which
+already returns a future,
+async will return a future
+to a future and it has been
+shown that it's possible
+to unwrap that, you
+don't need the outer one,
+you just need the inner one.
+So the lower right rule can be simplified
+to do nothing with asyncs,
+because in both cases,
+you get a future back.
+All that is nice and dandy.
+You say, okay, that's cool,
+but how do I do that in real code?
+I have to write all that stuff.
+No you don't.
+There's a library, and
+that's what I was mentioning
+in the beginning, that's, thank you.
+I will make it in five minutes, I promise.
+There's a library which already does
+all of that magic for you,
+and it exposes a C++ API
+which is conforming fully
+to the C++ 11 standard
+and with certain extensions
+which are aligned
+with this standardization as well.
+And that library is called HPX,
+and I will just mention
+it very shortly here.
+It's a general purpose
+parallelization framework
+runtime system you can use in your code,
+which gives you the standard
+library for concurrency
+and parallelism, essentially,
+all parallelism things
+you would wish of for your
+application to have today.
+Very flexible parallel algorithms.
+By the way, it's the only
+library which implements
+all of C++ 17 parallel algorithms.
+They are not available anywhere
+else in a conforming way.
+It enables write fully
+asynchronous code with
+hundreds of millions of threads,
+and the example I was showing at the end,
+they were running hundreds
+of billions of threads
+on a very large machine with that library,
+so it works very nicely.
+And it gives you the unified syntax
+for local and remote operations.
+Let's skip that, that's marketing speech,
+you can read up later on all that.
+The important part is, it's open source
+under the Boost license.
+So you don't even have to tell
+us when you want to use it.
+We have a large amount of users,
+about 100 contributors worldwide.
+So it's a fairly large
+open source project.
+Okay, one example.
+And then I'll shut up.
+This is one snapshot of the
+simulation of two white dwarfs,
+a binary star system
+with two white dwarfs,
+they're special small stars, which tend,
+when they start coalescing,
+get closer and closer
+and closer and in the end
+they blow up as a supernova,
+and that's very interesting
+for our physicists.
+And this is just showing you one of those,
+a visualization of one of
+those kind of snapshots.
+On the left is a more compact
+star than on the right,
+it's much smaller than the right star.
+The left star is about five times heavier
+than the right one, and you
+can see that those stars
+are so close together
+that the heavier star
+starts pulling matter from the larger star
+over in that accretion disk.
+So this is that stream
+which you see forming there.
+And this is what's very
+interesting to our physicists.
+I'm not a physicist, they claim this is
+just what they want to see.
+So they are very happy with that.
+Implemented to that was an
+r-tree, not surprisingly,
+so you can see that things
+are being refined adaptively
+where the actual action happens.
+So you want to go down,
+up to, I don't know,
+12, 14 refinement levels in order to
+get the precision you want in the area
+where the physics is happening.
+In the rest of the space,
+nothing is happening anyway,
+so you don't need any resolution.
+Yeah, this gives you a video
+of what we produced recently.
+That is the same simulation,
+just showing you some timesteps,
+essentially the evolution
+of those two stars,
+and as you can see, the closer those get,
+the more violent gets the process,
+and in the end the one star
+gets sucked up by the other one
+and things blow up, or not.
+So that is exactly what
+our physicists like to see.
+The different colors are
+density iso surfaces.
+Each of those is one magnitude apart,
+so you see 10 to the fifth
+in ratio of magnitudes
+between density magnitudes in space.
+Okay, some graphs.
+This is an application, as
+I said, we ran on a KNL,
+it's an Intel modern architecture,
+KNL stands for Knights
+Landing Architecture.
+That's a, one node has 70 x86 cores,
+and each of those cores
+can run four hyperthreads
+at the same time, so essentially one node
+gives you 280 hardware threads.
+This graph shows you the
+scaling on a single KNL node,
+when one, two, and four
+hyperthreads are being used
+for that particular application.
+And for one hyperthread,
+that orange line gives you
+the parallel efficiency.
+So that essentially means
+scaling out on one KNL node
+from one to 70 cores gives
+us a parallel efficiency
+of about 95% or so.
+So fairly good.
+So we sped up almost 60 times
+when we were scaling out
+from one to 60 cores.
+The next graph gives you the scaling
+for the same application, without changes,
+on the full system, the
+full system in that case
+where 10 thousand nodes of those KNLs,
+so you see the graph were
+about 650 thousand cores.
+The graph is split into
+pieces because you can't
+just run the big problem on
+the small number of nodes
+and you can't run the small problem on
+the big number of nodes,
+because there's not enough
+parallelism in there,
+so we had to split that
+into different chunks,
+and each of those lines
+gives you one refinement level.
+So one more level of refinement
+added to the problem,
+which increases the problem, naturally.
+And on the left-hand side you
+have 10 levels of refinement
+and the very right-hand curve gives you
+14 levels of refinement.
+And as you can see, the whole
+thing scales very nicely.
+For that full system run,
+we had a parallel efficiency
+of about 25%, compared to one core.
+So scaling from one score
+to 650 thousand cores,
+we still get a parallel efficiency of 25%,
+and I think that was
+fairly, fairly good result.
+And by the way, we got awarded from NERSC,
+where that machine is
+running, and by the way,
+thank you so much for
+NERSC for giving us a time,
+I think we burned 30 million
+CPU hours on that machine
+just to do this run, thank you so much.
+And they awarded us for that result,
+so we are very proud
+that we achieved that.
+I'm done, very quickly,
+I showed you that image in the beginning.
+When you apply those
+techniques, you get this.
+Suddenly everything runs very nicely,
+you don't have these
+characteristic stripes any more,
+and if you look at those building blocks,
+you get actually this.
+Because everything fits nicely together.
+Everything is built around
+that one single thing,
+session is over and I am done.
+That's almost my last slide, thank you.
+Everything is surrounded
+one single principle,
+namely using futures to
+represent data dependencies.
+So everything fits very nicely together.
+Okay, thank you so much.
+(applause)
+- [Audience Member] Well,
+so for this to work,
+the futures have to be
+extremely lightweight, right?
+So you don't have any
+synchronization primitives
+inside of them, or how does that work?
+I'll come down, because,
+is the mic still on?
+Yeah, okay.
+HPX uses a level threading system,
+where the overheads, use
+a level threading system,
+where the overheads are very small,
+so the overheads for a single
+thread are sub-microsecond.
+Create, schedule, run,
+delete, 800 nanoseconds or so.
+And the future, well, it's
+essentially just one allocation.
+And some minor synchronizationing there,
+but it's very, very lightweight.
+Hmmm?
+One heap allocation, yes.
+Oh, you have to allocate the
+shared state in the future.
+- [Audience Member] Hi, I really like the
+2D Stencil example, but
+I'm not convinced that
+it scales better than the fork-join model,
+because you show two
+times types in the slides,
+but let's say that C, which
+I believe was the slow tile,
+let's say that there's something special
+about that tile and it's always slow.
+Isn't that gonna bound the, essentially,
+the procreation of the whole algorithm?
+No, you have enough work in the system
+to keep everybody busy.
+- [Audience Member] But the
+other ones cannot continue
+more than one timestep unless...
+You can continue as much timesteps as wide
+as your system is in terms of patches.
+- [Audience Member] Right, right.
+So in this case, would be still, like,
+just one timestep ahead.
+Well, in that small figure, yes,
+but normally you have tens of
+thousands of those patches,
+so you can have a fairly large difference
+between the timesteps.
+And once you're done on one
+end with your computation,
+you can redistribute things so that
+everybody else is helping with
+the rest of the computation,
+and that gives you the speed-up.
+- [Audience Member] That is
+the second part of my question.
+You didn't mention anything
+about load balancing.
+In this case, how would
+you do load balancing
+with this approach?
+Well, locally, on the
+node, you do load balancing
+through work stealing.
+- [Audience Member] Right.
+And in a distributed system,
+you do load balancing
+either by regenerating the
+tree and redistributing things
+or dynamically moving
+things around in a system,
+which is why we have that
+global address space.
+So HPX gives you a global address space
+spanning all the nodes, so
+you can move things from
+one node to another without
+the application even knowing.
+And so load balancing is done that way.
+- [Audience Member] So
+that would fall under
+overhead, right?
+Yeah, but it's nicely overlapped,
+because the cores have,
+all the cores are busy.
+You are not wasting time.
+The overheads are not
+on the critical paths,
+but the overheads are kind
+of hidden behind useful work
+because you have so much
+things to do in your system
+that nobody is waiting for anything.
+- [Audience Member] But don't
+you have to rebuild the graph,
+the dependency graph?
+Well, if you just move one node over,
+you don't have to rebuild any graph.
+- [Audience Member] Right, but that's not
+changing the graph, but if
+you have to rejoin the graph,
+that's the first thing you mention
+in terms of load balancing.
+Well, that's two possibilities.
+If you have to rebuild the graph,
+you certainly add some
+limitation in there.
+But here, we were doing
+things dynamically.
+So we were moving the
+boundary nodes over to,
+or our boundary patches over
+to other nodes dynamically
+in the background, and
+that worked very nicely.
+As you can see, so.
+- [Audience Member] Thank you.
+Please.
+- [Audience Member] Hello, um,
+I have two quick questions.
+The first one is, we have
+an apparent rendition
+of something like your futures at work.
+One question that so often come again is,
+is there a situation in
+one of the algorithms
+in building a future
+where you should implement
+an automatic unwrap?
+Um, we have not implemented
+an automatic unwrap.
+What we have done, we created a special
+unwrapping constructor for futures.
+- [Audience Member] Oh, the
+function that takes the value...
+The function which creates,
+well, you can construct
+a single future from a future to a future.
+And that, the unwrapping
+is happening there.
+- [Audience Member] And
+the second question is,
+did you look at the recently
+published concurrency library
+from Sean Parent, which have
+some differences with yours,
+and what do you think about it?
+I have looked at that, not too closely,
+but I have seen it, and Sean
+has developed his library
+after he has looked at what we have done.
+I talked with him for
+a while about that, so.
+Our goal was really to be very conforming
+to what the C++ standardization
+committee is doing,
+and Sean was free of that restriction.
+So he created something which
+might be better, API wise.
+But what we have seen
+is that even the stuff,
+as limited as it might
+be, which is currently
+being discussed under standardization,
+is sufficient to build such a system.
+That was kind of the goal,
+and what we wanted to show.
+- [Audience Member] Thank you.
+- [Audience Member] Hi, I would
+like to ask your experience
+with the GPU cards, like, I know there is
+dynamic parallelism and
+the ground level here
+is per core and per thread, for GPU cards,
+they are not such a graphics,
+and what is your experience?
+Well, for the GPU, what we do there,
+we launch the kernels on the GPU,
+but expose the execution on the GPU
+through a future on the CPU side.
+So that the future becomes ready whenever
+the GPU is done with
+that particular kernel,
+and that allows us nicely
+to continue working
+on the CPU side and
+synchronize with the work
+on the GPU and doing transparent
+data moval and all that
+in a very consistent
+way, which very nicely
+integrates with the rest of it.
+- [Audience Member] I see, so...
+Oh, we'll take the question
+offline, if you wouldn't mind.
+We can continue discussing that, okay?</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

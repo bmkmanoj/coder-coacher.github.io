@@ -1,0 +1,1436 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Michael Spencer “My Little Object File: How Linkers Implement C++” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Michael Spencer “My Little Object File: How Linkers Implement C++” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Michael Spencer “My Little Object File: How Linkers Implement C++”</b></h2><h5 class="post__date">2017-11-03</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/a5L66zguFe4" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">- Hello!
+I am Michael Spencer, and I work
+for Sony Interactive
+Entertainment or Sony PlayStation.
+I work on the compiler tool
+chain for the PlayStation 4,
+and I'm also a member of
+the C++ standards committee.
+And today we're gonna talk
+about object files and
+how linkers implement C++.
+So, you've got your build pipeline
+and you're gonna start
+with some source files.
+Each one of these is a translation unit.
+You've got b.cpp and c.cpp
+and your shared header.
+So the compiler looks at
+each of these in isolation
+and generates an object file.
+Here we've got b.o and c.o.
+So this is just part of your program.
+You've also got a bunch of libraries,
+your C++ standard library,
+C standard library,
+any runtime libraries, any other libraries
+you're gonna link against.
+And it's the linker that takes these
+and converts it into an executable.
+Today, I'm mostly gonna
+focus on right here,
+how the compiler is gonna
+lower from your C++ code
+into the object file and
+what that looks like.
+So what is an object file?
+Object files can be really complicated.
+There's a lot of details
+involved in the ABIs
+and a lot of backwards
+compatibility and cruft.
+Some of these things are
+like 20, 30 years old.
+So, when you come down
+to the highest level,
+an object file consists of three things.
+There are ranges of unsplittable data,
+and these are commonly known as sections
+or in MachO as atoms.
+Then you've got a list of names
+that define or reference these data,
+and these are known as symbols,
+and a list of modifications
+that need to be applied
+to the sections to
+reference these symbols.
+So let's take a quick
+look at an object file.
+So we've got our trusty compiler here,
+and we're gonna compile
+our b.cpp, generate b.o.
+And let's take a look at it.
+What tool are we gonna use?
+Well, let's try cat.
+(audience laughs)
+That's not the most
+useful thing I've seen.
+This actually isn't cat.
+This is vim.
+Cat doesn't actually
+print out that much stuff.
+It's a bunch of spaces.
+But we can see we've got Elf up there,
+some Clang version info,
+and a bunch of strings.
+It actually goes on for much longer.
+This file has not much
+in it, the C++ file,
+but generates a lot of object file.
+So we've got some tools to help us.
+Objdump, nm, livm-readobj,
+these are generic dumpers
+that are in bin utils and LLVM
+that can dump pretty much anything.
+We've also got format specific dumpers,
+readelf, otool, dumpbin,
+and see here, these are the
+three formats I'm gonna cover,
+ELF, MachO, and PECOFF.
+So let's try using one of these tools.
+Go back to our source file.
+And readelf.
+So here, we're passing sSr,
+so that's dumped the sections,
+symbols, and relocations.
+So we're gonna get to what all this means,
+but using these tools is the
+first step to understanding
+what's in your object files.
+Let's start with a really simple example.
+This is about the simplest I could get
+that is still a C or a C++ file
+that is the easiest to link.
+So we've got some assembly here.
+This is a really simple assembly.
+This is the x86 64 Linux
+ABI for calling exit
+and passing a value.
+So you can compile it into an object file.
+We can link that object file,
+and this is the whole link
+step for this example.
+If you actually look at a link,
+like if you pass -v to
+Clang on a normal build,
+your linked link will be a
+thousand bytes long or longer.
+That's including all of
+the standard libraries,
+all the search paths,
+everything that's needed.
+Here, we're just compiling just this file.
+We can run it, and I come
+up with the return value,
+and it's what we asked for
+You could also dump it.
+So here's objdump asking
+for the disassembly and relocations.
+There are no relocations here,
+because we're not
+referencing anything else.
+All we're trying to do
+is run this assembly.
+You can see the assembly.
+It's copied almost exactly,
+except for it converted it to hex.
+And we've got our first thing, a section.
+So this is the text section.
+So let's go into sections
+in a little bit more detail.
+The most important part of
+sections is they're atomic,
+and they can be moved around
+relative to other sections.
+And this is important, because if,
+when the compiler
+compiles your object file,
+you're gonna get your code and data
+and debug info and a
+bunch of other things,
+and they're all gonna be in
+your object file like this,
+and you've got a bunch of object files.
+And if you just try to
+concatenate all those together,
+you'd have a bunch of
+text and a bunch of data,
+bunch of debug, then text, debug, data,
+and that's not very friendly
+for running the code.
+It's difficult for the loader.
+It would be bad.
+So what this actually
+allows is that the linker
+can combine sections
+and group them together.
+And it does this based on
+the name of the section
+and the type of section and some flags.
+And by grouping them together,
+loader can just look at that file,
+can in map it, just map
+that file page into memory,
+and then it's done.
+So let's take a close look at sections.
+Here's the section dumps
+from different tools.
+The main parts of sections,
+every section has a
+name, text in this case,
+has a type.
+So ELF is a little different here.
+The type is just PROGBITS
+for both data and code,
+but MachO and PECOFF has
+a different type for that.
+Got a virtual address.
+Now, we're looking at object files here,
+not executable files.
+So your virtual address
+is just gonna be zero,
+because the compiler doesn't know
+where this is gonna be loaded in memory,
+so it's just gonna stick
+zero there for now.
+Got a file offset.
+The sections are, in the file,
+are actually represented,
+there's a bunch of section headers,
+which are these little
+things all in a table
+that point to big chunks of data
+down later in the object file.
+We've got the size.
+Some flags.
+These flags are gonna be
+your read, write, execute,
+and there's actually a
+couple of other flags.
+And alignment.
+And alignment is important
+because, let's say, you have a string
+which happens to have an odd length.
+And you also have an array of ints.
+And these are both globals.
+And if you just took that,
+the data, the array of ints,
+and stuck it right up at
+the end of the string,
+you would end up with misaligned ints.
+On some (mumbles) systems, that's okay.
+On other systems, that's bad.
+So in order to prevent that,
+we have to know, what's
+the alignment of a section?
+We've also got symbols.
+And in our early example,
+we had one symbol,
+and it was start.
+So a symbol defines or
+references a location.
+And symbols, they've got a value.
+A value is a little weird in symbols,
+because it's not just
+actually it's location.
+The value can also represent
+an absolute virtual address,
+or it can represent the size of things.
+And it depends on its usage
+that determines what the value means.
+And in this case, it's all the offsets.
+Here, they're all zero
+because all of these symbols
+start at the beginning of the section.
+Also, there's a type.
+And the type can influence
+how linking works.
+You'll notice here that COFF
+decided not to get the type
+'cause it doesn't actually
+matter in that case.
+But for otherwise, it's a function.
+It's got a scope.
+This is, what other object files
+and shared libraries and stuff
+can see this function or this symbol?
+So here, it's global, external, global.
+That means that every other
+object file can see it,
+and if we, for instance, had two globals
+with the same name in the
+same link, you'd get an error,
+'cause there can only
+be one definition of it.
+Then you've got a location.
+This the section in which
+the symbol is contained.
+And of course, a name.
+Let's take a closer look at that name.
+So that is actually pretty weird.
+It's got this _Z3ptsv.
+But actually, that's where
+the definition comes from.
+It was just int pts.
+So, there's both the Itanium mangling
+and the Windows mangling.
+I'm just gonna explain
+a little bit about the
+Itanium mangling here.
+You can actually get really deep into it.
+It's kinda complicated.
+But there's a prefix, _Z,
+string length,
+the name,
+and then void 'cause it
+doesn't take any parameters.
+And typically you don't
+wanna look at these directly,
+you'll like cppfilt, but
+if you spent enough time
+staring at a compiler
+and mangling and stuff,
+you kinda just start to see this stuff.
+Let's go back to our
+really simple example.
+What if we wanna call a function?
+So let's refactor our code,
+take out that assembly.
+You might wanna call
+exit from somewhere else.
+And compile it again.
+So Clang, and this time,
+we're gonna pass ffunction-sections,
+'cause I wanna show you
+how separate sections work.
+If I didn't pass this, they'd
+all get in the same section
+and it would be hard to explain.
+So let's dump.
+Same dump.
+Here it looks very similar.
+We've now got our Z4exitv,
+which has the original code,
+and we've also got a
+relocation, this jump.
+So you'll notice that we've
+got a bunch of zeros here.
+This jump instruction right now is saying
+just jump directly after it.
+That's not terribly useful.
+That's not really what we wanna do.
+So the compiler leaves a
+little note to the linker.
+It says replace this offset
+with the value of whatever
+exit happens to be minus four.
+Minus four is just 'cause of
+the way x86 addressing works,
+is that the address in there is
+actually the address of
+the next instruction,
+so you need to subtract the four off.
+So what's a relocation?
+Relocation is, it's
+locations in section data
+that are gonna refer to symbols.
+And there are notes that
+the linker leaves that says,
+hey, you need to go and update this
+once you know the final
+address of everything.
+And you can dump some symbols.
+They've got location.
+In this case, this is gonna
+be the offset in the section.
+As for relocations, storing
+the section they are in,
+each section will have
+a lot of relocations,
+so duplicating that in the
+relocation would be wasteful.
+So instead, you'll have
+each section will have
+a table of relocations.
+You got a type.
+There's tons of types.
+These are all the instruction
+pointer relative relocations
+across ELF, COFF, and MachO.
+And you've got the value,
+and that's the expression that
+this relocation represents.
+So, let's go a bit further
+and say we want an external function.
+We're gonna split our program up
+into multiple translation units.
+And we'll grab this std::_Exit.
+Grabbing this because this
+is the lowest level exit
+that's provided by the standard library.
+It doesn't do any cleanup.
+It pretty much just
+calls the sys call exit.
+Compile this.
+And let's look at the
+symbols and relocations.
+First thing to note is that
+our exit now is undefined.
+It means that this exit symbol
+is not contained in the object file.
+It's gotta look elsewhere.
+And then we still have relocation.
+So we can run it, get the same result.
+Let's go a bit further, and
+let's make a global variable.
+Global variables are
+actually pretty simple.
+You'll compile it again and look at it.
+And additionally to our called exit,
+we've got this new one
+which does have a location.
+It's in section five,
+which happens to be .data.
+It's also got another type, object.
+And we get another relocation into ret.
+And if we dump the section contents,
+we'll see .data, which is section five,
+has these bytes in it.
+Those happen to be that
+same value just in text.
+So we didn't actually have to run
+a global construct or anything.
+The compiler just stuffed
+it into the object file.
+And so so far, all of this
+we're gonna see basically.
+And run it and get the same result.
+Let's go a step further,
+get some real C++.
+We're gonna use a global initializer.
+And we're gonna print out a value.
+(audience laughs)
+Teacup.
+So compile again.
+And try to run it, and nothing happened.
+Where did our output go?
+Well, you notice I've been
+using start, _start, not main.
+A bunch of things happen
+before main, actually.
+And that's while your global
+initialization happens
+and a bunch of setup, TLS.
+So let's actually see what
+this object file looks like
+and how the compiler is trying
+to get the linker to do this.
+So let's dump this.
+So we actually got these new sections.
+We still have our original .text._start,
+which is where the call to std::_Exit is.
+But we've also got
+.text.startup and .init_array
+And .init_array has a
+new type, an array type.
+This is special for the compiler,
+and if we dump that section,
+we'll see that we've got
+eight bytes of zeros.
+That's because that location
+will be replaced by
+this relocation saying,
+stick the absolute address
+of .text.startup plus 20 into there.
+And you'll see what happens in a sec here.
+Yeah, that relocation
+and where it points to.
+So...
+I think this is duplicated.
+Oh, no, no.
+So, yes, if we switch over to
+main, sorry, then it works.
+It prints.
+Except for it didn't print the Unicode,
+'cause, you know, Unicode is hard.
+So let's go take a look at this thing.
+And so we've got our
+section and the relocations.
+And then, your libc is gonna
+have some code like this.
+What this code does is the compiler know,
+or init_array is special.
+It's part of the semantics of our ABI.
+And so it puts init_array_start
+and init_array_end symbols
+into your final executable,
+and then your libc will contain
+some code similar to this.
+And all this does is treats
+it as a function array.
+And because of the way that linker works,
+taking all of the init_array sections,
+they all have the same name,
+so it just concatenates them all.
+And then, at the end, you're
+just left with a list of,
+an array of function pointers.
+It's actually pretty fast to set this up.
+No special processing and weirdness.
+This is a bit more complicated.
+Let's say we wanna refactor again.
+We're gonna have the shared init function.
+We wanna call this everywhere.
+But it's inline, and let's
+just say this is in a header.
+We've partially pre-processed this code,
+but the inline is (mumbles) matter.
+So compile it again, and
+we're gonna dump some stuff.
+So we're gonna look here, and
+this is just the sections.
+And we've got a new flag here,
+this group, or G, which means group.
+And, if we look a bit further,
+we've actually got some
+condot groups, comdat groups.
+What this is saying is that
+the section for the init
+and the relocations for that section
+are part of a group and
+that they go together,
+and that if you drop one,
+you need to drop the other.
+And each group has a group name.
+And I'll explain a bit how
+that processes in the linker.
+We've also got a symbol.
+And this symbol has a new type.
+So instead of global, it's weak.
+A weak symbol, you can
+actually have multiple of them,
+and the linker just chooses one.
+And so
+the way this works is comdat groups.
+And each section can belong to a group.
+And so here we've got,
+they're both in group Z init.
+And when the linker is
+reading in object files,
+it inserts this group name into a table.
+And if it's already seen that group name,
+then it just doesn't load it all.
+It just ignores them.
+It just drops them on the floor.
+So that's actually really fast to process
+instead of having to go back
+and try to match identical
+functions and merge things,
+'cause that gets complicated.
+And this is actually where the
+one definition rule comes in,
+because there's no information
+for which one of these
+from separate object files
+the linker should pick.
+The linker could pick any one of them,
+and your program has to behave the same.
+So that's why
+all your definitions in the
+source code have to be the same.
+And we can actually take
+a look at templates.
+And so we may wanna
+return a different type,
+although int is gonna be the
+only valid thing, basically.
+But from the perspective
+of the compiler and linker,
+this is exactly the same
+except for the name is changed.
+It just has a different mangling.
+That's the only difference.
+So let's make our global
+even more complicated
+and make it inline.
+So C++17 feature, yeah, 17 feature.
+So, you can compile this
+and take a look at it,
+and some new things here.
+We've got the BSS section,
+which is just, and NOBITS,
+which just means that this ret is
+gonna be zero at the beginning.
+So there's no reason to store
+this in the object file,
+and no reason to store it
+in the executable, actually, either.
+This tells the loader
+that when it loads it
+that it just needs to
+allocate lots of zeros.
+Now in this case, it's only four.
+But we've also got this
+weird extra thing, GV.
+This is a guard variable,
+because every object file that
+emits this inline variable
+needs to have the constructor for it.
+You can't actually remove that,
+because this might be going
+into multiple shared objects,
+and the shared object order
+initialization might be weird.
+You might be loading a
+shared object from a thread,
+and so it needs to have
+a separate variable
+that can do atomic, hey,
+have I initialized this yet?
+And we've got weak there,
+so we'll only end up with one of them.
+Now, if we change,
+go back a bit and change
+this to a static function,
+you'll note that there's no
+comdats and it gets local.
+So this is why
+you don't wanna have static
+functions in header files,
+or anonymous namespace scoped
+things in header files,
+because this function will be duplicated
+in every object file,
+and it requires additional
+linker optimizations
+to maybe get rid of them.
+Linking inline functions
+and getting rid of those is much faster
+than hoping the linker
+gets rid of the static.
+So, I'll talk a little
+bit about debug info.
+So, I could give a whole
+talk, multiple days,
+about debug info.
+But the main, there's two
+main debug infos now, formats.
+There's DWARF, which is
+used on ELF and MachO,
+and CodeView/PDB, which is used on PECOFF.
+And so the way debug info works is that
+it's a collection of sections
+that are just mapping
+source code to object code.
+And the compiler emits a ton of data,
+all your types, all your source ranges,
+and sticks them into these sections.
+And it's the linkers
+responsibility to de-duplicate data
+and to provide any indexing
+to help the compiler.
+Now, this can slow down your linker,
+and so there's generally options
+to either enable it or disable it.
+It's a trade off between
+how often you're building
+versus how often you're
+starting your debug.
+Let's take a look at exceptions.
+So here's some beautiful
+code, uses exceptions.
+We've got some external calls
+to make sure that the compiler
+doesn't just totally see that,
+oh, you're not actually
+using the exceptions.
+Nothing bad can happen.
+I'm just gonna remove all the code.
+And exceptions, they're all,
+today, are all table-based
+implementations.
+And the ELF and MachO are
+actually based on DWARF.
+They use some DWARF tables.
+And PECOFF is a totally custom format,
+but they work similarly.
+So we're gonna take a look
+at the ELF implementation.
+And basically, here's what you get.
+So you've got the GCC exception table,
+which actually contains
+the special data for the catch clauses.
+And that is the C++ runtime data
+that's needed to figure out
+which types are being thrown.
+And you've got the .eh_frame,
+which is actually the information
+for how to properly unwind the stack.
+And that is generic, 'cause
+It's shared by languages.
+And then the except table is per language.
+And then you actually bring
+in a whole new library,
+so all these undefined symbols.
+Gotta be able to unwind,
+allocate exceptions,
+catch and throw.
+And this personality thing,
+and that's what checks to see,
+hey, do I need to catch at this block?
+So I'm gonna explain
+how static linking works
+at a very high level.
+There's a lot of details that go into this
+that make our ideal linker
+not actually work that way.
+But you basically have five steps.
+You're gonna read input, resolve symbols,
+layout, write, and apply relocations.
+So, gonna read your input.
+So you open up every
+file in the command line
+and record all the metadata.
+So record the sections,
+symbols, and relocations.
+And for archives or stack libraries,
+you actually just record its symbol table.
+Then, you step in and you
+start resolving symbols.
+So for each symbol, you need to determine
+which symbol is the actual
+primary symbol definition there.
+So you saw we had weak symbols earlier
+for inline and stuff
+like that, and templates.
+It actually needs to choose
+which one of those is gonna
+be the main definition,
+and it just picks one.
+Generally, it's gonna be
+the first one it sees,
+but if you later have a strong
+definition, it'll pick that.
+And at the end, if you've
+seen two strong definitions,
+you need a error, and if you
+haven't seen any definition,
+well, you need the error
+'cause you've got an undefined symbol.
+Then you need to start
+laying out sections.
+So you're gonna group sections
+by the types and flags,
+combine input with the same name prefix,
+and then assign virtual addresses
+while respecting alignment,
+as I was explaining earlier.
+And at this point, you'll know
+the addresses of all your symbols.
+And then you're gonna write your output.
+So this is actually pretty simple.
+You're just, for each input section,
+you've already determined
+where its address is
+gonna be in the output,
+so you just mem copy it basically.
+But after you've done that,
+you're still gonna have these
+references of, like call zero.
+And that's wrong, so you
+need to apply relocations.
+So, for all your input sections,
+you've got to go over them,
+look up the symbols of references,
+and then compute the result
+and write that into the output.
+So you actually write twice.
+So while you're doing all that,
+there's a bunch of linker
+optimizations you can do,
+ICF, or identical code folding,
+relaxation, some others.
+So let's take a look at ICF.
+So, you've got these two functions.
+Let's assume that A and
+B have the same size
+and have trivial constructors.
+This code is probably gonna look the same.
+Without ICF, you'll just
+get two definitions of it,
+and with it, you can merge them.
+So that just looks for identical sections.
+And there's a special bit to this.
+So like the same bytes,
+same type, same flags,
+but not the same
+relocations, not necessarily.
+They need to be equivalent.
+And so you actually look at
+the full relocation graph,
+walk the whole thing,
+make sure that all the sections have
+the same bytes, same type, same flags,
+and equivalent relocations.
+And then if all that works
+out, then you can merge them.
+And the algorithm is
+actually kinda tricky.
+Vroo-ee, one of the Google
+guys that works on LD,
+actually came up with a
+really good algorithm for this
+that beats everyone else.
+It's pretty fun for LD.
+But after you do that, it picks
+one and discards the rest.
+So, relocation relaxation.
+When you actually write a call like this
+and you're generating
+position independent code,
+like you're gonna write
+and you're doing a shared object or a DLL,
+it's actually gonna look like this.
+This is an indirect call
+through the global offset table,
+which I'll get to a bit later,
+but that's basically a table of addresses
+that'll get filled in later.
+Now, if the linker knows
+that this function,
+it actually knows the full address of it,
+it can just convert to nop call foo.
+And you have to insert this nop,
+'cause remember, sections are atomic.
+You can't just cut one in half,
+take out a byte, and
+glue it back together,
+because you might disturb
+all the other offsets.
+Also can do this very similar
+thing with TLS relaxation.
+So there's actually this
+really kinda complicated way
+to get to a TLS, a thread
+local storage variable,
+where it might be anywhere.
+It might be just off a shared object
+initialized somewhere else.
+So you've got to get
+the descriptor for it,
+and then that's actually a bunch of nops,
+and then call get address.
+And if the linker knows that,
+hey, I actually know where
+that global variable is,
+or where that thread local variable is,
+I can actually just convert it into
+grab the TLS address and
+then just compute the offset
+and grab it directly.
+And that actually helps a
+lot in certain circumstances.
+You've also got special sections,
+which are merged sections.
+These are sections that are known to
+basically not have the address
+taken of certain things,
+and these are generally gonna be strings
+and sometimes fixed data.
+And this is actually much simpler than ICF
+because here, the section
+is actually not atomic.
+You can split it up all you want.
+So you can split it up
+and do a unique on them.
+Next thing is garbage collection.
+So, you've got your big libraries.
+You've included Boost,
+although Boost is actually
+really a problem here
+'cause it doesn't have much object code,
+but certain libraries.
+And you're not actually
+using the entire library.
+You're only using parts of it.
+So what's the point in
+including all this code
+in your final executable?
+You've gotta ship that to customers.
+It's bad.
+So what garbage collection will do is,
+first, you gotta find all the roots.
+So, like your start,
+which is actually where the
+entry part of your program is,
+all your global constructors,
+and a ton of other things.
+Then, you just do mark sweep.
+So you mark all the
+sections that are reachable
+and then remove everything
+that's unmarked.
+And then a fun one,
+link time optimization.
+Again, you have,
+there's actually I think been talks here
+about link time optimization.
+But how this actually
+works in the linker is that
+you delay object file generation
+until all inputs are known.
+And you have to do this
+because you actually want to,
+there's additional optimization
+that could happen in the linker
+that is only possible because of,
+you're able to determine
+which symbols are needed externally.
+And so there's this pass that you run,
+which in LLVM is called internalize,
+which tells the optimizer
+that, hey, these symbols,
+no outside code is gonna reference them,
+so you can see everything.
+So all the code you see is
+everything that touches it.
+And this actually allows it to do
+a lot more optimization and
+reasoning about the code.
+So you make them internal, optimize,
+then generate object files,
+and then pass those into the linker again.
+Dynamic linking.
+So, once the static linker is done
+that runs on your dev machine,
+you gotta ship this to somebody
+and they need to load it
+and they need to run it.
+And this is actually
+done by dynamic linking.
+And there's a lot of
+parts to dynamic linking,
+but the core parts are loading
+it, applying relocations,
+and then this thing
+called the PLT/GOT or IAT.
+So to load the binary, your kernel,
+the executable contains
+a bunch of instructions for the loader.
+They're called different
+things in different formats,
+but essentially what it is
+is it tells which bytes of the input image
+need to go where in virtual memory
+and which flags it needs.
+And this is, generally this turns into
+an in map call of the range.
+You've then gotta do
+some dynamic relocations.
+You might have address,
+yes, address based layout randomization,
+or you're loading a shared object
+and so you don't know where it could be
+'cause you don't know
+how many other shared objects there are.
+And so this is for everything
+that can be a cross module reference.
+You need to have these relocations.
+And so they're applied
+after everything is loaded.
+And generally not allowed to
+relocate executable bytes.
+Now, since you're not allowed
+to relocate these executable bytes,
+you need some way to get around that.
+And the way that works is the PLT/GOT
+with the procedure linkage table
+and global offset table
+on ELF systems and MachO
+and the import address table on Windows.
+And all this is, it's
+just a table of addresses,
+so it's basically a function pointer array
+or a pointer array.
+And these are
+relocated sometimes by the
+loader at the very start
+because you have no knowledge
+of when that access is gonna happen,
+but for functions, it can get
+lazy about it, and it can...
+So that's what the procedure
+linkage table is for.
+It'll jump in there if it
+hasn't been called before.
+The loader will go and
+run and find that function
+and store the address
+in the (mumbles) table,
+and then jump there.
+And then all future calls
+will just jump directly
+to the new function.
+That's all I have.
+Any questions?
+No questions?
+Oh, we have a question.
+- [Man In NASA Cap] You were talking
+about template functions,
+non-inline template functions,
+and how it checks that the
+bytes match and everything.
+What if the bytes don't match?
+What if you put an if def
+so that the template function
+is different depending
+which file you were in?
+So you've two template functions
+with the same signature
+and the same names.
+- Okay.
+So the question was, what if you have
+two template functions which
+actually aren't the same?
+So, it can really depend.
+In this example, if it's simple
+and there's nothing else referencing it,
+and depending on certain offsets,
+it can actually just work,
+but it's really dangerous.
+So that's where the one
+definition rule comes in,
+and so it's undefined behavior
+to actually have different
+token arrangements.
+- [Man In NASA Cap] Yeah.
+It'll just pick one at random, right?
+- Yeah.
+But there are cases where this is wrong.
+Like, for example, if the
+debug info might be wrong,
+it might pick a different debug info
+than it picks for that thing,
+so your debug info may be wrong.
+Your exceptions might be
+wrong, which is pretty bad.
+- [Man In Audience] (mumbles)
+format your hard drive
+because it (mumbles)
+- Yeah, exactly.
+It's just gonna format everything.
+- [Man In Audience] So, most of this stuff
+happens once on the build machine,
+but the dynamic linking obviously happens
+every time the program is started.
+What are some best practices
+specifically in C++
+for reducing startup
+time as much as possible
+and keeping the amount of work
+the dynamic linker has to do down?
+- Well, for startup time itself,
+best thing is don't have
+any global constructors.
+But in terms of the
+actual dynamic linking,
+one, a major thing is visibility.
+So if you have everything...
+So by default on Linux,
+everything can be interposed.
+And that means that all
+functions have to go through,
+and all data, has to go
+through these tables.
+If you change to hidden visibility,
+which means that you know that this object
+is not used outside of this module,
+either your executable or
+your library, then the linker
+doesn't actually have to
+generate dynamic relocations.
+It can instead just resolve
+those all at compile time,
+or sorry, at link time,
+at static link time.
+So hidden visibility,
+don't have as many globals.
+And those are really the major things.
+- [Man In Audience] Thank you.
+- [Man In Gray Jacket] So
+just a clarification question.
+You're suggesting not
+to use static functions
+and rather use inline functions, right?
+- Don't use static
+functions in header files.
+If it's in a single
+translation unit, that's fine,
+'cause there's only gonna
+be one of them anyway.
+The problem is that when
+they're in header files,
+then they get duplicated
+into every object file,
+and then you're relying on
+optimization to catch it
+instead of semantics.
+- [Man In Gray Jacket] What
+about class static functions?
+- Class static is completely different,
+because those aren't actually local.
+They are, the static keyword
+is heavily overloaded.
+So yes, yeah.
+- [Man In CppCon Shirt] When can you rely
+on a comparison of function pointers
+when the function pointers
+come from instantiation of templates
+potentially among many
+different object files?
+- The standard guarantees
+you that that's gonna work,
+and it actually does work on Linux.
+There can be problems with the way
+that Windows implements it.
+I don't remember under what circumstances,
+but you can get cases where the
+addresses won't be the same.
+But on Linux, it actually makes sure that
+every object file references the same one.
+And that's how the weak
+symbols help with that,
+because there can only be one definition,
+and they'll all end up with the same one.
+- [Man In CppCon Shirt]
+And it doesn't matter
+whether it is shared objects
+or statically linked from several modules?
+- Nope.
+On Linux GNU systems, it doesn't.
+I'm actually gonna,
+Ree, do you know if that's
+an issue on Windows?
+- [Ree] Yeah, they're
+not gonna be the same.
+- Yeah, so they're not gonna
+be the same on Windows.
+And you actually,
+if you do default visibility
+equals hidden on Linux,
+they also won't be the same.
+- [Man With Ponytail] All right.
+So I've got a question on
+identical function holding.
+So let's say, to keep
+things really simple,
+I'm compiling with O-0,
+and obviously, I've got
+like 50 different vector
+dot sizes in there.
+Those all have to have
+a different address.
+- Yes.
+- [Man With Ponytail] How is that handled?
+- So, the way you actually handle this is
+there are ways to know if
+the address is taken or not.
+LLVM actually has a
+special linkage for this,
+like ODR not taken or address not taken.
+You also can look at
+the relocations that are
+used to get some hints.
+And the last step is you just add a nop.
+So you just have a series
+of nops at the start,
+and so they all have different addresses.
+- [Man With Ponytail] Oh.
+So you're saying function addresses
+are not necessarily aligned?
+'Cause if you're able to jump to a nop--
+- Well, you might have a four byte nop.
+It depends on the processor you're on.
+But yeah.
+- [Man With Ponytail] Thanks.
+- [Man In Audience] I have a problem
+when I link against libraries from Boost
+that my RAM gets filled
+up with a bunch of,
+like 50 variables called ID.
+- 50 variables called?
+- [Man In Audience] ID.
+And these are statics within
+a template function somewhere,
+and I'm not really good at the linker.
+How can I make those go away?
+(audience laughs)
+- So I'm not familiar
+with this exact problem.
+Where are they coming from?
+What C++ construct are they coming from?
+- [Man In Audience] It's
+a templatized function
+with a static pointer in it.
+- So with a function local static?
+- [Man In Audience] Yeah.
+- Okay.
+Well, those all have to be
+different from the language.
+You're not gonna get rid of
+them unless they're not used.
+- [Man In Audience]
+Well, they aren't used.
+- So if they're not used,
+why is the linker...
+Which platform?
+- [Man In Audience] ARM for
+Thumb-2 Cortex microcontrollers.
+- Okay.
+So, it's really gonna depend on the linker
+and if it's allowed to GC it or not.
+I see no immediate reason
+that the linker should
+not be able to GC it,
+especially 'cause you're not using
+shared libraries and stuff.
+This is just a static link?
+- [Man In Audience]
+No, it's a static link.
+- Yeah.
+So the linker should be
+able to remove those.
+I can't tell you why it's not
+without looking more into it.
+- [Man In Audience] Well,
+I have a slight suspicion
+it usually has to do with some
+kind of stringbuf libraries
+where there's somewhere virtual
+functions under the hood
+that it probably can't
+prove can't be called.
+I turn on LTO.
+They don't go away.
+I turn on everything I find.
+They don't go away.
+- Even LTO doesn't get rid of them?
+Hmm.
+I would have to see the specific example.
+But, can the tools help you?
+You could go and look at
+what the symbol linkage is.
+You need to go look at
+the relocation graph.
+There's not really a tool
+that'll just show you
+the relocation graph.
+But if you wanna dig through that,
+you can try and find the relocation
+that's to those that the
+linker can't get rid of.
+- [Man In Audience] Yeah.
+Okay, so I have to learn
+this stuff basically.
+- Yeah.
+- Okay.
+- That would be my suggestion there, yeah.
+(audience laughs)
+- [Man In Brown Jacket]
+Well, on multiple occasions,
+I run into this problem that I defined
+some sort of structure in a cpp file
+and called it, say, foo,
+and then also defined the same
+structure in the unit test,
+the same name, and the
+linker was like just, &quot;Fine.
+&quot;Well, I'm going to link this together.&quot;
+But as soon as run it,
+I obviously get (mumbles) and
+then just completely blew up.
+Do you think it would be
+possible somewhere in the future
+to add some mechanism to warn the user
+that is doing something
+that's going to blow up?
+- So--
+- [Man In Brown Jacket] Or
+is it technically impossible?
+- Well, so I'm surprised that
+you didn't get a link error.
+So, were these structures
+defined local to the function
+or just globally?
+- [Man In Brown Jacket] Well,
+they were globally defined
+both in the cpp files.
+But, well, what I should have done
+was to use anonymous
+namespace, but, well, I didn't.
+- I'm just a bit surprised
+that you didn't get an error from it.
+I would, again, have
+to see the exact code.
+But there is some work being done to,
+and Gold has a bit of
+this, for ODR checking,
+where it'll actually, if two
+things have the same name,
+it'll also actually include,
+I think they implement it
+by including a hash in another table,
+and they'll go and look up there.
+So there is some work being
+done to catch those cases.
+It might not be that exact
+case, but cases similar to that.
+But it does add overhead,
+but there is some work going on there.
+- [Man In Brown Jacket] So
+should I file a bug report
+if this happen again, or?
+- Yeah.
+It's gonna be a feature
+request, well, maybe.
+You could file bug, and
+then with the test case,
+they'll be able to say, &quot;Oh,
+this is actually a problem,&quot;
+or, &quot;No, this is something
+that we need to check for,&quot;
+and we'll add that to our checker.
+- [Man In Brown Jacket]
+All right. Thank you.
+- [Man With Ponytail] So I was wondering
+if you can speak more
+about the parallelization of the LTO step,
+because everybody always says,
+&quot;Compilers can be
+multi-threaded, no, no, no.&quot;
+But then, suddenly you have this step
+where apparently that's not true.
+- So were you at Teresa's
+LTO talk, or Thin LTO talk?
+- [Man With Ponytail] No.
+I'll watch it on YouTube.
+- Yeah, so watch her talk.
+You actually can also
+parallelize monolithic LTO.
+It's just it's hard, like
+parallelizing compilers is hard.
+But we actually do, like
+Google actually does have
+a working parallel implementation.
+It does some tricks of sharding and stuff.
+- [Man In Gray Jacket] Hello.
+I just want to say that the ultimate tool
+to catch all the (mumbles)
+violations is unity build.
+And we need to support that thing.
+(audience laughs)
+It works for everything, yeah.
+- Yeah, that also works. (laughs)
+- [Man In Audience] Unless you have files
+that on their own require
+like 10 gigabytes of
+memory per file, and then--
+- Yeah.
+Stop, stop writing crazy meta programs.
+(man in audience speaking off mic)
+(Michael laughs)
+Okay.
+(man in audience speaking off mic)
+(Michael laughs)
+If that's it, then...
+Oh.
+- [Man In Black Shirt] Question.
+As far as I know, there are
+multiple linkers around there.
+So it's LD, LLD, Gold, as well.
+Can you outline the difference,
+and why would I want to
+use one over another?
+- So, yeah.
+So if you're on Linux,
+you've basically got three options now.
+And LD is pretty old.
+It's gonna have the maximum compatibility,
+and compatibility with all of,
+like every linker script ever written.
+That's gonna be for credibility.
+Gold is gonna be faster than LD
+and is going to have a
+bit lower compatibility.
+There are some things
+that they were just like,
+&quot;No, that's a bad idea.
+&quot;We're not gonna implement that.&quot;
+But it works with pretty much everything,
+and has a few more features.
+LLD is actually generally
+gonna be the fastest.
+It doesn't have...
+It's pretty feature
+complete at this point.
+There will be a few more
+either un-implemented things
+or maybe a few bugs in linker scripts.
+But I would highly
+suggest you try out LLD,
+and hopefully it works for your project.
+- [Man In Black Shirt] Thank you.
+Just to clarify, when you say faster,
+you mean link time performance,
+or runtime performance for application?
+- Link time performance.
+The linker will do some things
+to change runtime performance,
+but at this point, all
+of the linkers implement
+basically all of the
+relaxation strategies.
+LLD is, if you're on ARM,
+like for x86, this is easy,
+but if you're on ARM,
+I don't know if we implement
+all of the best trampoline
+or the thunk generation algorithms.
+There may be a few other issues.
+But the best thing is
+try and see, benchmark.
+- [Man In Black Shirt] Thank you.
+- [Man In Audience]
+(mumbles) one more question?
+- One more.
+- [Man In Audience] Does
+every SO have it's own field?
+- Does every SO?
+- [Man In Audience] Have its own--
+- Oh, shared object, yes.
+Yes, every shared object
+and your main executable
+will have its own PLT
+and global offset table.
+And yeah.
+And so they'll get filled in.
+So if two different SOs
+call the same function,
+then they will both get a
+global offset table entry,
+and they use their own.
+Yes.
+Any other questions?
+Okay.
+(audience applauds)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

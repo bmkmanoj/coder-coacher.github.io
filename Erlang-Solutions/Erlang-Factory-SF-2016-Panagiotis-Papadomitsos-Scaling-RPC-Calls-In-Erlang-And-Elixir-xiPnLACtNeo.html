@@ -1,0 +1,994 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Erlang Factory SF 2016 - Panagiotis Papadomitsos - Scaling RPC Calls In Erlang And Elixir | Coder Coacher - Coaching Coders</title><meta content="Erlang Factory SF 2016 - Panagiotis Papadomitsos - Scaling RPC Calls In Erlang And Elixir - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Erlang Factory SF 2016 - Panagiotis Papadomitsos - Scaling RPC Calls In Erlang And Elixir</b></h2><h5 class="post__date">2016-03-12</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/xiPnLACtNeo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">all right hi everyone thank you for
+staying it's like the last talk of the
+day so takes a lot of courage who here
+has used RPC like explicitly like RPC
+call who has used ere long spawn and
+spawn a process to the remote node you
+it probably works fairly well for you
+guys things start to break when you ship
+a lot of data and that's what I'm going
+to talk about today I'm PJ my actual
+name is really long so you can call me
+PJ I'm a distributed system architect at
+splunk before splunk I used to work at
+bug since we did a lot of air long there
+we still do a lot of our lung our
+infrastructure uses air lung everywhere
+and we're basically receiving 150,000
+requests per second from mobile mobile
+phones all over the world and process
+that data in real time and shipping that
+data within between the nose was a huge
+challenge for us and you'll see why in a
+bit this is the agenda we're going to be
+talking about what happened how we fixed
+it what were the challenges then I'm
+going to show you a bit of elixir code
+and then a pretty good demo that's
+incredibly over-engineered but it's
+still fun all right so let's get into it
+so the problem that we were dealing with
+was very straightforward we have an
+infrastructure consisting of all right
+now it's more than 100 nodes that are
+receiving mobile analytics data if the
+web front end is receiving mobile
+analytics data it's passing it to the
+backhand the backend doing some
+processing and then disseminating that
+data that that basically JSON objects to
+a bunch of different services so there's
+incoming traffic that's getting
+amplified to the backend servers because
+one request from a single mobile device
+can go to a bunch of different services
+for different reasons we used to use RPC
+call to
+you ship the data between nodes what
+made made it interesting wasn't that we
+were just launching or just calling the
+process we're literally shipping
+payloads like ten kilobyte 100 kilobytes
+to mega byte worth of data between nodes
+the traffic never stops twenty-four
+seven hundred thousand requests one
+hundred thousand calls per node there
+the incoming requests are having 250
+thousand requests coming in that get
+amplified and we end up with as many
+hundred thousands of calls per sec per
+node so the problem that we dealt that
+we used to deal with a year ago about
+when we developed a general pc was that
+as soon as we turned the whole new
+system on everything started crashing
+about visually in the mornings which
+were which was when the traffic from the
+phones was greater because everybody
+started using their apps so the notes
+started crashing usually out of memory
+issues well actually not usually always
+out of memory issues we started scaling
+up after some point not nothing worked
+after some point we're like okay there's
+something going on here we cannot like
+infinitely scale up sorry scale out like
+launched more and more and more service
+a the money is going to run out and be
+this is not a way to solve a problem
+there's there must be something breaking
+those systems so we started digging
+around and what we found is that the RPC
+library that you own all know and love
+what basically does is a reagent server
+call to a remote node on a on a named
+process in a remote node and the name
+process is called rex from remote
+execution this is a single gen server
+that's running by default as part of the
+standard library the standard
+distribution on every airline note that
+you launch and it's a single gen server
+you really have to keep that in mind
+it's a single gen server that's
+receiving messages from all over that
+all over the clusters all over the nodes
+in the cluster so we started in Spain
+inspecting and tracing those mailboxes
+and guess what those were the mailboxes
+we were looking for those were the
+mailboxes that were causing the out of
+memory issues and basically destroying
+our infrastructure this is how r ex
+works I'll go over it quickly I'm
+presenting that to you so that you can
+compare it to the other way Jenner pc
+works so a process will do RPC call the
+RPC call will first of all initiate a
+distributor LAN connection to the remote
+node through net journal connect and the
+VMS internals when it's connected and
+the state is established it will
+serialize the RPC request send it
+through the distribution port that's
+very important the distribution port is
+the port through air language changes
+basically everything with every other
+airline node there's a pair of ports for
+every node that's connected to every
+other node there's a actually a port to
+send an important receive these are all
+mapped through EPMD so it was it will
+send the data through the distribution
+port while it's sending the data this is
+incredibly important for you to
+understand right now while it's sending
+the data the port is blocked by it's
+physically blocked because it's actually
+sending data over the TCP channel while
+this data is going through the channel
+the vm cannot send anything else i mean
+it doesn't cannot multiplex like
+heartbeats or amnesia transactions with
+like whatever you're sending over there
+the channel that channel on the other
+side note you will get the request
+deserialize it send it in the in
+reckless mailbox the brakes mailbox this
+was the point of contention here Rex
+mailbox Rex will pull the mailbox
+process the request basically will spawn
+a process outside of the gen server
+because if the probe what we're trying
+to call Miss behaves then it's going to
+crash the rack server suggests sponsor
+process execute what we want the the
+worker process that wreck spawn will
+send the message back to rags and say
+hey that everything is done here's the
+message ok success regs will send it
+back over the distribution channel same
+thing happened here the blah the port is
+blocked while the data is trans it's
+transmitting back you
+the way back is not that big because you
+don't return huge banners you might
+return which binaries you're going to
+face the same problem there the data
+goes back to note one the request is
+realized and the process that was
+calling the function gets the result so
+we started doing experience we're like
+okay maybe RPC call is not appropriate
+maybe we should use cost because it's
+analytics data and it's okay if we drop
+one don't do this at home by the way
+it's not advisable to be okay with
+dropping one but we switch from al
+physical to RPC cast it improved the
+performance of the nodes that we were
+sending that we're sending data but they
+didn't prove their performance of the
+note that we're receiving data that the
+word were the ones that we're having the
+problem you know with a single mailbox
+and all also cast is not stateful enough
+if the node is down if they note hasn't
+been connected it doesn't care we'll
+just say true everything is fine and
+then you'll think that you sent the data
+but you didn't actually so relax this
+there's a single gen server maybe if we
+got rid of that so what we did is we
+switched from RPC call to literally just
+spawning a remote a remote process with
+our payload of data and then just
+waiting for a process to messages back
+like okay I've been spawned correctly
+I'm going to process your data right now
+it's not limited to a single mailbox
+problem solved you would think and we
+had to basically reimplement parts of
+the RPC call because remotes point is
+stateless you just get a PID you don't
+get anything else but that then we hit
+this this is actually not an error
+message it's if you subscribe to system
+events with along system monitor and you
+try to ship big binaries or like big
+data structures over a remote spawn / RP
+saw RPC call over basically the
+distribution port you might get this
+this means that the distribution port is
+busy while you are sending data and
+something guerlain dream tried to do
+something else and it couldn't because
+the port was busy we've actually found
+out through one but the product that
+airline solutions is built
+funny story when we switched to remote
+spawn the nodes were crashing for other
+reasons but they were crashing much more
+frequently they're actually crashing
+more of me that's the Chinese stock
+market but what was happening was that
+because we're blocking the distribution
+port amnesia could not send the kiva
+life message is the transactions
+anything to basically lettin the other
+node the other nodes know that hey I'm
+alive there's no Nets played there's
+nothing going on so the nodes were
+crashing for different reasons but still
+crashing the remote spot architecture I
+put that here in order for you to be
+able to compare with the previous
+solution so the only thing that's
+different from here to versus Jenner a
+versus RPC call is the fact that you
+don't do an RPC call to ship to a gen
+server you directly use the distribution
+channel here to do the spawn do the
+network connect sterilized thread
+through sent through the deep ort port
+is blocked while you're sending data
+voila and then goes back the response
+goes back explicitly from the process
+running on the on the note on the other
+side this didn't scale because we're
+blocking the distribution port so we
+needed to fix that so we fix the first
+problem we remove the mailbox the
+receiving mail box the second problem
+was much harder to fix because we had to
+basically invent a way of shipping data
+outside of the distribution port
+out-of-band as we call and we did we
+named the project Jenner to see and what
+it does basically it uses separate TCP
+connections ergo separate mailboxes for
+each direction that you're making you
+thought that you're selling data so if I
+am no day and you are note B then I'm
+opening a TCP channel to send data over
+to you and you will open a different TCP
+channel to send data to me that those
+are two different mailboxes one to send
+one to receive one to send from me to
+you and one from you to me that performs
+extremely well it also seems it's using
+gently CP and not the distribution
+it doesn't block the VMS disability port
+one of the latest features that have
+been implemented is using a tcp and an
+exclusive disappear easier to listen to
+requests about connections I will get
+into that Valley explained in the
+architecture but using a tcp listener an
+explicit listener to listen for new
+connections we basically got rid of the
+requirement of all the airline nodes
+existing in the same cluster in the same
+subnet or the same insecure network also
+because of the way that the TCP
+connections are implemented you can
+actually cast send data try to send it
+over a synchronously and you will get
+some kind of connection state feedback
+which remote spawn didn't offer so the
+architecture I'm so sorry about the size
+this is that this is the only the only
+way I could present it I will try to
+walk you through so you do as you do RPC
+call you do general physical this will
+perform basically a local named process
+look up over then-no over a process
+named based on the node that you're
+trying to connect so a general pc client
+that is trying to connect to note a will
+be named jerry pc client for node a so
+we know exactly which process to look up
+so it will look up the process if the
+process doesn't exist it will launch it
+and the way that it launches it is it
+will perform a PCP will perform a TCP
+exchange over a predefined port that's
+listening on the other side I think it's
+15 369 I might be wrong it was around
+the port that I just came up with it
+will connect to that port and say by
+serializing run irvine are determined
+turns binary saying ok can you please
+I'm client XYZ can you please launch a
+gen server that I can't connect you and
+send data so the the tcp listener on the
+other side will launch a server it will
+dynamically allocate a port through
+gently see police in zero it will
+dynamically allocate the port get that
+portrayed that port from the server that
+is listening to that port and we
+reported back to the client and say hi
+I've launched in server here's the port
+that you're supposed to connect to the
+client takes that information and
+explicitly connects to that port after
+that the connection is established and
+then whenever you send you do join our
+PC call the grp see jen server the
+general pc client jen server would get
+the messages serialize them over send
+them over the jenti CP port the acceptor
+on the other side would get a message
+deserialize its spawn a processing the
+same way as RPC does spawner process
+process the results center when the
+results are done a message gets passed
+to the gen our PC acceptor the acceptor
+will get the result serialize it send it
+over the channel that is p channel to
+the client and the client to the process
+that was calling it that's more or less
+how its structured some cool stuff as I
+said name product we name every process
+except for their spawn workers name
+process helps you understand hey I have
+these mailbox that's saturated I don't
+know why by doing process info and not
+even tracing process info is much more
+lightweight on the person who is
+debugging right away right right there
+what's going on if you do processes
+where you can see that it's a Jenner pc
+client degeneracy acceptor process
+that's being overloaded with messages as
+i said also uni-directional connections
+with means means i'm sending data to you
+through my own mailbox if you want to
+send data at me not reply explicitly
+send it i initiate the connection you
+open a different tcp channel and the
+last feature that's actually that was
+implemented this week using a tcp server
+instead of distributed along allows
+communication over in secure channels
+the previous implementation of general
+pc 0.9 version 0.9 instead of having an
+explicit tcp server to basically listen
+for requests to launch servers it would
+be the client would basically do a RPC
+call it bare RPC call to the node on the
+other side they say hey can you please
+launch a server and just give you the
+port and the other side will just launch
+it and they reply through proper
+distributed airline channels we got rid
+of that so now that so now you can use
+gin RPC and send data over the Internet
+well no not right now because it's clear
+text is not SSL based that's one of the
+future features we're trying to
+implement but you can you don't have a
+local to local airline nodes dependency
+anymore other duties we spawn processes
+as I told you the way that our PC does
+it we spawn processes so that we don't
+ruin the acceptor service that's
+basically responsible for maintaining
+the TCP connection open all the
+responses that general PC returns are
+compatible with our PC so AB cast true
+which is incredibly inconsistent in the
+way that it returns the response is
+sometimes it's true sometimes it's okay
+sometimes it's app cast yes it's
+completely random and we use a cool
+trick under committed feature called I
+net a sink when you basically listen to
+it a jenti speed socket you can enable
+that feature and you get messages
+whenever there's a connection you don't
+have to block your server you can wait
+for messages from the vm when a new
+connection is initiated performance wise
+our initial RPC simple RPC
+implementation could handle about 50,000
+calls per second per node until the
+mailboxes were stretched saturated is
+not a problem of the performance of the
+rack server is a problem of the
+performance because of the huge payloads
+that we were sending even though there
+were binaries the whole thing was much
+much more heavy to the vm our remote
+Spohn increase the performance before
+bonita started freaking out and just
+crashing and destroying our clusters RPC
+generally she currently handles about
+150,000 calls per second per node
+without being maxed out it's actually
+just hunting these calls all cool and
+breezy
+our nodes are eight core nodes and
+they're about to their load is about 2.0
+so it's they're like it's ridiculous but
+not everything is great there are
+certain shortcomings one is that there's
+a single client and accept your mailbox
+so instead of having a single mailbox
+for every node we have a single mailbox
+per node there's actually a feature I'm
+going to talk about it later there's a
+feature that I was inspired by by the
+airline mailing list that we're gonna
+implement its going to get rid of that
+limitation does not work with anonymous
+functions agarose nodes that doesn't
+work anywhere not even remote spawn not
+even RPC because mostly the vm
+communication when you declare an
+anonymous function and you serialize me
+to ship it over to the other node it
+will ship the metadata the definition
+the actual function body will not be
+shipped that that's why doesn't work I
+don't know what kind of magic well it's
+not magic just probably just proper
+tcp/ip handling of properties VIP
+hunting but distributed airline works
+better are detecting when nodes are down
+junnar pc is not quite there yet we're
+basically leveraging all possible states
+that junk tcp allows us to read to react
+to like disappear or TCP connection
+reset or all these situations but
+sometimes there are no keeper lives
+between the nodes there are no explicit
+keep alive so we could actually
+implement that but there are no
+currently note people apps to probe the
+poor to see if it's open it will fail
+and you will get notified out or you
+might not if there's a weird failure but
+that's inherent to the implementation
+that was good enough for us and if you
+do use calls instead of costs you'll be
+fine and that's it that's all the
+problems we found so far with using
+general pc now to the elixir part when
+we wrote generously I like elixir by
+reading some of the documentation I had
+no idea how to write it I assumed it was
+the same as Erlang it actually is but
+it's a lot more fun so I wrote XR pc as
+an exercise for myself to learn elixir
+to learn
+difference is the intricacies of the new
+language the way that I implemented it
+in the way that I worked with a lecture
+was kind of different so one takeaway is
+developing a lexer code is not the same
+as developer developing airline code
+there are certain differences but mostly
+if you've developed a lot of airline
+code you'll be fine with development
+elixir code if you started with a lexer
+code my personal advice my personal
+personal unsolicited advice is for you
+to learn how to come to the airline fare
+first and then when you go back to
+elixir everything will make more sense
+because it's the the syntax of the
+language and the cymatics are have been
+designed for the vm that vm in mind the
+features of X RPC are we're used to be
+the same as general pc they're not
+anymore because general bc because the
+project was a proof-of-concept like hey
+i can build this in the elixir general
+pc is more feature full right now in in
+version one it's going to become much
+more if you want to use it don't use
+except receive your generous e it works
+great and it's much more performant than
+exer pc cool things are found while
+developing elixir code elixir allows and
+i love that absolutely love that elixir
+allows more concise code instead of
+writing variable equals bad to be
+variable equals bad or pc or variable
+equals error you right verbal in ABC and
+then you can you it's easier on the eye
+it's more concise it's easier to reason
+about you don't need to write
+boilerplate code for jinsha river and
+other gem modules with actually gin
+server and gentlemen Jennifer same there
+is no prox module in elixir so you
+actually have to write boilerplate code
+but it's cool i like the tool select mix
+I kind of like X unit is not as advanced
+as common test but it's getting there
+and it's very easily programmable where
+you can instrument it very nicely to do
+what you want transparent and
+interoperability with other a long
+project that works out of the box I love
+the fact
+it forces you to write specs it forces
+you to write documentation as part of
+your code and it writing documentation
+as part of your code actually makes
+sense because then you can type h and
+your modular you can see the code that
+you've written you get slave nodes we
+actually use slave nodes in the X RPC
+tests to launch a remote node and send
+data and see what happens in the feature
+that used to be true right right now
+it's not up until version 0.9 you could
+use X RPC and Jen are PC between
+erlangen external nodes through a clever
+use of basically the same module in a
+lexer you could use it we had like they
+say they super of the supervision
+modules and the modules that were called
+by Jen our PC we had the same names in
+extra pieces so when you do an RPC call
+you would find the same module and vice
+versa that doesn't really work anymore
+because we move to the disability center
+architecture there are some downsides a
+lot of the things that the elixir offers
+are more powerful than the default
+Erlang bonds list comprehensions come to
+mind they're much more powerful they can
+cast your resulting list into a
+different object they can do a lot of
+cool stuff we get we got some
+performance this is completely random
+dinner pcl that the next slide I'm going
+to explain to you why I mentioning these
+performance issues the biggest problem
+that I I faced while using a lick sir
+were that if you compile and an elixir
+project in a specific airline runtime
+system version it will run only on that
+and that's why that's because elixir
+does feature detection based on the run
+time system that you run it in and
+enables or disables features that
+completely broke my Travis CI builds
+because they build elixir with Erlang 17
+but you can choose a long 18 to run a
+lick sir with and it just all hell broke
+loose so the build the travesty I build
+of XR piece is broken but if you
+actually run the test yourself you'll be
+fine the X you
+not as powerful as common test yet and
+dialyzer you actually have to add the
+plug-in which kind of sucks I hope they
+integrate dialyzer into the intermix a a
+very interesting thing that I ran into
+while building elixir code was that
+magic always comes with the price so
+that's a completely pointless list
+comprehension in in Erlang and it takes
+about one and half seconds but the same
+list comprehension in elixir takes three
+and a half amount of times three and a
+half times the time that it takes the
+airline implementation if you use in a
+min a map which is basically a short
+circuit two lists mapping you get a
+comparable performance this is not
+unexpected because as I told you this
+comprehension is an elixir are much more
+powerful but me things we should there
+should be some engineering effort to
+short circuit for our land-based Erlang
+airline idiomatic patterns of use for
+list comprehensions this is all with
+fury there I have an incredibly
+over-engineered demo for you give me a
+second so this is a terminal I hope it
+oh it's officially big great so I have
+four five different tabs here the first
+four tabs are four different containers
+running xrp see well basically an erlang
+shell that i'm going to show you
+basically the problem how it manifests
+I'm going to show you how it how X RPC
+interoperates with Jen RPC and I'm going
+to run a very fancy integration tests
+using docker in the last cell so I have
+a general pc node here it's a I'm going
+to try and ship sorry I'm going to try
+and ship the
+from one node to the other so let me
+flush all right so okay we have
+connected nodes I don't want to do that
+let's try it again
+all right so I'm going to read it a huge
+file
+and I'm going to try and ship it I'm
+subscribing to the system avenge that I
+told you before and I'm going to try and
+ship it to the other side the tab next
+to it so as you can see i'm doing a
+remote spawn and just running a random
+function is binary for this huge binary
+that i'm sending so now if I flush oh I
+forgot to tell you the VMS have been
+virtually slow down through the traffic
+control tool on linux to show you what
+happens with big packets and slow
+networks or big packets and just normal
+performing networks but they're just big
+so i try to ship this on the other shot
+on the other side we should be seeing
+this message so these measures basically
+is telling us that hey but think that
+you did here is a very bad thing because
+the distribution about port got busy and
+I don't know some things some things
+might break but the vm because the vm
+consider considers a when a very ship
+data over the intra bution channel that
+works as a heartbeat as well so the vm
+doesn't freak out amnesia would freak
+freak out though there you go all right
+on the other side basically it's fine
+yeah it's fine so the message got
+delivered properly imagine this
+happening a thousand times you have a vm
+constantly blocked with data with
+shipping data and the measure would
+freak out other applications that have
+heartbeats or any kind of
+synchronization would break let's see
+what would happen with jen RPC though
+that does the same thing it will run
+this thing on the other side then just
+see what happens its spawning the client
+is trying to connect to the remote node
+we don't we're not getting any messages
+so the vm is not blocked by it so that
+concludes the first scenario the second
+scenario would be for this node and this
+elixir node to basically interoperate so
+you can we can do a general physical to
+this and it should return the other
+notice on the other side right so these
+are all the bad messages is basically
+telling you what's going on under hood
+and we get the other nodes name and we
+can ship data over to elixir in any way
+we want the other side they're like no
+the elixir node got the message we can
+do the same thing and communicate back
+to the airlock node this is incredibly
+pointless I just did it for a proof of
+concept you should always use general pc
+I cannot stress this enough it's under
+heavy development XR pieces just a proof
+of concept and then for the last demo
+I'm going to launch how many nodes you
+want a logical number between one and 10
+5 okay so what this is going to do is
+going to launch five containers
+instrument them to run junnar pc in
+there i'll set the same cookie around
+EPMD and everything and then it will run
+an integration suit that will that
+basically gets all these do not dynamic
+nodes that have been generated and just
+try and make calls to see how the the
+tool performs now we're waiting this is
+new because actually published the
+project in hex about 30 minutes ago oh
+that's awesome it failed I think it's
+probably because I'm running other nodes
+on the other side but actually that's
+also a testament to how the integration
+test works it tried if we can check the
+tests will see that it fell down a multi
+all which means multi call that the way
+that we test multi Cole is we don't use
+any no definition so general pc uses its
+internally defined nodes which are
+different from the airline nodes because
+jen RPC has a node registry based on
+which ever knowed it has explicitly
+connected to which is pretty awesome
+because when you join an airline cluster
+you get a lot of crosstalk basically if
+you join a know that you have the
+disorder connect you join a huge cluster
+so there's a lot of gossip but we
+generally see you only connect to the
+notes that you explicitly want and that
+shows here too I'm going to run this and
+show you exactly what I mean so we have
+no nodes let's do a gen RPC call on the
+other side
+Oh
+ok so if you type nodes no no there's no
+distributed along at work here but if
+you write junnar pc nodes you'll see
+they know that you connected to
+incredibly handy we use it on multi-core
+to do this thing I have some time
+there's the pointer I have some time I
+would like to show you some code
+basically a side-by-side comparison over
+of the gerry bissi called the left side
+is generally see the red side is elixir
+you can see what I wanted to show you is
+basically the fact that while our land
+code is incredibly incredibly verbose
+incredibly verbose lines and lines
+actually this is a god module it has
+like all the functions we should break
+it down lines and lines of code elixirs
+code is much more concise your startling
+you have that using default you can
+define only one scenario of the function
+that you want you use the same semantics
+you use where is you can use everything
+you want specs are enforced dots are in
+place and basically you get the same
+amount of features in much much much
+less lines of code um and that's it
+enough with the demo sorry sorry where's
+the printer ladies and i'm going to show
+you what the future holds basically and
+the future the future are these four
+features after that i don't think
+there's any point in developing anything
+more but we're planning on supporting as
+a cell because that makes sense if you
+want to ship data over the Internet
+including prominent verification so that
+if you connect to remote node the remote
+node will check your certificate and see
+they know that you connect from matches
+your certificate the commenting common
+name that is in your certificate great
+idea from the airline mailing list shard
+connections per node with a key which
+you can use for consistent hashing
+random load balancing sequential load
+balancing anything you want you will
+prep we're planning on implementing just
+not only node separation but also key in
+no separation so it's going to make it
+much more performant for even more so
+higher workloads than what we're dealing
+with here blacklisting and whitelisting
+modules for our PC availability that
+goes hand in hand with this is so module
+if you want to expose your along system
+to a service that consumes and produces
+a long messages
+my not limit what you want to expose out
+of your applications to the these are
+these interfaces and get rid of Jenn TCP
+listen zero muscle because if you want
+to actually use it through corporate
+firewalls and weird security scenarios
+you actually have to have a predefined
+set of ports to use so that they can
+configure the firewall as well that's it
+thank you so much this where you can
+find the packaging using hex p.m. okay
+so go nuts please
+so when you use gently zippy connect you
+might we we get we parse the atom that
+you used as a node we split it we get
+will support long names we split it on
+the apt symbol we get the right side and
+the right side gently speaking supports
+both names like domain names like full
+fqt ends and IPS so that's what we do we
+get that and we connect to that and we
+register based on what the client has
+defined so if you define like gin RPC
+call node 1 and 1 2 3 4 this is this
+gets registered I can actually show you
+if you want we have enough time I'm
+sorry no not at all not in any way that
+that's that's deliberate if that's the
+point we're trying not to interact with
+the tsuba darling we used to a lot of
+the interesting engineering stuff that
+went into general pc was that it was
+using a hybrid approach use RPC calls
+over the standard length distribution to
+do lightweight operations like launch a
+listener connect like sense supervision
+signals and stuff and it was cool but we
+found out that if we use a TCP server we
+can get rid of the distributor line and
+it just makes it more versatile for more
+peculiar scenarios where you have
+limitations like I cannot open up my
+firewall to a bunch of airline notes
+talking to each other yes that was one
+of the shortcomings it only allows one
+node / IP address we can actually it's
+in the to do I'm not really sure there's
+weaker this can actually be fixed if you
+when you define a general gender PC clay
+connect or call or whatever you want you
+can actually define a list in airport so
+you can have multiple nodes with
+different listening reports you can find
+that in your configuration we can do
+that it's like straightforward how many
+people here use multiple airline nodes
+in the same IP address that's fair
+if you're going to do a remote console
+and you don't start generally seen that
+node I don't see the point of not being
+supported the problem with not having
+multiple nodes is basically on the on
+the lesion airport you have a address
+already used connection used or whatever
+so that's that's why that's what it not
+supported but it other than that you can
+launch diagnostic knowledge into
+whatever you want me a second i want to
+show you so
+I think it's because of the container
+it's running in the container in a
+second that's a rebirth rebug by the way
+ok so I'm going to cheat and I'm gonna
+call myself that actually works fine
+half of the test run run like this all
+right
+alright so you can see the processes are
+named here i'm sorry i cannot zoom gin
+or PC I'm sorry there it is so general
+pc acceptor one localhost 127 001 and
+the port jenner pc client so there is a
+slight deliberate inconsistency in the
+way that we named the process is the
+client is gets named with jen RPC client
+and then the node name but the etc and
+the server they don't because we don't
+have the node name on the other side we
+only have the report that was allocated
+and it's kind of pointless to be honest
+we can actually change that I don't see
+the reason right now but it cannot
+actually be changed we can ship the node
+name here so that so this can have
+proper naming for now is just name so
+that you know that this process is this
+application has this process that's
+getting overwhelmed with with messages
+and that's the reason we name the
+processes there is a proper supervision
+tree and everything as you can see here
+are the questions sure go ahead
+mm-hmm no no there is unless your server
+is actually overloaded and dying which
+you actually have them there you have
+workload problems unless your notice
+dying the T&amp;amp;T CP port is completely
+decoupled from the distribution port and
+if there is any slowdown in any of those
+two it will be on the other port as well
+because of the general workload failure
+to schedule properly so no we don't have
+any digit this actually solved our
+skeleton scalability issues this is this
+has been used in production for a year
+no problems at all no random
+disconnections no fool mailboxes
+excellent performance it's going to get
+better because of the of some
+optimizations we did in process handling
+but other than that is working great
+question please no I literally that was
+the point of developing the project was
+to see with no electric magic tricks I
+think the only different thing that I
+used was the fact that the workers on
+the receiving side on the server side
+that are being launched to execute the
+RPC calls that you're doing are being
+supervised so I'm using a task
+supervisor to launch a bunch of
+supervised processes that are one simple
+one for one and they just die when they
+complete the work but it was very very
+straightforward to implement so I use
+that on the general pc coder just air
+long spawn which is neither here nor
+there it would be better if I had like a
+supervisor that would supervise these
+processes but for simplicity I just
+didn't go this way I could be it can be
+retrofitted please
+I'm sorry to repeat the question there
+was that the clapping
+so the question is if there are function
+definition files on the client and the
+server that basically serve as a
+contract right like what you can call
+but you can't know this is right now
+deliberate it's how our pc works they
+you don't predefined what your white
+lease or your black list but we are
+planning on implementing that so that
+you can have the server can have like a
+prop list or a hash or a dict with the
+functions with actually the modules
+exposing functions n modules as well is
+too much granularity in my opinion
+exposing like saying these are the white
+listed modules that I allow general PC
+to execute should be enough and we're
+planning on implementing that yes yeah
+exactly exactly you create an RPC
+usually what we have and this is
+actually in production the way we've
+implemented it is we have an RPC module
+for every application that we have
+called XYZ underscore our PC and we use
+that to interface with the system that's
+that's just best practice questions
+other questions please
+I tried I actually tried looking into
+what made it tick there's a lot of
+hardcore macro expansion parse transform
+core airline work there I kind of gave
+up after a while I realized that it's
+it's expected because the list
+comprehension elixir is much more
+powerful and is implemented differently
+than core than inside the airlink
+language so no but it was very
+interesting to me I realized that while
+researching electric was like why why
+this is happening it's justified but
+it's also surprising to see that a very
+standard language construct not a
+library not a function not a module but
+the language construct in Erlang it
+performs different than they almost
+equivalent language construct in the
+lecture yeah so what's interesting I
+what's interesting to me is that wait
+there it is
+so this is the RPC this is the RPC
+module from OTP from the latest doppio
+TP release and you can see that this
+struck me is very very interesting the
+all the meat of the RPC call function
+that you do is this it does a named call
+to the regs process on the remote node
+so it actually is using by default
+distribution channels it was very
+interesting to me you kind of think that
+the vm does some things differently but
+it's not alien technology most of the
+times just uses standard things and that
+what you're supposed to use to write doc
+putting your own vm code other questions
+no thank you thank you so much for
+staying</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

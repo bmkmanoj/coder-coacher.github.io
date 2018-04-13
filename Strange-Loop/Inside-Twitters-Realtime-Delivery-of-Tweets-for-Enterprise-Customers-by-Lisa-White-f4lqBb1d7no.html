@@ -1,0 +1,976 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>&quot;Inside Twitter's Realtime Delivery of Tweets for Enterprise Customers&quot; by Lisa White | Coder Coacher - Coaching Coders</title><meta content="&quot;Inside Twitter's Realtime Delivery of Tweets for Enterprise Customers&quot; by Lisa White - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Strange-Loop/">Strange Loop</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>&quot;Inside Twitter's Realtime Delivery of Tweets for Enterprise Customers&quot; by Lisa White</b></h2><h5 class="post__date">2017-09-30</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/f4lqBb1d7no" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">good morning my name is Lisa white and
+I'm a software engineer at Twitter and I
+work on our real-time streaming products
+at Twitter we process hundreds of
+millions of tweets per day if you do the
+math out that's thousands of tweets per
+second and we process those in real-time
+without ever missing a single tweet so
+we built an architecture called power
+track and power tracks processes this
+massive amount of data both quickly and
+reliably power track allows our
+customers to create a customizable set
+of tweets so that they can get the
+tweets that are relevant to them and the
+reason that we do this is that for for
+most of our customers handling the
+entire entire firehose of tweets is a
+lot to handle there are a lot of people
+tweeting publicly at any given moment
+and handling all of that in real time
+would be a lot so we allow our customers
+the ability to filter based on the
+tweets that are important to them so
+that they can get the percentage of
+tweets that they care about so we do all
+the heavy lifting so that they can get
+there maybe 1% of the firehose of tweets
+that are important to them so there are
+a couple of different core use cases
+that that you might have heard about one
+would be some resource institutions
+might be looking for data around public
+health so that they can respond
+accordingly there might be different
+customers that are building different
+customer service tools and there we also
+have customers that are looking for
+signals around natural disasters so that
+they can respond accordingly so
+oftentimes our customers will connect to
+our api's and then bill deliver their
+data to their software so that they can
+do further analysis on the raw data that
+we deliver so as a software engineer on
+the product I'm excited to share with
+you the architecture of what we built ok
+so at a high level the power track
+architecture
+has a couple of different things that we
+took into consideration with the design
+the first is how we filter data at scale
+so as I mentioned we're processing
+thousands of tweets at it per second and
+in real-time and so we have to figure
+out how to make this scale and how to be
+able to filter in real-time how we
+ensure data fidelity so many of our
+customers our enterprise customers and
+dropping tweets on the ground is not
+okay so we have to make sure to give
+them all of the tweets we have system
+redundancies because as you know in
+production it's pretty common or not
+pretty common but it happens that things
+go wrong and you can't plan on things
+being perfect all the time so we have
+redundancy in order to ensure that in
+the case that things go wrong we have a
+back-up plan because we're processing in
+real-time we have to figure out how to
+apply customer stream configuration
+changes and then lastly we manage we
+have multiple data centers so we have to
+figure out how to manage the state of
+our customer applications across these
+data centers so at a high level the
+input into the product power track that
+I work on is the public firehose so
+basically all public tweets that are
+happening in real time and ultimately we
+deliver data to our customers and the we
+have a couple layers of our application
+the first of which is a filtering layer
+so this layer allows customers to have
+customizable rule sets so that they can
+filter only on the tweets that are
+important to them and then that passes
+the data along to the streaming layer
+which then does some additional
+processing and also renders the data out
+to the customer and so it gets written
+via HTTP streaming to the to the
+customer and so there they have a
+persistent connection to us so they'll
+connect one time and then they'll stay
+connected for you know maybe days or
+maybe even a week until our next deploy
+so they'll reconnect when we do a deploy
+but or if there's some kind of network
+click but for the most part they're
+staying connected all the time getting
+the tweets as they happen in real time
+and so the customer can manage their
+their rule set that dictates which
+tweets they get through a REST API and
+so this is our rules API and it allows
+them to be able to create rules and
+delete rules and then this thing gets
+applied to the filtering layer in real
+time so the customer doesn't have to
+reconnect in order to get the updated
+rule set which is helpful for them
+because then they don't have to worry
+about missing data during the time that
+they're disconnected but it does it does
+provide a little bit of a challenge for
+us to figure out how to apply those
+configuration changes in real time so
+the first piece that I'd like to dive
+into is the filtering layer and so as I
+mentioned we're processing thousands of
+tweets per second and that's just our
+base volume we also have to be able to
+handle large events like a big sporting
+event like the Super Bowl where a lot of
+people are tweeting more than just our
+base volume and so we have to figure out
+how to make this scale for some
+customers like those who are in the
+financial industry milliseconds matter
+and so we can't deliver the data
+extremely late so I'm going to be
+talking about filtering and how we make
+that scale to all of our customers and
+keep up with the real-time volume okay
+so you might be wondering what I mean by
+a customizable rule set so this is a
+really simple example of a customer rule
+so we have a filtering language that our
+customers use and certain operators that
+they're allowed to use so this rule
+would filter tweets that are from lm/w
+which is my twitter handle and it either
+has mentions or is a retweet so it
+either mentions another user or the
+tweet itself is a retweet of another
+tweet and then there's an implicit and
+between the from lm/w and the next part
+and so essentially this tweet would get
+applied to the customers rules in
+real-time and then as tweets come
+through the firehose tweets that match
+this rule would result in the data that
+they get so this is a quick example of
+two tweets that would match this rule so
+the one on the left you can see that is
+from me it's a tweet that I tweeted
+it also has a mentioned it mentions
+another user whose chewkey so this would
+match that rule the one on the right
+would also match so when we retweet the
+tweet that creates a new tweet so I
+retweeted this tweet from Twitter
+Boulder that's on the right and because
+it's both from me and is a retweet that
+retweet of the original tweet would go
+through the fire hose would go through
+my would go through any stream with this
+rule as well so we do this
+programmatically in real time and this
+is an example of the ast the abstract
+syntax tree of how we programmatically
+would walk through the rule so this one
+is pretty simple so we'd start with the
+and and then we can check whether a
+tweet is from lm/w
+then we can move on to the or and then
+traverse through each of the children of
+the or and check whether it has mentions
+there is a retweet and you might notice
+that there are some optimizations that
+can be made here for example if the
+tweet is not from Ellen W then then the
+whole rule is going to be false we don't
+have to continue over to the or and keep
+traversing through the tree similarly in
+the or if we determine that has mentions
+is true we can just call the whole or
+true and we don't have to keep
+traversing through the tree so this is
+called boolean shirt's short-circuiting
+and this is helpful but it's not that
+helpful so as I mentioned we're
+processing thousands of tweets per
+second and we also have customers that
+have hundreds of South but can't have
+hundreds of thousands of rules in each
+of those rules is most likely a lot more
+complex than this it probably it can
+have up to 2048 characters and we don't
+have a limit to the number of clauses
+that can be in there so these rules can
+get pretty complex in traversing through
+the entire tree of every single one of
+our customer rules for every tweet that
+comes through would be pretty CPU
+intensive so we have a mechanism to be
+able to speed this up and this is where
+predicate indexing comes in so the idea
+behind predicate indexing is that we are
+trying to quickly disqualify rules from
+being matches
+and this limits the number of full
+evaluations which are the tree walks we
+just looked at that we have to do so the
+way that we do this is every customer
+rule is indexed based on the match type
+of the clauses it contains so as an
+example if someone we're looking for the
+term Strange Loop then we would index
+strange and then we could we could also
+index loop and so then those two terms
+would get added into the index and then
+any tweet that matches those would then
+move on to be considered for full
+evaluation and I'll go into more detail
+in a couple slides about how we actually
+go about choosing what gets in the index
+but at its core what predicate indexing
+is trying to do is it's trying to weed
+out rules that wouldn't match anyway so
+essentially we're trying to narrow down
+our rule set so that we don't have to do
+a full evaluation on every single rule
+okay so to put this in other words the
+rule evaluation is broken down into a
+two-step process so when a tweet comes
+through the firehose the first step is
+to check the index and check whether the
+rule matches anything that's that's
+whether the tweet matches any of the
+indices and then if it does then that
+narrows it down to a smaller set of
+rules for which we put through full
+evaluations so as an example let's say
+that a customer has a hundred thousand
+rules then we add each of these rules to
+the index and this might be this is most
+likely more than a hundred thousand
+because we have to have every rule in
+the index but most rule is going to have
+more than one thing indexed because we
+have to make sure that logically if the
+rule is going to evaluate to true the
+index also evaluates to true so we'll
+have more terms in the index and then
+when a tweet comes through we'll
+evaluate the tweet against the index and
+then that will give us a smaller set of
+rules for which we have to do a full
+evaluation so you might be thinking well
+this seems to be over complicating it
+and you're adding in another step but
+actually because the indexing is so much
+checking the index is so
+much faster than doing the full
+evaluation this actually saves a ton of
+time and saves a lot of CPU usage and
+speeds things up and we definitely see
+that in code when we pick a app or index
+and we end up doing a lot more full
+evaluations and we would see system
+issues so the index is is way faster
+than the rule evaluation as I mentioned
+so then we can cut down on the time
+where we're swimming in CPU okay so now
+you may be wondering what we actually
+index and how we choose what we index
+well essentially we're trying to pick
+whatever is least likely to occur and
+the reason that we're trying to choose
+whatever is least likely to occur is
+because we're trying to narrow down the
+number of full evaluations that we have
+to do so if we so if we were to pick
+something that's highly likely then we
+wouldn't be narrowing anything down and
+we would end up doing a lot more full
+evaluations so in this case we have a
+couple of options for what we could
+index on so we could index for an and
+you only have to index one side and that
+is because either one of those being
+false results in the and being false so
+you only need one of them to guarantee
+that the index being true results in it
+being a potential match for the full
+evaluation so in this case we have a
+choice of indexing on from lm/w or
+indexing on the or clause but for an or
+clause you have to index every term in
+there and that's because any one of
+those being true results in the entire
+or being true so for it to actually
+follow logically that if the index is
+true the or if the rule is true the
+index is also true then you need to
+index everything that's in the or so in
+this case we can we could index has
+mentioned and is retweet the the problem
+with indexing those two terms is that
+then when we evaluate a tweet any tweet
+that either has a mentions or is a
+retweet would matter
+the index which is a lot of tweets that
+either have mentions or are retweets so
+we would end up doing a lot of full
+evaluations alternatively we can index
+from lm/w and although I tweet a decent
+amount
+I don't tweet nearly as much as has
+mentioned and is retweet so by indexing
+on from lm/w only we'd be able to cut
+down the amount of full of eight full
+evaluations we have to do by a huge
+amount because we'd only have to do full
+evaluations for the tweets that match
+from lm/w so in essence doing this
+predicate indexing allows us to cut down
+on the number of full evaluations that
+we have to do which are the full tree
+walks and that allows us to save a lot
+of time so this shows you if you're
+following along but in this case we'd
+index from lm/w so this helps a lot and
+it saves a lot of CPU however it's not
+quite enough we are still trying to
+handle all of the rules for all of our
+customers and keep up with all of this
+data in real time so we had to think
+about other ways to scale our filtering
+as well so the next piece that I'm going
+to talk about is more related to the
+architecture so at a high level again
+this is our architecture the input is
+the public firehose of tweets that is
+then moved into a filtering layer where
+the filtering layer filters for our
+customers and then the streaming layer
+renders out and outputs that via is she
+be streaming to the customer okay so
+each of the filter apps or each of the
+filter the filtering layer is broken out
+into different stacks where each stack
+filters for a set of different customers
+so in this example you can see that
+stack one is filtering for customers one
+two and three stack two is filtering for
+four and five etc so this allows us to
+break our customers out into different
+stacks so that as our customer base
+grows we can simply scale the stacks
+with our customer base and we've used
+this in the past when we've just
+grown in our number of customers and had
+to add more stacks we were able to do
+that pretty easily so in addition to
+that each of these stacks is processing
+a full firehose because they're
+filtering for a different customer set
+and each one wants their full set of
+tweets that matches but within each
+stack we have a set of apps as well so
+in step one in this example let's say we
+have three apps so each of those nodes
+would be reading in one third of the
+firehose of tweets and then each of
+those would all be filtering for all of
+the customers one two and three and then
+writing the data down to the streaming
+player so by sharing the load where
+we're allowing ourselves to be able to
+handle big spikes and tweets and things
+like that by sharing it across three
+nodes and the way that we handled this
+technically is by using a messaging cue
+so in Twitter we use a messaging cue
+called event bus and this is a Kafka
+like messaging cue so just a quick show
+of hands does anyone use Kafka before
+okay cool so it's a decent amount of
+people here so so essentially each of
+these stacks would have the same
+subscriber ID as as you'd call it in
+Kafka and by using the same identifier
+each of the nodes within each stack
+would be able to share the full copy of
+the firehose and so stacks 1 2 and 3
+would independently keep track of where
+they're at in the queue so that each one
+gets its own copy whereas the nodes
+within stack 1 I'll share the same
+identifier so that they can keep keep
+their place together and all share the
+same firehose effectively and so one
+thing that this allows us to do is as
+tweet volume changes we can scale our
+stacks up and down similarly as we
+improve filtering in different ways and
+see different kinds of improvements with
+our filtering algorithm then we might
+need less nodes per per stack so we can
+have that ability to be able to adjust
+sit and so we have a dashboard that we
+use to be able to do the stack
+management and to be able to control the
+number of nodes per stack and also how
+many stacks we have and which customers
+are assigned etc so in addition to
+filtering being very important data
+fidelity is also really important to our
+customers so as I mentioned earlier many
+of our customers our enterprise
+customers and data fidelity is extremely
+important to them so making sure that we
+deliver all of the data that matches
+their rule set so the way that we do
+this again is along the same lines of
+using a messaging queue and in Twitter
+that's eventbus so as I mentioned
+between the fire hose and the filtering
+layer we have a messaging queue and in
+addition to that allowing us to be able
+to partition the firehose the other
+advantage is is that it allows data to
+backup so if there's a big load spike
+let's say because of a big event that's
+happening then the data would back up
+into the messaging Q and the filtering
+layer would be able to keep processing
+and then it would catch up as the load
+starts to level out and so it is
+possible that we might get a little bit
+behind in the filtering layer but it's
+more important that we deliver all of
+the data then then it being like
+immediate all the time
+although we do do consistent load tasks
+to ensure that we're able to keep up
+with certain levels of volume but in the
+case of extreme events sometimes it is
+possible that we might get a little bit
+behind so we also have the messaging
+queue between the filtering layer and
+the streaming layer and you'll notice
+here that for each of the three
+customers you see in the diagram
+connected each one of those has their
+own messaging queue and so what this
+allows us to do is the filtering layer
+can publish down to the messaging queue
+for each of the customers but the
+different customers won't affect each
+other so if customer if the customer in
+the middle was backing up it
+wouldn't affect customer 3 being able to
+get their data on time and it all the
+other thing that this allows is if there
+were to be some sort of network flip or
+we do a deploy where the customer gets
+guests it gets disconnected they can
+request backfill and so what this means
+is that we take the pointer from where
+the customer's reading to and instead of
+reading from current we'll go back a
+minute or five minutes or whatever it is
+that they specify and just change the
+pointer in the queue so that they can
+catch up and read the data that they
+missed while they were disconnected so
+by using this technology and having a
+queue per customer we're able to get
+them kind of out-of-the-box
+functionality that for us was pretty
+easy to implement but provides the
+customer a lot of a lot of safeguards
+around making sure that they have data
+fidelity hey so we also use system
+redundancy to deal with failures so
+obviously be great if things always went
+perfect in production but sometimes
+things go wrong so we have redundancy in
+order to deal with those failures ok so
+I'm going to talk a little bit about the
+filtering layer so as we talked about
+the filtering layer is broken up into
+three different stacks which allows us
+to separate out the customers from each
+other and also to be able to scale as
+our customer scale each of those stacks
+has multiple applications which allows
+us to be able to increase a number of
+tweets or change things based on tweet
+volume and then on top of that we have
+all of this basically replicated so we
+have side a and side B where you can see
+that for customers 1 through 8 every
+single one of those customers is both
+inside a and side B so we're filtering
+every single customer twice and for us
+we chose this approach of having two
+different sides because operationally it
+makes it really easy to reason about so
+we know that we can
+a single note on side a and none of the
+customers will be impacted because side
+B is completely up and healthy we could
+actually lose all of side a and
+customers would not be impacted and this
+is really helpful for things like
+deploys because we can deploy side a as
+long as side B is healthy because it
+does take a bit of time for applications
+to come back up once they go down and
+the reason for that is because we have
+to do all of the loading of the rules
+into the index and do all that
+pre-processing in order to optimize the
+rule evaluation so for us filtering
+every customer only once could be
+problematic if a node we're to go down
+because then they could get delayed data
+but by having two sides we make sure
+that the customer is being filtered for
+in real-time at least once and then if
+one node were to have a problem then the
+customer would not be impacted so our
+goal here is to limit any kind of
+customer impact and then in addition to
+that if we do have any kind of
+operational issues let's say on side a
+and it's 2:00 a.m. in the middle of the
+night we don't have to worry about
+putting in a change really really
+quickly and in messing with things and
+making a bigger problem in production
+because we know that we can kind of take
+a deep breath and just kind of move on
+with like a thought-out way of
+approaching it because the customer
+impact is not there they're not being
+impacted because side B is healthy so it
+also just helps with peace of mind and
+being able to make sure that we're
+taking the right approach okay so
+configuration application this is how we
+apply customer configuration in real
+time so as we talked about earlier there
+in addition to the flow of filtering
+customer data they also have a REST API
+where they're able to update their rules
+in real time and this is essentially a
+different product but it's used for
+power track in order to be able to
+update their rules and the way that we
+handle this on the backend is we
+have two different mice equal tables one
+for rules and one for rule updates and
+just to walk through a simple example of
+how this would work let's say they added
+a rule that was from lm/w
+and then they decided my tweets were
+actually pretty boring so they deleted
+that so you can see that the updates
+table is kind of just keeping a log of
+what's being updated while the rules
+table is actually kind of the this it's
+the system of record where we have what
+the state of their rules is at that time
+then they might decide that they're
+interested in learning about hiking and
+then that they want to get tweets from
+Jack so the advantage of us having the
+data stored and these two different
+tables is that each filtering
+application can then subscribe to the
+updates table so that once it has the
+rule set loaded it only has to get
+updates and this is helpful because if a
+customer has 250,000 rules then if they
+make a change we don't want to have to
+reload all of the rules from the rule
+table all we want to do is see what
+changed so by the customer subscribing
+to the updates table they're able to get
+changes in real-time and then they can
+simply just add that rule or remove it
+without having to reload all the rules
+and as I mentioned previously reloading
+the rules is a pretty big task because
+we have to do all that re-indexing of
+the rules and the optimizations so
+reloading the entire rule set is not a
+super simple task and it's much easier
+to simply just apply the updates but we
+still keep the rules table completely up
+to date because that way when a
+filtering application is restarted it
+can simply just reload all of the rules
+from the existing state also for the
+customers to be able to manage their
+rules and be able to get all their rules
+to see what they are so that they can
+make changes to them make sure they
+align with what they have in their
+system and things like that so the rules
+table is the system of record and then
+the updates table allows the filtering
+applications to be able to apply those
+configuration updates in real time
+and then the customer can use this REST
+API where they're creating and deleting
+rules where the customer doesn't even
+have to disconnect and so they're able
+to continue getting data while all this
+is happening in the background so the
+way that we handle this behind the
+scenes is that the filtering
+applications pull for these updates on a
+certain interval so we've explored ways
+of having the the rule updates to be
+pushed to the filter apps but in the
+past this hasn't been quite as reliable
+and we've ended up implementing polling
+anyway so we kind of start with polling
+just so that it can make sure that the
+data matches what it's supposed to match
+but we've talked about in the future
+talking having the updates get pushed to
+the filtering application so that it can
+get applied a little more quickly okay
+so in addition to applying rule update
+configurations in real time we also can
+apply stream configurations in real time
+so we have a dashboard where we can
+basically see the configuration of the
+various sides and stacks and it also
+allows us to look at monitoring
+statistics like what the lag looks like
+when looking at the subscribing to event
+bus whether it's behind for a certain
+stack whether how long things are taking
+to process so how much time it's bending
+on the rule evaluation per stack to see
+if there's a certain problematic
+customer and then based on what we see
+in that dashboard and you know based on
+certain observability or alerts that
+trigger or things that are warnings that
+we see or things like that we can use
+this dashboard to diagnose and then
+mitigate any kind of customer problems
+so one thing that you might have noticed
+looking at this diagram earlier is that
+customers one through eight are both in
+side a and side B but the configuration
+of customers one through eight is
+completely different so stack one on
+side AI is completely different than
+stack one on side B and this is
+intentional and this is to basically
+reduce our cost
+being able to impact each other so each
+of these customers were filtering on
+rules that they uploaded and so we try
+to put all the mechanisms we can in
+place in order to make them not affect
+each other but sometimes there might be
+things that we miss so if customer one
+were able to upload a set of rules that
+ended up to be problematic or let's say
+some tweet started coming through the
+firehose that all of a sudden matched a
+ton of their rules just because of some
+special event that was going on then it
+is possible that stack one could get a
+little bit behind and trying to process
+that data so on side a that would impact
+customers two and three but on side B
+customers two and three are not on the
+same stack as as customer one so
+customers two and three would still
+continue to get their data in real time
+and not be behind because they're
+getting data from side B and so then we
+would be able to go into our dashboard
+once we realize that stack that customer
+one is is problematic and decide to take
+any kind of mitigation so if we we have
+the option of moving a customer to their
+own stack and this is essentially called
+quarantine them we have quarantine
+stacks where they end up on their own
+infrastructure so if they have complex
+rules based on a certain event that's
+happening having their own
+infrastructure gives them the chance to
+catch up while we might work with
+support and figure out how to reach out
+to this customer if their rules need to
+be changed if it's a certain problem
+with their rule or if we need to make a
+code change to be able to optimize for
+their for this case that was that was
+missed so and then it also would make
+the other customers on stack one on side
+a which would be two and three no longer
+be impacted and so essentially these
+stacks would pick up in real-time which
+streams are assigned to them and then we
+can make those changes in the dashboard
+accordingly and this is so this is this
+is helpful for us so the filter apps
+in the same way that they look for rural
+updates they also pull an outside
+application that's kind of managing the
+state of where each of the of what each
+of these workers should be working on
+and then they get back the list of
+customers that they should be
+responsible for so it is possible that
+we might move things around we might
+decide to add additional nodes to
+stack's if the tweet volume starts
+increasing and that's all something that
+gets applied in real time and it's kind
+of unknown to the filter apps they're
+simply just working so for example
+inside a stack one you can see we have
+three filtering applications there and
+if we were to decide to add another one
+let's say tweet volume increase and we
+needed more capacity to be able to
+handle all of the volume then we could
+add another one there so then that one
+would have four filtering applications
+and so then instead of each one getting
+a third of the fire hose each one would
+get a fourth of the fire hose and that's
+something that we would just get kind of
+out of the box just because we're using
+the the messaging queue so each one of
+those is using the same identifier for
+stack one and so just by adding another
+another node that would just all of a
+sudden start getting its portion of the
+data in the same way if a node were to
+go down then well then the ones
+remaining would kind of pick up the
+slack and it would not be affecting of
+the customers getting their data on time
+so state management refers to how we
+manage the state of our customers across
+our different data centers so back to
+the system redundancy we talked about
+how we have two different sides and how
+that allows redundancy so if something
+were to go down on one side it's not
+affected on the other well you can
+basically take that entire diagram and
+then duplicate it again because we also
+have multiple data centers and this is
+really helpful for us in failure
+scenarios but it also is a little bit
+tricky in terms of me
+the state across those data centers so
+one particular example of where this
+becomes a little tricky is customer
+connections so when a customer connects
+to us they connect with a certain
+identifier for their stream and they
+what they will have purchased a certain
+amount of connections so let's say that
+a customer purchased three connections
+that means that they get three redundant
+connections and that could be because
+they are bringing the data into their
+development environment or it could be
+because they want redundancy into their
+system just for extra backup to make
+sure that no tweets are missed if they
+were to get disconnected or things like
+that and the customer has no knowledge
+of which data center they're connected
+to so that's all done by routers on on
+our side so the customer connects and
+then they could be connected to two
+different data centers so we have to be
+able to communicate across those two
+data centers in order to basically make
+sure that we're not cutting them off of
+connections they should be having but
+that were not without that we're also
+not giving them a crazy amount of
+connections that would hurt our system
+so the way that we chose to do this is
+using zookeeper and the reason that we
+chose zookeeper is because when a
+customer connects that then requests
+Elise from zookeeper for that stream ID
+and then zookeeper just returns back
+whether Elise is available or not and so
+this took a lot of the overhead of
+writing the code away from us and one of
+the advantages of this was that the
+leases are ephemeral so unlike if we
+were to put a record into my sequel or
+something like that if a node were to
+just go down then the lease would
+disappear from zookeeper and we'd no
+longer be charging that customer for
+that connection whereas if we were to
+insert a row into a database then we
+would have to figure out some kind of
+cleanup process to make sure that the
+customer is actually still connected and
+that it's not the case that it just
+didn't get cleaned up if a node were to
+go down or something like that
+so using zookeeper and just because by
+its nature the leases
+ephemeral that kind of takes a lot of
+that extra work of figuring out how to
+make the notes heartbeat and things like
+that away and just kind of gets rid of a
+lot of error and we're able to use that
+out-of-the-box technology so in addition
+the we're using a cluster that's shared
+across datacenters so that provides the
+the advantage of it working across
+datacenter okay so for the powertrack
+architecture what we talked about today
+was how we filter at scale so how we
+basically use predicate indexing and how
+we have multiple applications per stack
+to be able to filter data at scale how
+we're filtering thousands of tweets per
+second for our customers hundreds of
+thousands of rules how we ensure data
+fidelity so basically how we use event
+bus or our messaging queue to be able to
+back data up into the messaging queue
+and ensure that data does not get lost
+along the way to our customers how we
+have heard onion C of the two different
+sides to ensure that we're okay in case
+of any kind of failures how we apply
+configuration updates in real time such
+as rural updates or where a stream is
+being filtering from and then lastly how
+we manage the state of our customers
+across different data centers so that's
+the end of my talk and so thanks for
+listening and I'm happy to answering any
+questions if people have them oh so I
+think I heard your question was it's the
+two different sides right to the same
+stream or different streams is that
+correct
+so the two sides right to the same
+stream and what that allows is the
+streaming layer essentially can then
+just read directly from that stream so
+you might be wondering well doesn't that
+end up with duplicate data for the
+customer one thing that I didn't mention
+so thanks for pointing this out is that
+the one
+things that the streaming layer does is
+d dupes so it kind of keeps a rolling
+window of tweets that it looked at in
+the last period of time and then does
+deduplication based off of the tweet ID
+so that we make sure that they don't get
+duplicates but it makes it easier from
+an operational perspective that it's
+only reading from or from one stream
+rather than have to coordinate multiple
+sure so the question was do we have any
+guarantees around fidelity or order and
+so around fidelity we in the case that
+we were to miss any tweets that would be
+considered like a system outage that we
+would work with support to post and
+communicate to customers so I'm not sure
+about like formal SLA s but we do
+consider it a production issue if there
+were to be a case where data were to be
+missing and that's why we have so many
+things in place like the the redundancy
+and multiple data centers and we have
+the messages in the queue in order to
+ensure fidelity another piece related to
+that is the filtering application
+doesn't actually acknowledge that it
+read and processed the event until it
+processes out to the rendering layer so
+it makes sure that the data has actually
+been written out and same thing with the
+rendering layer it doesn't acknowledge
+that it actually read the data until it
+writes that out to the customer stream
+so this makes sure that it that we don't
+lose data if a node were to go down even
+because then another node would pick it
+up because it's never actually been
+acknowledged and then the next part of
+your question can you remind me what
+that was oh yeah yeah so the order is is
+not guaranteed so it's basically
+producing the tweets in real-time as
+quickly as we can get them out yeah okay
+so the question was how do we deal with
+production issues it seems like because
+the system is pretty complicated that it
+would be difficult to kind of nail down
+where they she was and I think because
+we have it broken down into multiple
+different applications it's pretty easy
+for us to see where we've seen issues so
+you know we'll have error counters and
+have that in our monitoring dashboard so
+we'll know if we ever weren't able to
+publish and event and so I mean for the
+most part we get notified of issues in
+our system before a customer would even
+notice or a lot of the time a customer
+doesn't even ever get affected because
+it only happens on one side and not the
+other side and so it's not actually even
+customer impacting so for the most part
+based on what the issue is we're able to
+kind of narrow it down just because we
+have things broken down into discrete
+applications that we monitor separately
+and I'll have different jobs that
+they're responsible for we also have a
+QE team that is constantly streaming
+data and they're making sure that we're
+not missing data from the firehose so
+this is really helpful for us so that we
+can make sure that this is running in
+our staging environment happily before
+we ever push that to production so that
+definitely helps with just kind of peace
+of mind and making sure that things are
+fine and we're not pushing those kinds
+of bugs to production that would result
+in data loss so I think that that we're
+out of time but I'm happy to stick
+around and I'll be around for the rest
+of the conference so if anyone has any
+additional questions I'm happy to talk
+about it so thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

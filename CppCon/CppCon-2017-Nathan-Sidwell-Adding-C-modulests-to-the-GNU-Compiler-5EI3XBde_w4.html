@@ -1,0 +1,1897 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Nathan Sidwell “Adding C++ modules-ts to the GNU Compiler” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Nathan Sidwell “Adding C++ modules-ts to the GNU Compiler” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Nathan Sidwell “Adding C++ modules-ts to the GNU Compiler”</b></h2><h5 class="post__date">2017-11-03</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/5EI3XBde_w4" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">- I'm giving a talk on C++ modules,
+implementing them in the GCC compiler.
+I changed the title of the
+talk because when I had
+G plus plus there, people would say
+is this another language to C++ or not
+and I thought, well,
+okay, right, nevermind.
+I've made that mistake before, so.
+And interesting use of
+modular shipping
+containers in Christchurch.
+So
+yes, right,
+let's get on with,
+I'm gonna, the last time I gave this talk
+was to a Compiler Conference,
+and they were all Compiler nerds
+so we went right into the details
+of the implementation stuff.
+But that's not this audience,
+so I've modified the
+talk a bit and hopefully
+there won't be too much
+scary compiler stuff in
+and you'll get stuff out of this.
+So I'm gonna a bit at what
+the module specification says,
+maybe you all know it, but it's good
+and I'm just like the
+kid who's discovered that
+they've got different money in Canada
+and he was telling everybody
+this exciting fact.
+But we should be all
+grounded in the same place
+and then I'll get on to some of the bits
+inside the Compiler.
+Some interface choices
+and design decisions there
+that are gonna impact users.
+And where I've got to.
+So,
+why modules?
+Why can't we just carry
+on using header files,
+we've used them for 40 years, from C,
+30 years of C++, whatever, anyway.
+And nobody's complained before.
+Yeah, right,
+you know header files
+have gotten much bigger
+than they used to be
+and you know,
+if I get a Compiler bug to fix,
+I'm lucky if I've got half a million lines
+of preprocessed source code that is
+you know, 10 lines of program
+and half a million lines
+of template stuff that's
+all in the header files
+and you know, cut it down.
+But the point is that the
+Compiler has to keep parsing
+this stuff every time you
+include the header file
+in different translation units
+in different combinations.
+It's redoing the same
+work and this takes time.
+And then, nested, you know if
+you include some header file
+it includes the header files that it wants
+and you didn't know that,
+so suddenly, you've suddenly
+imported some other interface
+that you didn't expect.
+And you know, so internal
+details of the libraries leak
+in the header files because
+that's what's in there
+and users are curious
+and might not read the
+documentation and go
+oh there's this function I
+can call, I shall call it,
+'cause they've got the header
+file and then the library
+has a problem reorganizing
+itself because suddenly
+some important user is
+using an internal library,
+so it would be nice if we
+could stop them doing that.
+Library writers also have
+to protect themselves
+from unexpected argument dependent lookup
+because they might have
+bits in their template
+machine ability that they
+don't want the ADL to happen.
+And that's apparently an exciting
+thing for library writers.
+Where have we got?
+Oh yeah, we have this thing
+called Duck typing where,
+if you think about the header file,
+it's defining some class,
+and we include that
+in two different compilations,
+those compiled compilations
+are compiling different sources
+but the spelling of the
+class is exactly the same
+so it looks like you're
+ducking both of them
+so we declare it the same duck.
+But then
+actually you don't,
+often you don't, this is a
+no-diagnostic required kind of
+a thing and headers sometimes cheat and
+sometimes don't actually
+declare exactly the same thing.
+So they're kind of different
+but they sort of work probably, and.
+So, let's not do that, let's have modules.
+And we'll have better encapsulation,
+so the module can say these are the things
+that you can use from me and
+these are the only things
+you can use from me
+and you can't see the other bits of me
+that are my internals.
+And better, so we get better consistency
+with you know, with the
+class definition thing,
+if you've importing a,
+if you're using a module
+that's defining a class,
+you end up actually slurping
+in the same bits that the
+Compiler put out at some point
+and so you've got the actual same thing
+and it's guaranteed to be the same in both
+translation units and what not.
+And all that header parsing
+and template parsing
+and the header files takes a lot of time.
+C++ is not a LALR1 grammar.
+That's a Compiler term for meaning
+I can just look at the
+next token and figure out
+what I need to do.
+C++ requires unbounded backtracking
+because some of the parses are complicated
+and you don't know
+until you get to thing,
+you can get to the end
+of an expression and go
+oh hang on, this isn't a declaration.
+And it's, Louis pointed
+this out in his talk earlier
+about unexpected,
+recurring bugs that
+turn up in source code.
+And one of them is most vexing parse
+and perhaps the horrible
+one in the grammar.
+Okay, alright, so,
+some syntax of what modules looks like.
+You know,
+simple idea is that
+you import an interface
+and somebody's written that interface
+that defines what the module is
+and then the module
+author goes and provides
+implementation of that
+interface and you go and
+see the implementation accept
+through the interface bits.
+And here's an example.
+So this some user of module, of a module
+and it's using, importing Foo,
+I want to use bits in Foo module,
+and I want to use bits from the Bar module
+and then I can just
+call functions that are
+exported from these things
+that they've made visible.
+Now you'll notice I
+haven't said Foo colon,
+colon some Foo function.
+This name here is
+orthogonal to namespaces.
+So you still really want to
+put the stuff in some kind of
+sensible name space so
+you have that name space
+isolation that you have
+now with good model code.
+So that problem is still a
+thing that has to be addressed
+in your module.
+Okay, so
+how does this Foo module
+make stuff visible?
+It's got an interface.
+All the interface file is is
+a regular Translation Unit.
+It's a regular source file
+that produces an object file,
+with bits in it and functions that
+can be called and what not,
+but it also declares exports.
+So here's an example, and it's using the
+newer syntax of saying it's
+the thing that exports.
+So it's the only place where you see
+export keyword happening.
+So I'm the Foo module
+and I'm exporting stuff.
+And this is a function, see
+it's a regular function,
+it's not an inline function
+that you'd see in a header file.
+If this was in a header
+file, I'd have to say inline
+there or template
+instantiation or whatever.
+But I'm making it visible
+to importers of this module.
+They can see this function
+FooVersion and it returns
+and it's very exciting.
+I've got an accumulator
+variable and again,
+here I haven't said extern int ACC.
+I've just gone there's this is variable,
+I'm initializing it to zero
+in this interface file.
+So there's gonna be some bits,
+but I haven't got export in front of it.
+So people that, users,
+importers of this module
+will not see the accumulator.
+That's some kind of
+internal implementation
+detail that I'm gonna use for myself and
+not visible to users.
+Here's some other bits that I've got,
+I've got a function,
+non-export int function,
+so that's only visible to
+the, within the module.
+And I haven't got a definition of it here
+'cause I'm gonna define it somewhere else.
+Export class, so I'm gonna
+export a whole class,
+I'm gonna export a lot of members of this,
+all those members will
+be visible to importers
+but of course, we've still
+got public and private and
+protected access specifiers so
+whether they can actually use
+all those members is still the same.
+And some internal Helper
+class, which again,
+not visible elsewhere.
+And I wrapped it all up in a namespace.
+Other implement, other
+modules may use the same
+namespace as Foo, that won't be a problem
+unless they end up doing
+things that collide with,
+in ways that I won't get onto.
+Okay, right, implementation.
+So the implementation units of a module
+are regular Translation
+Units in the normal way.
+They just provide definitions of classes,
+functions and classes and what not
+and variables and things
+that you need in a library
+and in the way that we
+still, we need them already.
+There may not be any
+other implementation units
+other than the interface itself.
+That will be a very simple module
+where the entire implementation
+is in the interface file.
+But probably there are going
+to be several of these things
+for any particular module.
+And here's an example.
+So going back to that
+example that I just had.
+This is an implementation
+of Foo and it's providing
+the definition of this frob function.
+And you'll notice I haven't
+declared frob explicitly,
+I've just gone there's
+a frob in this namespace
+and that's, the reason
+that works is because
+the module interface I've seen,
+the Compiler's read stuff
+in from the interface
+to make these things, so
+it knows about the things
+I had in the interface
+in this translation unit.
+I'm just using this accumulator,
+didn't have to declare it,
+'cause it was already
+declared in the interface.
+Add something to it and return the value.
+Then another bit of it,
+another piece of the interface,
+different translation unit,
+just defines the Frobber widget,
+the Frobber member of the widget class,
+and calls the frob function,
+which is this function up here,
+and again, nothing
+that's actually that new
+to be explicitly declared.
+'Cause it will already be declared
+once in the interface file.
+Um, yeah.
+So this is the bit where
+we can pretend to be spies
+and do vaguely defined
+import export business.
+So, modules
+export, can import to other modules.
+So not only user code imports modules,
+but modules themselves
+can import another module,
+so you've got dependencies.
+And I'm reusing,
+I'm reusing me names, so sue me.
+Import Baz, I'm gonna import
+Baz and use that internally
+inside the definite inside
+the implementation of
+the Foo module.
+That import, the stuff that
+that makes visible to me
+is not gonna be visible to importers of
+Foo because I haven't exported it.
+But if you stick the export
+keyword in front of a thing,
+it exports it, so now the Bar module,
+clearly the design decision here was
+that users of Foo would need a Bar so
+re-export it so when you
+import Bar, import Foo,
+you're implicitly importing
+Bar and you get this
+dependency graph, it's a graph count,
+it'll have loops in it.
+And Alastair's got a question.
+- [Alastair] Is that export the dependency
+on bar, or is it exporting the
+contents of Bar?
+- It's making the contents Bar visible.
+So the question, you know, yeah,
+is just naming a dependency
+or actually make,
+but it's not, it's making,
+it's making the contents
+of Bar visible to
+importers of Foo.
+So they'll just say import
+Bar and then immediately
+as if they've just said import,
+and therefore if they import Foo,
+and see the contents of the bar,
+as if they themselves have
+said import Bar directly, yeah.
+And there's another question there.
+- [Attendee] So Foo wants to use Bar, then
+do you have to import Bar?
+- No. So the question was, you know, does,
+if Foo itself wants to use Bar,
+does it have to say import
+Bar, export import Bar?
+No. Export import Bar
+is implicitly the same
+as saying import Bar, export import Bar.
+And another thing about
+this is, is that if you
+import the same thing in multiple places,
+it only actually happens once
+and visibility might change.
+But I could say import Bar, import Baz,
+import Baz further down here
+and that would second Baz
+would have no effect.
+And I think there's another hand, no.
+Yeah, okay.
+- [Attendee] I wanted to ask if this is
+the same strategy as if
+you've have it include,
+it include something else?
+- Right.
+- [Attendee] Are we supposed to import
+what we use directly?
+- Right, okay, this is,
+should you rely on, should
+you implicitly rely on,
+if I want to Foo
+and
+I get Baz this way,
+should I implicitly import
+Baz myself if I wanted it?
+Well, this is, Bar, Foo here
+is exported Bar for a reason.
+It will have documented why, yeah.
+So, but the problem that we
+get with header file pollution
+is that if
+in this, the header
+file equivalent to this
+I would have to said hash
+import Baz and hash import,
+hash include Baz and hash include Bar.
+And I've made the contents of Baz visible
+to everything that hash includes,
+even though I didn't want to do that,
+because I only needed
+Baz for my internals.
+And that's the problem this
+is kind of solving, okay?
+- [Attendee] But I'm just trying to say
+what you said at the
+end so if I have a Baz,
+and I have a point, if Baz is public,
+but internally the Baz is represented.
+- By two points.
+- [Attendee] By, exactly.
+Bt now what I'm saying is,
+I don't want to people
+to make their own points.
+I want them to make the
+bots, but not points.
+- Right.
+- [Attendee] So in that
+case I would not export int.
+- Okay.
+- [Attendee] I would export Baz.
+- You would export the stuff,
+you would export for your box class
+but you wouldn't re-export
+the thing that was defining,
+if you defined your
+point of class in your,
+in your interface, you
+would not export it.
+It would be like that
+helper class that I had.
+Because you may have problems
+with people trying to
+create boxes out of not points,
+but that's not the point
+of the question, okay?
+Right, so this dependency
+graph can't have loops in it.
+And I think that was about it for there.
+It's, you can't end up building it.
+We'll probably get into that.
+I'm gonna run out of
+time if we just stop for
+questions at this point.
+I didn't, this is a bit,
+well I did expand because
+at the Compiler Conference,
+I just did that,
+did much less than that,
+and then talked about the pilot and
+then people came up and
+asked and I ran a bot
+for I asked a few grand in questions
+and being Compiler writers they went,
+yeah what about this horrible
+caller case over here,
+what about this horrible
+caller case over here,
+so, don't do that too much.
+Alright, so, so this
+might answer the question
+that you were trying to raise there.
+So here's a picture of
+how things hold together
+and this, we're gonna start
+off with a header file version.
+We've got a library, we've got some inter,
+it's got some source files,
+they get compiled into
+objects files and turned
+into a library archive.
+I've got a user source that
+compiles into a user object
+and linked together then
+you get an executable.
+But there's a bit missing
+from this picture,
+which is that bit, okay.
+In addition to having
+the Foo live resources,
+we've got this Foo dot H header
+which we hash include here
+and we hash include there
+and the Compiler goes
+oh I've got to hash include something,
+it goes down a search
+path, and finds it and then
+incorporates it during the
+compilation and off we go.
+So this picture now changes with modules,
+here's the, rather than
+the Foo header file
+we have a Foo interface file which is just
+a regular source file.
+Get a Foo object out of it,
+added it into the archive
+and off you go there.
+But the point was we wanted to
+get rid of this header file,
+so that's go, that go away.
+So how do all these linked bits here,
+this bit here and these bits here,
+know what was in here?
+We end up with this new thing called
+a Binary Module Interface.
+So
+that's some artifact of this,
+of compiling this interface,
+not only do we get an object file,
+I now get this other artifact that's new
+and that's incorporated
+into the compilations
+of the things that do the importing
+or the things that do the implementing.
+And now I've put it as
+a separate file here,
+right, because that happens
+to be how I'm doing that.
+It's an implementation choice,
+it doesn't have to be a separate file.
+It could be, for instance,
+incorporated into the object file
+in some way or it could
+actually be another stage
+of the compilation, so at the
+moment we can't compile it,
+formally go through,
+you know, source code,
+pre-process code, assembly
+code, object code and
+compilers have relied in
+various cases in that.
+And this can't be another
+step in that compilation
+progress that is a new one.
+But that doesn't change the
+concept that's going on here.
+And there was a question.
+- [Attendee] Does that mean we can know
+what parallels the?
+- Ah, okay, right, a question
+about parallel build stuff,
+I'm gonna get to that,
+you've seen an issue there,
+yeah you.
+Okay, so now I'm gonna
+dive into compiler stuff.
+And you know, if you don't
+like compilers, tune out now,
+or don't want to know.
+If you want to know how, what's going on
+inside the compilers then this is the bit.
+So GCC,
+GCC used to be called,
+the GCC used to be GNU C Compiler
+but now it's the GNU
+Compiler Collection because
+there are more than one language.
+So GCC is an overload determiner,
+GCC is the thing you type if
+you want to compile C Code,
+G++ is the thing you type if
+you want to compile C++ Code,
+and the difference is library selection.
+Anyway, yeah, so open source software,
+you can go and download
+it, build it yourself,
+you know play with it, whatever.
+Most people don't do that because
+building compilers is hard
+and use the one they're given.
+A whole bunch of different developers and
+generally specializing in
+different areas of the Compiler,
+I happen to have specialized
+in the C++ front end,
+because that's what I've been doing
+for about 20 years or so.
+And oh right, development versions.
+So there's a source tree somewhere in a
+version control system and the name,
+the numbering scheme
+we've now converged on
+is that the development trunk is called
+version N point zero for some N,
+at the moment, N is eight.
+So 8.0 is the development trunk.
+This changed at 4.9
+because at 4.9 we thought
+what's the next version,
+is it gonna be 4.10,
+or is it gonna be 5.0,
+and if it's not 5.0 when
+is it ever gonna be 5.0,
+so we just decided to just
+move all the version numbering
+on, on, move the point down one place
+and so after 4.9 you've got 5.1
+and then no user had
+use a point zero version
+and everybody was happy.
+And it's unambiguous, now,
+whether it was the in development
+version was point zero,
+or a released version.
+Generally aim for stable
+releases every spring,
+so around December time,
+things start getting
+slushy and freezing and new
+features can't really get in
+between the team, during
+that stabilization time.
+And the version in spring will
+be 8.1, next spring, okay.
+And then I think the current
+version is like 7.2 or
+point three, a few point releases after,
+because bugs happen.
+Anyway, so, feature development,
+small features will go directly on trunk.
+For instance some C++ 20
+features are going in like
+Yacob just committed
+the bit field initializer
+thing that happened, we
+found a bug in the parser
+that it wasn't being
+strictly correct and
+nobody had ever noticed.
+Anyway so this stuff is
+much more complicated than a
+small feature, it's
+gonna take a while to do,
+so I'm doing it on a development branch.
+And it's in an SVN
+system, because reasons.
+There you go.
+And there's a wiki page as well
+which I update when I remember.
+So,
+things that change is
+namespace lookup changes.
+What you see when you look in
+a namespace is now different.
+You see the things that are declared
+in the current translation unit,
+but you also see the names that
+were exported by the things
+that you've imported either
+directly or indirectly
+through the export
+import syntax and stuff.
+And module implementations
+also see the stuff
+from their interface module that that made
+available to the module.
+So okay, stuffs gotta change
+and being a lazy person
+I figured well, what's the simplest way
+of getting this to work and my idea
+was, hmm, inline namespaces.
+Contents of an inline
+namespace, looks a bit like
+the containing like, they think
+that it is a member of
+the containing namespace
+and maybe I can do something there.
+So you'd have something like this,
+where in my module linkage,
+I put them inside some
+un-spellable namespace,
+not very un-spellable
+but, proof of concept,
+so that's that thing that's
+only visible within the module,
+the accumulator and
+things that are exported,
+I have some slightly different namespace
+and that's the thing that's,
+the thing that's one more,
+I have changed my example.
+Okay, this is now
+exported, in this example,
+and it's sort of one level deep
+and I ran this by the
+other C++ maintainer,
+and he said yeah, that's not insane,
+so I thought great, I'll go there.
+Now inline namespace is
+clearly not going to give
+entire functionality because
+you're going to have to
+turn these on and off
+depending on what imports
+are being visible from where
+you're doing your lookup.
+So,
+internal compiler
+magic will have to
+adjust the availability.
+Now so you plan this,
+and then magic happens,
+you know how well it's going to turn out.
+It actually turned out surprisingly well.
+Because, and it allowed me
+focus on the other big bit
+of stuff I had to get working
+before any of this worked.
+So it was a very useful stepping stone,
+but,
+yeah, magic happens
+near a big cloud of doubt.
+So what I ended up having
+to do at this point
+was dive into the namespace lookup code
+in the compiler, which the
+compiler was originally
+a C compiler, Michael
+Tiemann cloned the source
+and then started hacking
+on it and turning it
+into a C++ Compiler and
+this happened incrementally
+as C++ was being developed,
+so originally there
+weren't new namespaces.
+And then there were like two namespaces,
+global and standard, and then
+there were more namespaces
+and stuff like that, so
+these got incremented
+over the last 20 years
+as new features added and
+after this time you end up
+in a very strange place.
+So I could either work
+around this strangeness
+and try and understand it,
+or I could spend the
+effort on actually making
+the strangeness go away,
+which is what I did.
+So,
+you know,
+it was full of N squared
+algorithms and N was
+it started off small, now N is really,
+people use namespaces all
+over the place, for instance.
+And I was gonna make N space, N very big,
+so I was concerned.
+So anyway, all that stuff has gone away.
+And it's goodness in it's own right,
+so that's actually on trunk and will be
+in 8.1 so look up should be faster.
+I also did it with classes, it was classes
+were objects that were quite
+convinced that member functions
+and member non-functions were
+completely different things
+and looked after them
+differently in a stupid way
+and I had to look twice and ugh.
+And so that's in trunk,
+and that last patch on that that I put in,
+made something like a
+three or four per cent
+parsing speed improvement
+and template instantiation
+improvement just from using, you know,
+one binary search rather
+than two binary searches.
+That kind of stuff.
+And so that's all niceness,
+and then I could start
+working on the module lookup.
+Which I did, so internally
+in the compiler,
+we mapped the module names onto integers,
+so there's an array of
+these things and we can put
+this integer in the
+declaration objects that are
+looking after your functions and stuff
+and fortunately I had some
+spare bits in the declarations
+to put this index so I
+didn't have to put them,
+make them in the data objects
+in the Compiler any bigger, hooray.
+And per module we have
+a map of, a bitmap of
+the things that this module imported,
+and another bitmap of the things that
+this bitmap is re-exporting.
+And when I'm importing,
+when I'm doing lookup,
+I need to look at this
+imported map to know
+which symbols are visible
+in this namespace,
+in this module.
+And this is the thing that when I,
+when something imports this module,
+it gets this whole bitmap
+of stuff added into it.
+And for simplicity,
+modules import and export themselves.
+Okay, yes, so names are
+bound to more than one thing.
+So in a namespace, there
+still ends up only being one
+namespace object and the name there,
+it's got a hash table in it
+that maps onto the things
+that it's bound to and in non-module stuff
+that thing would be a type
+deaf, or a type of class,
+or an overload set or something like that,
+it'd be one thing, effectively.
+But now names can be
+bound in more than one,
+to different things in different modules,
+so we end up with this mad hash bitmap,
+and this map gives you the sparse array
+and the contents of the sparse array are
+in for each module, actually
+binds it to something,
+will have in a slot in that
+array and then this bitmap
+tells you which of those slots you
+start concatenating together.
+Okay.
+Right, so that's name lookup.
+Right, binary representation.
+Yeah.
+So, interface unit produces this green box
+that I had in the other picture
+that's then slurped in by the importers
+and the module implementations.
+What is this thing?
+Well, A, it's not a
+re-distributable artifact.
+There's no intent of this,
+of binary module interfaces
+being things that
+people deliver to customers in
+the same way that they might
+deliver object code or a library archive
+and a header file.
+The distribution mechanism
+is still gonna be
+the source code of the interface units.
+And I'm locked, at the
+moment it's got some
+version numbering
+information I'm locking that
+to the modification of
+the source of the Compiler
+'cause it's so unstable and
+if it doesn't shout at me
+I'm just gonna get very
+confused at times when I've
+fed it a BMI that came
+out of a different build
+of a Compiler.
+And I understand that Jonathan
+is doing a similar thing
+with his Compiler for
+exactly the same reasons.
+Anyway, so what format should this be?
+Well, GCC has already got
+link time optimization.
+Link time optimization is
+when we compile the program
+into an internal representation
+and squirt that out to
+a disc and then the linker
+concatenates all this stuff
+together and re-invokes
+the Compiler and says,
+yeah, go nuts now, you've
+got the whole program.
+So that's reading and writing
+internal representation
+of the program, maybe I can use that?
+Yeah, no, life is not like that.
+The LTO is for optimization
+and it's squirting out
+the low level GIMP
+representation of the program,
+which is an unnecessary notation
+you don't need to know about
+but it's a low level thing
+that's good for optimization.
+And I need to squirt out
+effectively the high level
+front end representation of the program,
+so that code's useless to me.
+And for types, although the
+GIMP, the optimizers need
+to know about types, they
+only really care about
+INTs and record layouts
+and they don't care about
+anything else whereas I
+need to have the front end
+representation of types with template-ness
+and all that stuff, you
+know, visibile accesses,
+public and private and what not.
+So that doesn't really work.
+So, I had to write my
+own streamer for this
+to stream out the Abstract Syntax Tree
+and I'm just using a very simple
+tag contents notation.
+Hand written parser,
+it's not using any of the
+garbage collection machinery
+or the PCH machinery
+in the Compiler, we're not going there.
+And I implicitly numbered these nodes
+because this AST is an arbitrary graph,
+it's gonna have loops in it
+and I need to know back references,
+so I implicitly number these
+as they stream them out
+so you only have to do it one parse.
+It's like lisp pretty printing,
+but in one single pass thing.
+And then some of these tags are then,
+you know, if they're not
+in the range of numbers
+for back reference, then they're gonna be
+an actual contents and have contents
+and I have special markers
+for what the target is
+so you don't mix versions
+of your Compilers,
+saying squirt out a
+thing for an arm target
+and then read it and try to compile X86
+'cause that's not gonna work.
+Bits of the ABI get embedded in this
+'cause for instance, size T,
+and you may have 32 and 64 bit variance
+of your architecture.
+So you should think of this file actually
+as a caching artifact.
+That's what it really is.
+There's import tables and stuff.
+Cross-module references,
+so one module imports
+but uses names in another module,
+I don't stream out the other module,
+I stream out the name of that thing
+and some context so that
+it can then do a lookup
+in the symbol table of the other module.
+There's some special cases
+for, yeah tagged-types.
+Inside a Compiler, you've
+got, for a class for instance,
+you'll have an object that
+represents the type-ness of it
+and an object that represents
+the decal-ness of it.
+And they point to each other.
+And when you're parsing a type hierarchy,
+you find they type-y thing first,
+but the thing you want to
+look up is the decal-y thing
+'cause that has a name, so
+there's an ordering problem
+and just have some special
+tags to manage that.
+Oh and synthesized objects
+like type info objects.
+I don't stream out the type info object,
+I stream out tag and the type
+and it re-synthesizes it on import.
+So, application binary
+interface, oh right, yeah.
+So now this is, this is the
+bit that hits object files.
+And we've got,
+we have this new concept here that,
+of a name that's only
+visible within a module,
+and it's cross-translation
+units of the module.
+So this is a new kind of linkage
+and this is the language I've returned,
+external linkage and module linkage.
+External linkage, we've had that,
+that's like things are explicitly external
+or explicitly extern or not static.
+But this is a new thing.
+And,
+right.
+And module ownership is new.
+These two symbols are
+owned by the Foo module,
+they have an ownership thing.
+Right, so somehow we've
+got to map this onto
+object files so that linkers still work
+and that kind of stuff,
+or make linkers work.
+I'm gonna have some examples,
+some motivating examples now.
+Okay, so we've got
+module bar exports of bob
+and for purposes of this
+picture, all bobs are the same.
+They're a void function,
+for instance, let's say.
+And some other module imports
+it, and then uses bob.
+That's another module,
+Baz, that's exports,
+it, too, exports a bob,
+different bob, but the same name.
+Identical same name, in
+the global namespace.
+And other module imports
+that and uses bob.
+And then we link it all together.
+Should this work?
+If it was old-world, non-module stuff,
+this would not work because
+you get an ODR violation
+with multiple definitions of bob,
+and the linker would go
+bad, go away, have a think.
+And formerly, in the module specification
+that is still true, these
+things have external linkage,
+they, and you've got
+multiple definition error.
+It's bit confusing because you
+think, well these things here
+have no idea there was
+this bob thing back here.
+Or the collator of this thing
+was unfortunately hit by
+an indirect dependency,
+but that's a problem we've
+already got, it's not a
+new problem with modules.
+Right, next motivating
+example is this one.
+We've got a header file,
+and
+extern bob, it declares a bob in some way,
+there's, it also provides an
+object file with a bob in it.
+I haven't shown that bit.
+Old code uses the header
+file and calls bob.
+And then the authors of this
+module, of this header file,
+decide well, we're gonna
+turn it into modules now.
+Okay, so, they convert this
+header file into module-ness,
+and the whole library into module-ness,
+and that exports bob.
+And new code imports,
+imports that module
+and uses bob.
+And then we, but, we've now got,
+we've got for some reason,
+we're still using this library
+that uses the old way and our new way,
+and this new library,
+'cause it's got a new way,
+and we link it all together.
+Oh yes, and the, there's
+two cases here of interest.
+Either this is still,
+this in un-recompiled code
+that we can't touch,
+should this end up being the same bob
+and not get a re-definition
+error or a confusion error,
+and the other cases that
+the authors of this,
+when they modularized this thing,
+they provided a backwards
+compatibility header
+that you can recompile this code and
+with a hash include, though.
+The backwards compatibility
+header didn't just say
+import bob, import bar,
+it actually declared it
+in a way that
+you could use an old compiler,
+a non-modular ware compiler for.
+Do you want that to work?
+And we had a think,
+I talked to Jason and
+Gabby and I can't remember
+if Richard was in the conversation
+at some point as well,
+he probably was, this case has to work.
+This case we don't care about.
+It'd be nice if it
+worked or did something,
+but this case has to work,
+'cause otherwise you have
+to convert everything
+all at once and that's never gonna fly.
+So, right, okay, so
+this is just repeating.
+Module linkage is new,
+these are some symbols.
+I'm not gonna assume any new link,
+magic link technology.
+People are gonna have to
+obtain their compilers
+and their build systems,
+they're thinking okay,
+I'm gonna have to have
+a new link technology,
+they're going oh, screw
+this, this is too hard.
+So, we're gonna stay with the
+link technologies that you
+already have and for this
+slide I'm gonna say it's
+ELF because that's easy,
+but it's not specific to this.
+Okay, and we're gonna have,
+we want compiler independence
+at the object level.
+We want to be able to
+build our object files
+with different compilers and
+have them linked together.
+Even if we end up having
+to rebuild the interfaces
+with a single compilers to be able to get
+the BMIs that we need.
+So how do we do this modular linkage?
+Well it's gonna be,
+the only linkage-level thing at ELF
+that we have is global symbols.
+Symbols can either be global
+and visible everywhere
+in a program or they can
+just be visible in the
+current object file, i.e.
+static and local symbols.
+Hidden visibility, that doesn't help here
+for this particular problem all the time.
+So name mangling, which is the
+scheme that we have already
+for saying if we've got
+multiple Foo functions
+and an overload set I
+have to distinguish them
+at the symbol level, you
+may have seen these symbols
+if your linker was not
+de-mangling them for you.
+That's the scheme that we have.
+So, here I put spaces in
+them to make them visible,
+more readable, but it's
+all one under Bar Z,
+name and some stuff.
+So this is the current mangling for
+this exported function.
+And we're not changing that.
+So that means that bottom right corner
+that I showed you in the
+previous slide still works.
+So exported things have
+the same mangled name
+as they would have in a non-module world.
+But the module, the module linkage thing,
+we do change the name of,
+'cause other modules
+could declare their own
+Foo frob function within them
+and they would still have
+global, global binding at the ELF level
+so they better be different names.
+And the scheme here is that
+we just stick a little bit of,
+we mangled the module
+name in before the nested
+name specifier of frob.
+So again, that's what it currently is,
+that's what it becomes.
+One advantage, one thing
+that you may notice,
+that if I've got a random
+symbol that's exported,
+there's nothing in the symbol telling me
+the ownership of the module.
+So I don't know if I've got
+two symbols that collide,
+there's nothing in their name,
+while they're collided,
+there's nothing there that's telling me
+oh, you need to look at
+these two different modules.
+That would require new
+technology, effectively.
+But in the module local symbols,
+the module symbols, they do have a name,
+some information in them,
+so you can see where they came from.
+Okay.
+Right.
+So, what have we got now, yes?
+Okay, so this binary, this
+is the question we got,
+where does this binary
+module file come from?
+And, good question, you know.
+How do we name it?
+We had
+obvious choices are
+somewhere from the module name
+or somewhere from the source
+file of the interface.
+Listen, I've deliberately
+chosen a very stupid way
+of doing it and a big fix-me
+so that nobody believes
+what I've put there is, is sane.
+That might blow up in
+my face, I don't know,
+but it is what it is.
+Where do we find it?
+Do we use some kind of
+search path mechanism
+in the same way as a header search path?
+Don't know.
+And clearly there's gonna
+have some kind of build system
+integration because
+there's this dependency.
+With header files, if
+I've got a clean build,
+I know I have to build
+the object file anyway,
+so during the build of the object file,
+I can find the header file,
+I can note the header
+files I read and limit,
+that I now depend on these header files.
+And so the next time around
+I can go and figure out
+if something changed
+and I have to rebuild.
+But that doesn't work with module because
+as soon as I see the import,
+I need that BMI there
+and it's too late if I
+haven't already built it.
+So there has to be some way
+of integrating the compiler
+with the build system but
+it has to be done in a way
+that you can, you can on
+the command line still say
+oh, compile, hello, module hello world,
+compile name link works.
+If people have to have a
+massive build system integration
+to just compile the simple toy examples,
+people are gonna be upset.
+So I suspect
+some kind of hook
+in the compiler that has
+default behavior that
+works for the simple cases
+and can go and query the build
+system if the build system
+hasn't set stuff up properly.
+Ideally, you'd like the build system to,
+to know this information up front
+but that requires it to
+essentially parse all the code
+and figure out this stuff,
+whereas in fact the
+compiler figures it out
+while it's compiling but
+there's no direct connection
+back to the build system.
+And then you have the
+distributed build problem
+on top of that.
+So that's gonna require
+experimentation and thought
+but you can't really do
+much there until you've
+actually got some kind
+of module compiler to
+actually play with.
+So I expect this to,
+more answers to turn up.
+Okay, so where I got to,
+and this is value for a few,
+so name mangling, that works.
+And yeah, so I've been
+working with Richard Smith
+of Google, who I saw, yeah there he is,
+to figure out this name
+mangling stuff so we agree
+and there's actually a standard for it,
+it's on, I'll get, I'll repose it,
+it's part of the attaining
+vendor-neutral ABI thing
+that I'm, that got mentioned earlier today
+in the exceptions talk, it's part of that.
+You'll see we'll be suggesting
+this as an extension
+when we've figured all the bits out.
+Import and re-export, I can do that,
+I can import modules and
+I can re-export modules.
+Free functions, they work,
+I can have a free-function
+in the interface file
+and users can call it.
+I can have an inline free
+function in the header,
+in the interface file and
+importers will call it
+and it will get inlined.
+Classes, I can do classes to some extent.
+So I can have fields, I
+can have member functions,
+I can have virtual member functions,
+I can have some inheritance.
+The value of too exotic might
+be quite low for most users.
+This is by no means usable in
+anger,
+it's alive, but it's like, only just.
+So
+here's my to do list
+of stuff.
+I'll take audience requests
+now as next feature.
+- [Attendee] Do you have a template?
+- Yeah we have a winner, ding, ding.
+Templates, that is next on my to do list.
+- [Attendee] Clear your desk.
+- Sorry?
+- [Attendee] Clear your desk.
+- Yeah, I suspect this
+will be some templates,
+not all the templatedness all in one go.
+But, yeah, that's the
+next thing on the list.
+I haven't done all the
+abstract syntax tree now,
+I've just realized earlier
+with an example that
+all floating point constants are zero.
+(laughter)
+Variables, I don't do those at the moment.
+I can do virtual function, V tables,
+which are like a variable but special.
+More class stuff like different members.
+Type decals in a class,
+can't do that kind of stuff.
+I haven't done anything with
+enumerations at the moment.
+Inline, using directives,
+I punt on those, they're
+just global at the moment so,
+using directive anywhere
+affects every single module
+all at once which is clearly wrong.
+Using declarations, don't do that.
+These, I asked some
+questions in Toronto about
+using directives and
+declarations and the answer
+was, oh good question, hmm.
+(laughter)
+What do you think it should do?
+(laughter)
+So, I wrote down what
+I think it should do.
+And, I'm sure we'll have more
+meetings on formalizing that.
+Anonymous namespaces, there's
+one anonymous namespace
+throughout the whole compilation
+which is clearly wrong,
+that should be isolated in
+the way that it currently is.
+I haven't talked about
+the global module at all.
+That's a kind of transition-y thing for
+transitioning old code to new code.
+I've punted on that at the moment.
+Location information, if you import,
+if you, when you import a module,
+all the decals in that
+module become visible,
+their location is the import statement,
+so, yeah, debugging is
+gonna be, yeah, horrible.
+But you can't write sufficiently
+complicated programs
+to need a debugger at the moment, so.
+Oh, linkage promotion is an exciting thing
+that Richard spotted to do with,
+if you've got an inline
+function in an interface unit
+that refers to something that's static
+and only visible in the interface unit,
+you suddenly have to
+know that static thing
+has to be visible everywhere else,
+'cause you might want
+to inline that function
+or template, instantiate that template,
+through somewhere else,
+in some other object file.
+Error checking, I've, well see,
+there is some error checking there,
+but users are very imaginative
+and I'm sure there are
+cases I've forgotten of,
+because why would you write that?
+(laughter)
+ABI flags, yeah okay,
+I did say there were tags for ABI flags,
+they're not filled in at the moment.
+I only have one compiler.
+Search mechanism, thing for the BMI stuff,
+I haven't done anything yet.
+So, yeah, and yeah it's
+kinda got to get into
+C++ 20.
+So, the big to do list.
+So next question is when's
+it all gonna be ready?
+Predictions are hard, particularly when
+they're about the future.
+(laughter)
+So I will make this, I
+will make this prediction.
+That it's not GCC 8.
+As I said earlier, if you
+were paying attention,
+GCC sort of frees for
+release around December time,
+for release in spring and
+that got me two months
+to do that to do list, yeah,
+that's not gonna happen.
+So, not GCC 8, go and admire Bryce Canyon
+'cause it's beautiful.
+Okay, yes, questions.
+- [Attendee] You
+mentioned your handwriting
+across module boundaries.
+- Yes.
+- [Attendee] How does this template,
+how are you gonna change
+it to the binary numbers?
+- Right, so yeah, it was
+a question about inlining
+across module boundaries.
+You have to effectively do this,
+for the case to think, I'm
+using inlining as an example,
+but the actual driving
+case is template bodies.
+So you have to, to
+instantiate the template,
+you have to have the
+template body and that's
+why they're in header files at the moment.
+You have the same problem.
+So, and the answer is the same that,
+in the binary module interface file,
+that actually has the body
+of the inline function.
+It doesn't have the body
+of functions that are not
+inline that defined in the
+interface file in my case
+'cause it doesn't need it.
+Other compilers may differ.
+But in GCC case, it doesn't,
+and then if you want that
+inlined across compilation units,
+you would then stick LTL at
+the end of this stuff, yeah.
+Okay, I'm gonna use the microphone 'cause.
+- [Attendee] Thank you.
+I have an idea and can't
+you, like for starters,
+can't you drop the binary model interface
+and just have the same semantics,
+same sense semantics but use source files
+and in cost of running the front end?
+- Ah, right, yes so the question,
+the thing is why do we need
+the binary module file?
+Why can't we just re-read in the binary,
+the interface file itself?
+And use that as our mechanism?
+Well, yes, in theory
+that would work, right?
+Because it's clearly got
+all of the information
+that's in the binary module interface
+but you don't want to do that
+because parsing is expensive.
+You get all this
+backtracking and what not.
+And so,
+all the implementations that
+are being developed aren't
+taking that road for the reason that,
+you also have in a GCC's case,
+in any case, you then actually end up
+having to suspend the current
+state of the parser and
+have a new parser object.
+And there was an experiment,
+five years ago or so, that
+Diego Novello and
+Danny Berlin, I believe,
+it was, Google were doing to try and make
+pre-compiled headers more
+compose-able and that failed.
+And one of the reasons it failed was
+I can't suspend the state
+of the parser in GCC,
+'cause it's got too much global state,
+that was too difficult.
+And I remember, I talked to
+Diego about this time last year,
+and his first question was like,
+are you doing it like
+this, 'cause it won't work.
+No, I'm not doing it like that, okay.
+- [Attendee] Thank you
+and I have small question.
+The presentation you were talking about,
+about more in depth presentation of it.
+- Ah yeah, okay, the
+other presentation about,
+I presented it, it was at
+the GCC Cauldron in Prague
+earlier this month,
+that first presentation
+didn't get recorded for reasons,
+but there is a presentation
+that it did get recorded,
+where I'm talking about all
+the changes I did to the name
+lookup stuff, so that will give
+you more compiler internals
+than you might want, but
+that one is available, okay.
+- [Attendee] Thank you.
+- Okay.
+- [Attendee] Hi, at the
+previous module talk,
+which was very good as
+well, I asked the question,
+I work at Bloomberg, how
+would you advise I incorporate
+modules in a code-base
+that's 30 plus years old?
+- Yeah, so this is,
+yeah, this is the same,
+I was there so I remember
+the question that you've had,
+which was about, I've
+got a million lines of
+old code that was written
+by people who are now dead.
+(laughter)
+And I can't change it because it's got
+business logic, I don't know,
+whatever, it's like yeah,
+what do I do?
+Do I, are modules a thing I can even use?
+The answer to your question is
+modules as it currently is
+written probably doesn't help you
+with your old code.
+But I'm not quite sure, but I know,
+you know I talked to Alastair
+at the committee and stuff
+and he makes it, I understand
+the things going on there,
+I haven't quite got my
+head around what the
+right answer might be,
+so it's like,
+I think your question does
+not have an answer right yet.
+- [Attendee] Could I just
+give you a concrete example?
+I have a code base, I have,
+let's say I even have a modern code base,
+just doesn't have modules,
+and so I have an infrastructure,
+then I have a client
+that comes along and wants to use,
+and I'm giving you as an example date.
+I wanna use my date class.
+So the client comes along
+and wants to use that
+and wants to create a module,
+so this is a new C++ 20
+we'll say middle ware.
+- Okay.
+- [Attendee] Now I have somebody else who
+doesn't like fancy things or can't use it
+so they create some more middle ware,
+using the date 'cause this
+is in the old style headers.
+- Okay.
+- [Attendee] Now somebody
+wants to come along and use
+both of those libraries in
+one place and you talked about
+the situation where you
+have both header files
+and modules and do they
+mean the same thing
+when they come from both and specifically
+can we take advantage of the optimizations
+in the module when we have it,
+and when we don't have it
+just go revert to the header?
+- Right, okay, so that was a
+rephrasing of the question.
+I think what you've described
+is this picture here
+but I might have missed something.
+- [Attendee] Well, possibly.
+- Or something fairly close
+to that, I would hope.
+And the answer, and so the
+thing that we're aiming for
+is that, yes, this will work.
+You could make your
+module date code and then
+you could explicitly write a header file
+that's got extern declarations
+in it for the things
+that this exports and then
+the user that doesn't want to
+use anything but modules
+would be able to include that.
+- [Attendee] But you said, my module date.
+And I'm saying right now I
+don't have a module date.
+So I have an old library as a date.
+You know, date dot h.
+- Yeah.
+- [Attendee] Then I have
+somebody comes along
+and wants to use date dot h
+and produce a module interface.
+- Up to that existing?
+- [Attendee] To that
+existing library because
+we have a lot of existing libraries.
+- Yes, I'm not entirely sure,
+probably requires thinking about.
+- [Attendee] Fair enough.
+- The thing with these questions
+immediately get into things
+that are quite hard to
+fathom about, so, yeah.
+Happy to talk to you further,
+but maybe not right now.
+- [Attendee] Is the
+export import directive
+a commitment to someone
+else's interface, actually?
+- How?
+- [Attendee] So if we
+write in one of your slides
+before this.
+- Yeah, okay.
+Let's find it.
+Da, da, da, da. Da da da da da da.
+Ah, there we go.
+Was it this one?
+- [Attendee] Yeah.
+So bar,
+if I write my own
+module.
+- Yes.
+- [Attendee] And I
+write export import bar.
+- Yes.
+- [Attendee] Don't I commit
+to the maintenance,
+long term maintenance of
+the interface bar is exposing?
+And I'm not, I'm not the author of bar.
+Why would I do that?
+- Okay so the question is
+have I just signed up
+for maintenance of bar
+at this point?
+I dunno really.
+Yeah, I just write compilers.
+(laughter)
+- [Attendee] Just give
+you the follow up question
+to the same issue.
+I don't wanna maintain bar,
+so now the vendor of
+bar sends out an update,
+what happens to my code?
+Or someone using my module at this point
+with the new version of bar.
+- So, okay, so,
+I've exported bar, export import bar,
+new bar happens.
+What do my users do?
+Well, okay, so A, the
+new version of bar should
+not break its binary interface because
+that's just bad software engineering.
+If you've got a version two,
+you make it backwards compatible.
+If it does break it, then well,
+it's gonna be broken here.
+- [Attendee] It might
+change its overload sets.
+- That is correct.
+But if it changes its overload sets,
+it's changing its exported overload sets.
+Those are the ones that you see.
+If it changes its internal overload sets,
+don't care, 'cause you don't see those.
+Yeah, if it's changing its interface,
+yeah that will ripple
+through to users of Foo.
+Yes, that's what you're saying here.
+The one of the main, one of the,
+I think one of the primary
+uses of re-exporting is
+conglomeration sort of container modules
+that all they do is export
+a bunch of other stuff.
+And Biarno in his keynote
+had examples of that.
+With that import bundle starter,
+an import bundle, export expert.
+And you'd get, you know, different sets of
+exciting C++ features that way.
+So and all of those, all bundle
+starter would have would be export module
+bundle dot starter export import ding,
+export import there, export import.
+- [Attendee] So if I understand correctly,
+if a new Bar rolls out, I
+will have to rebuild my world
+that depends upon Bar if I want to have a
+consistent world view.
+- If you're using a new library,
+a new version of the
+library, that you depend on,
+you have to recompile your code anyway.
+That's not a new thing, yeah?
+You phrased it in a way that sounded new
+and I tried to rephrase it
+in a way that made it sound
+completely natural and what
+we already have to do anyway.
+- [Attendee] Yeah, okay.
+- I hope.
+Okay, are there any, oh yes.
+- [Attendee] So, yeah,
+we basically what we use
+the header files for was
+like sometimes separate
+implementation from
+declaration, et cetera.
+Sometimes I wanna like implement
+before I declare a class
+because I don't want
+people to start accessing,
+especially if it's old code.
+I want to just forward
+declare and they have
+a header of functions.
+So if I declare, forward declare a class
+and I just want them to use the pointer
+and the series of function.
+- Okay, yes, I didn't have
+an example of that but you,
+because I just exported the whole class.
+You can export just the class name,
+and then define, and have the definition
+in the interface file that is not exported
+and that definition is only
+visible to the module itself
+and you importers of the
+module just see the name
+as an incomplete type.
+- [Attendee] Exactly.
+- Which I think is what you've described.
+- [Attendee] Yeah. And does
+it infer some sort of scope,
+does the module infers like,
+you'd have to use like Foo column, column.
+- No.
+- [Attendee] It doesn't affect.
+- The module name is not a scope, okay.
+- [Attendee] So we'd have to use like,
+to have scope, if you want to use a scope,
+you have to use a namespace
+inside your module
+and export that?
+- If, if, if, yes.
+You would have inside
+the module interface,
+you would name, you would put namespace,
+my module in the way that we
+currently do for header files
+in exactly the same way.
+- [Attendee] Let's say STD.
+- Yeah, you could add stuff to it,
+because it could be
+shared with other people,
+namespaces are.
+We're gonna, I think
+about run out of time.
+But I think we're the
+last session, so, okay.
+I think that's it, so thank you everybody.
+(applause)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

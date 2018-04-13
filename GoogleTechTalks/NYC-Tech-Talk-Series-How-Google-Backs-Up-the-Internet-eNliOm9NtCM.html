@@ -1,0 +1,3298 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>NYC Tech Talk Series: How Google Backs Up the Internet | Coder Coacher - Coaching Coders</title><meta content="NYC Tech Talk Series: How Google Backs Up the Internet - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/GoogleTechTalks/">GoogleTechTalks</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>NYC Tech Talk Series: How Google Backs Up the Internet</b></h2><h5 class="post__date">2014-01-31</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/eNliOm9NtCM" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">
+RAYMOND BLUM: Hi, everybody.
+So I'm Raymond.
+I'm not television's
+Raymond Blum,
+that you may remember
+from &quot;The Facts of Life.&quot;
+I'm a different Raymond Blum.
+Private joke.
+So I work in site
+reliability at Google
+in technical
+infrastructure storage.
+And we're basically here to
+make sure that things, well,
+we can't say that
+things don't break.
+That we can recover from them.
+Because, of course, we
+all know things break.
+Specifically, we are in
+charge of making sure
+that when you hit Send, it
+stays in your sent mail.
+When you get an email,
+it doesn't go away
+until you say it should go away.
+When you save
+something in Drive,
+it's really there, as we
+hope and expect forever.
+I'm going to talk about
+some of the things
+that we do to make that happen.
+Because the universe
+and Murphy and entropy
+all tell us that
+that's impossible.
+So it's a constant,
+never-ending battle
+to make sure things
+actually stick around.
+I'll let you read the bio.
+I'm not going to
+talk about that much.
+Common backup strategies that
+work maybe outside of Google
+really don't work here, because
+they typically scale effort
+with capacity and demand.
+So if you want twice
+as much data backed up,
+you need twice as
+much stuff to do it.
+Stuff being some product of
+time, energy, space, media, et
+cetera.
+So that maybe works great
+when you go from a terabyte
+to two terabytes.
+Not when you go from an
+exabyte to two exabytes.
+And I'm going to talk about
+some of the things we've tried.
+And some of them have failed.
+You know, that's what the
+scientific method is for,
+right?
+And then eventually, we
+find the things that work,
+when our experiments agree
+with our expectations.
+We say, yes, this
+is what we will do.
+And the other things we discard.
+So I'll talk about some of
+the things we've discarded.
+And, more importantly,
+some of things
+we've learned and actually do.
+Oh, and there's a slide.
+Yes.
+Solidifying the Cloud.
+I worked very hard on
+that title, by the way.
+
+Well, let me go over the
+outline first, I guess.
+Really we consider,
+and I personally
+obsess over this, is that
+it's much more important.
+You need a much higher bar
+for availability of data
+that you do for
+availability of access.
+If a system is down
+for a minute, fine.
+You hit Submit again
+on the browser.
+And it's fine.
+And you probably
+blame your ISP anyway.
+Not a big deal.
+On the other hand, if 1%
+of your data goes away,
+that's a disaster.
+It's not coming back.
+So really durability
+and integrity of data
+is our job one.
+And Google takes this
+very, very seriously.
+We have many engineers
+dedicated to this.
+Really, every Google
+engineers understands this.
+All of our frameworks, things
+like Big Table and formerly
+GFS, now Colossus, all are
+geared towards insuring this.
+And there's lots
+of systems in place
+to check and correct any
+lapses in data availability
+or integrity.
+
+Another thing we'll talk
+about is redundancy,
+which people think
+makes stuff recoverable,
+but we'll see why it doesn't
+in a few slides from now.
+Another thing is MapReduce.
+Both a blessing and a curse.
+A blessing that you
+can now run jobs
+on 30,000 machines at once.
+A curse that now
+you've got files
+on 30,000 machines at once.
+And you know something's
+going to fail.
+So we'll talk about
+how we handle that.
+I'll talk about
+some of the things
+we've done to make the scaling
+of the backup resources
+not a linear function
+of the demand.
+So if you have 100
+times the data,
+it should not take 100 times
+the effort to back it up.
+I'll talk about
+some of the things
+we've done to avoid that
+horrible linear slope.
+Restoring versus backing up.
+That's a long discussion
+we'll have in a little bit.
+And finally, we'll wrap up
+with a case study, where Google
+dropped some data, but
+luckily, my team at the time
+got it back.
+And we'll talk
+about that as well.
+
+So the first thing I want to
+talk about is what I said,
+my personal obsession.
+In that you really
+need to guarantee
+the data is available
+100% of the time.
+People talk about how
+many nines of availability
+they have for a front end.
+You know, if I have 3 9s
+99% of the time is good.
+4 9s is great.
+5 9s is fantastic.
+7 9s is absurd.
+It's femtoseconds year outage.
+It's just ridiculous.
+But with data, it really can't
+even be 100 minus epsilon.
+Right?
+It has to be there 100%.
+And why?
+This pretty much says it all.
+If I lose 200 k of
+a 2 gigabyte file,
+well, that sounds
+great statistically.
+But if that's an
+executable, what's
+200 k worth of instructions?
+Right?
+I'm sure that the processor
+will find some other instruction
+to execute for that
+span of the executable.
+Likewise, these
+are my tax returns
+that the government's
+coming to look at tomorrow.
+Eh, those numbers couldn't
+have been very important.
+Some small slice of
+the file is gone.
+But really, you need
+all of your data.
+That's the lesson we've learned.
+It's not the same as
+front end availability,
+where you can get over it.
+You really can't
+get over data loss.
+A video garbled, that's
+the least of your problems.
+But it's still not good to have.
+Right?
+So, yeah, we go for 100%.
+Not even minus epsilon.
+So a common thing
+that people think,
+and that I thought, to
+be honest, when I first
+got to Google, was, well,
+we'll just make lots of copies.
+OK?
+Great.
+And that actually is really
+effective against certain kinds
+of outages.
+For example, if an asteroid
+hits a data center,
+and you've got a copy in
+another data center far away.
+Unless that was a really, really
+great asteroid, you're covered.
+On the other hand, picture this.
+You've got a bug in
+your storage stack.
+OK?
+But don't worry,
+your storage stack
+guarantees that all
+rights are copied
+to all other locations
+in milliseconds.
+Great.
+You now don't have one
+bad copy or your data.
+You have five bad
+copies of your data.
+So redundancy is far
+from being recoverable.
+Right?
+It handles certain things.
+It gives you location
+isolation, but really, there
+aren't as many
+asteroids as there
+are bugs in code or user errors.
+So it's not really
+what you want.
+Redundancy is good
+for a lot of things.
+It gives you
+locality of reference
+for I/O. Like if your
+only copy is in Oregon,
+but you have a front end
+server somewhere in Hong Kong.
+You don't want to have
+to go across the world
+to get the data every time.
+So redundancy is
+great for that, right?
+You can say, I
+want all references
+to my data to be
+something fairly local.
+Great.
+That's way you make
+lots of copies.
+But as I said, to say, I've
+got lots of copies of my data,
+so I'm safe.
+You've got lots of copies
+of your mistaken deletes
+or corrupt rights
+of a bad buffer.
+So this is not at all what
+redundancy protects you
+against.
+Let's see, what else can I say?
+Yes.
+When you have a massively
+parallel system,
+you've got much more
+opportunity for loss.
+MapReduce, I think--
+rough show of hands,
+who knows what I'm talking
+about when I say MapReduce?
+All right.
+That's above
+critical mass for me.
+It's a distributed
+processing framework
+that we use to run jobs on
+lots of machines at once.
+It's brilliant.
+It's my second favorite
+thing at Google,
+after the omelette
+station in the mornings.
+And it's really fantastic.
+It lets you run a task,
+with trivial effort,
+you can run a task on
+30,000 machines at once.
+That's great until
+you have a bug.
+Right?
+Because now you've
+got a bug that's
+running on 30,000
+machines at once.
+So when you've got massively
+parallel systems like this,
+the redundancy and
+the replication
+really just makes your problems
+all the more horrendous.
+And you've got the same bugs
+waiting to crop up everywhere
+at once, and the effect
+is magnified incredibly.
+Local copies don't protect
+against site outages.
+So a common thing that people
+say is, well, I've got Raid.
+I'm safe.
+And another show of hands.
+Raid, anybody?
+Yeah.
+Redundant array of
+inexpensive devices.
+Right?
+Why put it on one disc when
+you can put it on three disks?
+I once worked for someone
+who, it was really sad.
+He had a flood in
+his server room.
+So his machines are
+underwater, and he still said,
+but we're safe.
+We've got Raid.
+I thought, like-- I'm sorry.
+My mom told me I
+can't talk to you.
+Sorry.
+Yeah.
+It doesn't help
+against local problems.
+Right?
+Yes, local, if local means
+one cubic centimeter.
+Once it's a whole machine
+or a whole rack, I'm sorry.
+Raid was great for
+a lot of things.
+It's not protecting
+you from that.
+And we do things to avoid that.
+GFS is a great example.
+So the Google File System, which
+we use throughout all of Google
+until almost a year
+ago now, was fantastic.
+It takes the basic
+concept of Raid,
+using coding to put it
+on n targets at once,
+and you only need n
+minus one of them.
+So you can lose something
+and get it back.
+Instead of disks, you're talking
+about cities or data centers.
+Don't write it to
+one data center.
+Write it to three data centers.
+And you only need two of
+them to reconstruct it.
+That's the concept.
+And we've taken Raid up a
+level or five levels, maybe.
+So to speak.
+So we've got that, but again,
+redundancy isn't everything.
+One thing we found that
+works really, really well,
+and people were surprised.
+I'll jump ahead a little bit.
+People were surprised
+in 2011 when
+we revealed that we use
+tape to back things up.
+People said, tape?
+That's so 1997.
+Tape is great,
+because it's not disk.
+If we could, we'd use punch
+cards, like that guy in XKCD
+just said.
+Why?
+Because, imagine this.
+You've got a bug in the
+prevalent device drivers.
+Used first SATA disks.
+Right?
+OK.
+Fine, you know what?
+My tapes are not on a SATA disk.
+OK?
+I'm safe.
+My punch cards are
+safe from that.
+OK?
+You want diversity
+from everything.
+If you're worried
+about site problems,
+locality, put it
+in multiple sites.
+If you've worried
+about soft user error,
+have levels of isolation
+from user interaction.
+If you want protection
+from software bug,
+put it on different software.
+Different media implies
+different software.
+So we look for that.
+And, actually, what my
+team does is guarantee
+that all the data is isolated
+in every combination.
+Take the Cartesian product,
+in fact, of those factors.
+I want location isolation,
+isolation from application
+layer problems, isolation
+from storage layer problems,
+isolation from media failure.
+And we make sure that you're
+covered for all of those.
+Which is not fun until,
+of course, you needed it.
+Then it's fantastic.
+So we look to provide all of
+those levels of isolation,
+or I should say, isolation
+in each of those dimensions.
+Not just location, which is
+what redundancy gives you.
+Telephone.
+
+OK.
+This is actually my--
+it's a plain slide,
+but it's my favorite slide-- I
+once worked at someplace, name
+to be withheld, OK?
+Because that would
+be unbecoming.
+Where the people in
+charge of backups, there
+was some kind of failure,
+all the corporate data
+and a lot of the
+production data was gone.
+They said don't worry.
+We take a backup every Friday.
+They pop a tape in.
+It's empty.
+The guy's like,
+oh, well, I'll just
+go to the last week's backup.
+It's empty, too.
+And he actually said,
+&quot;I always thought
+the backups ran kind of fast.
+
+And I also wondered why we
+never went to a second tape.&quot;
+A backup is useless.
+It's a restore you care about.
+One of the things we do is
+we run continuous restores.
+We take some sample of our
+backup, some percentage,
+random sampling of n percent.
+It depends on the system.
+Usually it's like 5.
+And we just constantly select
+at random 5% of our backups,
+and restore them
+and compare them.
+Why?
+We check some of them.
+We don't actually compare
+them to the original.
+Why?
+Because I want to find out that
+my backup was empty before I
+lost all the data next week.
+OK?
+This is actually very
+rare, I found out.
+So we went to one of
+our tape drive vendors,
+who was amazed that our drives
+come back with all this read
+time.
+Usually, when they give
+them back the drives log,
+how much time they spent
+reading and writing,
+most people don't
+actually read their tape.
+They just write them.
+So I'll let you project
+out what a disaster that is
+waiting to happen.
+That's the, &quot;I thought
+the tapes were-- I always
+wondered why we never
+went to a second tape.&quot;
+So we run continuous
+restores over some
+sliding window, 5%
+of the data, to make
+sure we can actually restore it.
+And that catches a lot
+of problems, actually.
+We also run automatic
+comparisons.
+And it would be a bit
+burdensome to say we read back
+all the data and
+compare to the original.
+That's silly,
+because the original
+has changed in the
+more than microseconds
+since you backed it up.
+So we do actually check
+some of everything,
+compare it to the check sums.
+Make sure it makes sense.
+OK.
+We're willing to say that
+check some algorithms,
+know what they're doing, and
+this is the original data.
+We actually get it back
+onto the source media,
+to make sure it can make
+it all the way back to disk
+or to Flash, or wherever
+it came from initially.
+To make sure it can
+make a round trip.
+And we do this all the time.
+And we expect there'll
+be some rate of failure,
+but we don't look at,
+oh, like, a file did not
+restore in the first attempt.
+It's more like, the rate of
+failure on the first attempt
+is typically m.
+The rate of failure on the
+second attempt is typically y.
+If those rates change,
+something has gone wrong.
+Something's different.
+And we get alerted.
+But these things are running
+constantly in the background,
+and we know if something fails.
+And, you know,
+luckily we find out
+before someone actually
+needed the data.
+Right?
+Which [INAUDIBLE]
+before, because you only
+need the restore when
+you really need it.
+So we want to find out if it
+was bad before then, and fix it.
+
+Not through the segue,
+but I'll take it.
+One thing we have found
+that's really interesting
+is that, of course,
+things break.
+Right?
+Everything in this world breaks.
+Second law of thermodynamics
+says that we can't fight it.
+But we do what we
+can to safeguard it.
+Who here thinks that tapes
+break more often than disks?
+Who thinks disk breaks
+more often than tape?
+
+Lifetime.
+It's not a fair comparison.
+But let's say meantime to be
+fair if they were constantly
+written and read at
+the same rates, which
+would break more open?
+Who says disk?
+Media failure.
+Yeah.
+Disk.
+Disk breaks all the
+time, but you know what?
+You know when it happens.
+That's the thing.
+So you have Raid, for example.
+A disk breaks, you
+know it happened.
+You're monitoring it.
+Fine.
+A tape was locked up in
+a warehouse somewhere.
+It's like a light bulb.
+People say, why do light bulbs
+break when you hit the switch
+and turn them on?
+That's stupid.
+It broke last week,
+but you didn't
+know until you turned it on.
+OK?
+It's Schrodinger's breakage.
+Right?
+It wasn't there
+until you saw it.
+So tapes actually
+last a long time.
+They last very well,
+but you didn't find out
+until you needed it.
+That's the lesson we've learned.
+So the answer is re-code and
+read them before you need it.
+OK?
+Even given that, they do break.
+So we do something that, as
+far as I know is fairly unique,
+we have Raid on tape, in effect.
+We have Raid 4 on tape.
+We don't write your
+data to a tape.
+Because if you care
+about your data,
+it's too valuable
+to put on one tape
+and trust this one
+single point to failure.
+Because they're cartridges.
+The robot might drop them.
+Some human might kick it
+across the parking lots.
+Magnetic fields.
+A nutrino may finally decide
+to interact with something.
+You have no idea.
+OK?
+So we don't take a chance.
+When we write
+something to tape, we
+tell you, hold on
+to your source data
+until we say it's
+OK to delete it.
+Do not alter this.
+If you do, you have
+broken the contract.
+And who knows what will happen.
+We build up some number of
+full tapes, typically four.
+And then we generate a
+fifth tape, a code tape,
+by [INAUDIBLE]
+everything together.
+And we generate a check sum.
+OK.
+Now you've got Raid 4 on tape.
+When we've got those five tapes
+that you could lose any one of,
+and we could reconstruct the
+data by [INAUDIBLE] back,
+in effect.
+We now say, OK, you can
+change your source data.
+These tapes have made it
+to their final physical
+destination.
+And they are redundant.
+They are protected.
+And if it wasn't
+worth that wait, it
+wasn't worth your
+backup, it couldn't
+have been that
+important, really.
+So every bit of data
+that's backed up
+gets subjected to this.
+And this gives you a
+fantastic increase.
+The chances of a
+tape failure, I mean
+we probably lose
+hundreds a month.
+We don't have hundreds of data
+losses a month because of this.
+If you lose one tape, our
+system detects this through this
+continues restore.
+It immediately recall
+the sibling tapes,
+rebuilds another code tape.
+All is well.
+In the rare case, and I
+won't say it doesn't happen.
+In the rare case where two
+tapes in the center broken,
+well, now you're kind of hosed.
+Only if the same spot on
+the two tapes was lost.
+So we do reconstruction
+at the sub-tape level.
+And we really don't
+have data loss,
+because of these techniques.
+They're expensive, but that's
+the cost of doing business.
+
+I talked about light
+bulbs already, didn't I?
+OK.
+
+So let's switch gears
+and talk about backups
+versus backing up
+lots of things.
+I mentioned MapReduce.
+Not quite at the
+level of 30,000,
+but typically our jobs
+produce many, many files.
+The files are sharded.
+So you might have replicas
+in Tokyo, replicas in Oregon,
+and replicas in Brussels.
+And they don't have
+exactly the same data.
+They have data local
+to that environment.
+Users in that part of
+the world, requests
+that have been made
+referencing that.
+Whatever.
+But the data is not redundant
+across all [INAUDIBLE]
+the first.
+So you have two choices.
+You can make a backup of
+each of them, and then say,
+you know what?
+I know I've got a
+copy of every bit.
+And when I have to
+restore, I'll worry
+about how to
+consolidate it then.
+OK.
+Not a great move, because
+when will that happen?
+It could happen at 10:00
+AM, when you're well
+rested on a Tuesday afternoon
+and your inbox is empty.
+It could happen at 2:30 in
+the morning, when you just
+got home from a
+party at midnight.
+Or it could happen on Memorial
+Day in the US, which is also,
+let's say, a bank
+holiday in Dublin.
+It's going to happen
+in the last one.
+Right?
+So it's late at night.
+You're under pressure
+because you've
+lost a copy of your serving
+data, and it's time to restore.
+Now let's figure out
+how to restore all this
+and consolidate it.
+Not a great idea.
+You should have done
+all your thinking back
+when you were doing the backup.
+When you had all the
+time in the world.
+And that's the
+philosophy we follow.
+We make the backups
+as complicated
+and take as long as we need.
+To restores have to be
+quick and automatic.
+I want my cat to be able to
+stumble over my keyboard,
+bump her head against
+the Enter key,
+and start a successful restore.
+And she's a pretty awesome cat.
+She can almost do
+that, actually.
+But not quite, but
+we're working on it.
+It's amazing what some
+electric shock can do.
+
+Early on, we didn't have
+this balance, to be honest.
+And then I found this
+fantastic cookbook,
+where it said, hey, make your
+backups quick and your restores
+complicated.
+And yes, that's a
+recipe for disaster.
+Lesson learned.
+We put all the
+stress on restores.
+Recovery should be
+stupid, fast, and simple.
+But the backups take too long.
+No they don't.
+The restore is
+what I care about.
+Let the backup take forever.
+OK?
+There are, of course,
+some situations
+that just doesn't work.
+And then you compromise
+with the world.
+But this carries
+the huge percentage
+of our systems work this way.
+The backups take as
+long as they take.
+The client services that
+are getting the data backup
+know this expectation
+and deal with it.
+And our guarantee
+is that the restores
+will happen quickly, painlessly,
+and hopefully without user
+problems.
+And I should in little
+while in the case
+that I'm going to talk
+about, what fast means.
+Fast doesn't necessarily mean
+microseconds in all cases.
+But relatively
+fast within reason.
+
+As a rule, yes.
+When the situation calls for
+data recovery, think about it.
+You're under stress.
+Right?
+Something's wrong.
+You've probably got somebody
+who is a much higher pay
+grade than you looking
+at you in some way.
+Not the time to sit there
+and formulate a plan.
+OK?
+Time to have the
+cat hit the button.
+
+OK.
+And then we have an
+additional problem at Google
+which is scale.
+So I'll confess, I
+used to lie a lot.
+I mean, I still may lie,
+but not in this regard.
+I used to teach, and I used
+to tell all of my students,
+this is eight years
+ago, nine years ago.
+I used to tell them there is
+no such thing as a petabyte.
+That is like this hypothetical
+construct, a thought exercise.
+And then I came to Google.
+And in my first month, I had
+copied multiple petabyte files
+from one place to another.
+It's like, oh.
+Who knew?
+So think about what this means.
+If you have something measured
+in gigabytes or terabytes
+and it takes a few
+hours to backup.
+No big deal.
+If you have ten exabytes, gee,
+if that scales is up linear,
+I'm going to spend ten weeks
+backing up every day's data.
+OK?
+In this world, that cannot work.
+Linear time and all that.
+So, yeah, we have to learn
+how to scale these things up.
+We've got a few choices.
+We've got dozens of data
+centers all around the globe.
+OK.
+Do you give near infinite
+backup capacity in every site?
+Do you cluster things so that
+all the backups in Europe
+happen here, all the
+ones in North America
+happen here, Asia and the
+Pacific Rim happen here.
+OK, then you've got
+bandwidth considerations.
+How do I ship the data?
+Oh, didn't I need that bandwidth
+for my serving traffic?
+Maybe it's more
+important to make money.
+So you've got a lot
+of considerations
+when you scale this way.
+And we had to look at
+the relative costs.
+And, yeah, there
+are compromises.
+We don't have backup
+facilities in every site.
+We've got this best fit.
+Right?
+And it's a big problem
+in graph theory, right?
+And how do I balance
+the available capacity
+on the network versus where it's
+cost effective to put backups?
+Where do I get the most bang
+for the buck, in effect.
+And sometimes we tell people,
+no, put your service here not
+there.
+Why?
+Because you need this
+much data backed up,
+and we can't do it from there.
+Unless you're going to make
+a magical network for us.
+We've got speed of
+light to worry about.
+So this kind of optimization,
+this kind of planning,
+goes into our backup
+systems, because it has to.
+Because when you've got,
+like I said, exabytes,
+there are real world
+constraints at this point
+that we have to think about.
+Stupid laws of physics.
+I hate them.
+So and then there's
+another interesting thing
+that comes into play,
+which is what do you scale?
+You can't just say, I want more
+network bandwidth and more tape
+drives.
+OK, each of those tape drives
+breaks every once in while.
+If I've got 10,000 times
+the number of drives,
+then I've got to have 10,000
+times the number of operators
+to go replace them?
+Do I have 10,000
+times the amount
+of loading dock to put the tape
+drives on until the truck comes
+and picks them up?
+None of this can scale linear.
+It all has to do
+better than this.
+My third favorite thing in
+the world is this quote.
+I've never verified how accurate
+it is, but I love it anyway.
+Which was some guy in the
+post World War II era,
+I think it is, when
+America's starting
+to get into telephones, and they
+become one in every household.
+This guy makes a prediction that
+in n years time, in five years
+time, and our current
+rate of growth,
+we will employ a third
+percent of the US population
+as telephone operators to
+handle the phone traffic.
+Brilliant.
+OK?
+What he, of course,
+didn't see coming
+was automated switching systems.
+Right?
+This is the leap that
+we've had to take
+with regards to
+our backup systems.
+We can't have 100 times
+the operators standing by,
+not phone operators.
+Computer hardware
+operators standing by
+to replace bad tape drives,
+put tapes into slots.
+It doesn't scale.
+So we've automated
+everything we can.
+Scheduling is all automated.
+If you have a service at Google,
+you say, here's my data stores.
+I need a copy every n.
+I need the restores
+to happen within m.
+And systems internally schedule
+the backups, check on them,
+run the restores.
+The restore testing that
+I mentioned earlier.
+You don't do this.
+Because it wouldn't scale.
+The restore testing,
+as I mentioned earlier,
+is happening continuously.
+Little funny demons
+are running it for you.
+And alert you if
+there's a problem.
+Integrity checking, likewise.
+The check sum is being
+compared automatically.
+It's not like you
+come in every day
+and look at your backups
+to make sure they're OK.
+That would be kind of cute.
+When tapes break.
+I've been involved in
+backups for three years,
+I don't know when a tape breaks.
+When a broken tape is detected,
+the system automatically
+looks up who the siblings are
+in the redundancy set described
+earlier.
+It recalls the siblings,
+it rebuilds the tape,
+sends the replacement tape
+back to its original location.
+Marks tape x has been
+replaced by tape y.
+And then at some point,
+you can do a query,
+I wonder how many tapes broke.
+And if the rate of
+breakage changes,
+like we typically see
+100 tapes a day broken.
+All of a sudden it's 300.
+Then I would get alerted.
+But until then, why are you
+telling me about 100 tapes?
+It was the same as last week.
+Fine.
+That's how it is.
+But if the rate changes,
+you're interested.
+Right?
+Because maybe you've just got
+a bunch of bad tape drives.
+Maybe, like I said,
+a nutrino acted up.
+We don't know what happened.
+But something is different.
+You probably want
+to know about it.
+OK?
+But until then, it's automated.
+Steady state operations, humans
+should really not be involved.
+This is boring.
+Logistics.
+Packing the drives up
+and shipping them off.
+Obviously, humans
+have to, at this point
+in time, still, humans have
+to go and actually remove
+it and put it in a box.
+But as far as printing labels
+and getting RMA numbers,
+I'm not going to ask
+some person to do that.
+That's silly.
+We have automated
+interfaces that
+get RMA numbers, that
+prepare shipping labels,
+look to make sure that drives
+that should have gone out
+have, in fact, gone out.
+Getting acknowledgement
+of receipt.
+And if that breaks down, a
+person has to get involved.
+But if things are
+running normally,
+why are you telling me?
+Honestly, this is
+not my concern.
+I have better things
+to think about.
+Library software
+maintenance, likewise.
+If we get firmware updates,
+I'm not going to rep an SD card
+because the library's--
+that's crazy.
+OK?
+Download it.
+Let it get pushed
+to a Canary library.
+Let it be tested.
+Let the results be
+verified as accurate.
+Then schedule upgrades in
+all the other libraries.
+I really don't want
+to be involved.
+This is normal operations.
+Please don't bother me.
+And this kind of automation
+is what lets us--
+in the time I've been here,
+our number of tape libraries
+and backup systems have gone
+up at least a full order
+of magnitude.
+And we don't have 10 or 100
+times the people involved.
+Obviously, we have
+some number more,
+but it's far from a linear
+increase in resources.
+
+So how do you do this?
+Right.
+We have to do some
+things, as I say,
+that are highly parallelizable.
+Yes.
+We collect the source
+data from a lot of places.
+OK?
+This is something that we
+have our Swiss Army Knife.
+MapReduce.
+OK?
+MapReduce is, like I
+said, it's my favorite.
+One of my favorites.
+When we say we've got files
+in all these machines, fine.
+Let a MapReduce go
+collect them all.
+OK?
+Put them into a big funnel.
+Spit out one cohesive copy.
+OK?
+And I will take that
+thing and work on it.
+If a machine breaks,
+because when you've
+got 30,000 machines, each
+one has a power supply, four
+hard disks, a network
+card, something's
+breaking every 28 seconds or so.
+OK?
+So let MapReduce handle
+that, and its sister systems,
+handle that.
+Don't tell me a machine died.
+One's dying twice a minute.
+That's crazy.
+OK?
+Let MapReduce and its
+cohorts find another machine,
+move the work over there,
+and keep hopping around
+until everything gets done.
+If there's a dependency,
+like, oh, this file
+can't be written until
+this file is written.
+Again, don't bother me.
+Schedule a wait.
+If something waits too long,
+by all means, let me know.
+But really, you handle
+your scheduling.
+This is an algorithm's
+job, not a human's.
+OK?
+And we found clever
+ways to adapt
+to MapReduce to do all of this.
+It really is a Swiss army knife.
+It handles everything.
+Then this went on for a
+number of years at Google.
+I was on the team for
+I guess about a year
+when this happened.
+And then we actually sort
+of had to put our money
+where our mouth was.
+OK?
+In early 2011,
+you may or may not
+recall Gmail had an
+outage, the worst kind.
+Not, we'll be back soon.
+Like, oops, where's my account?
+OK.
+Not a great thing to find.
+I remember at 10:31
+PM on a Sunday,
+the pager app on
+my phone went off
+with the words, &quot;Holy
+crap,&quot; and a phone number.
+And I turned to my wife and
+said, this can't be good news.
+I doubt it.
+She was like, maybe
+someone's calling to say hi.
+I'm going to bet not.
+Sure enough, not.
+So there was a whole series of
+bugs and mishaps that you can
+read about what was made
+public and what wasn't.
+But I mean, this was a
+software bug, plain and simple.
+We had unit tests,
+we have system tests,
+we have integration tests.
+Nonetheless, 1 in 8
+billion bugs gets through.
+And of course, this is the one.
+And the best part is
+it was in the layer
+where replication happens.
+So as I said, I've got
+two other copies, yes.
+And you have three
+identical empty files.
+You work with that.
+So we finally had to go to
+tape and, luckily for me,
+reveal to the world
+that we use tape.
+Because until then,
+I couldn't really
+tell people I did for a living.
+So what do you do?
+I eat lunch.
+I could finally say,
+yes, yes, I do that.
+So we had to restore from tape.
+And it's a massive job.
+And this is where I
+mentioned that the meaning
+of a short time or immediately
+is relative to the scale.
+Right?
+Like if you were to say,
+get me back that gigabyte
+instantly, instantly means
+milliseconds or seconds.
+If you say, get me back
+those 200,000 inboxes
+of several gig each,
+probably you're
+looking at more than a
+few hundred milliseconds
+at this point.
+And we'll go into the details
+of it in a little bit.
+But we decided to
+restore from tape.
+I woke up a couple
+of my colleagues
+in Europe because it
+was daytime for them,
+and it was nighttime for me.
+And again, I know my limits.
+Like you know what?
+I'm probably stupider
+than they are
+all the time, but especially
+now when it's midnight,
+and they're getting up anyway.
+OK?
+So the teams are
+sharded for this reason.
+We got on it.
+It took some number
+of days that we'll
+look at in more detail
+in a little bit.
+We recovered it.
+We restored the user data.
+And done.
+OK.
+And it didn't take order
+of weeks or months.
+It took order of
+single digit days.
+Which I was really happy about.
+I mean, there have
+been, and I'm not
+going to go into
+unbecoming specifics
+about other companies,
+but you can look.
+There have been cases where
+providers of email systems
+have lost data.
+One in particular
+I'm thinking of
+took a month to realize
+they couldn't get it back.
+And 28 days later, said, oh,
+you know, for the last month,
+we've been saying
+wait another day.
+It turns out, nah.
+And then a month after that,
+they actually got it back.
+But nobody cared.
+Because everybody had found
+a new email provider by then.
+So we don't want that.
+OK.
+We don't want to be
+those guys and gals.
+And we got it back in an
+order of single digit days.
+Which is not great.
+And we've actually
+taken steps to make
+sure it would happen a
+lot faster this time.
+But again, we got
+it back, and we
+had our expectations in line.
+
+How do we handle
+this kind of thing,
+like Gmail where the
+data is everywhere?
+OK.
+We don't have backups,
+like, for example, let's
+say we had a New
+York data center.
+Oh, my backups are in New York.
+That's really bad.
+Because then if one data
+center grows and shrinks,
+the backup capacity has to
+grow and shrink with it.
+And that just doesn't work well.
+We view our backup system as
+this enormous global thing.
+Right?
+This huge meta-system
+or this huge organism.
+OK?
+It's worldwide.
+And we can move things around.
+OK.
+When you back up, you might
+back up to some other place
+entirely.
+The only thing, obviously, is
+once something is on a tape,
+the restore has to happen there.
+Because tapes are
+not magic, right?
+They're not intangible.
+But until it makes a
+tape, you might say,
+my data is in New York.
+Oh, but your backup's in Oregon.
+Why?
+Because that's where we
+had available capacity, had
+location isolation,
+et cetera, et cetera.
+And it's really one big
+happy backup system globally.
+And the end users
+don't really know that.
+We never tell any
+client service,
+unless there's some sort
+of regulatory requirement,
+we don't tell them, your
+backups will be in New York.
+We tell them, you said you
+needed location isolation.
+With all due respect,
+please shut up
+and leave us to our jobs.
+And where is it?
+I couldn't tell
+you, to be honest.
+That's the system's job.
+That's a job for robots to do.
+Not me.
+And this works really
+well, because it
+lets us move capacity around.
+And not worry about if I
+move physical disks around,
+I don't have to move tape
+drives around with it.
+As long as the global
+capacity is good
+and the network can
+support it, we're OK.
+And we can view this one
+huge pool of backup resources
+as just that.
+So now the details
+I mentioned earlier.
+The Gmail restore.
+Let me see.
+Who wants to give
+me a complete swag.
+Right?
+A crazy guess as
+to how much data
+is involved if you lose Gmail?
+
+You lose Gmail.
+How much data?
+What units are we talking about?
+
+Nobody?
+What?
+Not quite yottabytes.
+In The Price is
+Right, you just lost.
+Because you can't go over.
+I'm flattered, but no.
+It's not yottabytes.
+It's on the order of
+many, many petabytes.
+Or approaching low
+exabytes of data.
+Right?
+You've got to get
+this back somehow.
+OK?
+Tapes are finite in capacity.
+So it's a lot of tapes.
+So we're faced with
+this challenge.
+Restore all that as
+quickly as possible.
+
+OK.
+I'm not going to tell you the
+real numbers, because if I did,
+like the microwave
+lasers on the roof
+would probably take care of me.
+But let's talk about
+what we can say.
+So I read this
+fantastic, at the time,
+and I'm not being facetious.
+There was a fantastic
+analysis of what
+Google must be doing
+right now during the Gmail
+restore that they
+have publicized.
+And it wasn't
+perfectly accurate,
+but it had some
+reasonable premises.
+It had a logical methodology.
+And it wasn't insane.
+So I'm going to go with
+the numbers they said.
+OK?
+They said we had 200,000
+tapes to restore.
+OK?
+So at the time, the
+industry standard was LTO 4.
+OK?
+And LTO 4 tapes hold about
+0.8 terabytes of data,
+and 128 megabytes per second.
+They take roughly
+two hours to read.
+OK.
+So if you take
+the amount of data
+we're saying Gmail must
+have, and you figure out
+how many at 2 hours per
+tape, capacity of tape,
+that's this many drive hours.
+You want it back in an hour?
+Well, that's impossible because
+the whole tape takes two hours.
+OK, let's say I want
+it back in two hours.
+So I've got 200,000 tape
+drives at work at once.
+All right.
+Show of hands.
+Who thinks we actually
+have 200,000 tape drives?
+Even worldwide.
+Who thinks we have
+200,000 tape drives.
+Really?
+You're right.
+OK.
+Thank you for being sane.
+Yes, we do not have--
+I'll say this--
+we do not have
+200,000 tape drives.
+We have some number.
+It's not that.
+So let's say I had one drive.
+No problem.
+In 16.67 thousand days,
+I'll have it back.
+Probably you've moved on
+to some other email system.
+Probably the human race has
+moved on to some other planet
+by then.
+Not happening.
+All right?
+So there's a balance.
+Right?
+Now we restored
+the data from tape
+in less than two days,
+which I was really proud of.
+So if you do some
+arithmetic, this tells you
+that it would've taken
+8,000 drives to get it back,
+non-stop doing nothing
+but, 8,000 drives
+are required to do this, with
+the numbers I've given earlier.
+OK.
+Typical tape libraries that are
+out there from Oracle and IBM
+and Spectra Logic and
+Quantum, these things
+hold several dozen drives.
+Like between 1,500 drives.
+So that means if you
+take the number of drives
+we're talking about by the
+capacity of the library,
+you must have had 100 libraries.
+100 large tape libraries
+doing nothing else
+but restoring Gmail
+for over a day.
+If you have them
+in one location,
+if you look at how many
+kilowatts or megawatts of power
+each library takes,
+I don't know.
+I'm sorry.
+You, with the glasses,
+what's your question?
+AUDIENCE: How much
+power is that?
+RAYMOND BLUM: 1.21
+gigawatts, I believe.
+AUDIENCE: Great Scott!
+RAYMOND BLUM: Yes.
+We do not have enough
+power to charge a flux
+capacitor in one room.
+If we did, that kid who
+beat me up in high school
+would never have happened.
+I promised you, we did
+not have that much power.
+So how did we handle this?
+Right?
+OK.
+I can tell you this.
+We did not have 1.21 gigawatts
+worth of power in one place.
+The tapes were all over.
+Also it's a mistake to
+think that we actually
+had to restore 200,000
+tapes worth of data
+to get that much content back.
+Right?
+There's compression.
+There's check sums.
+There's also
+prioritized restores.
+Do you actually need all
+of your archived folders
+back as quickly as you
+need your current inbox
+and your sent mail?
+OK.
+If I tell you there's
+accounts that have not
+been touched in a
+month, you know what?
+I'm going to give
+them the extra day.
+On the other hand, I read
+my mail every two hours.
+You get your stuff
+back now, Miss.
+That's easy.
+All right?
+So there's prioritization
+of the restore effort.
+OK.
+There's different data
+compression and check summing.
+It wasn't as much data as
+they thought, in the end,
+to get that much content.
+And it was not 1.21
+gigawatts in a room.
+
+And, yeah, so that's a really
+rough segue into this slide.
+But one of the things
+that we learned from this
+was that we had to pay more
+attention to the restores.
+Until then, we had thought
+backups are super important,
+and they are.
+But they're really
+only a tax you
+pay for the luxury of a restore.
+So we started thinking, OK, how
+can we optimize the restores?
+And I'll tell you, although I
+can't give you exact numbers,
+can't and won't give
+you exact numbers,
+it would not take us nearly
+that long to do it again today.
+OK.
+And it wouldn't be fraught
+with that much human effort.
+It really was a
+learning exercise.
+And we got through it.
+But we learned a lot, and
+we've improved things.
+And now we really only
+worry about the restore.
+We view the backups as some
+known, steady state thing.
+If I tell you you've got to
+hold onto your source data
+for two days, because that's how
+long it takes us to back it up,
+OK.
+You can plan for that.
+As long as I can promise you,
+when you need the restore,
+it's there, my friend.
+OK?
+So the backup, like I
+said, it's a steady state.
+It's a tax you pay for
+the thing you really want,
+which is data availability.
+On the other hand, when
+restore happens, like the Gmail
+restore, we need
+to know that we can
+service that now and quickly.
+So we've adapted things
+a lot towards that.
+We may not make the most
+efficient use of media,
+actually, anymore.
+Because it turns out that
+taking two hours to read a tape
+is really bad.
+Increase the parallelism.
+How?
+Maybe only write half a tape.
+You write twice as
+many tapes, but you
+can read them all in parallel.
+I get the data back
+in half the time
+if I have twice as many drives.
+Right?
+Because if I fill up the
+tape, I can't take the tape,
+break it in the middle,
+say to two drives,
+here, you take half.
+You take half.
+On the other hand, if I write
+the two tapes, side A and side
+B, I can put them in two drives.
+Read them in parallel.
+So we do that kind
+of optimization now.
+Towards fast reliable restores.
+We also have to look at
+the fact that a restore is
+a non-maskable interrupt.
+So one of the reasons
+we tell people,
+your backups really
+don't consider
+them done until we
+say they're done.
+When a restore comes in,
+that trumps everything.
+OK?
+Restores are suspended.
+Get the restore done now.
+That another lesson
+we've learned.
+It's a restore system,
+not a backup system.
+OK?
+Restores win.
+Also, restores have to
+win for another reason.
+Backups, as I mentioned
+earlier, are portable.
+If I say backup your
+data from New York,
+and it goes to Chicago,
+what do you care?
+On the other hand, if
+your tape is in Chicago,
+the restore must
+happen in Chicago.
+Unless I'm going to FedEx
+the tape over to New York,
+somehow, magically.
+Call the Flash, OK?
+So we've learned how to
+balance these things.
+That we, honestly, we
+wish backups would go way.
+We want a restore system.
+
+So quickly jumping to a summary.
+OK?
+We have found
+also, the more data
+we have, the more
+important it is to keep it.
+Odd but true.
+Right?
+There's no economy
+of scale here.
+The larger things are, the more
+important they are, as a rule.
+Back in the day when it was
+web search, right, in 2001,
+what was Google?
+It was a plain
+white page, right?
+With a text box.
+People would type
+in Britney Spears
+and see the result of a search.
+OK.
+Now Google is Gmail.
+It's stuff held in Drive,
+stuff held in Vault.
+Right?
+Docs.
+OK?
+It's larger and more important,
+which kind of stinks.
+OK.
+Now the backups are both
+harder and more important.
+So we've had to keep the
+efficiency improving.
+Utilization and efficiency
+have to skyrocket.
+Because we can't have
+it, as I said earlier,
+twice as much data
+or 100 times the data
+can't require 100
+times the staff
+power and machine resources.
+It won't scale.
+Right?
+The universe is finite.
+So we've had to improve
+utilization and efficiency
+a lot.
+OK?
+Something else that's
+paid off enormously
+is having good infrastructure.
+Things like MapReduce.
+I guarantee when Jeff and
+Sanjay wrote MapReduce,
+they never thought it
+would be used for backups.
+OK?
+But it's really good.
+It's really good to have general
+purpose Swiss army knives.
+Right?
+Like someone
+looked, and I really
+give a lot of
+credit, the guy who
+wrote our first
+backup system said,
+I'll bet I could write
+a MapReduce to do that.
+I hope that guy got a
+really good bonus that year,
+because that's awesome thinking.
+Right?
+That's visionary.
+And it's important to
+invest in infrastructure.
+If we didn't have MapReduce,
+it wouldn't have been there
+for this dire [INAUDIBLE].
+In a very short, and
+this kind of thing
+has paid off for
+us enormously, when
+I joined tech infrastructure
+who was responsible for this,
+we had 1/5 or 1/6
+maybe the number
+of backup sites and the
+capacity that we did.
+And maybe we doubled the staff.
+We certainly didn't
+quintuple it or sextuple it.
+We had the increase, but
+it's not linear at all.
+But scaling is really
+important, and you
+can't have any piece of
+it that doesn't scale.
+Like you can't say,
+I'm going to be
+able to deploy more tape drives.
+OK.
+But what about operation staff?
+Oh, I have to scale that up.
+Oh, let's hire twice
+as many people.
+OK.
+Do you have twice as
+many parking lots?
+Do you have twice as much
+space in the cafeteria?
+Do you have twice as
+much salary to give out?
+That last part is probably
+not the problem, actually.
+It's probably more
+likely the parking spots
+and the restrooms.
+Everything has to scale up.
+OK.
+Because if there's
+one bottleneck,
+you're going to hit
+it, and it'll stop you.
+Even the processes, like
+I mentioned our shipping
+processes, had to scale
+and more efficient.
+And they are.
+And we don't take
+anything for granted.
+One thing that's great,
+one of our big SRE mantras
+is hope is not a strategy.
+This will not get
+you through it.
+This will not get
+you through it.
+Sacrificing a goat to
+Minerva, I've tried,
+will not get you through it.
+OK.
+If you don't try
+it, it doesn't work.
+That's it.
+When you start a service
+backing up at Google-- I mean,
+force is not the
+right word-- but we
+require that they restore
+it and load it back
+into a serving
+system and test it.
+Why?
+Because it's not enough
+to say, oh, look,
+I'm pretty sure it
+made it this far.
+No.
+You know what?
+Take it the rest of
+the way, honestly.
+Oh, who knew that would break?
+Indeed, who knew.
+The morgue is full
+of people who knew
+that they could make that yellow
+light before it turned red.
+So until you get to
+the end, we don't
+consider it proven at all.
+And this has paid
+off enormously.
+We have found failures at the
+point of what could go wrong.
+Who knew?
+Right?
+And it did.
+So unless it's gone
+through an experiment all
+the way to completion,
+we don't consider it.
+If there's anything unknown,
+we consider it a failure.
+That's it.
+And towards that, I'm
+going to put a plug-in
+for DiRT, one of
+my pet projects.
+So DiRT is something we
+publicized for the first time
+last year.
+It's been quite a while.
+Disaster Recovery Testing.
+Every n months at
+Google, where n
+is something less than 10
+billion and more than zero,
+we have a disaster.
+It might be that martians
+attack California.
+It might be Lex Luther
+finally is sick of all of us
+and destroys the Northeast.
+It might be cosmic rays.
+It might be solar flares.
+It might be the IRS.
+Some disaster happens.
+OK?
+On one of those cosmic
+orders of magnitude.
+And the rest of the
+company has to see
+how will we continue
+operations without California,
+North America, tax returns.
+Whatever it is.
+And we simulate
+this to every level,
+down to the point
+where if you try
+to contact your teammate in
+Mountain View and say, hey,
+can you cover?
+Your response will
+be, I'm underwater.
+Glub, glub.
+Look somewhere else.
+OK?
+Or I'm lying under a building.
+God forbid.
+Right?
+But you have to see how will
+the company survive and continue
+operations without that.
+That being whatever's
+taken by the disaster.
+We don't know what
+the disaster will be.
+We find out when it happens.
+You'll come in one day,
+hey, I can't log on.
+Oops.
+I guess DiRT has started.
+OK.
+And you've got to
+learn to adapt.
+And this finds enormous
+holes in our infrastructure,
+in physical security.
+Imagine something like,
+we've got a data center
+with one road leading to it.
+And we have trucks
+filled with fuel
+trying to bring fuel
+for the generators.
+That road is off.
+Gee, better have another
+road and another supplier
+for diesel fuel for
+your generators.
+That level, through
+simple software changes.
+Like, oh, you should run
+in two cells that are not
+in any way bound to each other.
+So we do this every year.
+It pays off enormously.
+It's a huge boon to
+the caffeine industry.
+I'm sure the local coffee
+suppliers love when we do this.
+They don't know why, but
+every year, around that time,
+sales spike.
+And it teaches a lot every year.
+And what's amazing is after
+several years of doing this,
+we still find new kinds
+of problems every year.
+Because apparently the one thing
+that is infinite is trouble.
+There are always some new
+problems to encounter.
+Really, what's
+happening is you got
+through last year's problems.
+There's another one waiting for
+you just beyond the horizon.
+
+Like so.
+Disaster.
+Wow.
+It looks like I
+really did something.
+OK.
+So I'll just carry it.
+Ah.
+And, yes, there's no backup.
+But luckily, I'm an engineer.
+I can clip things.
+So with that, that
+pretty much is
+what I had planned
+to talk about.
+And luckily, because
+that is my last slide.
+And I'm going to open
+up to any questions.
+Please come up to a mic or,
+I think this is the only mic.
+Right?
+AUDIENCE: Hi.
+RAYMOND BLUM: Hi.
+AUDIENCE: Thanks.
+I've no shortage of questions.
+RAYMOND BLUM: Start.
+
+AUDIENCE: My question was
+do you dedupe the files
+or record only
+one copy of a file
+that you already have an
+adequate number of copies of?
+RAYMOND BLUM: There's not a
+hard, set answer for that.
+And I'll point out why.
+Sometimes the process
+needed to dedupe
+is more expensive than
+keeping multiple copies.
+For example, I've got a copy in
+Oregon and a copy in Belgium.
+And they're really large.
+Well, you know what?
+For me to run the check
+summing and the comparison--
+you know what?
+Honestly, just put it on tape.
+AUDIENCE: That's why I said
+an adequately backed up copy.
+RAYMOND BLUM: Yes.
+On the other hand,
+there are some,
+like for example, probably
+things like Google Play Music
+have this, you can't dedupe.
+Sorry.
+The law says you may not.
+I'm not a lawyer, don't
+take it up with me.
+AUDIENCE: You can backup,
+but you can't dedupe?
+RAYMOND BLUM: You cannot dedupe.
+You cannot say, you're
+filing the same thing.
+Not-uh.
+If he bought a copy,
+and he bought a copy,
+I want to see two copies.
+I'm the recording industry.
+I'm not sure that's exactly use
+case, but those sorts of things
+happen.
+But yeah.
+There's a balance.
+Right?
+Sometimes it's a
+matter of deduping,
+sometimes it's just back
+up the file, sometimes.
+AUDIENCE: But my question
+is what do you do?
+RAYMOND BLUM: It's a
+case by case basis.
+It's a whole spectrum.
+AUDIENCE: Sometimes you
+dedupe, sometimes you back up.
+RAYMOND BLUM: Right?
+There's deduping.
+Dedupe by region.
+Deduping by time stamp.
+AUDIENCE: And when you have
+large copies of things which
+you must maintain
+an integral copy of,
+and they're changing
+out from under you.
+How do you back them up.
+Do you front run the blocks?
+RAYMOND BLUM: Sorry, you
+just crashed my parser.
+AUDIENCE: Let's say you
+have a 10 gigabit database,
+and you want an integral
+copy of it in the backups.
+But it's being written
+while you're backing it up.
+RAYMOND BLUM: Oh.
+OK.
+Got it.
+AUDIENCE: How do you
+back up an integral copy?
+RAYMOND BLUM: We don't.
+We look at all the
+mutations applied,
+and we take basically
+a low watermark.
+We say, you know what, I
+know that all the updates as
+of this time were there.
+Your backup is good as of then.
+There may be some
+trailing things after,
+but we're not guaranteeing that.
+We are guaranteeing that as
+of now, it has integrity.
+And you'll have to
+handle that somehow.
+AUDIENCE: I don't understand.
+If you have a 10
+gigabyte database,
+and you back it up
+linearly, at some point,
+you will come upon a
+point where someone
+will want to write something
+that you haven't yet backed up.
+Do you defer the write?
+Do you keep a transaction log?
+I mean, there are sort of
+standard ways of doing that.
+How do you protect the first
+half from being integral,
+and the second half
+from being inconsistent
+with the first half?
+RAYMOND BLUM: No.
+There may be inconsistencies.
+We guarantee that
+there is consistency
+as of this point in time.
+AUDIENCE: Oh, I see.
+So the first half
+could be integral.
+RAYMOND BLUM: Ask Heisenberg.
+I have no idea.
+But as of then, I can guarantee
+that everything's cool.
+AUDIENCE: You may never
+have an integral copy.
+RAYMOND BLUM: Oh,
+there probably isn't.
+No, you can say this snapshot
+of it is good as of then.
+AUDIENCE: It's not a complete.
+RAYMOND BLUM: Right.
+The whole thing is not.
+But I can guarantee that
+anything as of then is.
+After that, you're on your own.
+AUDIENCE: Hi.
+You mentioned having
+backups in different media,
+like hard disk and tape.
+RAYMOND BLUM: Cuneiform.
+AUDIENCE: Adobe tablets.
+And you may recall
+that there was
+an issue in South
+Korea a while ago,
+where the supply of hard
+disk suddenly dropped,
+because there was a
+manufacturing issue.
+Do you have any supply
+chain management redundancy
+strategies?
+RAYMOND BLUM: Yes.
+
+Sorry.
+I don't know that I can say more
+than that, but I can say yes.
+We do have some supply
+chain redundancy strategy.
+AUDIENCE: OK.
+And one other question was do
+you have like an Amazon Web
+Services Chaos
+Monkey like strategy
+for your backup systems?
+In general for testing them?
+Kind of similar to DiRT,
+but only for backups?
+RAYMOND BLUM: You
+didn't quite crash it,
+but my parser is having trouble.
+Can you try again?
+AUDIENCE: Amazon Web
+Services has this piece
+of software called Chaos Monkey
+that randomly kills processes.
+And that helps them
+create redundant systems.
+Do you have something like that?
+RAYMOND BLUM: We do not go
+around sniping our systems.
+We find that failures occur
+quite fine on their own.
+No.
+We don't actively do that.
+But that's where I mentioned
+that we monitor the error rate.
+In effect, we know there
+are these failures.
+All right.
+Failures happen at n.
+As long as it's at n, it's cool.
+There is a change
+in the failure rate,
+that is actually a failure.
+It's a derivative,
+let's say, of failures.
+It's actually a failure.
+And the systems are expected
+to handle the constant failure
+rate.
+AUDIENCE: But if it goes down?
+RAYMOND BLUM: That's a big
+change in the failure rate.
+AUDIENCE: If the rate goes
+down, is that OK, then?
+RAYMOND BLUM: If what goes down?
+AUDIENCE: The failure rate.
+RAYMOND BLUM: Oh, yeah,
+that's still a problem.
+AUDIENCE: Why is it a problem?
+RAYMOND BLUM: It
+shouldn't have changed.
+That's it.
+So we will look and
+say, ah, it turns out
+that zero failure, a
+reduction of failure
+means that half the nodes
+aren't reporting anything.
+Like that kind of thing happens.
+So we look at any change as bad.
+AUDIENCE: Thank you.
+RAYMOND BLUM: You're welcome.
+AUDIENCE: Hi.
+Two questions.
+One is simple,
+kind of yes or no.
+So I have this very
+important cat video
+that I made yesterday.
+Is that backed up?
+RAYMOND BLUM: Pardon?
+AUDIENCE: The important cat
+video that I made yesterday,
+is that backed up?
+RAYMOND BLUM: Do you
+want me to check?
+AUDIENCE: Yes or no?
+RAYMOND BLUM: I'm
+going to say yes.
+I don't know the specific
+cat, but I'm going to say yes.
+AUDIENCE: That's a big data set.
+You know what I mean?
+RAYMOND BLUM: Oh, yeah.
+Cats.
+We take cats on
+YouTube very seriously.
+My mother knows that
+&quot;Long Cat&quot; loves her.
+No, we hold on to those cats.
+AUDIENCE: So the
+second question.
+So if I figure out
+your shipping schedule,
+and I steal one of the trucks.
+RAYMOND BLUM: You assume
+that we actually ship things
+through these three
+physical dimensions,
+you think something as
+primitive as trucks.
+AUDIENCE: You said so.
+Twice, actually.
+RAYMOND BLUM: Oh, that
+was just a smoke screen.
+AUDIENCE: You said,
+physical security of trucks.
+RAYMOND BLUM: Well no.
+I mean, the stuff
+is shipped around.
+And if that were to happen,
+both departure and arrival
+are logged and compared.
+And if there's a failure in
+arrival, we know about it.
+And until then, until
+arrival has been logged,
+we don't consider the
+data to be backed up.
+It actually has to
+get where it's going.
+AUDIENCE: I'm more concerned
+about the tapes and stuff.
+Where's my data?
+RAYMOND BLUM: I
+promise you that we
+have this magical thing
+called encryption that,
+despite what government
+propaganda would have you
+believe, works really, really
+well if you use it properly.
+Yeah.
+No, your cats are
+encrypted and safe.
+
+They look like
+dogs on the tapes.
+
+AUDIENCE: As for the talk,
+it was really interesting.
+I have three quick questions.
+The first one is something
+that I always wondered.
+How many copies of a single
+email in my Gmail inbox
+exist in the world?
+RAYMOND BLUM: I don't know.
+AUDIENCE: Like three or 10?
+RAYMOND BLUM: I
+don't know, honestly.
+I know it's enough that
+there's redundancy guaranteed,
+and it's safe.
+But, like I said, that's
+not a human's job to know.
+Like somebody in Gmail
+set up the parameters,
+and some system said,
+yeah, that's good.
+Sorry.
+AUDIENCE: This second one
+is related to something
+that I read recently, you
+know Twitter is going to--
+RAYMOND BLUM: I can say this.
+I can say more than one,
+and less than 10,000.
+AUDIENCE: That's not a
+very helpful response,
+but it's fine.
+RAYMOND BLUM: I
+really don't know.
+AUDIENCE: I was
+reading about you
+know Twitter is
+going to file an IPO,
+and something I
+read in an article
+by someone from Wall Street
+said that actually, Twitter
+is not that impressive.
+Because they have these banks
+systems, and they never fail,
+like ever.
+RAYMOND BLUM: Never, ever?
+Keep believing in that.
+AUDIENCE: That's exactly
+what this guy said.
+He said, well, actually,
+Twitter, Google, these things
+sometimes fail.
+They lose data.
+So they are not
+actually that reliable.
+What do you think about that?
+RAYMOND BLUM: OK.
+I'm going to give
+you a great analogy.
+You, with the glasses.
+Pinch my arm really hard.
+Go ahead.
+Really.
+I can take it.
+No, like really with your nails.
+OK.
+Thanks.
+So you see that?
+He probably killed like,
+what, 20,000 cells?
+I'm here.
+Yes.
+Google stuff fails all the time.
+It's crap.
+OK?
+But the same way
+these cells are.
+Right?
+So we don't even
+dream that there
+are things that don't die.
+We plan for it.
+So, yes, machines
+die all the time?
+Redundancy is the answer.
+Right now, I really hope there
+are other cells kicking in,
+and repair systems are at work.
+I really hope.
+Please?
+OK?
+And that's how our
+systems are built.
+On a biological
+model, it's called.
+We expect things to die.
+AUDIENCE: I think
+at the beginning,
+I read that you also
+worked on something
+related to Wall Street.
+My question was
+also, is Google worse
+than Wall Street's system--
+RAYMOND BLUM: What does
+that mean, worse than?
+AUDIENCE: Less reliable?
+RAYMOND BLUM: I actually
+would say quite the opposite.
+So at one firm I worked at,
+that I, again, will not name,
+they bought the best.
+Let me say, I love
+Sun Equipment.
+OK?
+Before they were Oracle, I
+really loved the company, too.
+OK?
+And they've got
+miraculous machines.
+Right?
+You could like, open
+it up, pull out RAM,
+replace a [INAUDIBLE]
+board with a processor,
+and the thing stays
+up and running.
+It's incredible.
+But when that
+asteroid comes down,
+that is not going to save you.
+OK?
+So, yes, they have better
+machines than we do.
+But nonetheless, if I can
+afford to put machines
+in 50 locations, and the
+machines are half as reliable,
+I've got 25 times
+the reliability.
+And I'm protected
+from asteroids.
+So the overall effect is our
+stuff is much more robust.
+Yes, any individual piece is,
+like I said, the word before.
+Right?
+It's crap.
+Like this cell was crap.
+But luckily, I am
+more than that.
+And likewise, our entire
+system is incredibly robust.
+Because there's
+just so much of it.
+AUDIENCE: And my last
+question is could you
+explain about MapReduce?
+I don't really
+know how it works.
+RAYMOND BLUM: So
+MapReduce is something
+I'm not-- he's probably
+better equipped,
+or she is, or that guy there.
+I don't really know
+MapReduce all that well.
+I've used it, but I
+don't know it that well.
+But you can Google it.
+There are White Papers on it.
+It's publicly owned.
+There are open source
+implementations of it.
+But it's basically a
+distributing processing
+framework that gives
+you two things to do.
+You can split up
+your data, and you
+can put your data back together.
+And MapReduce does all
+the semaphores, handles
+race conditions,
+handles locking.
+OK?
+All for you.
+Because that's the
+stuff that none of us
+really know how to get right.
+And, as I said,
+if you Google it,
+there's like a really,
+really good White Paper on it
+from several years ago.
+AUDIENCE: Thank you.
+RAYMOND BLUM: You're welcome.
+
+AUDIENCE: Thanks very much
+for the nice presentation.
+I was glad to hear
+you talked about 100%
+guaranteed data backup.
+And not just backup,
+but also recoverability.
+I think it's probably the same
+as the industry term, the RPO,
+recovery point
+objective equals zero.
+My first question is
+in the 2011 incident,
+were you able to
+get 100% of data?
+RAYMOND BLUM: Yes.
+Now availability is different
+from recoverability.
+It wasn't all there
+in the first day.
+As I mentioned, it wasn't
+all there in the second day.
+But it was all there.
+And availability varied.
+But at the end of the
+period, it was all back.
+AUDIENCE: So how could
+you get 100% of data
+when your replication
+failed because
+of disk corruption or
+some data corruption?
+But the tape is the point
+of time copy, right?
+So how could you?
+RAYMOND BLUM: Yes.
+OK So what happened is--
+without going into things
+that I can't, or shouldn't,
+or I'm not sure if I should
+or not-- the data is
+constantly being backed up.
+Right?
+So let's say we have
+the data as of 9:00 PM.
+Right?
+And let's say the corruption
+started at 8:00 PM,
+but hadn't made it to tapes yet.
+OK?
+And we ceased the corruption.
+We fall back to an early
+version of the software that
+doesn't have the bug.
+Pardon me.
+At 11:00.
+So at some point in the
+stack, all the data is there.
+There's stuff on tape.
+There's stuff being replicated.
+There's stuff in
+the front end that's
+still not digested as logs.
+So we're able to
+reconstruct all of that.
+And there was overlap.
+So all of the logs
+had till then.
+The backups had till then.
+This other layer in
+between had that much data.
+So there was, I don't
+know how else to say it.
+I'm not articulating this well.
+But there was overlap, and
+that was built into it.
+The idea was you don't take it
+out of this stack until n hours
+after it's on this later.
+Why?
+Just because.
+And we discovered the
+cause really paid off.
+AUDIENCE: So you keep the
+delta between those copies.
+RAYMOND BLUM: Yes.
+There's a large overlap
+between the strata,
+I guess is the
+right way to say it.
+AUDIENCE: I just have
+one more question.
+The speed of these data
+increasing in our days
+is going to be double and
+triple in certain years.
+Who knows, right?
+Do you think there is
+a need for new medium,
+rather than tape, to
+support that backup?
+RAYMOND BLUM: It's
+got to be something.
+Well, I would have said yes.
+What days am I thinking about?
+In the mid '90s, I guess, when
+it was 250 gig on a cartridge,
+and those were huge.
+And then things like Zip disks.
+Right?
+And gigabytes.
+I would have said yes.
+But now, I'm always
+really surprised at how
+either the laws of
+physics, laws of mechanics,
+or the ingenuity
+of tape vendors.
+I mean, the capacity is going
+with Moore's law pretty well.
+So LTO 4 was 800 gig.
+LTO 5 is 1.
+almost 5 t.
+LTO 6 tapes are 2.4
+t, I think, or 2.3 t.
+So, yeah, they're climbing.
+The industry has
+called their bluff.
+When they said, this is as
+good as it can get, turns out,
+it wasn't.
+So it just keeps increasing.
+At some point, yes.
+But we've got a lot
+more random access
+media, and not things like tape.
+AUDIENCE: Is Google
+looking at something
+or doing research for that?
+RAYMOND BLUM: I can
+say the word yes.
+AUDIENCE: Thank you.
+RAYMOND BLUM: You're welcome.
+AUDIENCE: Thank
+you for your talk.
+RAYMOND BLUM: Thank you.
+AUDIENCE: From
+what I understand,
+Google owns its
+own data centers.
+But there are many other
+companies that cannot afford
+to have their own data centers,
+so many companies operate
+in the cloud.
+And they store their
+data in the cloud.
+So based on your
+experience, do you
+have any strategies
+for backing up
+and the storing
+from the cloud, data
+that's stored on the cloud?
+RAYMOND BLUM: I need a
+tighter definition of cloud.
+AUDIENCE: So, for
+example, someone operating
+completely using
+Amazon net sources.
+RAYMOND BLUM: I would
+hope that, then, Amazon
+provides-- I mean,
+they do, right?
+A fine backup strategy.
+Not as good as mine,
+I want to think.
+I'm just a little biased.
+AUDIENCE: But are there
+any other strategies
+that companies that operate
+completely in the cloud
+should consider?
+RAYMOND BLUM: Yeah.
+Just general purpose strategies.
+I think the biggest
+thing that people
+don't do that they can-- no
+matter what your resources,
+you can do a few things, right?
+Consider the dimensions that
+you can move sliders around on,
+right?
+There's location.
+OK?
+There's software.
+And I would view software
+as vertical and location
+as horizontal.
+Right?
+So I want to cover everything.
+That would mean I want a
+copy in, which one did I say?
+Yeah.
+Every location.
+And in every location
+in different software,
+layers in a software stack.
+And you can do if you even just
+have VMs from some provider,
+like, I don't know who
+does that these days.
+But some VM provider.
+Provider x, right?
+And they say, our data
+centers are in Atlanta.
+Provider y says our
+data centers are in,
+where's far away from Atlanta?
+Northern California.
+OK.
+Fine.
+There.
+I've got location.
+We store stuff on
+EMC sand devices.
+We store our stuff
+on some other thing.
+OK.
+Fine.
+I say it again,
+it's vendor bugs.
+And just doing it that way,
+there's a little research
+and I don't want
+to say hard work.
+But plotting it out on
+a big map, basically.
+And just doing that, I
+think, is a huge payoff.
+It's what we're doing, really.
+AUDIENCE: So increasing
+the redundancy factor.
+RAYMOND BLUM: Yes.
+But redundancy in
+different things.
+Most people think of
+redundancy only in location.
+And that's my point.
+It has to be redundancy in these
+different-- redundant software
+stacks and redundant locations.
+The product of those, at least.
+And also Alex?
+Yes.
+What he said.
+Right?
+Which was, he said something.
+I'm going to get it
+back in a second.
+Loading.
+Loading.
+OK, yes.
+Redundancy even in time.
+It was here in the
+stack, migrating here.
+You know what?
+Have it in both
+places for a while.
+Like don't just let it
+migrate through my stack.
+Don't make the stacks like this.
+Make them like that,
+so there's redundancy.
+Why?
+Because if I lose
+this and this, look,
+I've got enough overlap
+that I've got everything.
+So redundancy in time,
+location, and software.
+
+Hi again.
+AUDIENCE: Hi.
+So if I understand your
+description of the stacks,
+it sounds as if every
+version of every file
+will end up on tape,
+somewhere, sometime.
+RAYMOND BLUM: Not necessarily.
+Because there are some
+things that we don't.
+Because it turns
+out that in the time
+it would take to get
+it back from tape,
+I could reconstruct the data.
+I don't even have
+to open the tape.
+They don't bother me.
+AUDIENCE: Do you ever run
+tape faster than linear speed?
+In other words, faster
+than reading the tape
+or writing the tape by
+using the fast forwarding
+or seek to a place?
+RAYMOND BLUM: We do
+what the drives allow.
+Yes.
+AUDIENCE: And how are we
+going to change the encryption
+key, if you need to?
+With all of these tapes
+and all of these drives?
+You have a gigantic key
+distribution problem.
+RAYMOND BLUM: Yes, we do.
+AUDIENCE: Have you worried
+about that in your DiRT?
+RAYMOND BLUM: We have.
+And it's been solved to
+our satisfaction, anyway.
+Sorry.
+I can say yes, though.
+
+And I'll say one more
+thing towards that,
+which is actually,
+think about this.
+A problem where a
+user says something
+like, I want my stuff deleted.
+OK.
+It's on a tape with a
+billion other things.
+I'm not recalling that tape
+and rewriting it just for you.
+I mean, I love you
+like a brother,
+but I'm not doing that.
+OK?
+So what do I do?
+Encryption.
+Yes.
+So our key management system
+is really good for reasons
+other than what you said.
+I mean, it's another one of
+those Swiss army knives that
+keeps paying off in the
+ways I just described.
+Anything else?
+Going once and twice.
+
+AUDIENCE: Allright.
+So there's all these
+different layers
+of this that are
+all coming together.
+How do you coordinate all that?
+RAYMOND BLUM: Very well.
+Thank you.
+Can you give me a more specific?
+AUDIENCE: I mean between
+maintaining the data center,
+coming up with all the different
+algorithms for cacheting
+different places,
+things like that.
+Are there a few
+key people who know
+how everything fits together?
+RAYMOND BLUM: There
+are people-- so this
+is a big problem I had at
+first when I came to Google.
+So before I came to
+Google, and this is not
+a statement about me maybe
+as much as of the company
+I kept, but I was the
+smartest kid in the room.
+And then, when I came to
+Google, I was an idiot.
+And a big problem
+with working here
+is you have to accept that.
+You are an idiot, like all
+the other idiots around you.
+Because it's just so big.
+So what we're really good at
+is trusting our colleagues
+and sharding.
+Like I know my
+part of the stack.
+I understand there
+is someone who
+knows about that
+part of the stack.
+I trust her to do her job.
+She hopefully trusts
+me to do mine.
+The interfaces are
+really well-defined.
+And there's lots of tests at
+every point of interaction.
+And there are people who
+maybe have the meta-picture,
+but I would pretty much say no
+one knows all of it in depth.
+People have broad views, people
+have deep, vertical slices.
+But no one's got it all.
+It's just not possible.
+
+AUDIENCE: Hi.
+So I wanted to ask
+how much effort
+is required to deal
+with local regulation?
+So you described your
+ability to backup
+in this very abstract
+way, like we'll just
+let the system decide whether
+it goes into Atlanta or London
+or Tokyo or wherever.
+But obviously, now
+we're living in a world
+where governments are
+saying, you can't do that.
+Or this needs to be deleted.
+Or this needs to be
+encrypted in a certain way.
+Or we don't want our user
+data to leave the country.
+RAYMOND BLUM: Yes.
+This happens a lot.
+This is something that I
+know is publicly known,
+so I'm going to be
+bold for a change.
+No, I'm bold all the time,
+actually, but I'll say this.
+So we have actually apps.
+We won, some number
+of years and months
+ago, the contract to do
+a lot of, let's call it,
+IT systems for
+the US government.
+A lot of government
+agencies are on Gmail.
+Gmail for enterprise, in
+effect, but the enterprise
+is the US government.
+And that was the big thing.
+The data may not leave
+the country, period.
+If we say it's in
+the state of Oregon,
+it's in the state of Oregon.
+And we've had to go
+back and retrofit this
+into a lot of systems.
+But it was a massive effort.
+
+We've had to go back
+and build that in.
+Luckily, all the systems
+were modular enough
+it wasn't a terrible
+pain, because
+of the well-defined interfaces
+I stressed so much in response
+to, I think it was, Brad's
+question a few minutes ago.
+Yeah.
+It had to be done.
+And there are two kinds, right?
+There's white-listing
+and blacklisting.
+Our data must stay here.
+And there's, our data
+must not be there.
+And most of our systems and
+infrastructure do that now.
+And what we've
+tried to do is push
+that stuff down
+as far as possible
+for the greatest
+possible benefit.
+So we don't have 100
+servicers at Google
+who know how to
+isolate the data.
+We know how to say,
+on the storage layer,
+it must have these white or
+blacklists associated with it.
+And all the services
+write to it,
+just say, I need profile x or y.
+And hopefully, the right
+kind of magic happens.
+But, yeah, it's a huge problem.
+And we have had to deal
+with it, and we have.
+AUDIENCE: Could you go into a
+little more detail about using
+MapReduce for the backup
+and restore tasks.
+Just sort of like what parts
+of the backup and restore it
+applies to.
+RAYMOND BLUM: Oh, sure.
+Do you know what Big Table is?
+AUDIENCE: Yeah.
+RAYMOND BLUM: OK.
+So Big Table is like
+our &quot;database&quot; system.
+Quotes around database.
+It's a big hash map on disk,
+basically, and the memory.
+So if I've got this
+enormous Big Table,
+and remember the first
+syllable of Big Table.
+Right?
+I'm going to read this serially.
+OK, that'll take five years.
+On the other hand, I
+can shard it and say,
+you know what, I'm going to
+take the key distribution,
+slice it up into 5,000
+roughly equidistant slices,
+and give 5,000 workers, OK, you
+seek ahead to your position.
+You back that up.
+And then on the
+restore, likewise.
+OK?
+I'm going to start reading.
+OK, well, I've put
+this onto 20 tapes.
+OK, give me 20 workers.
+What they're each doing
+is reading a tape,
+sending it off to n, let's say
+5,000 workers up near Big Table
+whose job it is to get some
+compressed [INAUDIBLE],
+unpack it, stick it into the Big
+Table at the right key range.
+It's just that.
+It's a question of sharding into
+as small of units as possible.
+AUDIENCE: So it's just a matter
+of creating that distribution.
+RAYMOND BLUM: Yeah.
+And that's what MapReduce
+is really, really good at.
+That's its only thing
+it's really good at,
+but that's enough.
+AUDIENCE: It's just
+getting it to simplify it
+to that point that
+would be hard.
+RAYMOND BLUM: Yeah.
+I agree.
+It's very hard.
+And that's why I fell
+in love with MapReduce.
+I was like, wow.
+I just wrote that
+in an afternoon.
+AUDIENCE: And what's
+roughly the scale?
+You said for Gmail,
+it's on exabyte.
+I mean, for all of the data
+that Google's mapping out.
+Is that also in the exabyte or?
+RAYMOND BLUM: It's
+not yottabytes.
+It's certainly more
+than terabytes.
+Yeah.
+There's a whole spectrum there.
+AUDIENCE: Including
+all the pedafiles?
+RAYMOND BLUM: I can't.
+You know I can't answer that.
+AUDIENCE: Thank you.
+RAYMOND BLUM: You're welcome.
+And I'll give one more
+round for questions?
+Going thrice.
+All right.
+Sold.
+Thank you all.
+</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

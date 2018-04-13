@@ -1,0 +1,1706 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Adventures in Parametric Polymorphism | Coder Coacher - Coaching Coders</title><meta content="Adventures in Parametric Polymorphism - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Java/">Java</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Adventures in Parametric Polymorphism</b></h2><h5 class="post__date">2016-08-01</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/Tc9vs_HFHVo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so for those of you who are here two
+years ago John Rose and I stood up here
+and outlined a fairly ambitious agenda
+for a coordinated evolution of the JVM
+and the Java language - I basically
+reboot the way that the JVM interacts
+with data and memory and so this talk is
+status report of what we've been doing
+for the last two years the the quick
+summary is we've been working on it hard
+for two years we've made a lot of
+progress we got a long way to go so for
+those of you who are watching on YouTube
+I'll just a reminder this is focusing
+mostly on the JVM technology and not on
+the language side of it so even though I
+always make this disclaimer I know I'm
+gonna see articles about oh here's what
+Java 10 language is gonna look like it's
+not okay
+alright so disclaimer slide don't
+believe anything I say so the the agenda
+that we that we outlined at our last
+talk became part of what's we call
+project Valhalla as an open JDK project
+that we've been like I said running for
+the last two years and it's a good
+illustration of how a simple idea can
+balloon into something that touches
+basically everything so we started with
+a very simple seeming idea value types
+so value types is straightforward
+concept it's a pure data aggregate like
+a complex number or an XY point or a
+tuple that doesn't have any of the
+ancillary overhead that objects have and
+for all the same reasons why Java had
+primitives in the first place we want to
+be able to have a broader set of
+aggregates that behave like primitives
+so that we can add new new numeric types
+we can add language features without the
+overhead etc as we started digging into
+this we discovered something that while
+we already knew which is that every
+language feature every VM feature
+interacts with every other feature and
+so once you add one thing now you have
+to adjust everything to work with it and
+you can think of this as pulling on one
+end of a very long string so in some
+sense this talk is a little bit of a
+tour of the the length and topology of
+that string or at least the part that
+we've we've pulled out so far
+some areas that we've done quite a lot
+of research into and we think we have a
+good story some areas are still
+completely unknown so some parts of the
+map are going to be better drawn than
+others so the motivation for value types
+is pretty straightforward and has for
+all our other motivation we get it from
+a good source to paraphrase you know
+what Yoda said object identity is the
+root of so many problems object identity
+leads to pointers pointer leads to
+indirection and of course indirection
+leads to suffering and to illustrate
+this suffering let's take a look at this
+data layout of typical Java data
+structure if you have a class like an XY
+point simple aggregate you want to have
+an array of these guys well it's not
+really an array of points as an array of
+references two points each reference is
+a pointer each pointer points to an
+object in the heap that has to be
+allocated and garbage collected each of
+those objects has a header which has at
+least two words usually one for tracking
+identity related things garbage
+collection etc and the other for storing
+the objects type state and so what
+started out as a fairly simple thing an
+array of XY points has ballooned into
+something that uses more memory than
+necessary bernard talked about density
+that's that's an issue has a lot more
+indirection than necessary which is a
+big deal on today's processors where the
+cost of a cache miss is substantial and
+this is not just not the data structure
+that we had the layout that we asked for
+right the programmer probably had in
+mind something more like this and so you
+know what one of the the fundamental
+questions for project Valhalla is what
+code do we want to write to get a layout
+like this seems simple right how could
+it be taking so long well it's a long
+string so we think that this is the code
+we want to write it's a way of saying
+this this class this is XY point to
+aggregate is a special kind of classes
+of value class and I'm with a value
+class is willing to give up on object
+identity in exchange for getting some
+benefits so what what are what are those
+benefits let so let me start with
+now that we've been working on this for
+two years we finally figured out what
+our goals for the project are so let me
+summarize this the you know the the high
+order bit our memory density and memory
+flatness so we would like to be able to
+squeeze out extraneous object headers
+extraneous pointers extraneous in
+directions from representing
+straightforward graphs of data where
+they don't add value sometimes they do
+add value if you have representation of
+polymorphism then yes having a pointer
+and had a representation makes a lot of
+sense if you're just want to grovel over
+a big array of complex numbers it
+doesn't add value and you and you want
+to get rid of it but more generally when
+when there's a performance cost to doing
+something or when there's a perceived
+performance cost of doing something
+developers often mess up their code in
+order to get better performance and even
+though we wish most of them will stop
+doing that because most of the time it's
+it's a bad trade the best way to get
+them to stop doing that we tried the
+education route that didn't work so the
+best way you know that we can think of
+is to try not to put developers in a
+position where they perceive that they
+have to make a choice between
+performance and abstraction type safety
+encapsulation doing the right thing so
+eliminate the temptation to unroll that
+array of XY points into two arrays
+events which I know people do eliminate
+the need for library writers to write
+handwritten specializations of things
+how many people here have used the Java
+eight streams library right how many
+people here kind of see the specialized
+streams like in stream long stream
+double stream as a regretable wart I
+certainly do
+it was painful to write them it's
+painful to use them we had to we had no
+other choice the performance of
+arithmetic unboxed primitives is
+terrible but it wasn't a good you know
+it wasn't a good result because there's
+a lot more code we give up a lot of
+abstraction it was it was a necessary
+evil we'd like to get rid of that
+necessary evil so we would like for
+being able people to be able to use
+generics to write the code once and
+abstract over all the different data
+types so value types and by extension
+generics over values eliminate these
+cost frictions
+so that's the performance side of it but
+the flip side of that is the
+expressiveness having you know those
+hands specialized classes like in-stream
+and double stream it's an abstraction
+violation it's not complete we didn't do
+all of the the primitives because we
+didn't want to balloon up the the
+runtime and it still doesn't scale well
+the things like streams of tuples so we
+would like to make generics more
+powerful so that you can abstract over
+all the time so abstract over not just
+references but primitives values and
+even even the lack of the lack of data
+so that people can write things once
+rather than n plus 1 times you know so
+we have lots of code in the JDK like
+arrays dot fill that has to be written
+nine times that's silly right so we have
+a performance goal we also have an
+expressiveness goal here and the to work
+out the work pretty well together as a
+sort of third goal in order to make this
+actually work not only do we have to
+provide VM and language features that
+let you do the right thing we also have
+to find a path for our existing
+libraries that now by in our historical
+relativism now do the wrong thing to
+find their way to the right place and
+migrating existing libraries is even
+harder than writing new libraries and so
+in addition to the VM features the
+language features for expressing what we
+want to be able to Express
+we also need some features from RIE
+grading existing code to come into this
+new world we did this with the default
+methods and lambda where by adding
+default methods we were able to add a
+conversion from collection to streams so
+that you could do filter MapReduce over
+existing collections we need the same
+kind of thing for for these features so
+okay that's the goal let's let's grab
+the starting point to the string and
+start pulling so value types you can
+think for them as pure data aggregates
+they're just the data no identity they
+don't admit representational
+polymorphism they can't have subclasses
+or super classes that's one of the
+things you trade away so XY points fine
+but you can't have you know an XYZ point
+extends the XY z-- XY point they're not
+mutable
+they're not knowable and equality
+because there's no identity is based on
+their data not their state
+sorry not their identity
+and so by giving up a few things by
+giving up identity by giving up
+polymorphism representation of
+polymorphism by giving up on mutability
+we get a bunch of things we are able to
+get the data layout that looks more like
+the what we want slide than the what we
+have slide values can be routinely
+flattened into enclosing objects or
+other values they can routinely be
+flattened into arrays we don't need an
+object header and we essentially get
+aggregates that behave with the runtime
+characteristics of primitives so there's
+sort of two ways to look at it you can
+look at these things as programmable
+primitives or you can look at it as
+classes that behave like primitives two
+sides of the same coin
+so unlike primitives you get a bunch of
+things that only classes have had they
+can have methods they can have fields
+they can implement interfaces they can
+use encapsulation to hide their states
+so you can have values with private
+components they can be generic you can
+have a generic value optional of T and
+so this is you know not only allows us
+to extend the you know the the set of
+primitive like classes but allows us
+about library writers to write rich
+abstractions that are going to perform
+well now there's a zillion questions
+about value types of which about ninety
+percent can be answered by the general
+rubric what wouldn't do so if you want
+to know what happens when you assign a
+value to lot to objects well what
+happens when you assign into objects it
+gets boxed same thing that trick
+actually works really well that should
+so you know so that should be your first
+assumption of well what would a
+primitive do in this situation and you
+pretty much get the behavior value would
+do so our mantra which you know may or
+may or may not survive the the product
+launch is codes codes like a class works
+like an int actually it works more like
+a long because of word tearing but we'll
+come back to that but but this distances
+are what we generally have in mind all
+of the abstracted capabilities of
+classes with the runtime performs
+behavior primitives nice story right
+okay so who cares well who wants these
+new things well my argument is everybody
+right
+first and foremost people who write
+applications that deal with a lot of
+data scientific computing
+you know they want to be able to reason
+about footprint and predictability they
+don't want to give over 60 percent of
+their memory to object headers they
+don't want to be taking cash miche's all
+the time so application writers who deal
+with data definitely want these library
+writers want these too if you want to be
+able to write library based numerix 128
+bit inch complex number algebraic data
+types you know things like you know a
+optional and choice
+you know cursors these are all a great
+fit for writing as library based classes
+and you can think about this a little
+bit as you know there's a little bit of
+inspiration here a lot of inspiration
+from guy steals growing a language talk
+who here is seen growing a language
+anybody who hasn't which is most of you
+write this down go home tonight watch it
+growing the language guys steal from
+loops lie about 15 years ago one of the
+best talks ever done you you won't
+regret it
+there's also a paper about the talk is
+more fun library writers want these not
+just for writing library abstractions
+but for improving the performance of his
+diction existing abstractions so if you
+look at the way link list works right so
+you have link list of T that it has a
+corresponding you know linked list node
+class which holds a T which means you
+have to take two data two pointer in
+directions to get to your data if the if
+the data can be inlined into the node
+which is what you would get from a value
+type it makes library based abstractions
+more efficient similarly hashmap with
+fewer interactions is going to be faster
+if hashmap is faster all java
+applications are faster so library
+writers want these but you know at also
+for the people in this room compiler
+writers really want these right if you
+have a language that has tuples it's
+really going to have to turn that into
+an object you know if you have multiple
+returned if you have numeric types that
+don't happen to be the exact eight
+numeric types the JVM gives you how many
+people here are in this pane right so
+you know I feel your pain you know we
+maintain a compiler to we would like to
+extend its range of features so this is
+a tool that's that's useful to little
+compiler writers as well so everybody
+wants volume types
+pulling on the string it would be pretty
+silly to have value types but not to be
+able to have generics over values that
+didn't have to resort to boxing so you
+know we can express everything we want
+with a ray list of integer but you just
+feel dirty every time you do it right
+and you know it the performance sucks
+you get a data layout that looks like
+the first you know what we have now
+slide when you take an ArrayList of
+integer you know for all the same
+reasons too many objects header too many
+in directions too much allocation too
+much GC so what we really want is
+ArrayList of int and have it backed by a
+real interest is that so much to ask so
+you know obviously we you know we want
+to do value types but if we did values
+without generics over values it would
+look willfully incomplete and this is
+where the string gets really complicated
+so before we dive into the details of
+generics which I will I just want to
+look at a couple of alternatives that we
+could have done these were some roads
+not taken people I asked why do you have
+to invent this new value type thing why
+don't you just do structs and those
+those of you who know me know that I
+don't respond very well to questions
+that start with why don't you just the
+the questions like that always belie
+incorrect assumptions you know the
+question suggests the structs are
+actually simpler than values and they're
+not they're just more familiar because
+we saw them first right we all remember
+struck from C well you know what and so
+it seems like oh it's a very basic thing
+but it's not structure this weird half
+one thing half another thing sometimes
+they have identity sometimes they don't
+if you have a struck that's a member of
+you know of another aggregate it
+inherits the identity from its enclosing
+aggregate if you have a struct held in a
+local variable the runtime has to invent
+an identity for it so it can be mutated
+and you need both passed by value passed
+by reference to do structs Java only has
+passed by value which is a good thing we
+do that as a simplicity so this is
+adding a big new feature to ant units to
+support the simpler thing and it really
+comes down to structs are actually more
+work and more complete
+even values it's not really an A or B
+it's an A or a and B where values are a
+so our conclusion was and we you know
+people have questions we can take this
+to the the workshop about later today
+our conclusion was this is this isn't a
+winner this is just gonna this is going
+to be more complex harder to reason
+about a lot harder to optimize values or
+a lot simpler a more sensible
+alternative that we could have pursued
+but we chose not to is as tuples you
+know in the JVM it would be fairly easy
+to denote a tuple of like int and long
+as you know open paren IJ that would fit
+kind of nicely into the bytecode
+instruction set and it would be pretty
+straightforward to have op codes for
+pushing and popping and destructuring
+tuples and the semantics are easy and
+the verifier would be happy and all of
+that and we actually looked at this and
+asked ourselves like how much work is
+this and it turns out it's almost as
+much work it's a lot of work and it's a
+lot of intrusiveness into the class file
+format but it doesn't give you
+everything values does it doesn't give
+you encapsulation so you can't have
+values that encapsulate private data
+which means you can't have a safe
+wrapping for native pointers for example
+and you'll also give up on nominal T so
+if you have two tuples that have the
+same structure like an XY point and an
+int range they would be the same runtime
+type and so you know Java has a strong
+commitment to nominal T that if you
+design you know if you design a class
+classes have names names carry meaning
+it makes it harder for people to make
+mistakes just because two things happen
+to be an int even though they have
+different interpretations and so our
+conclusion for the why not just do
+tuples was we could do that it would
+cost a little less it would have
+measurably less benefit and it didn't
+seem like you know the best you know the
+best choice but at least it wasn't an
+outright silly choice so what does it
+mean to say the JVM sports value types
+it raises a lot of questions how do we
+construct a value how do we move values
+but from the stack to the local
+variables how do we access their
+components invoke their behavior
+how do we embed them in other aggregates
+like other values or objects how do we
+write them down in a field descriptor or
+a method descriptor you know how do we
+convert between values and objects these
+are all questions that have to do with
+byte code representation so it means
+that to have values we need some new bi
+codes we need some new type descriptors
+we probably need some new constant pool
+forms and as an added bonus to make
+things just more fun values don't have
+known fixed size all the other things
+that the M is used to deal with have
+fixed size references are either 32 or
+64 bits depending on your architecture
+insert 32 bits long for 64 how big as a
+value depends how many fields it has and
+if we want to make changing the
+representation of a value a binary
+compatible thing we don't want to bake
+the assumption of how many fields it has
+into the into the clients we would like
+to figure that at at runtime so this is
+a new challenge for VM architects so
+this immediately raises the question of
+stack slots if an inn takes one slot and
+along takes two slots if I have a point
+with two Long's as its components how
+many slots is that well the obvious
+answer is four but we don't really like
+that answer very much because it means
+that any client of point is going to
+assume okay I know exactly how big it is
+and that means we can't change its
+representation later that kind of goes
+against our commitment to nominally and
+dynamic linkage so we'd like the answer
+to be some fixed number reasonable
+candidates might be one or two or you
+can imagine reasons for three but we
+would like there to be some fixed size
+that all values take up this many slots
+and actually the easiest thing would be
+for everything to take up one slot how
+many people here wish we hadn't made
+Long's take up two slots how many times
+the people made the mistake of not not
+accounting for that extra phantom slot
+more than once more than ten times yes
+anybody who writes things that process
+bytecode make this mistake every week so
+we'd love we'd we'd like for everything
+to take one slot but I digress
+okay so I'm
+mentioned converting between values and
+objects we have a story today what
+wouldn't do well we have a box class
+Java lying integer which is an object
+and we have fairly easy transforms
+between an int and an integer but that
+seems that seems ok when you have 8
+value types when you have an infinite
+number that seems pretty lousy we would
+like to derive the boxes from the value
+class file right so we would like for
+each value class file to generate 2
+runtime types an unboxed version that
+behaves like a primitive and a boxed
+version that's used for Interop with
+api's like reflection that deal entirely
+an object and object array so our
+working theory for how we would write
+down the distinction between an unboxing
+and a box value is that the Box value
+would continue to be L class name and
+then we pick another letter we picked Q
+for no good reason and the the unboxed
+value would be represented as a q type
+so the claw the pointer class class file
+gives rise to two runtime types L point
+the Box version and Q point the unboxed
+version this may change but this is our
+working theory today and you know the
+big part of the motivation for this has
+to do with how do we ensure migration
+compatibility for classes that started
+their life as reference classes and then
+got turned into value classes along the
+way like we want to do with optional or
+local date/time or a number of other
+classes in the JDK so okay we need a way
+to write down the name of a value type
+we we propose one there Q point we also
+need some byte codes that can move
+values around and my code design has a
+lot of constraints it has a lot of
+constituents we're running out of byte
+codes so that's that's one constraint
+that that we're very mindful of but
+there are many constituents that that
+use byte code the VM itself the garbage
+collector and the verifier we would like
+for the byte code set to make it easy
+for those components the VM to do their
+job we want to make it reasonably easy
+for compiler writers to transform
+programs into byte code and similarly
+for for tools more importantly actually
+for tools to be able to take byte code
+and derive properties of the program so
+there's lots of trade-offs for
+you know how we you know how we pick
+these new bike codes there there are
+opportunities for overloading where we
+can take existing bike code and just
+give them more functionality at the cost
+of more complexity or we could invent
+you know a larger number of new bike
+codes or our working theory mostly from
+a not expanding the bike code set too
+much is to have a single new bike code
+called typed which acts the prefix kind
+of like wide and it modifies the
+properties of the following by code so
+the to push a point on the stack you
+would use a load and prefix it with a
+typed point prefix not clear whether
+this is gonna be the final answer but
+it's not a bad not a bad starting point
+for a prototype so let's take a look at
+the you know some bike code so here's an
+example of a simple class that consumes
+an XY point value note the horrible
+syntax which is deliberate we don't want
+to talk about language syntax here we
+just want to you know illustrate that
+there is some way to construct a point
+maybe it's new maybe it's not not
+interested in having that conversation
+for a couple years so the you you know
+just like any constructor invocation
+you're gonna push the arguments on the
+stack and there'll be a bytecode for
+making a new new value type maybe it'll
+be invoke static of a factory we're not
+sure but but there's there's there's
+there some way to say make me one of
+those and put the result on the stack so
+now there's acute points on the top of
+the stack and then we save it off
+because we're gonna use it twice so we
+save it to a local variable
+note that the V store byte codes they
+had an extra operand they don't just say
+what you know what local local variable
+slot are we putting it in but they also
+say the type and that's important
+because we the VM has to know how big
+this thing is how many bytes it has to
+move and so this raises one of the
+questions we saw earlier how many slots
+of this take up and then we extract a
+field from it which might be get filled
+might be V get filled but there's some
+way to do that and then that results in
+the field being on the top of the stack
+just like any other get field we store
+that off into a local variable and then
+you know we
+we retrieve the the value again out of
+our local variable and do a get feel for
+why and store it off okay so this gives
+you the flavor of what our our prototype
+does now fairly straightforward
+basically we're adding a new family of
+types to that which can be moved by the
+the various data movement by codes you
+know load store return and along with
+those you have to carry the static type
+along with you so if you're returning a
+point V return is going to say I'm
+returning a cue point pretty
+straightforward okay so more more things
+tied to the string lots of questions for
+for our route type objects does object
+continue to be the top type that's the
+choice that I the dotnet folks made when
+they when they added value types - you
+know - dotnet but it does seem kind of
+like the notion of has identity should
+be reflected in the static type system
+somewhere so wedging everything into
+object seems a little a little weird
+should there be a new any type well if
+you ask any programmer their answer is
+of course until you start to ask them
+all right well what would the in-memory
+representation of an array of any be and
+then they like wander off and change the
+subject or something like that you know
+clearly value types want to have methods
+like hashcode and equals so those should
+be defined somewhere but they also
+clearly don't want to have methods like
+way to notify because those are
+identity-based so where do these get
+inherited from not from object but maybe
+from somewhere and then you know of
+course what do we do with primitives do
+can we retrofit primitives as values
+somehow or as there is always gonna be
+some odd third wheel so these are these
+are some questions that you know we've
+been asking ourselves for a while we
+don't have it have all the answers yet
+but we're making some progress so one
+thing that we've made a tremendous
+amount of progress on and there's going
+to be the the majority of my talk today
+is what do we do about generics and this
+is where a lot of the complexity is so
+generics in Java always embedded a kind
+of uneasy compromise which is that you
+can terrify over primitives the reason
+for that is you know was it was a
+pragmatic choice at the time there's no
+common top type in the EM type system
+between object and int there's no byte
+code that can
+both an object and an int so we had no
+idea how to translate it and by assuming
+away primitives in the generics design
+we solved a lot of problems most notably
+that it worked on the VM that we had in
+in 2004 but you know today's problems
+come from yesterday's solutions generics
+/ primitives kind of suck the
+performance sucks you know it puts a lot
+more pressure on the GC and forces
+library writers to compensate with
+tricks like in-stream which we would
+like to avoid so people pick on a racer
+and you know to some degree you know we
+deserve it but I think a ratio overall
+gets a bad rap I think a ratio was a
+very pragmatic compromise it enabled us
+to have generics with the VM that we had
+it allowed us to get this additional
+type safety with basically no additional
+runtime costs and no additional runtime
+footprint there wasn't an explosion of
+class file footprint with separate
+representations for a list of integer
+and lists a string we were able to share
+the representation and you know one
+thing that we did very well in the in
+generics is this gradual migration
+compatibility thing where you genera
+file a library and its clients and
+subclasses have a choice of genera
+fiying now genera fine later genera fine
+never and that's really powerful I mean
+Flag days are horrible having a Flag Day
+where we say okay everybody on Tuesday
+has to recompile the world it works if
+you have no users but if you have you
+know have a user base the size of our
+user it's an honor base it's a
+non-starter because libraries exist in
+different maintenance domains than their
+applications right we develop the Java
+collections you know here at Oracle
+everybody uses them they don't have the
+opportunity to go recompile the JDK or
+they do but but it's unreasonable to ask
+them to do so
+so if you want to be able to evolve
+libraries across maintenance domains you
+need a degree of you know a migration
+compatibility and we did I think a very
+good job with us in generics and we want
+to continue to do that as we extend
+generics so okay so let's say we want to
+be able to have specialized generics /
+primitives and values the the strawman
+syntax for this is we have a modifier to
+the generics
+variable anywhere you can say this is
+generics over a broader domain there's
+actually a reason why we need that we
+can't just automatically reinterpret old
+source files as being any generic so
+okay that's a reasonable book in class
+raises a lot of questions what should be
+the method and field descriptors of
+those methods what bike codes do we use
+to push it to your papa T or or what
+have you and you know on the right
+column I have here's what the
+descriptors looked like under erase
+generics clearly that's not going to be
+good enough so what should they look
+like so about almost two years ago we
+built a first prototype of this which we
+now call model one we didn't call it at
+that at the time where we basically
+spewed out extra metadata into the class
+file where we had annotate and a load
+that was moving an object with metadata
+that said oh by the way this object came
+from T but that object came from you and
+then we had a runtime specialized err
+that would take about two byte code take
+the metadata and gener and turn all the
+a loads to high loads and and the
+amazing thing is it worked I mean it
+really did work it was it was really
+cool and it was all done with compiler
+trickery and class loader trickery so
+didn't involve the VM also cool but it
+was a mess it was very intrusive I did a
+talk on this last year here for those
+either saw it where I went through the
+characteristics of our sort of first few
+rounds of prototypes
+it was incredibly intrusive and there
+was the result was it touched basically
+every bit in the class file and you know
+we ended up with a lousy programming
+model with no commonality between list
+of int and list of float and no
+wildcards so it was a great
+proof-of-concept to prove that it was
+possible to do and it would have been a
+lousy idea to think about shipping that
+approach as I said you know our prime
+directive here is compatibility we need
+to have gradual migration compatibility
+so we want for taking an existing class
+list of T and n F eyeing it list of any
+T to be source and binary compatible
+both for clients and for subclasses and
+for subclasses it's harder similarly you
+know if you have an existing like
+enclosing you know tie
+an outer type you want to be able to add
+new generic type variables that have
+that be a compatible thing what we end
+up with is a scheme were une Phi from
+the top down so you can any file your
+top types like you know lists list of T
+array list of T first and then the
+subclasses have the option to any fire
+or not now or later but we certainly
+don't want to you know like I said
+require require flag days so one of the
+reasons why the first prototype kind of
+failed was that the bytecode set is kind
+of hostile to a parametric polymorphism
+it has all of these non orthogonality is
+where you know some data types take one
+slot some take two but also sometimes
+you use different instructions for
+different data types so if you want to
+do a compare and branch on a reference
+you have a fused operation if a comp but
+if you want to do the same thing with
+floats you do an F comp and an F which
+makes it difficult to have one class
+file that describes generics over you
+know any possible type instantiation and
+the same thing is true for a rate
+creation and for default values the
+default value for you know for a ref as
+a constant oh but it's icon zero for an
+int right we'd like to have a single
+representation that to score that dead
+that's generic over all the possible
+type instantiations so our third attempt
+did much better and what we did was we
+basically refactored the class file
+format to move all of the type
+information into the constant pool and
+that's a fairly that's not as horrible
+as it sounds cuz most of the information
+was there already so we need some some
+new constant forms to describe the use
+of type variables and parametrized types
+and we need some byte codes that can
+operate across you know any you know an
+abstract type something that moves at E
+as opposed to moves an answer along and
+if this works which it does the end
+result is that at runtime specializing
+lists of T into list of int is just a
+transformation on the constant pool and
+it same actually turns out to be a
+simple fast dumb mechanical translation
+on the constant pool which is good
+because we like our VM engineers dumb I
+mean we like our VMs down
+you know what I mean so you know there's
+there's some you know there's there's
+still some loose ends this one slot to
+slot thing is still a persistent thorn
+in our side where we we have some ideas
+for that we would like to get to where
+everything can take one slot but we
+actually have a prototype of this that
+works I'll have a download URL at the at
+the end here so okay let's deep dive
+into some some class file stuff because
+that's what this audience loves so we
+have to reify information about the
+generic class so if I have an any
+generic class it's gonna have a generic
+class attribute the generic class
+attribute acts basically as a table of
+contents for the type variables so that
+we have a consistent numbering for type
+variable number three is T declared in
+this scope so if we have an remember you
+know Java can have nested classes I can
+have a class in review nested in a class
+outer of T and inside the body of inner
+I can refer to both T at U which means I
+need a consistent numbering both for
+inners classes but all type variables
+but also those inherited from outside
+scope and there's a pretty
+straightforward unraveling of how to
+represent this in the class file format
+you don't need to follow all the details
+but basically you haven't there's an
+array of scopes one corresponding to
+each enclosing class and within each one
+you have an entry for every type
+variable what's its name what's its
+bound is identified and that way we have
+a consistent numbering for type
+variables which we can use so that's
+pretty straightforward more interesting
+question is let's say I have a method M
+that takes a list of int how do I write
+down the descriptor for that seems like
+an obvious question
+the way we approach type descriptors
+today is is nominal there are utf-8
+strings and we would like to not have to
+do a tremendous amount of string
+manipulation at runtime we would like to
+represent the notion of list of int in a
+more structural fashion so right now we
+express a class with you know
+like if you have a new bike code where
+you say no new list it referred about
+the new bike code refers to a constant
+class in the the constant pool so how
+about we have something like constant
+class but one that's parameterised so it
+captures not only the name of the class
+but the description of its type
+parameters and that's actually pretty
+straightforward so the the first new
+constant pool form is parameterized type
+which says tell me about my the
+parametrization of my enclosing type if
+I'm an inner class what class am i
+parameterizing list you know ArrayList
+what-have-you how many type variables do
+I have and what are my type parameters
+and those are pointers to other
+constants in the constant pool and
+that's the magic trick that we can build
+a tree structure description of a
+structural type in the constant pool so
+the way we would write down list of int
+is parameterize type whose template
+classes list and whose type parameters I
+am okay and that's going to be how we
+write down list of I a little bit list
+of it now if I have a more deeply nested
+generic like list of optional event
+because the type parameters point into
+the constant pool this is easy I say
+this is a parameterised type the
+template class is list the type
+parameter is another parameter ice type
+which is optional whose type parameter
+is I okay so you can see why we don't
+want to do this with string manipulation
+in you know in string signatures we
+would much rather represent the
+structure of the type and the and then
+do substitutions basically on the leaves
+of the tree okay so all right we have
+this great what about a ratio because we
+have a lot of class files out there that
+assume erasure all the lists of strings
+out there and compile class files are
+really erase lists so we have to have a
+way of writing down erased lists so we
+add to the vocabulary in addition to a
+type parameter being any other type you
+know a ground type a parameterised -
+array type it can also be the special
+token that means erased we use the
+underscore to describe that so a list of
+int is parameterize type of list with
+eye
+of reified strings parameterised type of
+list with string a list of erased is
+parameterize type of list with type
+parameter erased and this turns out to
+be a pretty powerful trick okay but that
+wasn't the question I asked the question
+I asked was I have a method descriptor
+that takes a list of int how do I write
+down that method descriptor well I can
+do the same trick right so historically
+we we take the nominalization of all the
+types and concatenate them together wrap
+them in parenthesis and that's the
+nominalization of a method type but we'd
+kind of like to have a more structural
+description so that we can operate on
+the the you know the leaves of this tree
+without having to rewrite the whole tree
+well this is actually really easy same
+trick as before we have a method
+descriptor constant which says here's
+how many arguments I have
+and then here's n references to other
+constant pool entries for my type
+parameters and another reference to the
+constant pool entry for my return type
+and so the way I would write down a
+method M the take list event is a method
+descriptor that has one argument type
+and that argument points to the constant
+pool entry for a parameterised type that
+parameterize its list with int and it
+works well there's actually we have this
+working it's great so pull on the string
+some more what about arrays what if I
+want to have an array of list of int
+well we can do the same thing we can
+have a constant to describe a rate type
+so we're basically unrolling some sort
+of premature optimizations we did 20
+years ago of cramming things into
+strings by maintaining these the
+structure of tights both array types of
+generic types in the class file so
+that's pretty straightforward so these
+these structural types form a tree the
+intermediate nodes of the tree are
+structural combinators like
+parameterization or array at the leaves
+of the tree in the simple case you have
+concrete types like int but you also
+might have type variables how would I
+write down this method takes a list of T
+so I do the same trick we have a
+constant new constant that describes a
+type variable use it encodes
+the type variable number which is a
+index into the table of contents that I
+talked about earlier and these type
+variables also carry around their
+precomputed eraser with them so you can
+think of this as type variable number
+three in case of a ratio or break glass
+and use this concrete type string when
+you go and specialize and and this way
+we can describe a list of T as a
+parameterised type parameterizing list
+with type variable the number four for T
+and then the eraser for T in that
+context and because eraser is horribly
+non compositional you get a different
+ratio depending on different you know
+places you use it and it turns out that
+that this that this trick gives us a
+very valuable property which is the VM
+doesn't have to know anything about a
+ratio except that there exists something
+called a ratio and if called upon to
+erase it can use the pre-computer to
+ratio that's already there in the
+constant pool that means you know not
+only does the vm not have to understand
+this horrible complex transform but it
+means that different languages can have
+different erasure schemes and the vm
+doesn't care it just mechanically
+substitutes stuff based on what's in the
+constant pool and what's in the you know
+the the argument list for
+parametrization
+which is really nice okay so we've
+turned our description of types from you
+know of structural types into structural
+representations in the constant pool and
+the constant pool retains this form
+rather than prematurely flattening it
+and so you end up with these trees that
+describe types whose intermediate nodes
+or things like per am type or array type
+and whose leaves are things like type
+variable or int or a constant class and
+you know so it's it's a little bit of a
+change to the how we interpret the class
+file format because it always used to be
+that when one constant refers to another
+constant the type was always known we're
+introducing a little bit of polymorphism
+where we say this type could be a
+parameterised type or an array type or
+something like that the result of all of
+this and i know that was a bit of a deep
+dive is by consolidating all the type
+information in the constant pool now
+there's exactly one place where where we
+describe this thing as a t versus this
+thing is
+and this turns specialization of a class
+which in the first model was very
+intrusive and complex into specialize in
+the constant pool and in fact a very
+dumb transformation on the constant pool
+and and that in part is powered by
+storing the eraser at every point that's
+used so that when you say I want to
+specialize ArrayList of erased well
+every time you see a type variable that
+refers to type variable number zero you
+just copy the pre-computer to race
+you're in and you're done
+and so the way our prototype works now
+it does it in the class loader but
+eventually loot in the VM it walks
+through the constant pool finds all
+these new constants and just turns them
+into utf-8 and so we make up a nominal
+representation for I which is internal
+to the you know to the runtime for list
+event and when we see parameterize type
+of list parametrized with int we turn it
+into whatever that name is and it
+reduces to a class file that our
+existing VMs can adjust and and
+manipulate and then you know that once
+we push this into the VM the VM is free
+to share the whole rest of the class it
+only has to specialize of even a very
+small part of the constant pool the part
+that has these new entries which for a
+big class is a relatively small fraction
+of the constant pool and then everything
+else about the class can be shared
+between list of int list of float list
+of erased so it's a nice story ok so
+let's look at an example I've got an
+example class its generic and two type
+variables and it's got some fields one
+is an example of T and U the next two or
+examples of these are static types of
+int + int + int and string and then I've
+got a met a method M that takes example
+of GNU okay so this is the piece of the
+constant pool that describes the
+relevant things here I hope everyone can
+read this in the back so the you know
+these names correspond to constants 13
+24 27 and 32 so the example of T and u
+turns into a parameterize type where 11
+means example and 3 and 12.2 type
+variables that describe T nu so if I
+want to specialize this for Internet
+i specialized the type variables and
+then there's a mechanical transformation
+to turn that parameterize type into a
+class name and so if if T and you are
+both erased well I'm gonna turn 3 and 11
+into their erasure because the the the
+the the type variable carries around its
+erasure and and then I specialized then
+you know parameterize type into either
+the erase class or the intermediate
+runtime name I made up for the
+specialization of a example with
+engineers for example with int and
+erased which you can see in like 24 and
+27 there and similarly if I'm
+specializing you know for int and erased
+or for incident I get a slightly
+different specialization of the constant
+pool and the the bottom row shows this
+is what my method signature looks like
+so the method signature for you know an
+erased instantiation of example is the
+same as it's always been
+and then for the specialized examples it
+has its it's a a method descriptor that
+points to the type that gets specialized
+with some flavor of example so it's
+pretty straightforward and like I said
+we have this all working it works pretty
+nicely okay so I kind of lied and I said
+all you have to do is specialize the
+constant pool and you're done so what
+did I lie about I lied about the byte
+code so what do we what do we do about
+byte codes like a load and I load well
+my codes can have operands that point in
+the constant pool too so if I have this
+type prefix where the operand points in
+to the constant pool and I use that to
+modify a more strongly typed byte code I
+can say typed reference to type variable
+number zero payload 0 and then when I
+specialized the constant pool that will
+specialize to object and I'll know that
+this a load is moving an object that's
+one way to do it there's another way to
+do it we can have you buy codes where we
+have you load you return you store where
+you stands for universal and these all
+have an extra operand the actual byte
+code syntax will figure that out but
+basically the idea
+is any place in the class file whether
+it be the constant pool or the bike code
+that is type dependent will have a
+reference back into the constant pool to
+get the type information and by the time
+you actually use this bike code that
+constant pool will already have been
+specialized so even though the
+constantly the class file itself is
+obstacle abstract it has T isn't using
+it by the time you're actually using
+this class at runtime those T's and use
+have collapsed to either int or object
+or what have you so it's it's actually
+pretty straightforward okay so if you
+believe me that that works you know the
+next reasonable question is alright how
+do we represent these runtime types I've
+got a bunch of runtime types that are
+derived from a single class file I have
+a list of int and list of float and list
+of erased and historically we had this
+one-to-one relationship between source
+files class files runtime types and over
+time we've like exploded each one of
+those relationships and this is kind of
+the last one where we can have many
+runtime types that derive from a single
+class file so we've been using a term to
+describe cold species to describe
+multiple types that derive from a single
+class file and this is a pretty useful
+taxonomy because it means the class
+still means something it means what
+source class what class file did you
+come from and that's separate from what
+is your runtime representation so if I
+specialized list event its species is
+list of int but its class is still list
+and this is our trick for getting binary
+compatibility for with code that says
+you know X dot get class and compares it
+to list dot class that will still work
+it still means what it means and then if
+you want finer grained information you
+do have a different way of asking all
+right so what about generic methods
+generic methods are particularly tricky
+because they exist entirely today as a
+figment of the compilers imagination the
+VM has no first-class notion of method
+of a method the way it does of class but
+you know since you know code in generic
+method can refer to type variables you
+know from both defined in a method and
+from enclosing types we need a way of
+describing the specialization
+of a method and that means we need to
+include it if you have code that's
+inside a generic method it needs to be
+described in that table of contents that
+I described so here's an example of how
+nasty it can get you can have an outer
+class with an inner class that has a
+generic method and the generic method
+has local classes in it right so you
+know in that innermost method I could
+refer to a type variable from one of my
+outer classes from the outer method from
+the you know the local class etc so when
+we unroll this in into class files that
+table of contents needs to include not
+only includes in classes but enclosing
+generic methods so you know our current
+strategy is that we'd take generic
+methods and we do sugar them into
+classes and the advantage of this
+strategy is it takes something that we
+don't know how to do specializing a
+method turns into something we do know
+how to do specialize in a class so we
+take this class food that has a generic
+method that's generic and any you and we
+turn it into a synthetic class you know
+a nested class call it food Allah Ram
+we'll figure out what it's really called
+and we can now specialize that class you
+know separately and if you know when we
+when we specialize a generic method we
+need not only the methods type
+parameters but all the methods all the
+type parameters for enclosing scopes but
+since we've turned this into a class
+that becomes a straightforward class
+specialization problem half you know
+this is kind of a leaky translation a
+bunch of interesting questions about how
+to avoid this from leaking too badly
+stuff that we're working on but this
+seems to this seems to work reasonably
+well and then how do you invoke one of
+these well you know our favorite hammer
+invoke dynamic so invoke dynamic on a to
+generic method the the bootstrap will be
+like invoke invoke generic method the
+static type parameters the static
+parameter list will include the type
+parameters of the generic method at
+linkage time it will go specialize the
+method class or it'll go look it up in
+the system dictionary and then link the
+call site to the appropriate entry point
+so that actually works pretty well ok so
+one question that people might be asking
+is so does this mean you finally reified
+generics and got
+raesha people love to ask this question
+and the answer is well it's more
+complicated than that yes and no a
+specialized classlist event is reified
+but list of string probably won't be
+it'll probably still be erased like it
+always was for all the same pragmatic
+reasons that we chose you know 12 years
+ago now interestingly we have a way at
+the bite at the class file level to
+describe both lists of reified string
+and list of array string we probably
+won't expose both at the java language
+level other languages can make their own
+choice about whether they want to expose
+a racial or reification or both you know
+so that way it becomes the languages
+choice about how and when to erase you
+know in in Java we're very much
+constrained to compatibility with
+existing stuff and so that is a strong
+reason to continue with erasure but also
+you know not erasing means ballooning up
+your footprint making a lot of you know
+duplication between list of int and list
+of float and and such another reason to
+not say let's chuck a racer out the
+window and make everything reified
+besides the fact that we have to throw
+all our libraries out is if you look at
+real world generic code a lot of it
+won't work under strictly reified
+generics you know you have to do things
+like casting through raw or using
+unchecked operations to express what you
+want and if those were impossible people
+would say this language sucks and so we
+want people to be able to port existing
+libraries that means the existing tricks
+have to still work and so erasure is
+here to stay and it's you know here to
+stay both for compatibility reasons and
+for pragmatism reasons but other
+languages that run on the JVM if they
+want to pursue fuller full reification
+knock yourself out in the in the
+translation for generic methods you saw
+a new modifier that I snuck fast - you
+called species static and this is
+actually a pretty cool thing which so
+right now there's sort of two places you
+can put data in in a class hierarchy you
+can put them in an instance or you can
+have static members you can put them in
+a class and it turns out that there's a
+lot of things that are really nice to
+put not in the class but in the species
+because the species has access to the
+the type parameters whereas
+class doesn't so there's a lot there are
+lots of uses for this like for things
+like caching an empty list or an empty
+array tracking or interning how many of
+these have I instantiated or let me in
+turn this thing on construction
+associating you know things like
+associated types where let's say you
+have list of T and you want to know
+what's the corresponding type set of T
+that's the kind of thing that you could
+store in a you know in a specie static
+variable and Lang the language
+implementation can use this as well I'll
+give a couple examples so here's here's
+a common trick that people do where they
+want to cache an empty list they don't
+want to make a new object every time so
+they want to have one object that
+represents empty lists with erasure
+totally easy you just make a new empty
+erased list and when someone says I want
+an empty list of string you just cast it
+to list of string and you're you go to
+the races while that falls apart if the
+runtime type for a list of into the
+runtime type for list of float isn't the
+same so what we can do is we can say if
+you associate if you store this not as a
+class static but as a specie static well
+each species can have its own its own
+empty list instance and the erased
+species which covers list of string and
+list of integer and list of Shu and all
+of that there's one shared between all
+those racers and it just sort of works
+and so it's a useful for library writers
+to use a specie static placement as a
+place to put specialized versions of
+things or associated things that are
+associated with the specialized
+instantiation it's also useful for a
+compiler so let's say we want to have
+reflective exposure to your type
+variable so if I have a list of tea I
+want it might want to be able to say
+list tea and maybe the answer comes back
+erased but if you know but maybe it
+doesn't maybe it says you know this is
+really a list of int well this is
+another natural place to use specie
+static so the compiler could generate a
+synthetic fields called tea in which it
+puts some reflective mirror not clear
+whether it's a class or something else
+Marisa will have a lot more to say about
+this later today
+and so it brings the generics in more
+into the programming model where you can
+say at runtime what is T and maybe the
+runtime says well all I know is it's
+erased but maybe it says you know I'm an
+optional event so that's a good example
+of pulling on the string right you know
+you that are our runtime representation
+creates these thing called species and
+we want to bring that into the
+programming model in a way that's
+natural for the programmer so a bunch of
+other little things along the way when
+we did when we did in classes in Java
+1:1 we kind of faked accessibility
+there's a mismatch between the language
+rules for what is private mean and the
+m's rules for what is private mean and
+so compilers tend to have to generate a
+little a little extra that downgrade the
+accessibility of things from like
+private to package and generate
+accessors like you know access dollar 0
+how many people here like stumbled over
+these accessor methods so what we would
+like to do is bring the you know bring
+the accessibility rules sort of into
+alignment with this notion of multiple
+runtime types derive from one source
+type where class files form what we call
+a nest nest largely corresponds to a
+source compilation unit or a single like
+top-level only a family of classes and
+define accessibility within a nest and
+if you specialize list event then that
+specialized species becomes a member of
+the nest of list and this turns out to
+eliminate a lot of rough edges in the
+translation it's not a big deal but it's
+like something that's been an irritant
+for a lot of people who work with byte
+code and that's something that we wanted
+to fix for a while
+worth noting this isn't friends this
+isn't a general-purpose accessibility
+busting mechanism this is more aligning
+the accessibility mechanism with how we
+tend to generate by code anyway all
+right last bit and then I'll wrap up is
+once you have generics over values and
+particularly over things like numerix it
+starts to become a lot more attractive
+to have methods that are conditional to
+a particular instantiation it makes
+total sense for a list of int to have a
+sum method it doesn't make any sense for
+a list of xu to have some method
+right so it becomes attractive to be
+able to say this method has a constraint
+the constraint is that I'm only
+applicable to receivers that have a
+certain type parameterization again
+syntax completely provisional but the
+idea is pretty straightforward I can
+expose methods that are conditioned on
+my on my parameterization and and this
+actually turns out to be not so hard to
+do and it turns out to be both a
+migration compatibility feature for
+migrating libraries like in-stream but
+it's also an expressive feature for
+being able to say I have a list of
+things and if that thing knows how to
+add itself up then I'm going to expose a
+lifted some method that that invokes
+that if you saw my talk last year we
+went went through several painful
+iterations of our translation strategy
+and one of the threads of that was the
+search for wildcards our initial
+strategy had no support for wildcards
+which was you know two pun intended
+wildly unpopular it actually turns it
+was after kind of interesting that
+people complain endlessly about
+wildcards it's like one of the most
+hated thing in Java except what we
+discovered was even more hated than
+wildcards is what when you threatened to
+take away people's wildcards but the
+reality is it's really hard to write
+generic code without them but you there
+needs to be some common supertype that
+represents a list of something but I
+don't know what that something is
+and you know if you think about it if
+you have class full of T extends bar of
+T well foo of wild should extend bar of
+wild and foo of in should extend bar
+event and you have these multiple super
+types of full event and only one of them
+can be a class so the others have to be
+something like interfaces but interfaces
+can't have protected members or fields
+or a lot of other things so it needs to
+be something new needs to be some kind
+of VM help here and we're looking for
+the minimally intrusive thing and we're
+not there yet but it's that's one of the
+one of the areas of active searching
+okay and reflection we're going to have
+a whole talk from R it's about
+reflection this afternoon but all the
+questions I asked about how do I write
+down the type list event you could ask
+all the same questions about how do I
+reflect
+/ list event how do I reflect over a
+template list of T and C which methods
+are partial and all of that how do we
+reflect over generic methods and this is
+this another area where we've actually
+made dramatic progress and you'll see
+that this afternoon and if you remember
+our talk from two years ago John talked
+about arrays 2.0 which is a pretty
+ambitious thing some subset of that is
+needed here to be able to terrify over
+array of T so that there's some common
+super tight between inter a and object
+array we haven't figured out what that
+is but that's certainly part of our
+migration compatibility story so okay
+that was a lot and we're not done we're
+in fact kind of just getting started
+because everything I outlined you know
+up until now outlines like a pretty cool
+new programming model that lets us
+genera Phi over a lot more things lets
+us write one version of a lot of things
+instead of many cut-and-paste duplicated
+versions of some things which would be
+great if this was a new language but
+java isn't a new language and we have
+you know trillions of lines of code out
+there so we need a story for migration
+and some api is don't any five very well
+just as some api's didn't genera phi
+very well but any fiying the core
+libraries has to work it has to be
+compatible it has to be compatible for
+both clients and subclasses we would
+like to be able to migrate types that
+are reference types now to be value
+types we would like to consolidate
+classes like in stream into stream event
+where they kind of belong
+we'd like to consolidate the nine
+versions of a radar fill into one
+generic method which means we need tools
+for migrating existing classes that say
+I used to look like this but now I look
+like that and if I have an old client
+that didn't get the memo
+that's okay well deal these features
+turn out to be a lot nastier actually
+the mcore features because they're just
+as complicated may be more complicated
+and they're less generally useful but
+they're still critical so we have to do
+them and so you know we'd like you know
+it's a default methods you know in in
+Java eight we're kind of a down payment
+on this of our ability to add new
+functionality to existing classes we
+would like to be able to edit
+functionality exist in classes and
+change their signatures so
+I have an old type like date and I have
+a method like you know get access to aid
+and it returns a date I'd like to
+migrate it to return a local date time
+because that's the new recommended way
+but the old stuff has to be there so we
+need to figure out how to how to migrate
+these signatures similarly like existing
+generic classes have things like
+overload or remove T against remove int
+hoops what if T can be int or worse
+methods like map get which nobody uses
+right what does map dot get return it
+returns a V what does it return if the
+things not present in the map no what if
+V is int oops so there there are some
+core api's that are gonna have some real
+trouble you know with just a
+straightforward mechanical migration so
+we need they need some help and like I
+said migrating you know reference
+classes to values we would like to be
+able to do that this is kind of like the
+motivation for our story of having like
+L&amp;amp;Q types but that's not that's not the
+whole thing it doesn't get us the whole
+the whole way there so we have like a
+rich set of problems on on migration
+that we also have made some progress on
+but but we're not all the way there yet
+we don't have a fully implemented
+solution yet but it certainly makes
+sense that as we add language features
+we'd like for the existing libraries to
+sort of stay up to the level of language
+so that they don't start to look you
+know completely decrepit and the older
+our libraries get you know the more
+important it is to be able to sort of
+keep them up-to-date so this is an
+important aspect of this project okay so
+wrapping up we started out with one
+simple goal
+I just want denser flatter aggregates I
+want complex and point to behave like
+int so value types great idea yeah we're
+done right well that ripples into the
+bytecode set type signatures you know
+that connects with arrays and generics
+and all of our existing libraries happen
+to use arrays and generics so it's a
+pretty long and nasty string that we've
+been pulling on we've been pulling on it
+for about two years we've exposed a lot
+of it we know what a lot of it looks
+like we're not done so we're gonna keep
+pounding our heads
+and like I said some of these areas are
+now well understood some of them are
+still researched and um had a Java one
+two years ago James Gosling talked about
+this project and and he said I think
+this is great but you do realize that
+you've signed yourself up for like six
+PhD theses right and you know I didn't
+want him to be right but he usually is
+and he was in this case too so you know
+we're maybe like two and a half of those
+six theses through so making progress
+lots more to do um but you can't play
+with this stuff so we have a really nice
+prototype of any five generics and the
+compiler and the runtime so you can
+write you know others there's a port of
+collections and streams that works over
+most types and there's a more limited
+prototype of value types in the the VM
+interpreter so two documents that that
+that give more detail on this and
+there's a implementation and the code
+repo at the Valhalla project at open JDK
+and with that I'm done thanks for
+listening and we're gonna have a
+workshop later this afternoon where you
+can ask all your questions so thank you
+very much</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

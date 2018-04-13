@@ -1,0 +1,1901 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Improving Parallel Programmability with Determinism | Coder Coacher - Coaching Coders</title><meta content="Improving Parallel Programmability with Determinism - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Microsoft-Research/">Microsoft Research</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Improving Parallel Programmability with Determinism</b></h2><h5 class="post__date">2016-08-11</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/YU5bijTSeQw" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">each year microsoft research helps
+hundreds of influential speakers from
+around the world including leading
+scientists renowned experts in
+technology book authors and leading
+academics and makes videos of these
+lectures freely available
+all right welcome to the stock it's my
+pleasure to introduce Joe dat to you he
+is visiting us from across the lake from
+the University of Washington where he
+has been a graduate student for the past
+five years his work lies at the
+intersection of computer architecture
+programming languages and software
+engineering and he's been working on
+making programs parallel programs in
+particular deterministic and he'll tell
+us about that work today great thanks
+Russ so thanks everyone for for coming
+to my talk really appreciate it so today
+I'm going to try to convince you that
+there's no such thing as luck at least
+when it comes to parallel programming
+and that we can radically improve the
+way that we write parallel programs with
+determinism so as you all know we live
+in an age of parallel hardware right
+every hardware designer has shipped a
+multi-core design at this point most of
+the time it's actually difficult to buy
+a single core design even if you want
+one in contrast to this surfeit of
+parallel hardware though there are
+relatively few parallel programmers who
+can write the sort of code that
+efficiently utilizes all of these
+parallel resources so why is parallel
+programming so difficult well first of
+all it's difficult because its
+programming right this is far from a
+solved problem all the single threaded
+issues that you have show up again in
+the context of parallelism on top of
+that if you're writing a parallel
+program you generally care a lot about
+performance that's one of the main
+reasons to parallel lies and getting a
+performant parallel program means you
+have to deal with things like false
+sharing lock contention scalability and
+other complicated issues on top of that
+parallelism introduces its own strange
+concurrency issues that can affect
+correctness so there's a whole new class
+of correctness bugs out there with scary
+names like add misty violations and data
+races and these only show up in the
+context of parallelism and then finally
+I would argue that as if this weren't
+bad enough there's an overarching layer
+of non-determinism that really
+exacerbates the single and multi
+threaded correctness issues because it
+makes execution non-repeatable so non
+determinism really plagues us throughout
+the software
+a development cycle if we want to debug
+our programs where we can't reproduce
+these so-called haizen bugs when we're
+testing our parallel code it's very
+difficult to guarantee testing coverage
+because of non determinism and then of
+course there are issues that will
+inevitably seep out into deployment and
+then it's difficult to reproduce those
+back in a development environment so non
+determinism is makes life difficult at
+every step of this cycle so I've also
+done work on correctness issues in
+parallel programs but today I'm going to
+focus on non determinism and i'm going
+to show you that non determinism is not
+a fundamental aspect of parallel
+computation even though all of the
+multiprocessors and multi chip
+processors that we've been building for
+four decades now have been non
+deterministic there's no reason that
+they have to be that way and I'll show
+you some designs today executed in
+Hardware in software and also even with
+small modifications of the programming
+language that show that we can get
+deterministic execution for arbitrary
+parallel programs with relatively low
+over it all right so here's the outline
+of the rest of my talk first I'll be
+much clearer about what i mean by
+determinism give you some additional
+motivation for why it's valuable after
+that I'll describe this technique of
+execution level determinism which is set
+of techniques we developed at u-dub that
+provide deterministic execution for an
+arbitrary parallel program even programs
+that have bugs like data races in them
+so I'll show you some algorithms for
+providing deterministic execution argue
+why those algorithms are correct and
+then I'll describe how to efficiently
+implement these algorithms and hardware
+and in software and then show you some
+results from the systems that I've built
+after that I'll talk about some current
+work that I'm doing which has some
+lightweight language extensions to
+provide a higher performance determinism
+in the context of a software-only system
+and then finally I'll share some of my
+ideas for future work all right so let's
+get started what is determinism so
+determinism that a kind of intuitive
+level means that there's one possible
+output for each input right so with a
+current not
+deterministic system like a conventional
+multiprocessor we have today there are
+many possible outputs for any input
+where you run your program you don't
+really know which one of these you're
+going to get with determinism of course
+there would be only one output for each
+of those inputs and crucially the output
+that you get for any particular input is
+somewhat arbitrary it's always going to
+be the same but we're going to use this
+flexibility of not really specifying in
+advance which of these outputs you get
+in order to provide higher performance
+as you'll see you later so just to make
+this a little bit more concrete and
+since it's an election year we have this
+example of a multi-threaded voting
+machine all right so we've got these two
+threads blue thread and the red thread
+so what they're doing is they're
+subtracting and incrementing from a
+shared counter so at the end of the day
+we just look at the value in the counter
+if it's positive or negative we can tell
+who want the election right so if the
+code from these two threads of the
+instructions interleaves at a relatively
+coarse granularity then that's ok we get
+the expected result the election is a
+tie but if we have them interleaving at
+a finer granularity then we have a
+classic lost update problem right and
+we're going to drop one of the votes now
+depending on whether it's a red vote or
+a blue boat that's been dropped you may
+or may not consider this to be a bug
+maybe a feature but in the spirit of
+bipartisanship let's say that this is
+some sort of issue that we want to fix
+right so why can these different
+interleaving arise in the first place
+well there's lots of things that can
+affect an execution from the single
+threaded world we're familiar with
+notions of input right yeah the bytes
+that you read from a file or you know
+the buttons that a user clicks on these
+obviously can affect where your program
+does in the multi-threaded world the
+number of threads that your program is
+using can also affect the computation
+that it performs but unfortunately on
+our current non-deterministic parallel
+systems there are many other things that
+can also affect what execution you get
+when you run your program so whether
+your program has data races in it can
+definitely affect what happens
+scheduling decisions made by the
+operating system or even by the hardware
+can affect things even low-level
+phenomena like temperature
+affect the speed with which circuits are
+switching and ultimately that can bubble
+up into something that's visible in in
+the program's output and for those of
+you who have done a lot of parallel
+programming before you will no doubt be
+familiar that the phase of the moon is
+actually a crucial aspect to getting a
+program a parallel program that that
+computes correctly right so ultimately
+we could maybe hope to control a lot of
+these these phenomena right maybe if we
+didn't believe too much in quantum
+mechanics we could control things down
+to the very lowest physical level but
+ultimately as a programmer it's very
+difficult to control a lot of these very
+low-level things that can affect an
+execution right programmers have enough
+trouble just keeping data races out of
+their program let alone worrying about
+things like temperature so ultimately
+what we want is we want a higher level
+more useful notion of input like these
+explicit inputs here and we want a
+useful notion of determinism that works
+for arbitrary multi-threaded programs
+abstracting away all these low-level
+details that can affect an execution and
+leaving execution strictly a function of
+these high level inputs that a
+programmer can easily identify and
+control so that's exactly the kind of
+scheme that I'll describe to you today
+so just to talk a bit about some of the
+benefits that determinism could provide
+if we imagine a world in the future
+where deterministic execution was
+deployed throughout our computing
+infrastructure so what I have here is I
+have a little cartoon of the software
+development cycle so we do some amount
+of iterating between testing and
+debugging after that we go ahead and
+deploy something that we're reasonably
+confident in of course deployment just
+reveals new issues and the cycle starts
+all over again right so if we had
+determinism available throughout our
+deployed computing infrastructure we'd
+be able to use reverse debugging
+techniques while we're debugging our
+code testing results would be
+reproducible and this would eliminate
+the need to stress test parallel
+programs right we don't have to run them
+over and over again hoping to trigger
+interesting thread in your leavings you
+just run it once you get the output that
+you get and then you move on to the next
+input
+because we would have a guarantee that
+programs have behaved the same way from
+testing on to deployment testing would
+ultimately be more valuable and so we
+would be deploying code that we that
+would be more robust we'd have more
+faith in and then finally for the issues
+that did leak out into production we'd
+be able to reproduce those back in a
+development environment yes question so
+your definition of determinism was kind
+of ending input and outputs and state
+and those are in 11 relationship crying
+talking about debugging it seems like
+you might be concerned about
+intermediate States where your
+definition alone
+multiple different intermediate states
+leading to the same final state correct
+you can talk about that yeah so let me
+just repeat it for the recording um so
+the question is there is a notion of
+sort of just input-output determinism
+that I've described that maybe during
+production all we care about is we
+provide the inputs we get the same
+output but during debugging we would
+also care about maybe the intermediate
+states in the computation that we used
+to derive that final output yes that's a
+great point so I will touch upon that a
+little bit later as you'll see as I
+describe the systems and how they
+actually work that we do provide that a
+series of deterministic intermediate
+States as well which I do think is
+crucial for debugging great so many
+others have identified these as as
+useful properties for systems research
+so there's been a lot of related work
+that provides these same benefits but in
+a more limited fashion so for example
+there's been a large amount of work on
+record and replay systems both in
+hardware and also in software and also
+hybrid hardware software systems some of
+this technology is actually transferred
+over to the commercial realm so these
+days it's not uncommon for hypervisors
+and also debuggers to allow you to
+execute programs in reverse or allow you
+to replay an execution currently the
+commercial products only allow record
+and replay for single-threaded programs
+so multi-threaded record and replay is
+still considered an open research
+problem on the testing side of things no
+doubt many of you will be familiar with
+the work that comes up with smarter
+testing strategies so ways to examine
+all of the schedules that are possible
+for a given input and ways to
+intelligently explore that space there's
+also been work on what's called
+constraint execution so the idea here is
+that we test our program right and we
+explore through testing a certain part
+of the space of possible schedules and
+then when we go and deploy our program
+we might like to sort of limit its
+execution to that part of the space that
+we've tested before so constrained
+execution is a mechanism for in a
+best-effort way and of trying to limit
+the code to do
+what we what we've tested it doing so in
+contrast to these point solutions
+determinism provides a unified mechanism
+right it's a single mechanism that
+provides all these benefits there have
+been other approaches to determinism as
+well however so one of the most popular
+has been this idea of language level
+determinism so the basic idea here this
+is a a new programming language
+something like deterministic parallel
+Java or Nestle if you're familiar with
+those and the basic idea is let's have a
+new programming language which is
+constrained in the kind of parallelism
+that it can express often there's a
+heavy emphasis on static checking as
+well and what we will require what we
+will do is that will design the language
+so such that all programs that are
+expressed in such a language are
+deterministic by construction so that's
+the the trade-off that you make you have
+to rewrite your program in this new
+language it only supports restricted
+forms of parallelism but it gives you
+determinism by construction another
+interesting somewhat bizarre use case of
+determinism came up with of all places
+the Halo game engine so halo is a as you
+and Microsoft well know a very popular
+first-person shooter for the Xbox and it
+turns out that I mean speaking with the
+halo developers halo the the halo engine
+has been explicitly architected to run
+in a deterministic way since back in two
+thousand one and so halo is
+multi-threaded running on the Xbox as
+well as the GPU and the reason that the
+halo developers did this was for all of
+the good software engineering reasons
+that I described previously but also
+determinism enables some new use cases
+in the context of their game engine so
+for example when you are recording a
+game session in Halo you can efficiently
+do that recording by just logging the
+explicit Network and controller inputs
+right you don't have to record anything
+else about the execution and then later
+on when you watch that game session
+again you aren't just seeing a movie and
+you're actually experiencing a
+deterministic re execution of that
+previous session and so this allows you
+as a user to interact with the game
+world in certain non-intrusive ways so
+for example you can move the camera
+around and you can also rear ender that
+session at higher resolution if you want
+and because the underlying platform is
+deterministic you have a guarantee that
+when you when you re execute it even in
+you know with this non intrusive
+instrumentation no divergence will occur
+right and if there were an if Hale o was
+a non-deterministic execution platform
+obviously all sorts of things go wrong
+during the replay process so in contrast
+to these two approaches that we've seen
+so the halo developers were just using
+manual best-effort approaches they stuck
+to deterministic parallelism patterns
+they tried to avoid data races in their
+c++ code and they hope for the best so
+that's the sort of manual approach we
+could also write all of our code in
+these deterministic languages but they
+have various restrictions as well so in
+contrast to these two previous
+approaches what I'll show you today is
+this idea of execution level determinism
+and so execution level determinism is a
+completely automated approach there's no
+need for a programmer to do anything to
+their code for it to run on this
+platform in a deterministic way all
+right so that's the first bit so now
+let's move on how do we actually provide
+determinism well let's go back to this
+idea of our multi-threaded voting
+machine right so we have these different
+interleaving some instructions here and
+we saw some examples of how they could
+arise but in order to control the
+program's output we need to control this
+interleaving in some way and so the
+basic idea is we're going to isolate the
+instructions from each thread from all
+the other threads so we're going to
+isolate them in terms of the memory that
+they read and write so it's a shared
+memory program but we isolate each
+thread from from all the other threads
+basically what's this what this is doing
+is it's taking a multi-threaded program
+and converting it into a collection of
+single threaded programs right and so
+each of these single threaded programs
+is going to naturally execute in a
+deterministic way and so that's how we
+we can get determinism from a
+multi-threaded code now obviously
+threads want to communicate with each
+other right that was the whole point of
+writing a multi-threaded program in the
+first place so we need to handle these
+updates
+what we need to do is we need to merge
+updates in a deterministic way and at
+deterministic times or points in the
+execution and then to execute an
+arbitrary parallel program we can just
+lather rinse repeat this process until
+termination so this is the determinism
+recipe that we're going to follow today
+we need to isolate threads updates from
+each other we need to merge updates in a
+deterministic way and at deterministic
+times and as you'll see we have a series
+of optimizations but we can come back to
+this recipe each time and see how it how
+it provides determinism and how we can
+change the mechanisms to provide
+different performance between the two
+you might you might have to well if you
+are interested in providing sequential
+consistency that's right just merging
+updates and if you come to stick with
+what you got right so we'll see the the
+first scheme i'll talk about users
+transactional memory it does provide
+sequential consistency will show how to
+handle those conflicts and then later on
+I will argue that we maybe should give
+up on sequential consistency move to
+more relaxed consistency but we don't
+have to give up on determinism of that
+in that context alright so let's start
+with the simplest possible thing right
+serializing the program so this is an
+execution time line diagram going to
+show you a bunch of these throughout the
+talk today we've got time on the x-axis
+and then threads are on the y-axis and
+what we're going to do is we just
+execute one thread at a time switching
+between them in a round-robin order now
+the things we have to enforce in order
+to ensure determinism so we have these
+each thread execute a set of
+instructions we call that quantum and
+then the amount of time that it takes
+for each thread to execute a quantum we
+call a quantum rent and to enforce
+determinism here we need to ensure that
+quanta are of a deterministic size so
+they're typically on the order of 10,000
+instructions and then we have to have a
+deterministic scheduling policy for
+switching from one threat to the other
+so round robin is a very simple but
+perfectly fine example if we have these
+two properties then we can enforce
+deterministic execution to put this in
+terms of the recipe that I showed you
+previously all right we need to isolate
+threads from each other we do that by
+running one thread at a time very
+trivial form of isolation we don't
+actually need to merge updates because
+well so in one thread running and then
+in order to switch between threads that
+deterministic times we're going to count
+out a fixed number of instructions all
+right so so this is great this allows us
+to enforce deterministic execution for
+an arbitrary parallel program this this
+could be the end of my talk right yes
+question leave this County
+war and less the threat explicitly
+doesn't like a call
+yes so there there are some things you
+have to do if you want to handle like if
+it goes if it blocks into the operating
+system say where threads are created
+threads exit yes but in the common case
+where threads are just running this is
+fine great i should also point out it's
+it's straightforward to handle those
+other cases deterministically as well
+because they arrive at deterministic
+points in each threads execution great
+so what's wrong here right there's only
+one simple thing that we left out and
+that is of course all of the parallelism
+in the original program right we wrote a
+parallel program in the first place that
+was something obviously it was important
+to us so what we're doing is or what we
+would like to do is we'd like to be able
+to somehow you know magically overlap
+the execution of these quanta right
+because we started with a parallel
+program parallelizing parallel code
+should be relatively straightforward
+right much easier than parallelizing
+sequential code so as an architect
+whenever I hear that you know we need
+some kind of magic mechanism to overlap
+these these quanta I think okay that's
+pretty straightforward we'll just go
+ahead and speculate and the particular
+speculation mechanism that we're going
+to use is called hardware transactional
+memory so many of you are no doubt
+familiar with transactional memory and
+it's a very sophisticated and active
+research area and I don't have time to
+go into all the details today but I will
+tell you the three things you need to
+know about transactions to follow the
+rest of this talk so the first thing is
+that programmers place code inside
+transactions the second thing is that
+the semantics of these transactions are
+such that they the code running inside a
+transaction is is under the illusion
+that it's executing completely serially
+it's like it's the only code running in
+the entire system now in reality there
+may be other transactions running
+concurrently but this is the illusion
+that the U is a a programmer can rely
+upon the second thing we need to know
+about transactions is that they're
+implemented using speculation
+particularly in the context of hardware
+and so what this this means is that what
+the runtime system will do is it will
+potentially launched a bunch of
+transactions all running concurrently it
+will check for interference between
+these transactions as they run if
+there's no interference by the end of a
+transaction then that transaction can go
+ahead and commit however if there is
+some interference that's that's detected
+then that transaction will roll back
+it'll be as if it never executed in the
+first place all right so in terms of our
+recipe how does this all fit together
+well we're going to isolate threads from
+each other by taking these quanta and
+putting them inside transactions in
+order to merge updates in a
+deterministic way we are going to
+enforce that these quanta commit in a
+deterministic order and then in order to
+switch between threads that
+deterministic times we'll just count
+instructions like before okay so let's
+see is so I should also point out that
+the there are actually three criteria
+that determine when a threads quantum
+ends one is hitting a fixed instruction
+count the others deal with
+synchronization and also with exhausting
+finite hardware resources now get to
+those later in the talk all right so
+let's see an example of how this all
+fits together so we're going to execute
+quanta in parallel right because they're
+implicitly running inside these
+transactions after the quanta are done
+executing we go ahead and commit them in
+a in some sort of fixed deterministic
+order so that's what commit mode does so
+there's two things that are that are
+important about commit mode one is that
+it's enforcing the illusion of serial
+execution right so this is exactly
+equivalent to the straightforward
+serialization that we saw previously and
+that's because we're forcing a commit in
+a particular order the second thing
+that's important about commit mode i'll
+actually get to in just a second but
+that fixed order can actually help us
+optimize a bunch of the conflict
+detection mechanism as well okay so what
+happens if we have one of these
+conflicts well let's say we have a
+conflict between 31 and threat to what
+we're going to do is we will detect that
+conflict we will roll back in this case
+the transaction running on thread to
+re-execute it during commit mode and
+then
+continue executing from there so again
+this maintains that illusion of serial
+order that we that we started with so
+let's dig into a conflict detection a
+little bit here right so as you're
+probably familiar with conflicts are
+defined as two operations from say two
+different threads or two different cores
+accessing the same memory location and
+at least one of those operations is a
+right so that's the standard definition
+of a conflict from the transactional
+memory literature and that's reified in
+this table here now when we get to our
+deterministic transactional memory
+system it turns out that we can be much
+more relaxed in detecting conflicts so
+how does this work well the basic idea
+is that for these two rows that have
+highlighted here we have a write
+operation as the second operation so
+this write operation is always going to
+produce the same value for a location
+because we're executing
+deterministically the write operation
+will always be ordered as the second
+thing again because of our deterministic
+commit order so we could roll back and
+re execute in these cases but we would
+always end up with the same value same
+final value anyway so there's no point
+in doing that so let's just not detect a
+conflict there of course there's still
+this other case where we have actual
+data flow between operations and that
+does require a conflict and let me just
+dig into that a little bit so let's say
+you throw two is writing location X
+thread three is reading location X right
+thread tues value is locked up inside
+its transaction so thread three is going
+to see some previous value for x from
+somewhere else in the system then if we
+detect a conflict roll back and then re
+execute the transaction on thread three
+we can see that the commit here from
+thread 2 has made that new value of x
+visible so this this reacts acute 'add
+version here is what conforms to the
+that illusion of serial execution that
+we wanted right we want to the illusion
+that thread 3 executed after thread 2
+and so because we execution generates a
+different result we have to detect a
+conflict and roll back okay well we
+don't actually have to do that all the
+time so let's just take a step back and
+see how we could optimize this little
+bit more so thread 2 is producing this
+new value for x right and it's trapped
+inside the transaction but in some sense
+we don't want it to be trapped inside
+anymore because that's precisely the
+value that thread 3 needs to see so if
+there was a way that we could sort of
+poke a hole in that isolation let the
+value leak out then we could potentially
+optimize away a a row back in this case
+so this the general idea is that let's
+break isolation this will help us avoid
+rollbacks this doesn't work in all cases
+it could be the case for example the
+thread to later writes another value to
+X yeah and so we would have to detect
+that we had forwarded the wrong value
+and still roll back and reacts acute in
+that case but ultimately this means that
+many of the situations in which we would
+normally have to detect a conflict we no
+longer have to detect a conflict yes
+baby produced st. Paul's concerns me
+even if they did
+yes that's correct net execution or that
+the control flow could diverge
+arbitrarily due to reading the wrong
+value yes yes I don't know shirin so how
+do you know in terms of when you break
+this isolation where the visibility of
+the right is in the third transaction it
+doesn't it matter where it shows up in
+terms of the ordering of the
+instructions within the transition we
+would have kids you back to breathing on
+all really beat correct so yeah so maybe
+eight if I understand your question
+correctly you're asking about where when
+exactly did we do the forwarding and
+can't that affect the i guess the so if
+we had multiple reads going on in thread
+three you know which of them will see
+the value that's correct so what we're
+doing here is we're still enforcing the
+illusion of serial execution of these
+quanta so the way that I didn't go to
+the details but the way that we would
+detect conflicts and the need to roll
+back even in this more advanced
+speculative forwarding scheme would be
+to ensure that we always had the
+illusion that it was thread ones quantum
+thin thread twos and threes occurred
+before the value
+exactly if you recorded the happiness
+before Brett say that you know there was
+a dependence from teaching his p3 but
+that was okay because of the border
+because it was consistent with the order
+I would have been closed for determines
+but I can saw if you saw you know t2
+ordered before T 3 and T 3 4 40 2 cyclo
+you know it's not so our Carolina
+backing it so do you like piggy back a
+little bit on the conflict detection to
+do that does that work to extend the HTM
+to sort of do this right okay so the
+question is how does this more
+sophisticated complex detection work so
+yes you can extend hardware
+transactional memories conflict
+detection to detect these kinds of
+errors all right and not these errors
+but these kinds of essentially
+serializability violations as well
+before you want to reserve oh yes
+knowing the order in advance is crucial
+because then we know that lets us know
+that ok forwarding from you know this
+thread to this thread is is okay or that
+it should have been the other way and we
+need to roll back great so just to
+summarize how this transactional memory
+scheme works I've shown you how we can
+recover parallelism from a parallel
+program using Hardware transactional
+memory I've shown how we can avoid
+rollbacks in many cases by optimizing
+the conflict detection process and then
+the final thing is really something that
+would be nice to have that we don't have
+which is that it would be really nice if
+we could avoid this need for constant
+speculation right we're putting every
+instruction in the program inside a
+transaction constantly speculating and
+as you're well aware speculation has
+many costs right there's the time and
+the energy that you lose whenever you
+miss speculate but then in some sense
+something even worse is just the
+complexity of implementing the
+speculative machinery in the first place
+right what do we do about irrevocable
+actions because everything is running
+inside a transaction we need some other
+out-of-band mechanism to handle things
+like I oh so if we go back to this
+recipe for determined as amusing
+transactions we can see that it gave
+everything that we needed in order to
+provide determinism but it also gave us
+something that we didn't need right it
+gave us this serial execution which was
+enforced through speculation and we
+really don't need the solution of serial
+execution and some sense transactions
+are really overkill so they give us this
+nice serial order but if all we care
+about is determinism it would be totally
+okay to have a more sophisticated
+interleaving of instructions as long as
+we maintain determinism so the the hope
+here is that we can come up with a
+scheme that provides the performance of
+transactions in terms of still
+expressing or harnessing the underlying
+parallelism of the application but that
+it avoids the downsides of speculation
+now of course it's it's important to
+maintain two properties one is we still
+have to be deterministic that's the
+whole point here of course and the
+second thing is that we have to maintain
+program semantics right so reordering
+instructions in various in very
+sophisticated ways may break existing
+code and so we want to make sure that we
+still support existing parallel programs
+so I'll talk about these two points in
+turn so the first thing I'd like to
+explain though is this notion of a store
+buffer this is a bit of a detour into
+how processors are implemented and we'll
+see that this is important for
+understanding how we can enforce
+determinism in a non speculative way all
+right so store buffers arise because we
+have the situation say where a processor
+is doing a store and that store mrs. in
+the memory hierarchy so there's kind of
+two options we have here the very simple
+thing to do would be to say all right
+we'll just sit around and wait and as
+soon as the cache line that we need
+percolates into the l1 then we will
+allow that store to complete and then
+keep on executing but if you think about
+what a store is doing right it's just
+producing a value sending it to the
+memory system there's nothing that we
+need from the memory system in order to
+continue executing so why not have a
+little hardware structure that sits here
+buffers the operation coming out of the
+processor and then lets us keep going
+right we have to remember that value so
+that way subsequent loads can still see
+it but really there's no need to to stop
+and block the entire core just because
+we missed
+on a store so for our purposes store
+buffers are really nice because they
+provide isolation without any kind of
+speculation so there's nothing
+speculative about using a store buffer
+you have a store we just put it into the
+store buffer subsequent loads check that
+store buffer but you never detect
+conflicts you never roll back I should
+also point out the store buffers are
+private to each processor all right so
+p2 can see its own stores but p1 has its
+own separate store buffer it doesn't see
+what p 2 is done great so in terms of
+our determinism recipe now if we want to
+eliminate speculation we're going to use
+store buffers to isolate threads updates
+from each other in order to merge
+updates in a deterministic way we came
+up with a parallel merge algorithm which
+it turns out is exactly the same as the
+z-buffer algorithm that's a very common
+in graphics hardware and then of course
+we'll count instructions like before now
+I don't have time to go into this
+parallel merge algorithm um be happy to
+talk more with you about that offline
+but I will go into store buffers and how
+we use those to buffer updates ok so
+we're executing in parallel again we're
+using store buffers to isolate threads
+from each other I should also point out
+that we have a way of performing
+synchronization in parallel mode as well
+this is due to a nice algorithm from
+some folks at MIT called kendo and I
+want to time to explain that today but I
+can share the details offline okay so
+how does the store buy from mechanism
+work well let's say thread one is
+writing to location a thread 2 is
+reading from it thread 2 is going to get
+some previous value of a right it's not
+going to see thread ones update a thread
+one will see its own updates of course
+otherwise things would get pretty crazy
+and if thread to also wants to update
+location a that's fine it gets its own
+private copy can do whatever it wants
+with that after we're done executing in
+parallel we have commit mode which
+deterministically publishes the contents
+of each thread store buffer making it
+visible to the rest of the system that
+uses that z-buffer algorithm that i
+mentioned
+obviously and yes and then then we just
+continue executing so one thing maybe
+some of you are curious about at this
+point is our question no all right yes
+oh so you still have this quanta of
+10,000 instructions yes that's right so
+you're ah so it depends on whether
+you're implementing with hardware and
+software but in terms of hardware we use
+the private levels of the cache
+hierarchy and so private I'll one
+private l2 is if available and so that
+gives us on the order of 100 200 k space
+yes right yes it's yeah we we couldn't
+read this or buffers just a little cash
+you make it big book extend the right to
+the term store buffer as applied to
+current processor design is generally a
+very small you know maybe a ten tree
+structure right and we need something
+that's much larger than but it's the
+same idea okay great so one thing maybe
+that you're wondering about is that what
+we've done to this program is we've
+taken all of its updates right and we've
+hidden them inside the store buffer so
+no one else can see them and is this
+okay right obviously we need to make
+sure that these updates are visible at
+some point right and so really what
+we're talking about now is the memory
+consistency model of the programming
+language the program was written in and
+also the architecture architecture if
+we're implementing this in hardware so
+for our purposes the memory consistency
+model says when these store buffers have
+to be made visible when their contents
+need to be published not just a bit of
+terminology publishing less often means
+that we have a more relaxed consistency
+model publishing more frequently means
+that we have a stricter consistency mom
+so in terms of the consistency
+ramifications of the scheme I just
+described to you it really comes down to
+commit mode right so commit mode is what
+publishes the contents of the store
+buffer kind of like a sense in say a
+current non deterministic system
+unfortunately commit mode is is somewhat
+expensive because we have this global
+barrier right we have to wait until
+everyone's finished a quantum until we
+can go ahead and commit
+so because commit mode is so expensive
+what we ultimately want is we want a
+really relaxed consistency model because
+the more relaxed a consistency model is
+the fewer restrictions at places on the
+program in terms of when updates need to
+be visible right we want as much
+flexibility there as possible so we want
+the most relaxed consistency model that
+we could possibly get away with because
+we want to publish as real as possible
+um just an interesting side note you'd
+think that as an academic I might be
+interested in publishing as frequently
+as possible but it turns out in this
+particular context publishing rarely is
+exactly the right idea on a more serious
+note deterministic synchronization
+because it has this global visible the
+aspect to it is more expensive than non
+deterministic synchronization and so as
+hopefully you'll you'll take away from
+this later relaxing the memory
+consistency model is something that
+definitely makes sense in the
+non-deterministic context but it makes
+even more sense in the context of
+determinism because synchronization is
+more expensive all right so which
+consistency model are we going to choose
+well there's a bunch of them out there
+I've just listed a handful on this slide
+as I said we want the most relaxed
+consistency model as opposed to the most
+uptight possible so we're going to
+choose what's called data race free 0
+it's essentially the same consistency
+model in the c++ memory model or java so
+let me just give you a quick loss on how
+the dr f 0 model works right so let's
+say we've got these two threads they're
+executing these instructions dr f 0 says
+that visibility has to be propagated
+along these happens before edges so
+happens before edge is something that
+maps up a that that matches a release
+operation of a lock to the subsequent
+acquire and so dr f 0 says that updates
+have to be visible along these edges and
+any other time that you are free to keep
+those updates buffer so now let's put
+this all together in terms of an example
+so we're executing in parallel right we
+can do synchronization operations in
+parallel as well thanks to the kendo
+algorithm then we have a commitment
+you executing let's say the thread to
+unlocked this lock and then thread three
+subsequently locked it right so we've
+got it happens before edge here from
+thread to to thread three our
+consistency model says that we have to
+ensure that updates are visible along
+one of these happens before edges
+fortunately for my example we have a
+commitment ravines right and so this
+commit mode satisfies the constraints of
+the consistency model so it turns out
+that this is a relatively common pattern
+in the benchmarks that we looked at and
+ultimately it means that we are rarely
+forcing a commit mode which is expensive
+due to synchronization constraints our
+consistency model is relaxed enough that
+that rarely comes up and so what this
+allows us to do is it allows us to
+execute larger and larger quanta without
+having one of these commit modes
+intervene and so because we can execute
+larger quanta we can better amortize the
+cost of these barriers at the end of
+each quantum round and this ultimately
+gives us higher performance so just to
+summarize this relaxed consistency
+approach to determinism I've shown you
+how we can still execute programs in
+parallel in a deterministic way without
+relying on speculation the key to that
+was adopting a relaxed memory
+consistency model and I hope I've also
+convinced you that relax consistency is
+a very natural optimization for
+determinism because deterministic
+synchronization is so much more
+expensive than its non-deterministic
+variant all right so that does it for
+the algorithm section now let's talk
+about how do you actually build this
+stuff right and then I'll show you some
+graphs at the end of this from some of
+the systems that I've built so if we go
+back to the transactional memory
+implementation what we we started with
+was a conventional multi-core processor
+and the first thing we needed was the
+best effort hardware transactional
+memory system very similar to what intel
+has said is coming out in there Haswell
+processors next year and then in
+addition to this best effort HTM
+machinery we also need a little bit of
+extra stuff we need quantum Building
+inside the processor core need to count
+instruction
+we need to enforce a deterministic
+commit order of transactions and then
+finally we also need to ensure that if
+we overflow the resources of the
+deterministic transactional memory
+hardware which is typically implemented
+in the private cash we need to ensure
+that that's a deterministic event so
+that way we can use that as a signal for
+when a thread should stop its quantum
+and so ultimately this boils down to
+modifying the cache eviction policy a
+little bit so when we moved from the
+transactional memory implementation to
+the relaxed consistency implementation
+we realized that well first of all we
+don't need Hardware transactional memory
+anymore right and because that was the
+majority of our hardware support we
+realized we had an opportunity to kind
+of strip down the other mechanisms that
+we needed in hardware as well so at the
+end of the day at the end of the day we
+got it down to just these three
+mechanisms so the first is instruction
+counting I think instruction counting
+makes a lot of sense in hardware it's
+really cheap and it has a non-negligible
+cost in hardware I'm sorry in software
+right and so the second mechanism we use
+is we require a store buffer mechanism
+I'm trying to leverage the private
+caches on the system right we want to
+keep threads isolated from each other
+private caches are isolated at the
+hardware level so it makes a lot of
+sense to reuse it that physical
+isolation at a higher level stack
+question this is speculation going on
+inside the hardware itself right that's
+good sure first a the cache things like
+that you know the same instruction
+sequence may or may not take more cycles
+I guess but but if they level of my
+individual instructions you're saying is
+completely deterministic right right so
+so as you point out there's a lot of
+speculation going on under the covers
+and the decisions use to inform that
+speculation are not necessarily
+deterministic right so ultimately we
+have a deterministic outcome for a
+program but we don't necessarily have
+deterministic timing for that program
+yes and so I will gesture towards some
+ideas in the future work section about
+how we might go about building a
+processor that has deterministic timing
+and from that you would also get a
+deterministic outcome as well great so
+the third mechanism that we need is this
+so the parallel merge algorithm that I
+didn't describe has a lot of
+fine-grained parallelism it's
+implemented in hardware and GPUs and it
+makes a lot of sense to bake that into
+hardware for our purposes as well on the
+software side of things we try to leave
+as many policy decisions as possible up
+to software right so issues about how
+big quanta should be maybe whether they
+should adaptively grow and shrink over
+the course of an execution that's all up
+to software issues about when to place a
+particular store value into the store
+buffer or not because you can leverage
+static analysis to prove for certain
+locations you don't need to do that and
+then finally issues about when the
+contents of the store buffer should
+exactly be made visible so basically the
+question of enforcing the consistency
+model because it's a relatively rare
+occurrence we also leave that up to
+software so now I'll show you some
+results first from a hardware simulator
+that we built to simulate this processor
+design there's a lot of details here
+source code is available on our group
+website but ultimately you care about
+the results right so we've got
+benchmarks on the x-axis and the y-axis
+is performance overhead that's
+normalized to non-deterministic
+execution so the baseline is let's take
+a non-deterministic program so just
+basic pthreads plus locks run it on our
+simulator with say four threads that's
+the baseline how much does determinism
+cost you on top of that and so here are
+the results from our hardware simulator
+as you can see overhead very
+substantially by benchmark but even when
+we're looking at a 16 processor system
+the worst-case overhead is in the fifty
+to sixty percent range which we think is
+relatively tolerable these same ideas
+also lend themselves to a compiler
+implementation so we have a C C++
+compiler built around llvm in order to
+isolate threads from each other we use
+hash tables attached to each thread so
+on a store a thread will put a new entry
+in the hash table and then on a load it
+checks the hash table to see if there's
+some value if there's nothing in the
+hash table then it goes out to to the
+read-only version of main memory and
+then we've implemented the commit mode
+algorithm as well in software so it's
+the same setup as before performance is
+normalized to non-deterministic
+execution because this is all pure
+software these are experiments running
+on a real machine in our lab as you can
+see by this scale of the y-axis the
+performance of your heads are not quite
+as rosy and indeed there are some
+benchmarks that show roughly an order of
+magnitude slow down for enforcing
+deterministic execution yes soon debug
+how scalability is infected
+it looks like some cases you get you
+know extreme CL you actually get higher
+overheads with hyper more processors is
+that generally curious yeah I think
+scalability is a is an interesting point
+so there's sort of two answers there one
+is that the the store buffer
+instrumentation that we add to the
+program is relatively scalable because
+that's something that each thread does
+in isolation and so one thing you notice
+on the hardware results is that for some
+benchmarks the overhead reduces as we
+increase the number of threads and
+that's because we're normalizing to a
+non deterministic baseline and the non
+deterministic program doesn't scale
+perfectly we add a bunch of overhead to
+the program some of which does scale
+quite well heine its kind of hiding the
+fact that there's an underlying not
+scalable aspect
+right so it's I'm cigarette we want to
+wildly hips the fact that went down is
+really just a word to the fact that this
+is this program won't scale on 60
+processor matter what you do right right
+and so yes and so ultimately you would
+want to riorca tect the fundamental
+program to descale better skilled off to
+succeed you know you haven't even higher
+overhead yes this
+correct so too the the thing where
+scalability really starts to to affect
+us is in terms of these global barriers
+at the end of each quantum room
+obviously stopping all threads forcing
+them to de synchronize is not the way to
+scalability so I do have some ideas
+about a more scalable deterministic
+algorithm which I haven't gotten around
+to implementing yet but that eliminates
+this need for for global barriers all
+right so I've shown you that Hardware
+determinism can be quite fast right but
+obviously it doesn't exist unless you
+have a billion dollars or so lying
+around you just want to give to me I'd
+be happy to go off and fab this for you
+software determinism does exist but as
+we can see it's quite slow and so
+ultimately we would want some way of
+improving the software performance right
+and so that's what I'm going to talk
+about next and I'll make this relatively
+quick because I know I'm running a
+little bit tight on time here so the
+current thing I'm working on is this
+project called melt so I mailed stands
+for merging execution and language level
+determinism so as i gestured to at the
+beginning of the talk there are these
+sort of two camps to providing
+deterministic execution there's the
+language level approaches which is have
+existed for many years and then there's
+the execution level approach which I
+described to you earlier too so these
+two approaches have in many ways a
+classic static versus dynamic analysis
+kind of trade-off right so if we do
+things statically there's no runtime
+overhead but things are going to be more
+restricted right and so a dynamic
+approach can handle the general case but
+we have to do everything at runtime so
+it's more expensive another interesting
+point of distinction between these two
+approaches is that the restrictions that
+deterministic language is in force allow
+them to have this property known as
+sequential semantics so sequential
+semantics is there's this really nice
+property where your program is going to
+have the same exact behavior if you run
+it with one thread or ten threads or a
+thousand threads and that really comes
+about because of the restrictions in the
+language if we think about a dynamic
+approach where we are supporting
+arbitrary multi-threaded program
+right there's no way to get that same
+kind of agnosticism to the number of
+threads of program is using because
+fundamentally you can have a program
+that does something completely different
+with a threads vs seven threats right so
+there's no way to to really abstract
+away the number of threads you're using
+so meld is a hybrid approach which tries
+to combine the best of both worlds in
+terms of the static and dynamic
+techniques so we end up with low runtime
+overhead as I'll show you general
+support for arbitrary parallel programs
+but because of that generality we are
+not going to be able to provide
+sequential semantics alright so the
+motivation behind meld is this so-called
+9010 role right ninety percent of the
+time spending ten percent of the code
+for a lot of parallel programs we looked
+at it turns out that this ten percent of
+the code is often data parallel in a
+nicely structured way so here's a little
+cartoon of a parallel program so there's
+lots of complicated stuff going on maybe
+locks flag base synchronization but
+there's this little kernel of regular
+data parallel computation buried
+underneath all of this complexity and
+fortunately for our purposes this
+regular data parallel criminal is often
+where a lot of the time is spent perhaps
+because this is a fundamentally more or
+typical II a more scalable kind of
+parallelism then something a little bit
+less structured so the basic idea behind
+melv is let's use execution level
+determinism to handle all this
+complicated stuff right and then let's
+use a deterministic language for
+encoding this very regular computation
+which seems pretty straightforward of
+course the tricky part is what's the
+interface between these two approaches
+because there's many things that could
+go wrong if we we don't think about this
+carefully so let's say we have some kind
+of parallel merge sort algorithm right
+standard divide and conquer parallelism
+we could write this in a deterministic
+language like deterministic parallel
+Java would be very straightforward but
+that and if we could verify it in
+isolation but as soon as we take that
+isolated function and then plug it into
+a larger program all sorts of
+interesting issues come up right are
+there concurrent calls to merge sort
+what alias is our input here can other
+threads you know modify ray
+we are modifying it the whole point was
+to you know statically verify this as
+deterministic remove all instrumentation
+and in order to answer these questions
+we would naively add back a lot of
+instrumentation so what do we do with
+milk well we propose a lightweight type
+qualifier system which essentially
+segregates the data in the program into
+the part that's operated on by the
+deterministic language and the rest of
+it and then we have a simple set of
+typing rules which enforce certain
+aliasing properties so that you can't
+just take a pointer from one side of the
+world and then publish it on to the
+other side here's a quick diagram of how
+they meld compiler works so we've got
+our program it's got its little data
+parallel kernel and we've got the type
+qualifier system to keep them
+ring-fenced so we take the complicated
+parts of the code run that through our
+standard deterministic compiler so that
+adds a store buffer instrumentation to
+all the memory accesses and then for the
+data parallel Colonel we do two things
+first it's written in a deterministic
+language and so what we do is we take
+that code along with what we call an
+abstraction currently this is done
+manually by yours truly but we are
+looking into automating this going
+forward the abstraction is basically
+just a conservative summary of what else
+is going on in parallel with this data
+parallel computation so it may be the
+case so there's nothing else going on
+maybe the case that there's you know an
+io thread running in the background
+something like that and basically what
+we do is we take this abstraction and
+the colonel we express them both in a
+deterministic language and then if we
+can get that code to compile then we
+have our proof that it's safe for those
+two components to run in parallel
+without instrumentation for
+the thing that is running in parallel
+with this kernel thing it's completely
+isolated from your operating on
+different pieces that's true yes yes
+that n which is fortunate because we
+need to be able to express that
+isolation in a static way so that limits
+you you know amount of reasoning we can
+do but yes that is true and then for
+performance reasons we found that it's
+good to count instructions everywhere
+we're still building quanta because
+we're doing the standard execution level
+determinism approach and because we
+don't for load balance purposes it's
+it's hard to know a priori whether we'll
+have all of the threads running
+something that is in a deterministic
+language or not so we just count
+instructions everywhere and that turns
+out to be the best approach for
+performance all right so now show you
+some results again benchmarks on the
+x-axis here we're also normalizing
+overhead to non determinism like before
+and these are experiments run on a real
+machine right so these are the blue bars
+i showed you previously for our
+deterministic compiler and as you can
+see in the green here that if we are
+able to leverage these well-structured
+kernels of data parallel computation we
+can remove a dramatic amount of the
+runtime instrumentation that we're doing
+so i think this is a really promising
+approach moving forward have and heal
+the other kind of stuff
+good stuff yes they do there's so we
+have a workshop paper about this if
+you're interested in more details I can
+also talk with you more online offline
+but there yes so we have a table there
+showing that these programs do acquire
+locks used condition variables and so
+forth and so it obviously parts of the
+program can be expressed very cleanly in
+a deterministic language but it would be
+non-trivial to take the entire code and
+port it over all right so just to
+summarize the contributions I've talked
+about today first of all at UW pioneered
+a set of techniques that provide
+determinism for arbitrary parallel
+programs so even programs that have data
+races in them I've also shown you that
+relaxed memory consistency is a very
+natural optimization for determinism
+because of the cost of deterministic
+synchronization I showed you how to
+implement determinism across the stack
+right which parts are really amenable to
+hardware support which should live in
+the compiler and which maybe even have a
+good case for for modifying the language
+so now I'd like to talk about future
+work since I work in the area of
+determinism you might suspect that all
+of my future work is strictly defined in
+terms of things that I've already done
+and you would be somewhat correct so I
+am very interested in using determinism
+to improve program safety and
+performance but looking more broadly I'm
+also really excited about this notion
+what I'm calling safe memory and so this
+is an idea to battle some of the
+upcoming programmability challenges I
+see coming with emerging processor
+architectures so let's start with
+determinism so one of the things I'm
+excited about is new use cases for
+determinism so one of the things that's
+nice about determinism is it it lets you
+run multiple copies of a multi-threaded
+program and so essentially doing
+replication and you can keep those
+replicas in sync very easily just by
+broadcasting the inputs right because
+you know that the replicas won't diverge
+on their own accord because of
+determines so I think this is going to
+be useful in many ways one particular
+way is that if we are trying to analyze
+some multi-threaded execution right
+let's say we want to detect races we
+want
+track information flow we want to turn
+on expensive contracts checking
+something like that typically what we'd
+have to do is just layer all those
+analyses on to a single execution right
+that's the only way that we could get a
+sound union of all those guarantees
+right but now that we can replicate a
+program efficiently using determinism
+right we can turn on one analysis in
+each replica right so we only pay the
+overhead of of say the slowest analysis
+it's possible to go even further that we
+could take a particular analysis right
+and essentially stripe it across
+multiple replicas and if we're smart
+about how we do the sampling within each
+replica we could construct a scheme
+where we ended up with the same full
+coverage guarantees but we don't pay for
+the execution overhead in any particular
+replica I also think it's useful to
+think about re leveraging the isolation
+that we are using to enforce determinism
+in other parts of the programming stack
+so definitely inside the runtime system
+one can imagine using this isolation to
+maybe Allied synchronization enable new
+compiler optimizations it's possible
+that this could even be useful at a
+programming model level so possibly part
+of the programming language as well on
+the other end of the stack getting back
+to Ben's question earlier all of the
+systems I've talked to you about today
+provide deterministic output but they
+don't provide deterministic timing and
+so that would be an interesting Avenue
+for future research right there's many
+you know particularly in the real-time
+systems community people who care a lot
+about deterministic performance and I
+think there's a large overlap in the
+mechanisms that can be used to provide
+deterministic timing um and they could
+also with slight modification be sort of
+you know turn down a little bit to allow
+just a deterministic outcome if you
+wanted to to provide both sets of
+guarantees another thing that I think is
+interesting is that in terms of
+information flows security there's also
+another point of connection that the non
+determinism that people are concerned
+about eliminating in information flow
+security right so you want to stop
+timing channels
+in that case is very similar to the
+kinds of non-determinism that the
+systems I've described today are
+eliminating so in some sense you could
+think of the determinist the execution
+level determinism stuff I've described
+to you as providing a very low level of
+information flow security right it's
+preventing certain flows of information
+because we fix the flow of data within
+the program and so that could eliminate
+certain channels and then information
+flow security you know eliminating
+timing channels eliminating propagation
+from you know trusted untrusted data is
+a generalization of that I to all right
+so on to safe memory so we're all
+familiar with Moore's law right
+exponentially more transistors over time
+historically this has led to increased
+single thread performance right we got
+faster processors more recently this is
+shifted into providing more cores on a
+particular chip and in the future we're
+going to see multiple accelerators
+special-purpose accelerators living on
+the same chip along with multiple cores
+and fundamentally these phase shifts
+have been driven by the power demands of
+processors right so because we couldn't
+scale frequency anymore we shifted from
+a single chord to multiple cores and
+increasingly we're seeing that because
+even though we get exponentially more
+transistors the power used by each
+transistor is relatively constant even
+though they're getting smaller this
+means that if we kept all the
+transistors on all the time we would
+have exponentially increasing power per
+chip is obviously not particularly
+sustainable and so that's leading in
+turn towards specialization so we've got
+special purpose accelerators that we use
+some of the time most of the time that
+they're off they are off and so this
+allows the entire chip to stay within
+its power budget so what do these
+accelerators look like well there's
+going to be multicores obviously I don't
+think those are going away GPUs are now
+integrated on chip and we could also in
+the future who knows what those crazy
+architects will come up with right
+crypto reconfigurable there's there's
+many possibilities unfortunately for a
+variety of reasons I think that these
+accelerators are going to be more or
+less black boxes I think there's an
+intellectual property argument here but
+also because these accelerators are
+designed for low power operation it
+doesn't really make sense to add a lot
+of extra stuff so that you can see
+what's going on inside these
+accelerators right so these are black
+boxes of functionality and because
+there's no visibility here I think
+there's going to be a great programming
+challenge that is similar to the multi
+core programming challenge that we faced
+but in some sense much worse because we
+can't instrument the code that's running
+on these accelerators yes contrast this
+kind of thing with the system on a chip
+how was it tells us just wanna chip not
+exactly the same story it is exactly
+this this ape show you know you can buy
+phones did today they have hundreds of
+billing suppose it that don't have the
+program ability to turn right i think
+that basically so system-on-chip
+definitely exhibits some of these trends
+I think that going forward as we have
+more and more transistors that we need
+to burn I think that the the sort of
+scope of each particular accelerator
+will become much more specialist and so
+because these things will become very
+specialized maybe you would use it to
+accelerate you know part of the garbage
+collection algorithm or part of this
+data structure operation and so they'll
+be woven into the program in much more
+complicated ways than they are currently
+yes
+eventually context switchable
+good read and make sure it memories get
+away from this I students from Pratt
+yeah so the question is about AMD's
+plans to bring GPUs on chip so shared
+memory is already here with some of the
+fusion coprocessors and then yes you
+know certainly the OS people want to
+virtualize things to piss transistors
+I guess it kind of goes back to you
+seamless
+so right arguing that in this world
+little disc revoked the trumpet what we
+still with these new types of chips
+extensions and everything
+right so the question is how much debug
+ability you know logic or budget should
+we add each one of these accelerators
+and I think that that answer is very
+little and I think historically it's
+been the case too um but I have a new
+perhaps idea about where we should spend
+some of that complexity right so just to
+flip quickly through all the problems
+that you're certainly familiar with
+right so we've got data races at misty
+violations memory safety issues right I
+think we'll have new kinds of bugs
+around resource brokering right how do
+you ensure that only one purpose one
+person is using accelerator at a time
+how do you do debugging across code that
+runs parsley on the cpu and then steps
+over into one of these accelerators just
+ensuring that say if you had a you know
+reconfigurable logic right you want to
+ensure that only one person is using
+that at a time that they don't have you
+know conflicting configurations support
+setting up often these accelerators
+require a little bit of configuration
+before you can actually run the
+computation that you want so they are
+configurable in a limited way and
+there's certainly I've noticed a lot in
+the GPU programming I've done that
+there's a lot of issues that can come up
+with sort of speaking the right protocol
+to the accelerator and I think there's a
+lot of opportunity for providing richer
+support in terms of speaking these
+protocols correctly um so one option we
+could have that we've sort of been
+talking about already is that we can
+kind of turn these black boxes into gray
+boxes right so we can peek inside a
+little bit see what's going on maybe
+that'll help us figure out some of these
+issues I think that a better approach
+though is to instead think in terms of
+the communication fabric that we use to
+talk to these accelerators so for
+various reasons I think this is going to
+be shared memory nom although I am
+definitely up for a good shared memory
+verses message passing debate if anyone
+wants to join me later ultimately shared
+memory has lots of problems right
+hopefully I've convinced you that over
+the first part of this talk and so what
+I think we need to do is we need to
+build something on top of shared memory
+that I'm calling safe memory that
+provides much more safety then then
+shared memory does so I think there's
+all kinds of specific safety properties
+we could build on
+top of shared memory as opposed to to
+modify each of these accelerators
+underneath so we could look at ensuring
+that an accelerator execute code and
+then Tomic and isolate fashion we're
+definitely going to want sandboxing for
+security purposes we can think about
+implementing watch points which would be
+helpful with debugging we can think
+about ways that we can use the memory
+interface to debug what's going on
+inside an accelerator right so we can do
+the debugging from the outside as
+opposed to from the inside performance
+isolation issues there's lots of things
+that we could provide strictly in terms
+of this communication interface and i
+think that the opportunity here is if we
+can do that efficiently then we can
+provide these safety guarantees in a
+really agnostic way right you can take
+any accelerator that you want plug it in
+as long as it knows how to read and
+write shared memory you're going to be
+fine because the communication fabric
+itself is providing you with certain
+safety and programmability guarantees so
+here just some first steps I would like
+to take in implementing this project at
+the I say level obviously it's important
+to define what exactly the communication
+model is going to be how rich is that
+model in terms of how accelerators
+communicate with each other and then
+defining interesting safety properties
+from there at the hardware level we need
+to investigate efficient checking
+circuits both in terms of the logic and
+then the storage thats required to
+enforce these safety properties I think
+there's also a large opportunity to
+specialize the way that the network is
+built because these checking circuits
+will have very particular traffic
+patterns and I think we can heavily
+optimized for the kind of work that
+they're doing at the software level I
+think that verifying the control
+protocols that we use to set up a
+computation on the accelerator and then
+kick it off wait for the results I think
+that there's a lot of opportunity to use
+maybe types or other kinds of static
+verification to ensure that we are
+speaking to these accelerators in the
+right way
+alright so thanks again for your
+attention so to conclude I've shown you
+today how we can provide determinism for
+arbitrary parallel programs I've shown
+you how we can trade strong memory
+consistency for higher performance in
+the context of determinism and I've also
+shown you how we can implement
+determinism across the stack from
+Hardware all the way up to the
+programming language and then finally
+I've shared some of my thoughts on this
+new idea for safe memory which i think
+is going to be important to address the
+upcoming programmability challenges of
+emerging processor architectures now I
+definitely didn't do all this work by
+myself I'd like to thank all my
+collaborators that i've had over at
+u-dub and also here and now I would be
+happy to take any additional questions
+that you have thanks again so with could
+you say your name please yeah so few
+exceptions most of the accelerators that
+unit 10 G
+use it any of the soc other things
+get a lot of performance out of managing
+separate memories and things that are
+this big pool of shared memory deal with
+how are you how do you propose
+addressing with safe members what a
+bunch of that memory control used in the
+same way as you great yeah so maybe a
+way of increasing that is how to save
+memory deal with maybe caching right so
+accelerators would want to cache things
+for locality for power and yeah i thinka
+corporated that into the model is very
+important certainly you can get all
+sorts of this is possible even with
+current GPUs all sorts of weird
+consistency problems if you don't do the
+you know synchronization quite right and
+so I think probably the most
+straightforward thing to do there would
+be the sort of hand off a chunk of data
+to the accelerator and then ensure that
+no one else tries to to you know read or
+write that data until the accelerator is
+done with it I think ultimately it would
+need to be in terms of bytes because i
+think you know having fine-grained
+protection is going to be the key to
+providing to eliminating false positives
+but also supporting arbitrary
+accelerators that maybe you know do
+something complicated to your XML string
+and memory but you don't want to
+restrict you know protect the entire
+page or something that lets drink lives
+on we should have excellent is going to
+bob lutz way up into programming
+language ester
+is the okay so is the notion of an
+accelerator going to make it up to the
+pl level yes I think it will I think
+this is sort of a an observer of the
+architecture community it seems clear
+that a lot of the concerns which were
+typically kept under the covers of the
+is a concerns like energy and you know
+circuit reliability may be going forward
+even are bubbling up and some of them
+are really best handled at the
+programming language level so I think
+something like verifying the control
+protocol that you use to speak to an
+accelerator you could have you know some
+runtime mechanism for that but it's
+something that you don't do very
+frequently and when you get it wrong it
+has you know very bizarre effects so I
+think it makes a lot of sense to maybe
+try to reify that in the programming
+language and just statically check it
+for example
+any other questions okay okay great
+thanks</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

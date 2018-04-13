@@ -1,0 +1,577 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Intersection Workshop - Less painful high performance image processing | Coder Coacher - Coaching Coders</title><meta content="Intersection Workshop - Less painful high performance image processing - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Microsoft-Research/">Microsoft Research</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Intersection Workshop - Less painful high performance image processing</b></h2><h5 class="post__date">2016-08-11</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/QmUcO6aeUZQ" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">each year microsoft research helps
+hundreds of influential speakers from
+around the world including leading
+scientists renowned experts in
+technology book authors and leading
+academics and makes videos of these
+lectures freely available
+so I'm going to talk about a language
+that I've been working on with Jonathan
+Reagan Kelly and others at MIT and
+Stanford and the goal of it is to make
+high-performance image processing code
+easier to write mostly but also more
+portable and more modular so why do we
+care about this as computer vision
+people well so you want to get your
+computer vision algorithm out there in
+the real world maybe is an iphone app
+it's written in MATLAB so you just need
+to put it to bc and put it to see and
+we'll be fast right unfortunately this
+is no longer the case sees machine model
+is no longer sufficiently close to
+reality that this is going to get you as
+good a performance as you can get so
+let's look at an example okay so this is
+a very simple algorithm it's a three by
+three bucks filter that's been
+decomposed into a horizontal filter
+followed by a vertical filter and you
+can see that I've allocated some
+temporary storage to you know store the
+output of the horizontal filter that I
+then vertically filter you can assume
+here that I've got guard bands so we can
+ignore boundary conditions for this case
+so the problem is that even with you
+know all compiler optimizations turned
+on this is 10 times slower than this on
+the same CPU and this is just doing a
+handful of simple optimizations that
+most people are familiar with the first
+thing we do is we paralyze the outer
+loop over why using OpenMP see this
+loser and that was the easy part that
+just involved adding this line up here
+pragma OMP parallel for and now we're
+running in parallel okay then we want to
+compute things in vectors instead of
+just you know doing scalar math these
+are all 16 bit values which is pretty
+common for image processing so instead
+of all our nice multiplications and
+additions we now have a bunch of vector
+intrinsic additions and multiplications
+and well actually the divide by 3 became
+some
+sort of fixed point multiplication that
+wraps around in the right way now in
+theory those two operations should be
+enough to make this 32 times faster
+because we have a four core machine and
+we can do eight wide 16-bit arms in
+practice it makes it about four to five
+times faster this is very typical for
+computer vision algorithms because what
+happens is when they're scalar code they
+tend to be compute limited but as soon
+as you start to vectorize or paralyze
+you quickly run out of memory bandwidth
+these operations typically do very
+little math per pixel and then they
+operate on large images so they have to
+stream the whole image in from memory
+okay so what can we do well we partially
+fuse the horizontal blur with the
+vertical blur we compute the horizontal
+blur in a small tail 256 wide and 30 for
+high and we use that to compute a small
+tile of the output 256 wide x 32 high of
+course the 34 becomes 32 because the
+footprint of the kernel needs a little
+bit more so we do a little bit of wasted
+work here so in some sense we're trading
+off a little bit of recompute for better
+sort of producer-consumer locality and
+by doing this we have intermediate
+output in cash and we have higher
+bandwidth from cash so we can keep the
+second stage of the algorithm fed
+without it waiting on memory bandwidth
+and the result is that it's 11 times
+faster okay great but I don't think
+anyone would actually want to write this
+kind of code or it's kind of right once
+read never code and it has a pretty
+short lifespan because as soon as the
+underlying architecture changes a little
+bit or soon as you want to put to it
+slightly different device or use a
+different data type it's useless so it's
+hard to write hard to understand it's
+extremely hard to to change if you
+decide you wanted to test out different
+optimization strategies you can't really
+do that without rewriting it it's not
+portable not very usable but it's an
+order of magnitude faster and that's
+with a
+a machine that was a couple of years old
+this disparity is growing as machine
+gets me as machines get more core and
+more cause and as a vector widths expand
+okay so we decided that we would try to
+get around this by teasing apart these
+optimization concerns like fusion and
+paralyzing and vectorizing from the
+actual statement of the algorithm so we
+came up with a language that does this
+it's called halide because that's a nice
+sexy photography related word and we
+call the optimization concerns the
+schedule and we call the code that
+actually defines the algorithm just the
+algorithm and let's have a look at what
+that previous example looks like in how
+I so instead of images we have pure
+functions and where we would normally
+create images based on other images we
+instead define functions based on other
+input functions so we define the this
+temporary function based on a horizontal
+blur of the input and then we define
+this blurred function based on a
+vertical blur of that temporary function
+so these are pure functions over an
+infinite integer domain so we push
+boundary conditions aside and what we do
+is we take the input image and you wrap
+that in a function which defines a
+boundary condition for it and from then
+on everything's over an infinite into
+domain everything side-effect free as
+well so we're free to expand these
+bounds to compute more of something if
+necessary you know if we want to round
+up the width of an image to be a
+multiple of four so we can vectorize
+efficiently we're free to do things like
+that so the algorithm stated there and
+the schedule is down below it and that's
+at own separate little set of calls
+which specify all of the transformations
+that we applied to the code to make it
+run 11 times faster so we compute things
+in tiles and we vector eyes and
+paralyzed and then we compute temp in
+chunks within a certain loop nesting
+level of the output
+okay so that's the basic idea of the
+language oh I should mention also that
+this is actually just C++ code so that
+is the kind of low-level tweak that we
+expect the compiler to be able to do in
+this case I think the fixed point
+multiplier is exact so we just always do
+that for this case yeah it works out due
+to some modular arithmetic and I think
+we can we are in there are other cases
+we do play some games with precision
+because we're domain-specific we know
+we're doing image processing so you
+don't always care too much about that
+less significant bit but I think in this
+case it actually worked out so this is
+C++ code it's a function in C++ that
+defines a little highlight pipeline so
+when you actually want to evaluate this
+you say please realize please evaluate
+this function blood over this square
+domain and it it jit compiles a small
+piece of code that does that and based
+on the domain of the output that your
+request it also jet compiles in code
+that will compute what regions of all
+the other functions need to be computed
+and it uses sort of some symbolic
+interval arithmetic to propagate those
+bounds backwards through the pipeline
+okay so that's the basic idea and I have
+a bunch more slides that going to detail
+about skit all the different scheduling
+options down there I have some more
+complete algorithms and i also have
+results of course but now would be a
+good time to pause and maybe have
+questions or just a discussion about
+whether or not performance matters for
+computer vision or if people have other
+questions about the language yeah
+have a question where do you see your
+language in relation to so we see opencl
+as a potential back end one of our back
+ends right now is khuda aur Cooter's
+sort of intermediate representation PTX
+and this means that we can take the same
+algorithm and just change the schedule
+to be one that maps to the GPU instead
+so it's really nice can take the same
+algorithm code and run and efficiently
+on CPU or GPU I guess opencl can do that
+to some extent but still a lot of the
+schedule is baked into the algorithm
+statement opencl assumes that you're
+running inside this parallel for loop
+nested for deep and you have to make
+your algorithm fit that model whereas
+here we specify the algorithm however we
+want to and then separately specify how
+that maps onto that parallel for loop
+mostly what you win is fewer lines of
+code and portability
+so we have a separate construct called a
+reduction domain and that's equivalent
+to sort of defining a function defining
+a function as if it were the end process
+in a reduction over functions so let me
+show an example yeah off to exit slides
+of this
+casts
+okay so this is how we compute a
+histogram this is out eval unit tests
+folder so we declare a function let's
+see with our Clara function histogram
+here and this code is out of date we
+declare our reduction domain whoops you
+know I'm going to turn on mirroring so i
+can actually see one in time
+it's our arrangement makes plays okay
+bah
+yeah when I i have a similar example in
+the slide so i'm just going to jump back
+to the slides
+ok so you define a reduction domain and
+then a function can refer to other
+instances of the same function and the
+effect you define an initial version of
+the function and you define a recursive
+statement of the function and the effect
+is that you're constantly patching a
+function with you're saying my function
+is equivalent to what if the old version
+of my function was except at this
+instance it has this value at this site
+it has this value instead and that may
+refer to the previous value at that side
+or other values at other sites so you
+say of image of X Y how sustainable is
+your computational model saying that
+mm-hmm so we're basically model modeling
+things on how image processing would
+look like in Haskell say if images were
+represented as functions from you know
+an integer tuple to some output value so
+we tried to be very strict about side
+effects except for things like debugging
+and then C++ you can really imbues C++
+so we can embed these kind of functional
+definitions within that just by using
+operator overloading and that lets us
+integrate more cleanly with your host
+code in a way that I find a little ugly
+with more shader like languages as far
+as future proofing goes our goal is to
+make the statement of the algorithm as
+divorced as possible from its adaptation
+onto a particular piece of hardware so
+I'm pretty optimistic about that you may
+need to we divorce the algorithm
+statement from the concerns about
+hardware but we don't let you not
+specify the concerns about hard way you
+still need to think about those things
+we just push all that into the schedule
+huh so for new algorithm you do need for
+a new hardware you will need to change
+the schedule
+separate in your peaceful sea which you
+said it was some of the lines of where
+they are because of hardware issues and
+some of the lines
+so I don't like this code because the
+optimization concerns are sort of
+hopelessly mixed in with the algorithm I
+really wanted to separate the two so
+that you can think about whether or not
+the algorithm is correct separately from
+thinking about how to make it run fast
+the underlying conception machinery
+I think the thing that makes it work is
+it's almost a meta programming approach
+we restrict the algorithm statement to
+being something more pure functional and
+then we instead of expressing the
+optimizations as part of that we express
+them as a post transformation applied to
+that the disco door Oh like a real
+example you mean just in Emacs so sure
+so we can jit compiler should say but we
+can also statically compile so what that
+code tends to look like is there's a
+final line that says blood compile to
+file and then a file name and that will
+spit out an object file and a header
+that you incorporate with your existing
+project so the examples I have mostly do
+that but you can try to
+I open a more interesting example of
+that
+so this is code to do level set
+segmentation based on the snake
+algorithm so I have a bunch of these
+sort of functions that take functions or
+C++ functions to take highlight
+highlight functions to do basic things
+like compute small filters and then if I
+scroll all the way down I have some
+scheduling code this case it's very
+simple schedule and then this is an
+iterative algorithm so I define a halide
+pipeline that does just one iteration
+and then I repeatedly apply that more
+functions
+right we just linked to llvm and ask it
+to compile things for us I'm afraid yeah
+so here's the piece of code that
+actually evaluates a function into a
+concrete array and that the first time
+you run it through that does the jet
+compilation if you haven't already Oh in
+this case we have already because we
+didn't want to mess up that timing code
+with the jet compilation it's just fine
+you compile get up there and now five
+buff to I believe is just some sort of
+basic image type that you can then use
+so you define this function and then you
+say realize the function into this image
+and it evaluates the function over that
+domain and populates that image yep
+so what we typically do for debugging is
+because we control cojan we can will we
+can do print f's there's one way we can
+we have a debug expression that will
+whenever that is evaluated it will print
+something out but we can also turn on at
+racing mode which tells you every time a
+load or a store occurs to a particular
+buffer or a particular realization of an
+image at a particular location what the
+value is and we're also working on some
+visualization tools so that you can see
+each image slowly appear as you run
+through the pipeline so I found it very
+easy to debug actually I think I've been
+ignoring you for a while that's right
+yeah the people who have been thinking
+about people who are capable of
+understanding how to vectorize and
+paralyze things but they don't want to
+write code that they're never going to
+be able to use again we've also been
+thinking about cases where you have a
+separate person who is writing the
+algorithm and then you hand that off to
+an architecture expert who figures out
+how to make it run fast without having
+to touch the first person's code
+it's quite similar to matlab and in fact
+we were surprised that matlab doesn't
+already do something like this matlab
+does deal with things as explicit arrays
+and you have to worry about boundary
+conditions and things like that whereas
+we provide a little bit more support
+there but yeah it's fair to say that
+this is a high-level language combo
+combined with a scheduling language that
+gives you fast code we have we have yeah
+but when I show some results why it's
+actually you I'll jump to the result
+slides okay well so here's some detail
+about how scheduling works let's get
+through this there is a language for
+scheduling it makes sense you can see
+the details in a cigarette paper
+these are all the different ways of
+traversing domain bilateral grids one of
+our examples sorry Kevin I'm skipping
+over your algorithm ok so the bilateral
+grid this is an example where Silvan
+Paris's nice cleans the implementation
+let's see it took about 470 milliseconds
+and using many fewer lines of code we
+took 80 milliseconds but that doesn't
+compare to say IPP if we want to compare
+to a PP oh this is a good example
+actually before we get to be IPP one we
+wrote a software post processing
+pipeline in assembly before the Franklin
+camera project so that we could have
+fast d mosaicing and color correction
+and whatnot on the n900 and that code
+was in a nightmare I think I inspired at
+least one undergraduate to quit doing
+research with us because he helps us
+with that code and in many many fewer
+lines of code we achieved the same
+performance and how I did that was I
+copy pasted the comments from the
+original code which had the algorithm in
+pseudocode and just massaged those into
+the halide statement of the algorithm so
+we were faster than tuned assembly in
+this case an assembly that I beat my
+head over for a long for a long time and
+we're portable where the tuned assembly
+wasn't here's another example this is
+local laplacian filters so we took
+Silvan Paris's code that uses openmp and
+intel performance primitives and on his
+laptop that took 627 milliseconds on a
+quad core on a 4 megapixel image and our
+code using many fewer lines of algorithm
+and just a little bit of scheduling was
+twice as fast they're both vectorize
+they're both paralyzed yeah
+I'm trying to use it as a proxy for the
+readability of the result I'm not
+guaranteeing that it's faster to code
+but it does make the result easy to read
+provisionally instead like that
+bloodlines the provisional community he
+drove added stuff before alright nected
+galaxy in theory a great guy mm-hmm so
+yeah that so the Bermuda Hydra lattice
+it accelerates that was my dissertation
+and we've been unable to express that
+algorithm because it relies heavily on a
+hash table to store values on a lattice
+which is not a grip and it's a
+high-dimensional thing so we can't embed
+it in agreed without any commercial
+curse of dimensionality so sparsity is
+something we can't handle in general non
+image data structures is something we
+can't handle right now it depends on the
+dimensionality because the bilateral
+grid will explode at higher
+dimensionalities because it has this
+exponential dependence on dimension but
+possibly yeah
+yes because it's very slow to try out
+new schedules so we have a string of 13
+different schedules we tried it took a
+couple of hours to run through and we
+found that the best one so this
+generates a bunch of image pyramids and
+then combines them in interesting ways
+we found the best one in lined all of
+the laplacian pyramid levels and also in
+line the coarsest level of the gaussian
+pyramid level and you know vectorized
+across this dimension and it split
+things into chunks of four scan lines
+and paralyze across that and in a few
+hours we could try a lots of different
+schedules and we found that this one was
+much much faster than the one that salon
+had baked into his code which was
+computing more things globally so he was
+memory bandwidth limited when we want
+yeah yeah we arbitrary dimensionality
+but most of our syntactic sugar only
+goes up to four dimensions but in
+principle Observatory so here's a
+slightly more computer visionary
+computer vision II application where we
+actually took matlab code and not matlab
+code that uses for loops like proper
+matlab code that operates on vectors at
+a time now this I believe is horribly
+bandwidth limited because there's no
+other way we could have gotten the
+result that we do we found that running
+our code on the same CPU using halide we
+were 70 times faster we use more lines
+of code than MATLAB because we have
+these sort of you know we define a C++
+function that takes in a halide function
+and defines a new hey Lloyd function
+then returns that whereas MATLAB does
+that all in just one line here is a new
+matrix as a function of some other
+matrix we did minimal scheduling because
+this algorithm it works it does a whole
+bunch of different stencils and combines
+them so it works well just to inline
+everything which is our default schedule
+and we were 70 times faster on the cpu
+and just for fun we also ran it on the
+GPU and there's just an if statement
+that says if this flag is set then
+compiler GPU instead and that compiles a
+whole bunch of GPU kernels and mix cpu
+GPU orchestration and that was twelve
+hundred and sixty seven times faster yes
+yes you need to specify how it maps onto
+the GPU which is this quadruple nested
+for loop which is a matter of calling a
+single function that says these
+dimensions of my highlight function
+mapped to these dimensions of the GPU
+how long does it take will serve on
+paris did this in an afternoon and that
+was his introduction to the language
+perhaps this is a particularly easy
+algorithm because it's mostly just local
+stencils then i went through and cleaned
+up the code for you know there were some
+things that he didn't realize there was
+an easier way to do it generally I find
+this pretty easy because it's the way I
+think about I end it to be the way you
+write the image processing code on a
+whiteboard this image of XY equals this
+function of some other images
+why does it have to be functional I
+don't think it has to be functional we
+just found that to be a convenient
+expression because we can embed it in
+C++ easily and it's an expression that
+naturally emits when you have an
+imperative statement of the algorithm
+it's tempting to bake in information
+about scheduling you know there is a
+particular loop nest order so we found
+that it was easier to avoid accidentally
+making those things in with a functional
+language the interface oh well we
+finished the current version of it just
+in time for the cigarette deadline
+earlier this year so I would say not
+very stable we're still tweaking it and
+we haven't released it publicly yet we
+plan to do a public release in August
+and hopefully will be more stable at
+that point but it is still quite painful
+to use because for example a syntax
+error in your original halide definition
+right now in some cases propagates
+through to a segmentation fault
+somewhere inside the last stages of
+compilation so it needs a lot more love
+before this will be a friendly thing to
+use ok ok</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

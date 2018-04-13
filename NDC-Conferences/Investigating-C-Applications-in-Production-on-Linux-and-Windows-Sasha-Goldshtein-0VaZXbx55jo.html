@@ -1,0 +1,1455 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Investigating C++ Applications in Production on Linux and Windows - Sasha Goldshtein | Coder Coacher - Coaching Coders</title><meta content="Investigating C++ Applications in Production on Linux and Windows - Sasha Goldshtein - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/NDC-Conferences/">NDC Conferences</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Investigating C++ Applications in Production on Linux and Windows - Sasha Goldshtein</b></h2><h5 class="post__date">2017-07-05</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/0VaZXbx55jo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">well thank you for coming welcome this
+is a C++ track and they keep moving us
+right if you were at NBC for a few years
+you know they keep moving us from room
+to room
+this time they hid us in this very
+secure enclosure but anyway thank you
+for coming and this is going to be
+investigating C++ applications in
+production on Linux and Windows quite a
+title my name is Sasha I work for a
+training and consulting company called
+Stella we do this sort of thing
+debugging performance investigations and
+specifically if you have C++
+that's cross-platform that you try to
+run on both Windows and Linux or some
+other flavors of UNIX systems or even if
+you only target one platform the whole
+story of how to look at your application
+in production get performance
+information from production get
+diagnostic information from production
+has traditionally been pretty difficult
+this whole production side of things so
+there's lots of tools for the
+development story for the development
+time profiling and debugging and that
+sort of thing if you're on Windows I bet
+you're using Visual Studio or something
+like this if you're developing for Linux
+with C++ you might be using eclipse
+but these development tools they have
+some pretty good debugging and
+occasionally performance profiling
+capabilities also but the production
+side has often been neglected and so
+this is what I want to focus on in this
+talk give you some idea of the tools I
+use and other people use to diagnose
+issues in production in our C++
+applications so just the slide is not
+advancing there we go some objectives I
+would like us to cover and for you to
+come back at the end of the talk and be
+sure that you actually learned so we'll
+talk briefly about dump analysis getting
+core dumps or dump file depends on the
+OS and analyzing them in a debugger
+without leaving the production
+environment ideally we'll talk about
+some tracing tools so lightweight
+loggers that you can attach through
+application and get an idea of
+interesting runtime events that are
+happening like file accesses disk
+accesses Network events that sort of
+thing
+we'll talk about CPU profiling and how
+to visualize
+CPU profiling results to pinpoint CPU
+bottlenecks in your production system
+without having to suspend the process
+without having to restart the process
+just doing this for a live production
+process we'll talk about memory leaks
+briefly and how to identify which areas
+in your code are allocating and not
+freeing certain memory blocks and they
+will do that by instrumenting memory
+allocations but again doing this for a
+live production process without having
+to recompile or restart it and finally
+we'll talk about some I'll show you some
+examples of little one-liner
+investigations where you briefly
+slightly customize a tool to do
+something very specific so that's the
+plan in terms of operating systems so I
+tried to highlight five core areas which
+will be looking at CPU sampling so
+figure out the CPU bottleneck dynamic
+tracing which basically means attaching
+to an area of the system that is not
+instrumented with some logging in
+advance then there's static tracing
+which is attaching and tracing events on
+a system which is instrumented for that
+in advance and then we have core dump
+generation and core dump analysis and
+for all these different scenarios I've
+tried to put together some tools and
+different operating systems which would
+be able to sort of stand up to the task
+and that can be used in a production
+environment so for example when on
+Windows I'm putting down Visual Studio
+in there I do I do intend to show an
+alternative that you can use if you
+can't install Visual Studio in your
+production environment and on linux
+again i want to show tools that can
+actually be used in production and so
+what we'll be focusing on is just
+windows and linux but of course similar
+options exist for other releases
+sometimes some features might not be
+fully supported or exactly the same but
+the general idea hopefully will be
+useful before we get started just a few
+disclaimers first mind the overhead any
+kind of production investigation comes
+with the risk of screwing something up
+in your in your environment by other
+slowing things down or even crashing
+your process because you attach a tool
+that is too invasive or maybe even
+crashing the whole system if you put too
+much stress on the whole box so you need
+to measure you need
+to test all the tools I'm going to show
+you in your own system in your own test
+environment before you go ahead and
+deploy them to production and a lot of
+tools will have a dedicated overhead
+section in their documentation at least
+the good tools they will tell you what
+to expect how they work and what the
+expected overhead should be and then you
+should be able to decide for yourself so
+like if the overhead the worst-case
+overhead is 20 percent I might be okay
+with this for my production box someone
+else might say know anything that's
+worse than 2% I cannot afford to run on
+my production box but some tools
+actually have an overhead of like 200
+percent and then well they're just not
+so well suited for production use I
+suppose so we'll start with core dumps
+or dump files depends on the OS just as
+a very very general introduction core
+dumps or a dump file is a memory
+snapshot of a running process so you
+have a process running over time it has
+a bunch of threads and you can attach
+the process in a particular moment in
+time suspend the process and write out
+the process memory to a file and this
+can happen either on demand like
+whenever you want so like in this
+illustration the process is running and
+then we stop it grab a dump and let the
+process continue execution or this could
+happen on crash so if the process
+crashes of the system crashes has an
+unhandled exception or signal then we
+can generate a core dump as well and
+this is what most people actually
+recognize when you mention core dumps to
+them they think of crash dumps actually
+but you can generate dumps whenever you
+want based on arbitrary triggers and
+conditions so let's take a look at some
+of the tools we have for generating
+dumps by the way in terms of demos I do
+have live demos of everything but if
+something doesn't work or if we don't
+have time I also have screenshots so the
+slides you will have at the end will
+hopefully let you reconstruct this whole
+story on your own box so unlocks the
+dump generation story is fairly simple
+the system is typically configured in
+such a way that dumps can be generated
+when an application crashes you can get
+core dumps when an application crashes
+there's a magic file called proxies
+Colonel Corps pattern which you can
+configure for one of two things you can
+either put a file name in there and then
+you would just get a core dump file with
+that name in the current directory if
+your application crashes with some
+unhandled exception or you could put an
+application name in there and
+essentially pipe the dump information
+into a separate process which might just
+capture some basic info and write out a
+log and not actually generate the whole
+core dump which could be multiple
+gigabytes of space so you could pipe the
+dump output to an application where you
+write it out to a file there's also a
+configuration switch which controls the
+maximum core dump file size that you are
+willing to accept and you limit can
+configure that and finally to open core
+dumps you can use a bunch of different
+debuggers gdb works ldd works and
+there's a obviously additional custom
+tools as well the Windows story is
+fairly similar on Windows there's a
+registry key of course because that's
+the windows configuration database so
+there's a registry key that you can
+configure to get dump files
+automatically whenever an application
+crashes you can configure this to be
+system-wide or for just one particular
+process and both of these things
+hopefully are something that you can
+actually do on production boxes on Linux
+you might want to limit the core dump
+file size on Windows you have control
+over the type of the dump if it's going
+to contain the whole process memory or
+your certain portions so that the file
+is actually smaller but generally these
+settings are something you can apply to
+a production system and they would only
+have effect if a process actually
+crashes so as long as you don't have
+crashes and operation as normal you
+don't really pay anything for these
+settings you only pay for them when
+there's an actual crash and you want to
+identify what happened later on Windows
+there is also proc dump which can
+generate core dumps on demand on Linux
+there's a similar tool called G core
+which can generate core dumps on demand
+what do you do with them and I'll show
+you a quick demo in a moment
+on linux you can attach gdb for example
+or ll DB or a bunch of other debuggers
+to the dump file to the core dump and
+ask the debugger to give you information
+about the crash that occurred the call
+stack of the current thread get list of
+threads basically navigate the core dump
+as if you were attached to the live
+process at the moment of the crash this
+is kind of the idea of generating core
+dumps you get a snapshot of the process
+and you can just traverse it as if it
+were live of course you can't continue
+execution from that point because it's
+just a snapshot in time but it does give
+you the same as if you broke into a
+debugger and started looking around
+that's the effect we want to get on
+Windows Visual Studio can actually open
+dump files and this is again less
+interesting for production although you
+could of course copy the file from the
+production environment to a development
+box and then open the dump in Visual
+Studio on your development machine
+alternatively there is a set of
+lightweight debuggers such as windbg and
+c DB which you can run in the actual
+production system it's just files you
+need to copy over there's no
+installation involved and they can also
+perform some basic dump analysis and
+tell you what the exception was what the
+call stack was which modules were loaded
+which threads were running and that sort
+of thing and for both of these options
+you might also want to look and that's
+something I'm not going to cover here
+into automation of this whole process so
+if you have a hundred dump files opening
+each of them individually and then
+running commands manually and inspecting
+the results is going to get pretty
+tedious so you do want to have some sort
+of script which would get you just a
+basic detailed the basic details out of
+each core dump like the crash that
+occurred the call stack which module was
+responsible and then the next file and
+the next in the next this can be
+achieved on both Linux and Windows by
+just automating the debugger essentially
+scripting the debugger to do what you
+want so I want to show you a couple of
+examples again I have screenshots as a
+backup but let's hope we don't need them
+so on Windows I have in my registry the
+configuration mentioned on the slides so
+I have this app called battery meter
+which crashes occasionally and I have
+configured local dumps on my Windows
+registry to generate dumps for the
+battery meter process and place them in
+this folder see flash temp slash dumps
+whenever a crash in that process occurs
+now if we actually run this crashing
+battery meter application here's what it
+looks like it's not actually doing
+anything it's just a sample of course
+and then I can click around and still
+nothing happens but after a while it
+crashes so application has stopped
+working and I can close it and then if I
+look in my dumps directory then there's
+a sample file I generated yesterday and
+there's also the dump file from right
+now which windows created as soon as
+that process crashed now this is a
+complete memory snapshot so we see it's
+it's like 64 megabytes and obviously for
+larger processes it could be a lot
+larger so there is control you can
+exercise over the exact size of the file
+now you can open those again like I've
+said in visual studio or in a more
+production friendly debugger just to
+illustrate what happens when you open
+this kind of file and Visual Studio I'm
+going to drag it in and then Visual
+Studio shows me the basic information
+about the file which includes the
+exception code that happened now this
+number might not tell me much but if I
+click the bug here on the right then
+Visual Studio displays additional
+information that says a heap has been
+corrupted so they have a memory
+corruption in this process actually and
+if I click break it will show me the
+call stack where this crash occurred
+so this is a call stack inside the
+windows heap manager which had a crash
+so basically was trying to free memory
+and then the heat noticed that it is
+corrupted and I can navigate to my own
+source code as well which is in this
+function here and then I just need to
+tell
+my debugger where to find the source for
+this for this process oh I don't have
+the sources here well I'm sorry about
+that but you could all you could
+obviously tell your debugger to open the
+source and actually show you the source
+I do have a screenshot of this right
+over here this is what it looks like
+where I do have the sources on the
+system it just points to a specific line
+of source which had the crash and if you
+look at the line it's actually pointing
+to the closing brace over here and so
+you might ask how come the closing brace
+is trying to deallocate memory but then
+you think about it and the closing brace
+is where instructors run correct
+so some destructor was running at this
+closing brace and trying to free memory
+so probably either the battery
+information or the CPU information
+classes they have inside a heat pointer
+and the destructor for these classes is
+then trying to free that pointer and it
+notices that the heap has been corrupted
+now obviously this isn't enough to
+actually investigate what happened
+exactly but we know where the crash was
+and what the exception was and what the
+call stack was and what all the other
+threads were doing as well if we wanted
+to the same thing we could replicate
+using either windbg or even more
+lightweight debuggers again these are
+there are many options and we're not
+going to look in depth at all of them
+but for example in windbg which is a
+lightweight debugger you could drag and
+drop the dump file into the debugger
+again and then if you run an extra
+command called heap you would actually
+get some more specific information about
+the heap corruption and this is
+something visual studio actually doesn't
+do and so this more specific information
+would tell you for example that we
+detected an error whose features are
+consistent with a buffer overrun so our
+memory corruption and the heap is not
+just a random memory corruption it looks
+like a buffer overrun over heap buffer
+which can be used for further
+investigation and this whole process can
+also be automated so here I have a
+screen shot from a command line window
+on on windows where I ran the CDD
+eggs
+the tool this is a command-line debugger
+which is again very very lightweight and
+what it can give you is the same
+analysis essentially in the shape of a
+text file and I have actually stored
+that text file right over here so we can
+look at it if we want and this is just
+an analysis and exception analysis which
+has in in text format the same
+information we had a corrupted heap you
+can see the call stack you can see the
+function and which should happen the
+reason I'm showing this is just to
+explain that we can automate the whole
+process once I have a command a
+one-liner that analyzes the dump and
+generates this kind of text I can build
+the whole workflow which would do this
+for a hundred files and then aggregate
+the the exception results let's take a
+look at the story on Linux just very
+briefly so this is a screenshot but
+let's try and do it live so I have over
+here a core file which was generated
+previously from crashing one of my
+sample processes these are are online so
+you could replicate these results later
+so I'm going to just resize this a
+little I'm going to run gdb and tell gdb
+that the actual application we are we're
+looking at is sorry it's over here in
+this folder actually it's called per
+grep and the core file is this core file
+over here and then gdb happily loads
+that core file and says that the program
+was terminated with signal cig abort so
+this is why we crashed and it tells me
+that the current thread is thread number
+one and then we get we can again perform
+some analysis so for example I could get
+a stack trace in in gdb and this is C++
+so the function names you know what it
+looks like the function names are
+slightly on the longer side but you can
+see that this whole thing is happening
+inside the heap so this also has a heap
+corruption very likely so we are trying
+to call leap C free to free memory and
+then it just bails out with a with an
+error and we can see along the way some
+strings in
+indicating double three or corruption so
+we also have a hip corruption here and
+if we look at the whole call stack which
+is kind of hard to read through but if
+we look at the call stack we got here
+from from stood vector over here stood
+vector of string which was trying to
+allocate something so it called into the
+allocator and probably had to resize
+things and eventually the heap
+implementation again in Lindsey noticed
+that the heap has become corrupted so
+this is just again a very very general
+overview of what dump files and core
+dumps can do for you you can generate
+them automatically when something goes
+wrong you can then on the same system
+even in production analyze the crash and
+see like what's what's happening in your
+process and this is very very similar
+across operating systems and it is a key
+way of diagnosing production crashes
+essentially there's a I mean hardly a
+way to run a debugger attached to your
+production process at all times so this
+is the second best thing it basically
+replicates the whole debugger experience
+on a snapshot of your processors memory
+now it unfortunately requires if you are
+trying to do this on the production
+system it unfortunately requires that
+you have debug information or debugging
+symbols on the production system as well
+if you want to do core dump analysis in
+production you will also need debug
+information in production if you do not
+have debug information and I'll touch on
+that in a second you will get
+meaningless call stacks you will not get
+function names you will not get code
+addresses and source information so for
+example on Linux you might get something
+like this where the call stack is just
+full of question marks on Windows you
+might get a call stack which maybe looks
+a little better but it doesn't actually
+have function names mostly right it only
+has module names and offsets so this is
+typically happening because you don't
+have debug information or symbols for
+your for your application and just to
+briefly cover that before we move on
+on Linux when you build you need to
+generate debug information into into
+your binary this is something that
+happens at link time and that debug
+information would include function names
+class names layouts of various types
+parameter information source information
+as well and if you don't like the fact
+it bloats up your binaries then you can
+separate the debug information from the
+actual executable or from your actual
+library so you can omit it into the
+binary but then separate them so you
+have a separate debug information file
+and a separate executable file and on
+Windows it's a pretty similar story
+except they're always separate so in
+Windows when you compile with debug
+information the compiler and linker
+generate a separate file called PDF a
+PDB file which contains the debug
+information and if you're looking for a
+debug information for binaries outside
+of your control like your C++ runtime
+implementation or your C++ library then
+these should probably be available well
+officially so you're not you know you
+don't really have to build these
+components from source in order to get
+debug information for them on Windows
+Microsoft makes available most of the
+debug information for Microsoft binaries
+so for the STL and the C++ runtime and
+so on Microsoft has a public server a
+web server which will serve your
+debugger the debug info files
+automatically and on Linux it's slightly
+more evolved but still most
+distributions would have ready-made
+packages with debug information that you
+can install so for example an ubuntu you
+might be able to install a package with
+the DB g suffix whereas on fedora for
+example there is a dedicated debug info
+install command which takes a package
+and tries to find the matching debug
+information of course there's a lot of
+salties here in terms of finding the
+exact right version and so on but this
+is something that generally debuggers
+have learned to take care of for us so
+this was the dump analysis story in very
+very short and I hope sort of try manage
+to convey the important pieces of this
+of
+of of being able to get together dump
+files when something crashes or goes
+wrong in your production environment and
+then analyzing those crash dumps or core
+dumps even on the same system the reason
+I am doing the serve summary is that
+from now on we're going to move to
+performance and tracing things and if
+you have any questions about diagnostic
+part we saw so far you could we could
+talk about this at the end so we're
+going to talk about again performance
+and tracing now again on both operating
+systems and there's an important concept
+to get out of the way first
+which is the concept of sampling versus
+tracing so essentially both of these are
+just techniques for Diagnostics for
+getting performance information and
+diagnostic information out of the system
+sampling works by not looking at
+everything that is happening but rather
+grabbing samples once in a while so for
+example if you wanted to follow a CPU
+execution of a particular application
+you probably couldn't record every
+single CPU instruction as it is executed
+that would be a little too expensive so
+you usually use sampling for this you
+configure the CPU to give you for
+example an interrupt every million
+instructions executed and then you
+aggregate those samples so you don't
+really have a record of every single
+instruction you have a record every
+millionth instruction but then you a
+granade those samples and you have
+something statistically meaningful to
+draw results from tracing on the other
+hand is recording every single event and
+this is something you typically use for
+lower frequency things like disk
+accesses maybe a DNS resolution requests
+HTTP requests that sort of thing which
+is only happening like 10,000 times per
+second and not ten billion times per
+second so that's pretty much where
+sampling and tracing would fit in and at
+these request rates essentially so on
+Windows both sampling and tracing are
+pretty well covered by a mechanism
+called event tracing for Windows in the
+previous slot there was actually a talk
+about egw with a more dotnet perspective
+but
+can absolutely be used for C++ on
+Windows as well and I'll show you some
+pretty cool things that we can do with
+etw it is basically a logging
+infrastructure for the operating system
+where various components across the
+system like the kernel itself the
+scheduler the memory manager the heap
+implementation a bunch of other
+components emit interesting trace
+messages that we can either record into
+a file or analyze in real time just get
+the events in real time and process them
+without even saving them to disk and
+this allows for very low overhead
+tracing tools to be implemented if you
+don't actually store the events if you
+just look at them in real time and then
+drop them you can get very low overheads
+even if you have high frequencies of
+events like memory allocations for
+example could be happening hundreds of
+thousands of times per second
+but you could still feasibly use ET w if
+you are discarding events and not
+actually recording the whole thing on
+Linux there is a similar mechanism
+similar in spirit anyway called per
+vents which is built into the Linux
+kernel it's been available for ages as
+well and it can do sampling and tracing
+again it has a very similar architecture
+actually where there's various kinds of
+events that you can enable and they can
+either go into a file for later analysis
+or into a shared memory buffer for
+real-time consumption by some kind of
+application and Linux also has a
+front-end for using per vents which is
+just called perf and it's not built into
+Linux in the sense it won't always be
+available by default but it is part of
+the Linux kernel tree so you can install
+it typically or even build it from
+source for the specific kernel that you
+have and it works on a variety of
+platforms Intel obviously but also arm
+and a bunch of other less traditional
+platforms that Linux works on and before
+we actually look at collecting storing
+and visualizing events from sampling and
+tracing I do want to mention just
+briefly something a lot of C++
+developers are already using but some
+are not which is a visual
+method for a lot of performance
+information that we'll be generating
+today very very useful and important
+called flame graphs it is basically a
+way to visualize lots of stack traces so
+for example suppose you record all the
+file accesses that your system is
+performing and you have a call stack of
+where that file access came from in your
+code and then you want to see like which
+paths in my code are causing lots of
+file accesses am I going to do the same
+thing with Network events which paths in
+my code are causing lots of network
+accesses or which parts in my code are
+using lots of CPU time so whenever you
+have a lot of coal stacks and you want
+to visualize them quickly in a
+meaningful way this is where flame
+graphs come in and will I'll show you an
+example in a moment but basically if you
+look at the diagram it is just an
+adjacency diagram where there's to
+access the the horizontal axis is not a
+timeline it is just sorted
+alphabetically so it's not a timeline
+series it's just sorted alphabetically
+chart the vertical axis the y-axis is a
+call stack so if you see a function on
+top of another function it means it was
+called by that other function and of
+course I didn't say but every rectangle
+in the graph is a function is a function
+in a call stack that you collected and
+the wider something is the more
+prominent it was so width is something
+that's fairly easy to identify and this
+is why flame graphs are useful you can
+glance at the whole thing immediately
+and you can say okay so this thing here
+on the right looks interesting let's
+look at that but this little flame over
+here right this thing it doesn't look
+meaningful so even though I can't see
+the function name I'm probably not going
+to zoom into that unless I'm really
+desperate because that's that's just a
+tiny proportion of time so let's see how
+to generate those just one little thing
+before we get there in order to actually
+successfully resolve call stacks so we
+get a full picture of where the event
+was coming from we have to overcome a
+pretty annoying optimization
+which some compilers do by default
+called frame pointer emission basically
+frame pointer emission means that the
+compiler will not will not create a
+linked list of frame pointers on the
+stack so you can't reconstruct the stack
+by just looking at its state in a given
+time and that can make it hard for tools
+like etw and perf and other profiling
+tools as well to get an accurate stack
+trace of your threads now fpö
+does have like some performance benefit
+but I think it is mostly agreed by
+people in the performance world that
+it's not worth it like the two or three
+percent performance benefit you get from
+this optimisation is not worth the pain
+in profiling and debugging your system
+later so essentially it's it's an
+optimization worth turning off now on
+Linux there's a switch for most
+compilers called ethno a mid frame
+pointer which will disable the Septim
+ization Linux actually in some cases if
+you have full debug information perf
+would sometimes be able to figure out
+your call stack even if you do have FBO
+turned on but a lot of other tools will
+not be able to cope with it so you
+probably would want to turn this off
+anyway and then Windows egw basically
+doesn't work if you have a binary
+compiled with this optimization so the
+Microsoft compilers anyway they stopped
+using this optimization for quite a
+while I think since Visual C++ 2003 they
+realized it's just not worth the the
+pain in debugging and profiling which
+usually results so once we have that out
+of the way we can actually take a look
+at getting some stack traces out of a
+live running system will start with CPU
+profiling but then I'll talk about off
+CPU time as well so block threads like
+why is my thread blocking and waiting
+for something and then we'll talk about
+memory leaks as well which are well the
+technique I'm going to use is still
+going to be based on collecting stack
+traces at interesting points so let's
+take a look a quick look at the CPU
+story first I might skip by using
+screenshots here but I do want to show
+you the
+target application that I'll be using it
+is a very simple one on Windows called
+stupid notepad it's a note bit like app
+this is a notepad like app and I am
+typing like pretty fast but there are
+some delays so there are these hiccups
+in the in the app and if I put it
+side-by-side with something simple like
+task manager and just look at stupid
+notepad at the CPU usage so if you look
+at that at the same time as I'm typing
+you would see occasional jumps right so
+it goes from zero all the way to 20 18
+something like that
+so there are CPU spikes and I mean even
+without using any professional tools
+might be able to conclude that the CPU
+spikes are related to my typing activity
+and when there is a spike then there is
+also a lag in the actual user interface
+so this is what we want to investigate
+and on Windows we are going to use etw
+for this we're going to record events
+every certain number of clock cycles we
+are going to record the calls back of
+what this application is doing and then
+we'll visualize the whole thing so the
+recording if I actually did it from
+scratch here I would probably do with
+Windows performance recorder which is a
+free tool based on etw which you can
+absolutely put in production and in its
+in its basic mode it just has a bunch of
+check boxes you can check for recording
+different kinds of interesting events so
+you want to profile just CPU usage will
+check the CPU usage checkbox and then
+you do a recording with this tool and
+you open it with a slightly different
+tool called oops the windows performance
+analyzer so this is a matching tool they
+both ship as part of the same library
+and you can actually just copy them over
+it's just the executable files you did
+you don't really need to install
+anything now once I opened my recording
+file in Windows performance analyzer it
+can
+give me an overview first let's just
+switch back to the line graph it can
+give me an overview of CPU usage across
+the different processes on my system and
+this is just a default view there's a
+bunch of options we could customize but
+you can see that the stupid notepad
+process which is this guy over here this
+is this line has pretty obvious spikes
+in CPU activity and I can actually
+filter and just keep that one process on
+my chart so you can see it is pretty
+obvious spike selectivity over the
+recording interval so most of the time
+I'm idle but then I just have those
+spikes going all the way up to 25% of
+CPU and actually it's across all course
+so if I have four cores 25% is one full
+core being utilized by this process now
+I want to figure out which parts of the
+actual code are are being spent on CPU
+and this is where the stack view comes
+in so let me just see if I can yeah so
+I'm going to start expanding here and
+one of the things I want you to see is
+that you can when you visualize a stack
+tree like this texturally like an actual
+tree which is the default for a lot of
+tools it can be really hard to see
+what's going on you'd need to expend
+lots and lots of levels to figure out
+which function is actually taking lots
+of time and if you have ever used
+profilers you know that most profilers
+will default to this sort of view which
+has a tree that you have to navigate up
+to a 100 depth which is really hard so
+let's start navigating and just to give
+you an idea this is a very simple
+application by the way but it is windows
+and there's a lot of stuff around so I
+am still expanding and none of this is
+still my actual code so I'm going to
+keep expanding a little more and we are
+in this patch message and internal call
+will do procedure and okay so this is
+actually a function in my application
+that I can tell you something about if
+we make it a little bigger
+this is a function called unchanged main
+edit which is in my source code and it's
+probably I mean judging by the name it's
+probably cold whenever I type something
+in and so it looks like it's doing some
+CPU work now how much exactly I could go
+back here and so this count column that
+you see is the number of stack traces
+that we grabbed which had this function
+on the stack so how many samples did we
+grab overall we had eight hundred eight
+thousand nine hundred and sixty stack
+samples overall five thousand something
+were in that function and it's
+descendants so this is probably one of
+the cpu bottlenecks in my application
+but I mean I did have to navigate the
+tree quite a bit and it's very painful
+for more complex apps obviously so flame
+graphs again could be pretty useful and
+windows performance analyzer actually
+now have support for flame graphs this
+is relatively new so if we switch to the
+flame graph view here's what it looks
+like and I mean the individual
+rectangles are a little too small to
+read so we don't really see function
+names unless we zoom in even further but
+hopefully like the structure of the tree
+is immediately visible so I don't really
+need to navigate through sorry I'm not
+going to point up this screen I don't
+really have to navigate through this
+whole hierarchy to figure out that these
+are the functions I should be looking at
+right so everything below I just see it
+has the same width and there's nothing
+particularly interesting in there
+probably so I can immediately go to this
+unchanged main edit function and then if
+I want I could investigate its
+descendants
+like which functions are called by this
+guy in order to consume CPU time so
+again this is just a visualization
+technique with a pretty useful one and I
+hope you find it useful as well the
+underlying process was quite simple we
+recorded stark samples and then we used
+windows for
+analyzer to take a look the Linux story
+is fairly simple let's see if we could
+do this live so let's try the Mac X app
+so this is a very simple simple ass app
+which basically multiplies matrices 500
+times and it's really CPU intensive and
+I want to figure out where so we're
+going to use on Linux we're going to use
+perf in order to investigate its
+behavior so I'm just going to switch
+over to this root shell make it a little
+bigger and I will run perf this is the
+front-end for for the perfect mechanism
+which I have installed I'm going to run
+it in record mode
+I will instruct it to capture 97 samples
+per second so this is easily
+configurable
+I will instruct it to grab call stacks
+for me the G switch is for call stack
+for some reason well actually it's
+called graph so maybe it makes sense and
+then finally I need to give it the
+actual workload to execute or I could
+attach it to an already running process
+I'm going to use a just the existing
+binary okay so it's running with perf
+attached and taking 97 snapshots per
+second and you can see it is basically
+finished and it says I wrote out 632
+samples so again 97 times per second
+perf grabbed a call stack of what the
+application was doing and at the end we
+have 632 of those snapshots and it's not
+very big like the file we wrote this to
+was not very big just 72 kilobytes or so
+of course if we increase the frequency
+or if you have multiple cores being used
+or if you capture for longer interval
+your files might grow bigger and now
+it's time to visualize this so I could
+show you we're going to skip that I
+could show you the native perf interface
+for looking at the recording the
+recorded information it's basically this
+command line based UI it's cursed
+but we're not going to go through that I
+just want to immediately generate a
+flame graph of this and show you the
+flame graph so I have a screenshot of
+the flame graph which is going to be a
+little easier here's what the flame
+graph looks like on the bottom so again
+instead of navigating through a lot of a
+lot of stack frames a lot of trees I can
+just immediately see that the hottest
+functions in this app are matrix of
+float operator oh this is actually
+unfortunate this is operator rectangular
+brackets but the flame graph generator
+actually stripped that it probably
+thought it was just unnecessary well C++
+you know so this this is matrix a float
+operator rectangular brackets and also
+matrix a float operator star is doing
+the actual multiplication and here on
+the right there is also something inside
+vector now if this was if this were a
+live flame graph I could actually
+navigate this view and zoom in again I
+don't have a lot of time so I'm not
+going to zoom into this but I will have
+the flame graph file for you to look at
+if you'd like so this is again just a
+very quick way from the command line to
+generate a visualization of where my
+process is spending time and what's nice
+about perf here is that the overhead is
+totally controllable so I used 97
+snapshots per second here if this is too
+much and I see it flows down my process
+I can bring this down I can take 10
+samples per second and if I record for
+sufficiently long I will have a
+meaningful sample or on the other hand
+if I don't get enough samples then I
+could increase the number of samples per
+second and from experience around 100
+samples per second works pretty much ok
+on typical systems unless you have a
+very large number of cores and then you
+probably want to take this down a notch
+because it grabs a sample of every core
+so it will get bigger if you have more
+cores so this was just CPU profiling and
+I want us to be able to apply a very
+similar technique for memory leak
+analysis as well and now again if you
+have been doing
+C++ for a while you know that there are
+some development time tools for this
+like Val grind on Linux and some code
+analysis tools on Windows as well these
+are not very relevant for production use
+because they typically either slow down
+your process like by 500 percent or they
+require recompilation which is not
+something you'd probably do in
+production so instead here's a general
+process we're going to follow we are
+going to attach to a running process and
+look at every malloc and free code and
+of course if you're using some custom
+allocator
+we could attach to your custom
+allocators allocation routine and your
+custom allocators the allocation routine
+and then for each allocation you make
+we're going to record and store the
+allocated address and the size and the
+call stack which leads to that
+allocation and then whenever you free
+memory we'll look at the address and if
+it's something we know that you
+allocated before we're just going to
+discard that allocation so at any given
+time we only have the outstanding
+allocations the one that were allocated
+but not freed yet by the application
+when we suspect that there's a memory
+leak we can just dump out all the
+outstanding allocations and see how many
+bytes we have outstanding how many
+allocations we have outstanding and
+which call stacks led to those
+outstanding allocations so which call
+stacks allocated memory that wasn't
+freed yet now of course it will still be
+up to you to determine if it's a if it's
+a genuine leak or just something you're
+going to free later right but it will
+still give you the immediate insight
+into okay so here's something I have
+allocated and haven't freed yet does
+that make sense now of course
+aggregation is very important here
+because if I have a million outstanding
+allocations I don't want to see a
+million lines
+I want something aggregated so this call
+stack performed 100,000 allocations that
+were not freed yet now the old way of
+doing this on Linux and I'm going to
+show the the Linux and Windows ways in a
+moment
+the old way of doing this on Linux would
+be by using perf again we could instruct
+perf to record malloc and free calls in
+the Lib C library put that in a file in
+a perfect data file and then analyze it
+using some kind of script I suppose to
+see which allocations were outstanding
+now this is slow probably and the perf
+that data file that we generate is
+probably going to be gigantic if we do
+this for even five minutes on a typical
+process it's going to be a huge data
+file so the new way and this is
+something worth knowing about modern
+Linux systems the new way is to actually
+do the whole aggregation part the stack
+aggregation part in the kernel when you
+attach to the interesting events rather
+than dump out the whole thing to a file
+and then look at the file contents later
+so there is a unique kernel technology
+on Linux there's not something like this
+available for Windows unfortunately
+called bps and this is this has been
+part of Linux and Linux well did the
+original BPF technology actually has
+been part of Linux for ages but using
+BPF for tracing is something you can do
+since linux 4.1 or so so it's fairly
+recent and it's only in fairly recent
+kernels however if you do have a
+sufficiently recent kernel you can get
+the next generation of tracing tools
+essentially by using that kernel side
+aggregator rather than dumping all the
+events out to a file and then analyzing
+the file and there's a large collection
+of tools called BCC which you can find
+online I've also written some of those
+and there's contributors from a bunch of
+different companies all open-source
+tools which use the BPF technology in
+order to solve particular problems which
+are too expensive for standard tracers
+here are some of the tools that BCC
+contains and one of them happens to be
+mem leak up top which is a tool for
+inspecting memory leaks it basically
+does what I described previously it
+I chose to malloc and free and then it
+dumps out a record of outstanding
+allocations but it doesn't dump every
+single event to a file and post process
+it later it does the aggregation on the
+kernel side of things
+so the only thing that's actually stored
+in memory is this call stack made 100
+allocations you don't even store the
+same whole stack 100 times you do the
+aggregation right when you collect the
+event so the overhead is much much lower
+in practical terms what does it look
+like so I'm going to switch to
+screenshots here because we don't have a
+lot of time on the windows side of
+things and I'm going to start in the
+same order on the windows side of things
+if you have a memory leak like this
+we're going to use exactly the strategy
+I just described we're going to attach
+to malloc and free and we are going to
+inspect the differences the outstanding
+allocations and the way we actually
+attach to malloc and free is going to be
+using etw events this is a full listing
+of all the commands you would need to
+run for this in order to attach etw
+facing to heap allocations and freeze
+and get a file that has a record of
+every allocation and free that your
+process has made but again it's going to
+be a file so it's going to be a pretty
+massive file and you would need to
+analyze that file later because windows
+doesn't have BPF or anything like it so
+this is actually the only way to get
+this sort of thing and then you would
+analyze that recording in windows
+performance analyzer or some other etw
+tool and again just skipping to the to
+the crux of it you would be able to get
+a stack trace which allocates memory
+that wasn't read so this is outstanding
+allocations and you'd be able to see the
+number of the allocations made by that
+call stack and their total impacting
+size so the total size of those
+allocations in bytes so this is a call
+stack inside my application which has
+allocated 8 megabytes of memory which
+hasn't been freed yet so this is what we
+get from this output
+and again it's actually pretty simple
+like the whole process you can write a
+batch file which would do this for you
+but it does rely on generating a huge
+file if you run this on a production
+system for 10 minutes you could get like
+several gigabytes worth of allocation
+and free data the Linux side is slightly
+easier so I'm just going to skip over to
+the actual tool this is output from the
+mem weak tool from VCC and it basically
+dumps out stack traces and how many
+outstanding allocations these stack
+traces have so it's basically the same
+information except in text format and it
+can be parsed and displayed as a flame
+graph if you prefer so again it's just
+stack traces so it might actually make
+sense to display them as a flame graph
+and so as usual there's this huge C++
+stack here so it's a little hard to read
+but it does say at the beginning I have
+95 outstanding allocations which are
+responsible for slightly under a
+megabyte of memory which all came from
+this call stack so this call stack has
+made 95 allocations which have not been
+reclaimed which have not been freed and
+you can go ahead and analyze and if and
+see if that makes sense that your app
+should not have freed that memory yet so
+I'm going to cover very briefly just to
+leave you a minute or two for questions
+as well I'm going to cover very briefly
+two additional scenarios which tracing
+tools can cover in a very similar way so
+there's not going to be something super
+innovative here but just to let you know
+that these scenarios can also be covered
+on both operating systems using pretty
+much the same tools we already learned
+about so one of those is blocks time a
+lot of applications don't actually have
+lots of CPU usage or not exclusively
+about CPU usage they actually have a lot
+of blocking as well so waiting for
+something waiting for a synchronization
+mechanism waiting for network waiting
+for a database waiting for a file these
+are waiting things that our applications
+would typically do now to trace that
+time to actually account for
+that time we're processes are sleeping
+essentially waiting for something we can
+use context switch events from the
+operating system so both on Windows and
+on Linux we can ask the respective
+tracing tools to get us a record of
+every context switch
+so whenever a thread switches from
+running to waiting and then back from
+waiting to running we can trace where
+this is happening when this is happening
+for how long this is happening and then
+give you a picture of okay so this
+function here I spent five seconds
+waiting for a lock while in that
+function so it's essentially just a
+matter of correlating the context switch
+events which of course sounds easier
+than it is but someone has already done
+this job but basically we just need from
+the OS the context switch information in
+order to do that now the only reason I'm
+even mentioning this is that context
+switches are a pretty common thing so
+you could have a million context
+switches per second like easily on a
+typical loaded system and recording
+every single context switch to a file
+again is going to be pretty prohibitive
+so on Linux we have BPF which can do
+this analysis without actually storing
+stuff to disk on Windows we could
+potentially process some of this
+information in real time but in practice
+most tools will record this to a file
+and then analyze the file so this is
+slightly less efficient on Windows
+actually not slightly this is less
+efficient on Windows so what can this
+look like I'm just going to skip
+straight to the actual screenshots or
+even I have this open on my Windows box
+so this is what it can look like on
+Windows by aggregating all the context
+switch events I could get a timeline
+view of each of the threads in my
+process and see exactly what it was
+doing and when so for example here if I
+focus on my main thread in my
+application I can see on a timeline from
+0 to 20 seconds exactly by colors and
+times what that thread was doing so
+green here is execution
+this is synchronization I also have some
+leaping going on so I can see exactly
+what my thread is doing in terms of
+waiting and running and if I click any
+of those like I did here I actually get
+a stack trace so what the tread was
+doing if it was blocked
+where was it blocked if it was running
+what was it running again this is all
+available just by virtue of looking at
+the context switch events from running
+to waiting and from waiting back to
+running but again the underlying data
+can be pretty massive because every
+context switch would have to be traced
+on the Linux side of things on the Linux
+side of things we could use BCC tools
+based on the BPF kernel technology to
+get a flame graph of where my threads in
+my applications are actually sleeping
+waiting blocking for something without
+having to generate a file that has an
+event for every single context switch so
+basically what I used here is a tool
+called off CPU time which is from the
+BCC collection and on github and it
+generates a recording but the recording
+only contains the aggregated results so
+I don't have like every single context
+situation there I only have the
+aggregated record saying this call stack
+had 500,000 context switches which took
+that much time so I don't aggravate
+every single context switch making this
+a tool that you could actually run in
+production so that's that's for context
+switches and the last thing about a
+briefly mention is tracing file and disk
+and network IO which is very important
+and so you might be asking like why am i
+leaving this for the last four and a
+half minutes of the presentation but the
+reason is basically that it's it's more
+of the same we have basically seen the
+underlying technology for tracing
+different kinds of events so here is
+just a matter of picking the right
+events to trace so in Windows for
+example etw can trace file accesses and
+disk accesses and network send and
+receive events and on linux similar
+trace points are available in the kernel
+for block IO access for network
+access so essentially it's just a matter
+of using the same tools etw on linux on
+windows perf and BCC on Linux to just
+get an aggregation of file accesses and
+network accesses and disk accesses and
+that sort of thing
+just a few screenshots of what's
+possible to get your appetite up for
+example on the left you see a Linux tool
+which gives you a record of which files
+are currently the hottest across the
+systems like which files am I accessing
+the most for region 4 writes kind of
+like top but for files for file accesses
+on the right you see a similar thing
+from Windows when looking at a recording
+in Windows performance analyzer you can
+see a summary of which files are being
+heavily accessed on this particular
+system the other difference is Linux is
+live Windows is analyzing recording a
+recording file that's the only
+difference between those tracing file
+accesses in real time is also possible
+so on the left on Linux you see a tool
+which prints out every file access
+taking longer than a certain time so
+slow file accesses print them please and
+on the left there is a Windows
+command-line tool which I wrote called
+each race which does pretty much the
+same thing you can instruct it to look
+at etw events and print out events
+matching a certain filter so again
+there's some screenshots here of what
+this whole thing would look like just a
+couple of final notes to see here which
+might be interesting for you this is
+pretty cool if you have mechanical
+drives like non SSB this is basically a
+summary of where the disk head is on
+your drive so again unless SVC is
+slightly less interesting but in
+mechanical disks it's pretty important
+occasionally to optimize and defragment
+to drive so that you have adjacent
+accesses happening at the same offset on
+this roughly so you don't have a lot of
+travel of six essentially and this is a
+diagram that can show you those this is
+a linux screenshot of a tool called open
+snoop
+which is pretty cool and it's traces
+failures to open files so whenever you
+have a process that tries to open and
+file and fails it would print which file
+it was and what the error was so just
+again some of the things that are
+possible by instrumenting those same
+underlying mechanisms perf on Linux and
+etw on Windows so hopefully we've seen
+this whirlwind tour of Diagnostics and
+performance investigations and both
+operating systems we looked at crash
+dump analysis and how to get core dumps
+of crashing processes and both OSS and
+how to get basic details like a stack
+trace and exception information out of
+them we talked about some of the
+performance facing tools that can be
+used for production with C++
+applications we saw how to generate
+flame graphs of various things not just
+CPU use which is the most typical use
+but also for like blocked time for
+example or for disk accesses and that
+sort of thing
+and we looked at memory leak analysis
+which is pretty tricky especially in
+production but you see there are some
+options available for this as well there
+are some references in the slides
+touching on the different tools we
+looked at today there's lots and lots to
+learn of course beyond this presentation
+and here the slides and all the demos
+I've used some of these are actually in
+lab format so if you would like to spend
+a few hours practicing some of these
+tools you can look at those two github
+repos which have labs for both Linux and
+Windows that you can try in your own
+environment and just learn more about
+some of those scenarios I use but all of
+these are covered all my demos are
+covered by these two repositories now we
+have 22 seconds for questions which is
+going to be a little tricky and also I
+have in 20 minutes a talk in another
+room so if anyone wants to chat we could
+do that during lunch or you could walk
+with me there but this is as much as I
+can offer because they don't have a talk
+in 20 minutes anyway thank you very very
+much for coming and I hope you enjoy the
+rest of NBC please be in touch thank you
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

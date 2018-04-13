@@ -1,0 +1,1063 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>&quot;Distributed Commit Log: Application Techniques for Transaction Processing&quot; by David McNeil | Coder Coacher - Coaching Coders</title><meta content="&quot;Distributed Commit Log: Application Techniques for Transaction Processing&quot; by David McNeil - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Strange-Loop/">Strange Loop</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>&quot;Distributed Commit Log: Application Techniques for Transaction Processing&quot; by David McNeil</b></h2><h5 class="post__date">2016-09-17</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/X2g0FFOV2e0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">good afternoon everybody thank you for
+coming out my name is David McNeil I'm a
+developer I work at Llano cloud been
+there for about three years and
+basically what we do is we build out
+cloud application infrastructure using
+closure and a fair bit of Amazon Web
+Services so I really like my job it's
+great people good business good
+technology and in particular for the
+last year and a half or so I spent a lot
+of time with the Amazon Kinesis service
+so that's what I'll be talking about
+today and if I kind of go back to a year
+and a half ago trying to get my head
+around what it is I can imagine myself
+going to this page and seeing okay we've
+got clickstream data we've got a pipe
+and do some processing that sort of
+thing not a lot to really get traction
+on understanding what it is here but
+some point along line I didn't evitable
+you hear that okay it's basically a
+hosted Kafka so you go over to Kafka and
+you check that out now you see some more
+technical me technical meet in
+particular you see this this concept of
+a distributed commit log being mentioned
+and this turns out to be something that
+you can get traction on you can start to
+research and figure out and understand
+what that is so what I'm going to do
+today is try to accomplish two goals
+first I'm going to try to share a mental
+model of how to think of a distributed
+commit log how it works and how you'd
+make effective use of it and then as I
+go through this I'm going to try to
+provide some patterns based on our
+experience techniques of using it to
+achieve transaction processing and
+here's really a difference from what I
+would see and much of the many of the
+blog posts and discussion about it or
+people are using it for like clickstream
+analysis where you're seeing what's
+trending and you just kind of sloshing
+the data about and some can spill
+whereas our application we needed to
+account for each and every event so we
+wanted to make sure that we were
+systematically processing all the events
+so this was an area that seemed a bit of
+a blind spot at least in my ability to
+Google for things so this is kind of my
+retrospective of things that I think
+would have been useful to me a year and
+a half ago getting started with this
+technology so a few disclaimers Canisius
+and Kafka are very similar but I'll be
+talking
+really primarily from the perspective of
+Kinesis that's what I know that's the
+terminology I'll use I believe that many
+of these ideas translate to Kafka but I
+won't be doing that here and I'll be
+presenting patterns I really hope
+they're taken as patterns not best
+practices so as a pattern there's a
+context in which it applies there's
+trade-offs you know it's not Universal
+rules about what you should do so rather
+I'm hoping to contribute some ideas to
+talk about different approaches that not
+promote a best practice per se so we'll
+start off dig into this idea of a commit
+log at its core it's so simple I mean
+you say it describe it to somebody and
+it's hard to even believe that you could
+have a discussion about it right they're
+like what is it you just write things to
+the log so you go to the log and the
+basic idea is it's a log of everything
+that happened and when you want to write
+something you go to the end of the log
+and you immutably write some record and
+just an append-only fashion and so the
+log just grows and has records in it not
+very exciting at all and in fact there's
+not really much action for me here on
+the right side the interesting part is
+really on the read side but it starts
+out really simple so on the read side
+the basic operation you do is you come
+through and you read you read items out
+of this log and the two main kind of
+constraints that govern how you read it
+is first you read it in sequence so you
+just start at a point and then go
+forward and the other key characteristic
+here is you're doing non-destructive
+reads so you're not like consuming the
+records in a sense that like they
+disappear you're merely observing those
+records in the log and so now you're
+free to come back later and observe them
+again another application could observe
+them etc so with Kinesis the the data
+doesn't stay there forever so you can
+imagine take this analogy too far the
+scroll is like curling up there you get
+a window of things that you can read by
+default the records will stay in the log
+for 24 hours if you're willing to pay
+more you can turn that up and have them
+be kept for up to 7 days so the idea is
+you Amy really write these records in
+somebody else can come in maybe multiple
+people who come in and read them but
+they need to read them within 24 hours
+or else they're going to be gone so in
+that sense it ends up looking like a
+buffer right that's a buffer between
+these writers and these readers and you
+need to clear that buffer
+not in a sense of destructively but just
+getting them before they disappear so as
+you go in to read there's three
+different ways you can open an iterator
+so all of these will just start at a
+point and go forward in time but there's
+three different kind of places you could
+start at you could say I want an
+iterator starting at the oldest item in
+the log and that will just go to the
+oldest item in the log and you'll start
+reading forward from there you can ask
+for the newest items and that really
+kind of skips everything that's there
+today and just goes to the head or the
+tail of log and then as new items get
+written
+you'll receive those and you'll iterate
+across those and the final is probably
+the most useful it's to go to a specific
+sequence number so basically this is the
+pattern you're reading along you get to
+a certain place and then you die or you
+want to restart or something and when
+you come back in you want to pick up
+where you left off so you'd open up an
+iterator by sequence number to point to
+a specific place in the log where you
+left off so now a bit more about what
+actually goes into these records that
+are written into the log basically
+there's two fields that you provide as a
+user as a caller you say here's the key
+for this this item and here's a data the
+payload so when you hear key don't think
+like it's a global unique key think it's
+a key that associates many of the
+records together so for instance you
+could keep a track of all the
+transactions on an account the key might
+naturally be like the account ID and
+then you'd have a record for every
+transaction that ties those together so
+in addition to those two fields there's
+this third field that the system Kinesis
+will add in automatically and that's a
+sequence number and that identifies the
+the order in which the items were
+received and that's what you would
+reference when you make your sequence
+number iterator you'd go to a specific
+location so these three items are really
+what make up a record for for our
+discussion here today so there's the key
+and there's the data payload and this
+number the sequence number so I'm going
+to switch gears in notation I'm going to
+switch to this colored ball notation so
+here it's a more compact way to
+represent these three pieces of
+information the color indicates that key
+that I mentioned the payload the data is
+inside of the ball and I'll show that
+when it's important and I'll just omit
+it in many cases and then the order the
+C
+number is rendered here by a consistent
+pattern I'll use in the slides here is
+that time goes from top to bottom so the
+most recent records on the bottom the
+oldest records are on the top the
+sequence tells you you know basically
+what the sequence number was all right
+so now we can get into looking at what
+Kinesis actually does so at the bottom
+here I have these producers they all
+come with their bucketfuls of records
+that need to be written they might have
+multiple threads don't I'm
+simultaneously writing to all different
+keys and what Kinesis does is it slurps
+those up into the cloud because that's
+that's where you'd want them right is up
+in the cloud so they get slurped up and
+it's relatively chaotic going in but
+what Kinesis is going to do is it's
+going to resolve all the race conditions
+between which one came in win and it's
+going to produce like a canonical here
+is the sequence in which these are
+considered to have been received so you
+get this disorder going in and this nice
+ordered sequence coming out the top but
+it's not limited to that what actually
+okay so then workers they're going to
+come along and move down in top-down
+fashion they'll read the oldest record
+first and they'll sequence through these
+records and process them but this is
+Regan and the whole kind of distributed
+nature of this commit log so we're
+adding the distributed now to commit log
+and so the output it's not a single
+output stream but it'll actually be
+charted and its sharded by key range so
+you notice like all the red balls are in
+one shard all the green ones are in
+another right so at a given point in
+time all the records with a given key
+will be in a single shard so really what
+you get out of this the guarantee you
+get is not not that all the records are
+globally ordered that's not really the
+interesting aspect of it really what you
+end up with is all the records are
+ordered by key and the expectation is
+that you'll be processing these shards
+in parallel so concurrently so it's not
+so much important about the global
+ordering as it is making sure that the
+the events are ordered by key so this is
+now all the terminology for the Kinesis
+stack that I'll talk about today you
+have the producers at the bottom they're
+all sending these records into a stream
+that's true
+is sharded and you have workers not
+consuming them but but processing them
+at the top alright so we might start off
+small but of course all things Amazon
+the expectation is we'll be able to
+scale this up right so at the bottom
+it's pretty natural to think about
+scales like things Amazon hosts you can
+hit this with many producers all at once
+hammer in your bucketfuls of data in
+fact the limits you'll get by default
+from Amazon are you can do up to 50,000
+rights per second to a stream for this
+aggregate 15 megabytes per second and
+you can get this increased if you need
+more you can ask Amazon they'll increase
+it or you can make additional streams so
+you can shard it yourself basically by
+having additional streams on the read
+side it's actually limited by shard
+because that's the thing of interest
+that's what you're actually reading you
+can read up to 2 megabytes per second
+and this turns out to be really
+important limitation you can do five
+reads per second and that's not for
+individual messages but I'll talk about
+this more as we go through this this
+turns out to be a key a key restriction
+here all right so this might all seem
+like fun and games and it is fun tech
+it's it's good good stuff to work with
+but of course like all things Amazon its
+metered right and it's metered in this
+miniscule micro fashion that's hard to
+reason about but if you do the math it
+works out to be this so for every shard
+you're gonna pay 11 bucks per month you
+know just for the privilege of having
+the shard if you write to it at the max
+rate you could possibly write you're
+going to pay an additional buck 50 and
+if you turn on that feature to extend
+the storage beyond 24 hours you'll pay
+an additional 15 dollars per month and
+these are all for like a u.s. East
+region or something like that so it's
+yeah it's relatively cheap of course it
+depends on how many shards you need but
+certainly to get started with it's not
+very expensive so now we can revisit
+that initial analogy and understand now
+well it's not just the single monolithic
+log that's being written to there's
+actually many write heads if you will
+that are all writing to different logs
+and for Kinesis you don't need to know
+that it started you simply write to the
+stream but when you go to read you have
+to understand that you're reading from a
+shard and you have to read from
+The Shard you're supposed to so a lot of
+times initially it can be hard to
+understand like this looks like
+messaging how is this different from
+more traditional messaging so if I paint
+with a really broad brush and just talk
+about messaging systems and kind of
+gross over generalization you could talk
+about okay you've got all these
+producers at the bottom throwing these
+balls in this pit you got workers kind
+of pulling them out this looks very
+similar to what I just showed but of
+course there's a key distinction here
+these workers aren't coordinated right
+they're all they're not getting items in
+order in general they're just kind of
+reaching then pulling one out and
+they're all different colors mixed
+together and that's what Kinesis one of
+the key characteristics of what Kinesis
+gives you it allows you to process these
+records at scale in a way that you're
+coordinating which workers are getting
+which subsets of your of your keys and
+they're in order a consistent order that
+doesn't change over time all right so
+we've got the shards we can read from
+them but we have this problem we need to
+coordinate who's going to be reading
+from which shard when you want to just
+start up a bunch of servers and say hey
+go read from the stream so Amazon
+provides some client-side code Kinesis
+it's called the Kinesis client library
+so it's not part of their service per se
+it's clothes that you'd run on your
+application and it will take care of a
+lot of the kind of low-level details of
+figuring out who's going to be reading
+which shard at which time so what it
+does is it'll design
+it'll assign a lease or a lock to every
+shard and then when you start up your
+workers so you start up three workers
+and there's three shards it will use the
+Kinesis client library to sort out kind
+of a balanced load across those two or
+each of them would process one of the
+shards and the Kinesis client library
+does this by using dynamo so it stores a
+record of what the leases are and and
+who has them and what the sequence
+number is for each of them in dynamo s--
+there's no additional infrastructure for
+you to set up and those ooh keeper or
+anything like that so that's nice the
+number of shards and the number of
+workers can vary independently so here
+if you start one worker and you have
+three shards he'll just go out the
+worker will go out and grab all three
+leases and work on all three shards if
+you end up starting up five workers and
+they have three then there will be two
+idle waiting for work essentially
+alright so like I said all the
+complexity here is in the read side so
+one of the complexities of the read side
+is you're not reading records
+individually but you're actually reading
+them in batches so that looks something
+like this you're you're going along
+through this stream you're processing it
+and every time you do a read so one of
+those five reads per second what you get
+back is a batch starting at wherever
+your iterator is going forward you get a
+batch of records in sequence and so the
+idea is you'd read those and you've got
+this checkpoint that the kinases client
+libraries keeping track of that's
+keeping track of what sequence number
+you've processed so that as you go back
+to read it can pick up with a an
+iterator from there so you've got a
+checkpoint say on the last record you
+pick up a batch you work through it and
+the idea is you then when you complete
+that batch you update the checkpoint and
+grab a new batch so you work through it
+in this kind of mini batch fashion and
+this again is a little twist on kind of
+traditional messaging like it's easy to
+think of messaging is like event-driven
+you're getting one you know processing
+individual items but here it's really
+key to understand your processing
+batches of items and you're advancing
+your iterator kind of in batch steps so
+another wrinkle on the read side is what
+you get is at least once delivery which
+is kind of a convoluted way of saying
+hey you're going to get duplicates and
+you need to deal with it so how can that
+happen it can happen from a variety of
+reasons one reason is shown here you go
+in as kind of the top worker here you
+ask for a badge you're given one and
+sort of unbeknownst to you maybe you in
+a past life or maybe somebody else had
+already asked for this batch almost
+processed at all but then died before
+they could update the checkpoint so
+you're basically getting those records
+again from your perspective it looks
+like they're being replayed to you a
+similar phenomenon that I think of as
+these zombie workers is there might be
+other workers out there simultaneously
+that think they have the lease but
+they've actually lost the lease so maybe
+because of a network partition or their
+VM was quest or something they no longer
+hold the lease
+but they haven't realized that yet so
+they're walking around you know they're
+dead they just don't know it they're
+processing records and so really what
+this ends up leading to is even though
+you have this lease or this lock and the
+messages are coming to you you can't
+think of it as oh I'm exclusively
+processing these you really need to be
+paranoid and think of it as well I'm
+getting this message for the umpteenth
+time and there's a bunch of other people
+processing it simultaneously how do I
+think about my processing in that
+context because that's really what it
+takes to build this as a distributed
+fault-tolerant system is to basically
+assume the worst at all times and be
+paranoid so this leads to the first
+pattern that I'll present here it's
+obviously a pretty basic one but a an
+effective way to deal with this replay
+is if it's possible make your record
+processing processing identity basic
+ideas if you get the records repeatedly
+and you apply the kind of side effects
+from them repeatedly it'll have the same
+result no matter how many times you do
+it so this doesn't come for free
+there's work required there's a lot of
+times very careful design that's
+required to make this possible but I
+think it's a key technique to talk about
+so related to this as we talk about this
+checkpointing mechanism at least I had
+this problem early on it was easy for me
+to think of well the checkpoint that's
+the definitive statement of where I am
+in the sequence but as we went through
+some of our applications we realized
+it's actually more effective if I think
+of that checkmark that checkpoint the
+heavy black one at the top being that's
+kind of like a lower bound on how far
+I've gotten or an upper bound how it is
+but really I could keep track if I'm
+willing to I could keep application
+state that says oh for red I actually
+know that I processed these two records
+and if I update some state kind of
+simultaneous with processing these
+records and I keep track of what
+sequence number I've received then even
+if it gets replayed I'll understand
+oh no I've actually processed that I
+know where I'm at so the the check mark
+then that the Kinesis client library
+uses is just a bound doesn't
+specifically say what I've processed and
+this turns out to be useful for us even
+if the record processing is idempotent
+because just because it's I dumped it in
+doesn't mean you want to do it right it
+still takes CPU it still takes time
+don't necessarily want to be doing that
+especially if you have like kind of a
+really bad scenario where you end up
+needing to or bouncing back and
+processing a bunch of records and if
+you're going through thousands of
+records that you've already processed
+that can be really expensive so this is
+the next pattern basically where an
+option you have to deal with replay is
+to keep track by key of the last
+sequence number processed and again this
+doesn't come for free this requires
+keeping some additional state so you
+need to balance the trade-offs here and
+see if it makes sense all right next
+topic still in the reading side is
+talking about parallelizing the the
+processing so obviously the shards you
+can do parallel processing on the shards
+but inevitably you'll come to the point
+where you say okay yeah I don't want to
+make another shard but I'd like you know
+my processing is a bottleneck here and
+I'd like to be able to process this
+batch this shard in parallel so a
+technique we've been using for this is
+will have the worker read in a batch and
+so that's a sequence of records and then
+it'll rip through it and partition it
+break it up into sub sequences by key so
+here you've got all the yellow and green
+ones you break it up into here's the
+yellow sequence and here's the green
+sequence so you preserve the order by
+key but you're breaking it up and once
+you break it up then you can farm it out
+to a pool of threads that you have to a
+pool of worker threads that you have to
+run it and so this is recognizing that
+really the invariant that we're
+leveraging from Kinesis is not the
+global ordering of events but it's the
+ordering of events by key so this
+doesn't violate that we're keeping them
+in order by key I think it's also
+interesting to think of this now once
+you get to this point you can look at
+this grey worker down here getting all
+these yellow messages and it's not hard
+to now start to think of that as like a
+distributed object system or from
+closure like a distributed actor that's
+or distribute agent that's like a thing
+that lives out there that potentially
+has state like there's all these
+producers shoving in all these messages
+and they're all going to like that guy
+in order and so it really enables a
+style of processing if you think of it
+like that that's pretty powerful so we
+write this up we talk about what it
+means to to do subsequence processing
+and like all of them there's trade-offs
+this really kind of drives you to now
+want to scale up your processing nodes
+which is kind of not the it's kind of
+against the grain a little bit with all
+the cloud stuff you want to really scale
+out typically so I think if this is
+really just giving us another dimension
+so of course we can scale out but now
+you can also talk about how we how we
+scale up the nodes all right so yeah so
+things go wrong you know building these
+fault-tolerant systems it's not that
+faults aren't going to happen it's you
+know tolerating them so yeah so some
+domains you simply don't care if you get
+a record fails right you're doing some
+clickstream analysis not to disparage
+clickstream analysis but there might be
+a domain where you don't really care for
+a few records every once in a while fail
+you can just chuck them but I'm
+concerned with this this application
+domain where every record counts so for
+example these are say these are
+transactions on accounts and you want to
+balance you know sum them up to know
+what the balance is on each account well
+if you just throw out records in the
+middle it's you're not gonna get the
+right answer right so every record
+matters how do you deal with errors in
+this context and in particular it's like
+I struggled I bashed my head against
+this for a long time because with a
+regular messaging system you reach in
+you pull out an item you know you do
+some processing if it fails you can just
+kind of throw it back in and somebody
+else will pick it up later you know
+something will happen fine but here
+we've got like this fire hose this
+assembly line of all these records
+coming through like one of them fails
+like we can't like pull the lever stop
+the line and say you know everything
+stop and you know we're gonna figure
+this out like things have to keep going
+through if this is one read one fails
+you know all the greens and yellows and
+oranges we how do we keep them going and
+how do we think about this so this I
+spent a fair bit of time on this and one
+of the things we came up with is to do
+some work create some heuristics to try
+to categorize what kind of errors were
+seeing so we try to look at say we look
+at the exceptions and this is inherently
+hard right because
+once you get an exception you're kind of
+by definition off the beaten path right
+it's hard to understand exactly what's
+going on but you can apply some
+heuristics so we look at and say well is
+this an intrinsic error this is
+something to do with the message itself
+like a Poisson event that's coming
+through or is this really something to
+do with my environment like did I get
+this message and I'm going out to hit a
+database or go across a network and
+something misconfigured and so we put in
+place some heuristics to categorize
+classify exceptions into these
+categories and like I said there's
+definitely trade-offs here it's very
+challenging to sort through exception
+handling or exception generation is
+often a very poorly Specht part of the
+the libraries that we use and so it can
+be very fragile to rely on you know what
+kind of exception you're getting and how
+they're nested you know there's all
+kinds of wrinkles here so a related
+technique here is if we get an error so
+this red one is failing we don't just
+have to give up at that point especially
+if we have this idea of identity
+processing so we just retry like up to
+some number of times just try it again
+and maybe eventually that you know is a
+transient error and everything's fine we
+can carry on so as long as we don't do
+that so long that it really jeopardizes
+the the timing of the whole batch this
+is a tool that we can use again it has
+trade-offs yep okay so we're
+categorizing the errors we're saying we
+think this is environmental we think
+this one is intrinsic but then that's
+not really sufficient so say we have
+this case and we look in here and we see
+well basically every message is getting
+an environmental error so we can apply
+some common-sense and say well yeah I
+think that's probably an environmental
+problem but then what if you have
+something like this where most of all
+the messages are fine except this one
+but it looks like it's actually an
+environmental problem and this can
+happen there's weird things that happen
+so this led us to the point where you
+said well it's not enough simply to
+categorize them we also have to count
+them and we have to look at this batch
+and say you know how many of them are
+actually failing if it's just one is it
+pervasive and again couple this with
+that other thing where you have a kind
+of these two heuristics you're applying
+and I really left out a category here if
+you think about this so I talked about
+well it might be
+the event and it might be the
+environment and the one I left out is
+once hard to see sometimes like well it
+might be me
+like I might be the problem and you know
+that could be a startling question to
+ask but yeah I didn't write it up but we
+also have a mechanism where the worker
+can decide you know I think I'm actually
+the problem and it can surrender its
+leases at that point say hey I'm gonna
+let somebody else kind of step in and
+see if they can do better with this
+alright so I mentioned at the beginning
+kind of made a point of this that
+reading records is not destructive you
+can read them multiple times and what
+this enables you to do now is have
+multiple applications that are all
+reading from the same stream the same
+shards so the way this works is you know
+these are the workers I've been showing
+there for a particular application they
+have their locks but there could be like
+just like this two ships in the night
+there could be these other workers out
+there and they have their own set of
+locks they keep in track of their own
+checkpoints and they're just you know
+reading the streams in parallel with me
+streams are not reads are
+non-destructive so that that works fine
+there's no direct ties between these so
+all those there's no direct ties there
+is an indirect tie
+so I mentioned you're limited to five
+reads per second per shard and this is
+per shard so it's it doesn't care how
+many applications you're running it says
+hey you can't do more than five reads
+per second so if you focus on this a
+little bit and they don't really call it
+out in the docs but if you really focus
+on this like the docs talk a ton about
+scaling out right you can do however
+many you know gigabytes per say you know
+just tons of scale out if you focus on
+this one what this really says is it's
+producing there's a imposing a pretty
+hard limit on the latency that you can
+achieve through this system if you can
+only read five times per second I mean
+it's only over 200 milliseconds you can
+go do reads the expected latency of
+messages going through here is going to
+be 100 milliseconds and now if you have
+two applications that are reading that
+means if you're going to do it in a fair
+way you have to now read it half that
+rate and so now you're doubling your
+expected latency so this especially if
+you know depending on your kind of real
+requirements this can be a real bitter
+pill here so one of the techniques we've
+adopted for this is we've introduced
+this idea of a composite worker or a
+composite application so here I'm
+showing we'll have one worker that goes
+out and reads the the batches from the
+shards and if we have two applications
+they'll both be like a part of that
+worker and as the the batches are read
+they're handed a copy of those go to
+both of those kind of internal separate
+applications so this allows us to do
+kind of two totally different kinds of
+processing on the data without
+compromising on that read rate without
+introducing additional latency through
+this pipeline so like all these this
+definitely comes with a cost
+so there's trade-offs here it gets
+complicated you're thinking through like
+okay we're trying to do checkpointing
+well what if one of these applications
+is successful the other ones not well
+what do you do we're checkpointing at
+that point there's other complications
+like you're effectively yoking these two
+applications together in terms of the
+rate at which they're going through the
+data so you're effectively you know the
+slowest one is going to govern the rate
+at which you can do the processing here
+so there's there's definitely trade-offs
+ok so I've been talking about the shards
+as if they were static but it's in my
+opinion it's a mistake in terms of the
+way Kinesis wants you to operate to
+think of the shards of static so you
+need to write your code you can't assume
+there's a certain set of shard you can't
+assume what key ranges are in them
+rather you need to assume that it's
+dynamic it's changing over time and you
+just need to adapt to whatever the world
+is so to start to illustrate this here's
+an example you see two shards again like
+always time is going down and so at some
+point we decide well we really need more
+scale-out and so we split both of those
+shards and now we have four and then
+later we say well that was really too
+many we combined to a home now we end up
+with three so this is the real picture
+that you have to deal with as a reader
+of a stream is you need to understand
+that you need to dynamically figure out
+how many shards there are at a given
+point in time and pross
+and in terms of the order of processing
+you know the constraint we're going for
+is that the records are processed in
+order by key and so that you can kind of
+extend that idea here to shards as well
+that is you have to process the shards
+in order so you can kind of see here you
+start at the top right you can't process
+a shard until you've processed all of
+its parents so the two at the top there
+they have no living parents so you can
+start with those and then once you
+complete those now you can go to the
+four shards beneath and once you
+complete the two in the middle then you
+can go to the one at the bottom so you
+have to do the shard processing in order
+and then of course within those you
+process the records in order and if you
+do that if I didn't make any mistakes
+here if you follow this through you will
+have processed all of the records by key
+in order so I care
+the red ones they're all like at a given
+point in time they're all in one shard
+the yellow ones all in one shard the
+same way so this leads to one of my
+favorite ways of visualizing over all
+the Kinesis is doing and that's like
+this so at the bottom you've got this
+Khattak mess of all this stuff being
+jammed into this funnel and then Kinesis
+is working to resolve all the races
+figure out a canonical ordering for
+those and it's producing this kind of
+tapestry here right of all these these
+shards and so then your job as a reader
+is to come through and and process that
+with the level of parallelism that's
+available at each stage so the the
+Kinesis client library helps with this
+quite a bit so if you think about these
+these leases or these locks on shards
+you'll have a changing number of locks
+over time okay and this finally leads
+then to the final pattern that I'll talk
+about here and I haven't really talked
+into talk much about applications state
+but here at this point we've got this
+worker the darker worker at the top is
+has done some processing on the shard
+and let's imagine it has some
+application state so like if it's
+keeping track of those account balances
+maybe it's got the running balance for
+every account that's in its shard and
+then it comes to the point and says oh
+my shard is done so it there's no more
+work to do there but there's more work
+to do on the subsequent shards so now
+you can imagine if you have that state
+the shard level state if you will you
+now need to kind of break that up and
+you need to take like well half of the
+half the state needs to go to this one
+new gray worker and half needs to go to
+another one and that can be a really
+tricky problem so one of the approaches
+that we came up with for dealing with
+this is to track our shard state not by
+chard because shards are dynamic and
+they're changing over time but rather to
+track our shard state by partition key
+so by the keys and the data and if you
+do that so you can imagine like say you
+have like a dynamo table and you want to
+have the balances so for the key to the
+table would be the the key from your
+your stream and then another column and
+have the balance so if you key it in
+that way like with the grain of the
+stream then when the shard splits or
+merges you don't have to do anything to
+split your shard state right it's just
+accessible by key and so if you know
+this new shard workers has all the even
+accounts the other one has all the odd
+accounts they just go access theirs from
+the state so if you record the shard
+state by partition key then you can make
+the shard splits and shards shard merges
+trivial in terms of state management but
+like everything there's trade-offs here
+there's additional expense to storing
+that state and yeah there's there's
+definitely other things to consider so
+that's it those are the kind of the
+basic patterns techniques that we've
+developed in building some transaction
+processing applications I'd like to
+think that these are the you know that
+these things this is what would have
+helped me when I was starting out like a
+year and a half ago so if somebody finds
+use of it everyone really glad about
+that so thank you all thank you for your
+time
+these are a couple of references that I
+found particularly useful to crystallize
+my thinking they're not affiliated with
+me in any way they're just useful
+resources and that's all I had I think I
+have a few minutes for questions so any
+yes do the upper version you can run in
+your laptop okay so the question is when
+you're testing Kinesis it's hard to test
+this thing in the cloud do they have
+something to test locally I'm not aware
+of anything that Amazon has what we've
+done is we've developed our own just
+really lightweight in-memory data stream
+that has very similar semantics so we
+tend to do you know we have our tight
+feedback cycle with that and then we're
+sure to run our tests regularly against
+Amazon to make sure we don't diverge so
+it's like many Amazon services the
+feature footprint is really really small
+it's easy to replicate it's the mountain
+of like the non-functional stuff that
+they do that that's really what they
+offer so yeah pretty sure previous slide
+and behind him
+right so the question is I think the
+question is if you actually have a
+Poisson event what do you do I failed to
+comment on that that was a line I left
+out so the technique we actually use is
+as a technique I prefer at this point is
+when you have that Poisson event and
+it's really failing you can't stop the
+assembly line so the idea is well
+identify like off to the side say this
+key is in error I think of it like
+closure agents right the agent can be an
+error at some point if you know closure
+so you say that's an error and then any
+events that you get for that key you
+kind of shunt off to another area maybe
+that's what you were saying I yeah you
+have this queue of those and now you
+need your assembly line can proceed
+you know things go on and somebody's
+somewhere as to come back and like sort
+through what is this process all those
+queued events and then get back on to
+the main assembly line at some point
+yeah yep
+yes on the producer side what's the
+question
+you're right so I think the question is
+on the producer side when you send
+something you might fail and you might
+have to send it again so that's another
+source of duplicates that I didn't
+mention so yeah I mean there's different
+techniques one way is if you have an
+identifier in the payload that you're
+sending then it can be distinguished
+downstream like if you say this is
+account this is a transaction five and
+then you send it twice then the
+downstream they can they can understand
+that and figure that out
+so that's of course that's a source of
+duplication which is kind of subtly
+different than the duplication I talked
+about but I think there's other
+techniques to deal with it yeah right
+so the may not main things we would
+reach for would be like dynamo DB or an
+in-memory cache like elastic cache or
+something yeah yeah so can the clients
+when they're reading control the
+backsides I don't know actually I'm not
+sure I'd have to check the docs yeah
+yeah
+so question is what sterilization to use
+I don't know that I have the best advice
+on this I'm I like for development time
+JSON for the readability but then when
+it comes to hard core production like
+there's different constraints on you so
+I wouldn't necessarily do that yeah yeah
+so the question is do you know how you
+figure out how far behind your workers
+are or your consumers are that is one of
+the most important metrics to monitor in
+this thing because that's the heartbeat
+of your system and so Kinesis actually
+produces a metric so you can go in the
+cloud watch and you can see how many
+milliseconds behind your your workers
+are yeah free chart yeah yeah so I'm
+kind of embarrassed to say this actually
+so do a ton of cloud work and it's
+almost entirely with Amazon and I feel
+like I'm missing out like I should
+broaden my perspective but I tell you
+it's so good and it's it works so well
+that I'm really kind of I've blinders
+right now on Amazon but kind of in
+general in terms of career development
+and broadening my understanding I would
+love to see other providers and how they
+handle this and in particular I know
+there's a lot of similarities here
+between Kinesis and Kafka but I haven't
+personally done enough Kafka to really
+understand all those so at some point I
+would love to dig into that more and
+understand what it does I still time I
+do
+anything else yes
+yeah so with composite workers I
+actually tried to make that point but
+obviously I didn't make it clear enough
+but yes you that will reduce you down to
+the rate of your slowest application and
+that's a definite problem
+okay so yeah so do you so yes I would
+say this so when you're making those
+composite workers you can't just do that
+blindly I think this is your point you
+need to take into account what they're
+doing so that you don't have like
+unequal yoking right their yoke together
+they need to be going at the same rate
+they can't be going to dramatically
+different rates yeah anyone else
+no all right thank you I'm happy to talk
+about this stuff I love this stuff so if
+you want to come up front or whatever we
+can talk more thanks</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

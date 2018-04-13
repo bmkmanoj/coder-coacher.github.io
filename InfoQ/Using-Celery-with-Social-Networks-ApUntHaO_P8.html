@@ -1,0 +1,853 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Using Celery with Social Networks | Coder Coacher - Coaching Coders</title><meta content="Using Celery with Social Networks - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/InfoQ/">InfoQ</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Using Celery with Social Networks</b></h2><h5 class="post__date">2012-09-25</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/ApUntHaO_P8" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so let's say you want to interface with
+Twitter Facebook LinkedIn whatever
+social network but you have a problem
+because third party interfaces in
+general are hard lots of reasons for
+this just a few are that they are slow
+it is so much slower to call an external
+service than anything that you have
+internally even the hard disk that Eric
+was showing last presentation but users
+don't understand this right they want
+results right now they can see their
+friends instantly on Facebook why can't
+they see them on your site why are you
+slowing down what they're trying to do
+another problem is that third parties
+always have rate limits these vary
+widely from one service to another there
+are all kinds of weird corner cases and
+rules and some don't even publish their
+limits like Facebook so you have to deal
+with them reactively rather than
+proactively this causes a lot of
+problems instability yes even Facebook
+goes down so you have to deal with
+outages you have to deal with random
+failures 500s 503 s fail wails all the
+kinds of stuff that in your internal
+system you work really hard to work
+around you are confronted with them
+head-on in third-party interfaces so
+luckily there is a really great tool
+built for the Python community first
+integrated in Django and then split off
+called celery it is a distributed task
+queue essentially and so you have chosen
+to use celery because it is asynchronous
+which means that you don't have to do
+all of your third party interactions
+within the request response cycle it's
+distributed so you can spin out pools of
+workers as you need them shut them down
+when you don't need them anymore
+it's fault-tolerant has retried built in
+as a feature you can fail safely and
+still maintain your normal workflow but
+now you have two problems actually much
+more than two up there but these are all
+design problems that come with dealing
+with distributed systems and celery is
+no stranger to these kinds of problems
+before we dive into each of these design
+issues you'll you may notice throughout
+the course of this presentation that I
+have pretty strong opinions about what
+you should and should not be doing with
+celery and how you should do it
+you can feel free to trust me at my word
+or you can you know grow me later but
+one thing I will say upfront always use
+rapid mq as your broker never use rapid
+mq as your result store you will be so
+much happier if you just follow these
+rules RabbitMQ has AK support it has you
+know built-in exchanges and queue
+bindings and all kinds of routing
+features in it it is meant to be used as
+a message queue unlike Redis and all
+those others other backends that celery
+supports RabbitMQ however is a terrible
+result store because as soon as you ask
+for the result once it's gone and you
+can never ask for it again so if you
+have a distributed system that's
+checking for when things are done one
+place asks for it says yeah I'm done or
+no I'm not done yet
+you asked for it again somewhere else
+and what to ask I don't have a task that
+is not what you want from a results
+store it should store the results okay
+so let's get on to organization you want
+to try to make your tasks small and as
+atomic as possible the idea here is that
+workers are ephemeral units you should
+be able to kill them at will spending
+them up at will and you get much better
+distribution from small tasks you can
+spread them out better paralyze them and
+you should preferably only make one
+third party call per task if you have
+more than one API call say you burn
+through the first two you fail on third
+one you now have essentially lost two
+calls from your rate limit with no
+effective work done provided that you
+need that third to complete your task if
+you separate them all and use a
+dispatcher to call each one either in
+series or parallel then you keep each
+stage of your work as you go along and
+you get like I said better distribution
+you want to try to keep task arguments
+to a minimal state a lot of the reasons
+for this but for instance the model
+instances you should pass the PK of the
+model rather than the model instance
+ciliary is actually serializing that
+full model instance sending it up to
+your broker and back down to the worker
+you don't know how long that's going to
+take and in the meantime you could have
+deployed new code that has a migration
+say so now your model instant state is
+out of sync with the actual model
+definition in your code base lots of bad
+things can happen so you will avoid all
+of this and you will minimize the size
+of your messages which means less memory
+overhead and faster message passing if
+you only use minimal state in your
+message definitions you should defer
+data access to the task itself again for
+the same reason because you don't want a
+lot of information going over the queue
+like I said it increases performance and
+it prevents serialization
+synchronization issues so let's look at
+an example task this is a bad example it
+passes in a model instance as I said not
+to do it makes several API calls in
+series in the same task and when it
+tries to save the model instance at the
+end of the task you could blow up here
+as I've mentioned because you are now
+working with a deserialized instance of
+a model whose state is completely
+undefined in relation to the database
+that you're working with instead if you
+pass in the model PK you can avoid any
+race conditions by retrying if you get a
+do not does not exist exception this is
+actually good helps you maintain reality
+with your database and then you can use
+your task as a dispatcher for several
+API calls and get them all done in
+parallel so as much as Hilary tries to
+hide it from you on the surface tasks
+are classes you may define a function
+but as soon as you decorate that
+function you've made it into an instance
+of a subclass of tasks so tasks are just
+classes don't be afraid to subclass them
+yourself and make abstract parent task
+classes to encapsulate common
+functionality that you need for a lot of
+your tasks so if you were to take say
+this task is an example it does a lot of
+boilerplate stuff that you'll finally
+you're going to do over and over again
+between different API calls for this in
+this instance to Twitter instead if you
+make an abstract task base class and you
+wrap all that function
+and you know say an API call function
+and then you just return the result of
+whatever your client were to give you
+then you can make a subclass of that
+take away a lot of that boilerplate and
+just use that API call function over and
+over again that has other benefits that
+we'll cover later the final
+recommendation for organization is to
+make tasks that impotant when possible
+tasks will fail
+you cannot stop tasks from failing they
+will fail in creative ways and you
+didn't expect it's a very easy fix to
+say just run that task over again rather
+than to say oh well we once in some
+unknown state halfway through the task
+so we have to patch that up try to
+manually you know get it to the end
+result it's not always possible of
+course because you may have database
+rights that are not replicable you may
+have rights to your third-party services
+but when you can idempotence will save
+you grief so let's talk about tasks
+distribution every third party service
+you want to work with is going to have
+pagination of some kind when you're
+retaining a list of resources and pages
+are very logical places to break up your
+tasks because they're essentially
+instances of a for loop you're doing the
+same thing over and over again that says
+to me distribution so the strategy is
+different dependent on whether you have
+access to limit offset to the third
+party or whether you're dealing with a
+cursor that you get you know a value of
+the cursor for each page and you call it
+with an X value of the cursor sometimes
+you don't even know the total size of
+the set you're working with so that can
+change a strategy as well so provided
+that you have the best case where you
+have limit offset and you know your set
+size then the easiest way to handle
+pagination is to have a dispatcher task
+that instantly dispatches every single
+page that it's going to need to you know
+how are big your set sizes and so you
+get one hundred a thousand ten thousand
+whatever tasks dumped on the queue at
+the same time the workers turn through
+them furiously fast and provided that
+you don't hit rate limits you get really
+fast import of large number of objects
+from a third party that it's very little
+code this is the dispatcher that
+just goes through the range of offsets
+and launches pages so let's say that you
+do not have a limit offset support in
+which case whether you know the set size
+is irrelevant because you can't launch
+page two until you've done page one
+because page one includes the cursor
+value you use to launch page two so it
+still makes sense to do this in separate
+tasks because you get to save the bit of
+work you know from page to page but you
+can't run them in parallel that would
+look something like this where there is
+no dispatcher the task itself dispatches
+the next page and you start out with a
+default cursor value of you know
+whatever zero whatever the first one is
+and you look for a Sentinel cursor value
+that tells you you're done you launch
+one page after another and yeah until
+you get to the end so let's say you do
+have limit offset but you don't know
+your set size this is the case for I
+believe LinkedIn actually lies about the
+number of friends over a certain amount
+and things like that so you create a
+dispatcher task you determine how many
+concurrent pages you want to launch at
+the same time and then you have one page
+leapfrog it's other concurrent pages and
+requests the indexed in the set so page
+one will request page for page two page
+five on and on until you get to page six
+over there which doesn't have any
+results and so it says there are no more
+pages I'm going to stop requesting more
+pages the downside of this is you make
+API calls you don't have to because
+pages seven eight
+could have been skipped if you ran them
+all as the previous example one page
+launching another the upside is you get
+the parallelization in your distribution
+multiple pages at once so the dispatcher
+for that method looks something like
+this you set a number of concurrent
+pages and for each of those in the range
+you launch a single page and then from
+within that pages task it looks for
+results if there are results in that
+page then increments itself by the
+number of concurrent pages and launches
+that next page pagination is not a
+science it is an art you will find based
+on
+varying degrees of variance in response
+times from social networks that
+sometimes a social network will say like
+Facebook will say I can support 5,000 of
+these per page and they'll time out if
+you ask for any more than 3000 for
+instance sometimes your bottlenecked on
+your database writes and so you can't
+actually finish a page of results in a
+good amount of time your goal here is to
+minimize the number of API calls over
+the set of pages but you may have to
+make your page size smaller than the
+maximum in order to get tasks done in a
+reasonable amount of time and remember
+you need to minimize a state in your
+task definitions so it's a very bad idea
+to say request all of Persons friends
+and in a single task and then just pass
+off thousands of friends and messages to
+other workers because you'll get
+megabytes of message sizes that have to
+live in memory in rabbit and you'll eat
+up your memory memory real fast
+rabbits a little bit better about that
+these days but there was a time not too
+long ago when rabbit would just flat out
+like hard crash if he ran a memory no
+warning no nothing just everything's
+going that's bad you want to set time
+out on your task celery gives you a way
+to set a soft timeout and a hard time
+out so that you can deploy code easily
+so that you make sure that you know when
+you have long running tasks then you can
+go and fix that and it's it's a problem
+that you know you know about you so you
+can solve so another problem with task
+distribution is dependency when you have
+tests launching tasks launching tasks
+it's very hard to answer the question am
+I done with this set of work because you
+have this dependency graph and it could
+be a very complex graph depending on how
+your tasks are structured so luckily
+celery 3 if you haven't checked out
+celery 3 a major version release not too
+long ago it has a lot of good features
+one feature has built in is this
+dependency graph tracking when a task
+launches a task that child test says
+okay this is my parent task that gets
+serialized into the results store and
+so you can ask for the full graph of
+tasks if they're if they've been built
+if not it'll raise an exception and you
+know you haven't built on your full
+graph yet and then you can go through
+and check the results state of each of
+those tasks to get an answer to am I
+done yet so this requires that you don't
+ignore the results because otherwise
+there won't be anything in the results
+store and REM ffice izing do not use
+RabbitMQ as your result back-end if any
+of you take anything from this
+presentation it's do not use rapid mq as
+your results store back-end please don't
+so now let's talk a bit about rate
+limiting problems with rate limiting
+well the first problem is that celery is
+rate limit feature probably doesn't do
+what you think it does unless you've
+actually you know looked at it and used
+it directly we'll get to that in a
+minute
+third party rate limits depend on many
+different factors they they can be
+unpredictable they can be complex you
+have to be able to deal with all those
+factors if you want to respect their
+party rate limits so we've got a little
+sample task here it's as simple as I
+could possibly make it and it's rate
+limited to run once per hour and it's
+important that it only run once per hour
+and so I'm going to now do a live
+demonstration to show you how celery
+will handle this rate limit so the same
+things that I just mentioned it doesn't
+work with multiple worker Damons it
+doesn't maintain its state between
+daemon restarts luckily our real limits
+were wanting to deal with are actually
+enforced by the third party so we only
+have to make sure we're respecting their
+rate limits we don't have to enforce our
+own and the net-net is you want to use
+your own external centralized store for
+rate limiting when doing tasks and not
+celery's built-in support Redis is
+really good this has a lot of data types
+that we can use the factors can vary
+based on who's asking what feature
+they're asking for whether it's public
+or private information all kinds of
+other unknowns the best case in their
+scenario is that all these are published
+the reality is even when they're
+published they're usually not consistent
+so here's just an example of two calls
+to the Twitter API the first one is just
+getting your profile settings you can
+see it gives you a rate limit class
+these are all HTTP headers by the way it
+gives you a class of API identified a
+certain rate limit and a time when that
+rate gets reset you call the same API of
+at a different endpoint the search
+endpoint and you see these feature rate
+limit class for users search has a
+completely different rate limit and a
+completely different reset time and
+Twitter is actually gonna be rolling out
+more of this with one point one and so
+you need to be able to react timing
+dynamically to these rate limits based
+on the factors that they depend on so
+there are a few strategies here when you
+have known rate limits with a fixed time
+window like the one I just showed you
+which means that you have 350 calls per
+hour and at this UNIX timestamp you get
+your new set of calls there is a simple
+way to deal with it which is you just
+keep calling things until you hit the
+rate limit once you hit the rate limit
+you inspect the headers to say when do I
+get more calls you stick that timestamp
+in to Redis everybody looks for it and
+they delay themselves until you get your
+new batch of calls if you need to answer
+to the user how many calls do I have
+left this hour that's a little bit
+harder and you have to use a counter and
+either increment from zero or a
+decrement from your initial rate limit
+until that timestamp passes and then you
+can reset it so we're gonna show you the
+simple solution which is just see if the
+reddest key exists if it does pull the
+time stamp out subtract from now and
+retry with the countdown equal to the
+difference so that you won't retry until
+you get your new batch of tasks if yeah
+if you don't see the key then you try
+the call if you get a rate limit
+exception then presumably your client is
+nice enough to tell you when you are
+getting more calls but if not you need a
+better client and then you same thing
+you just figure out how long it is in
+the future and do a retry with the
+countdown until it happens if you know
+your rate limit but you have a rolling
+time window for instance like 25 calls
+every 2 hours which incidentally is
+Facebook's unpublished rate limit for
+wall to wall posts you can use a rehna
+store to set of timestamps and remove
+any stale ones from the end or the
+beginning that is check the length and
+if the length is less than your max
+number of requests within that window
+you're free to make another request
+otherwise you have to wait until the
+oldest one would have dropped off the
+window in order to make more requests so
+that essentially looks like like this
+where you have your your window you have
+your expiration time based on the
+current time - that window this all Z
+rev-range whatever
+that's all Redis sortedset functions
+they're really useful so you just
+chopped off all the instances of the set
+whose score is lower than the expires
+time and then you do a Z card to find
+out how many there are in the set
+if there are less near max you're free
+to make another call and you add
+yourself to the end with the current
+time value otherwise you determine what
+time stamp for the first one has you
+determine how long that is in the future
+for it to roll off the expires window
+and you retry with that countdown value
+so if you don't know the limit rate
+limit at all you have to be reactive
+instead of proactive
+using something Google calls exponential
+back-off which means that once you hit
+the rate limit then you start
+incrementing a counter that acts as an
+exponent to the number of seconds that
+you should wait to retry so you're
+hammering Google or whoever really hard
+at first they start to rate limit you
+and you back off by 2 4 8 16 32 seconds
+until you reach a maximum ceiling and
+then once you start to get through again
+you can either chop off your your
+counter and go back to zero and open up
+the pipe instantly or you can gradually
+decrement your exponent counter and you
+know kind of soft
+go back into it which you employ depends
+on well how nice you want to be and what
+they'll let you get away with honestly
+so an implementation of that is here you
+get your exponent if there's not an
+exponent or if it's 0 you go ahead and
+make your call otherwise you retry with
+2 to the back-off exponent seconds if
+you try to make recall any rate limited
+you increment this key and you do the
+exact same where you try you'll see a
+common pattern here is if you have
+already been rate limited you implement
+your strategy otherwise you try to make
+the call if you get rate limit there you
+can put the same exact strategy so let's
+talk about failover unfortunately we've
+been using countdown a lot here for
+failover with retries
+but even countdown doesn't do exactly
+what you would expect the celery and
+third parties can again fail in lots of
+interesting ways so you have to make
+sure your fill of our strategy is really
+solid really tight gosh I keep losing
+connection here all right so I would
+love to give you another code
+demonstration here but my presentation
+is already really long some of this gift
+that suffice to say tasks are
+immediately dispatched to a worker Damon
+on retry they're serialized with an ETA
+of when it's safe to actually try that
+task again the worker Damon hangs on to
+it and memory until that ETA is passed
+it does some internal prioritization to
+determine when it should retry the task
+and then it retries the task you would
+think that you could lose the work this
+way except that celery tries really hard
+to make sure you don't on the sauce shut
+down and rabbit has an acknowledgment
+feature so the worker doesn't
+acknowledge that it's working the task
+until it is actually working the task
+which saves you from losing work even if
+you were to kill - nine your celery
+worker Damon but this is still a very
+suboptimal solution because you have
+workers hanging on to tasks that should
+be in the queue and so your
+centralization your decentralization
+strategy your distribution strategy is
+totally thrown out of whack because you
+could have one worker Damon that has a
+whole bunch that is waiting to work and
+another that's starved for tasks at the
+same time and he just is not a good
+solution so the solution to this that
+I've come up with inspired by there's a
+guy who wrote a blog post on this is a
+dead letter exchange is an extension of
+AMQP that you can employ to fake this
+kind of HCA support that rabbit itself
+is missing
+so you have exchanges in AMQP that Q's
+binds to with routing keys and so you
+have a message that that reaches an
+exchange and then it has a routing key
+in the message the exchange says what
+cues do I have that match this routing
+key I'm going to send the message to all
+of those cues and then the queue can do
+what it wants to as far as consumers
+pulling off of it in this case we define
+an ad-hoc queue with our default routing
+key but in a separate exchange that
+queue has a TTL with the amount of time
+that we want to wait for that task
+before it gets actually put into the
+main queue in just an example 60 seconds
+and then we set this property on the
+queue called dead-letter exchange to
+tell it what exchange to dump the
+message into after that TT how has
+passed we don't hook any workers up to
+this queue there are no consumers so all
+the messages stay in the queue for the
+full TTL they expire and when they
+expire they get dumped into this other
+exchange here which is our normal celery
+exchange has the same routing key bound
+to our default queue with workers
+consuming from it and so at the end of
+the TTL it goes to the normal process
+gets consumed by worker just as if it
+were newly sent but all this time the
+message exists on your rapid mq server
+not in your workers and so this is a
+snippet from an overridden apply async
+function from a task subclass that
+dynamically tells celery about a queue
+that is creating with these queue
+arguments of message TTL and dead letter
+exchange you also see this X expires
+here that basically ensures that the
+queue disappears after that number of
+seconds because we don't actually want
+to keep all these queues around we just
+want them temporarily for the purpose of
+dead letter exchange so then you update
+your routing options by telling it route
+it to my countdown exchange with this
+new queue I've just created and then
+celery will dump it into the countdown
+exchange it'll get routed to your queue
+it'll sit there for your TTL which is
+your countdown value and then get dumped
+into the normal celery process so that
+is the alternative to
+using celery's built-in countdown I hope
+to convince us that this is worthy of
+putting in celery itself so again third
+parties can fill in lots of interesting
+ways so you want to figure out all of
+your edge cases and weird things that
+only happen once in a blue moon wrap all
+of those up into a centralized function
+stick it in a task-based class and use
+that base class for all of your
+subclasses that use that same social
+network or third party to make those
+calls
+this can include retry functionality it
+can include you know exception handling
+all the things that make it really hard
+to wrap up your tasks nicely and neatly
+and make sure that it gets done or
+retried you want to handle within a
+single function
+all right so dealing with multiple
+queues why would you want multiple
+queues well you get better control over
+the priority of tasks if you segment
+your queue by task type or by you know
+priority that sort of thing
+you can allow for spikes much better
+because you can distribute your
+resources however you want to you can
+launch worker daemon pools that only
+consume from certain cues rather than
+all the queues and so you have many many
+more routing options available to you if
+you use multiple queues for different
+purposes another interesting use case is
+what I call a triple Q which is when you
+have really low priority work but maybe
+a large volume of it needs to be done
+over a long period of time and we'll
+talk about that more in just a second
+it's really easy to implement multiple
+queues and celery it's just a setting
+and your setting is not pi
+you define the queue name and the
+binding key you can get deeper into this
+if you actually want to use the kombu
+queue object under the covers in the
+AMQP implementation but you don't have
+to
+and then you just launch your celery
+worker daemon with your queues argument
+I think by default it uses all the
+queues but it's always better to be
+explicit so you can tell this worker
+pool use this queue this worker pool use
+all the queues and you know
+however you want to so back to the
+trickle cue so let's say you want to do
+something like keep the avatars fresh
+for all of your you know users have
+Twitter accounts connected you want to
+do this for say hundreds of thousands of
+users but you don't want to starve the
+other things in your queue so you set up
+a cron job you have a cursor persisted
+somewhere like Redis or in your database
+or something that says this is where I
+last left off it's been a minute
+yeah just put five or ten more in the
+queue and work them it's very low
+priority but if you dump all of them at
+once into your queue then you're going
+to starve everything else that wants to
+use that same priority queue and so
+let's say you had Facebook people whose
+avatars you want to update as well you
+dump a hundred thousand Twitter jobs in
+this queue it takes days and days and
+days to work and now your Facebook users
+have days old still avatars because you
+starved one task in favor of another
+making implicit priority where you
+should have been having them equal
+priority by trickling them into the
+queue so I mentioned a cron job just now
+to implement this circular queue this is
+another one of my strong opinions
+I think celery B is a reimplementation
+of the cron wheel that doesn't need to
+exist so don't don't use it it has
+problems one of those problems is that
+it uses a persistence layer either the
+file system of the database to keep
+track of your periodic tasks that can
+get out of sync with your tasks
+especially if you delete tasks and the
+record is still in the database celery
+beet will try to launch tasks that don't
+exist in them will yell at you this is
+bad it's just one more process to manage
+who wants to manage another process
+unless you're an ops guy and you've job
+as managing processes but I'm not I
+don't like managing processes so I like
+the fact that everyone in the world uses
+cron and it's really just not that hard
+there's no need to make a reinvention of
+it there's no need to re-implement it in
+a way that you know could have bugs less
+code is good right so just use cron
+don't use celery beet there's probably
+not actually
+but I'm going to pretend that there is
+for the sake of this Meetup and go right
+into debugging just a few tips when
+you're debugging locally go through the
+effort to set up rabbit Redis set up
+your worker Damon's all this stuff
+I know it's antithetical to the run
+server way of doing things and Django
+Local Development but you really don't
+want to use always eager to run your
+tasks synchronously when you're
+developing locally a lot of these
+strategies have tasks launching tasks
+dependency tree that I mentioned if you
+have like a big network that you're
+importing locally you're going to exceed
+your maximum recursion depth you're
+gonna do other nasty things like
+incidentally launched a task that takes
+a long time to get all worked out and
+you're waiting for your local web page
+to load for minutes and minutes and
+minutes while it's running in the
+background doing these things
+synchronously that's not really designed
+to be done synchronously and it's always
+better to be as close to production as
+possible when you're working your local
+environment because things work more
+like production that way so given that
+you have given up synchronous running of
+tasks
+you now have debugging issues because
+problems are harder to track down you
+can't easily just set a breakpoint
+although you you can set a breakpoint
+ancillary workers but that's another
+problem
+so logging is the answer to these issues
+and it's good for production as well as
+your local environment add more logging
+info level logging doesn't get caught by
+default so you can specify log level and
+info on your worker daemon pools but
+logging is really the edge the central
+tool that you have to debugging a
+distributed system and third when you're
+working with third party dependencies
+unit tests are good but you really want
+a suite of integration tests as well
+there's an idea that you should never be
+mocking anything that is outside of your
+control that you don't control the API
+for and you don't control the API for
+third parties but you mock them anyway
+and I do too because it saves time in
+your test suite and you don't actually
+want to make those calls to live servers
+I understand it's completely reasonable
+but you're not actually testing the full
+loop until you have integration tests
+that actually go out and hit those live
+servers and third parties and make sure
+that the API that you coded
+is actually the API this still exists or
+you know any number of other things that
+might have changed because you're
+mocking out these third party calls a
+few gotchas this is just a basic Python
+thing but if you're using sea level
+blocking like sockets then nothing else
+is going to be able to interrupt your
+code the soft timeout that celery
+provides as a feature won't actually
+won't actually fire you'll get to the
+hard timeout which is you know just like
+a hard process kill and you'll lose
+workers and bad things will happen and
+you won't know why so the easy solution
+for third-party interfaces in particular
+is just a set a timeout on all of your
+socket calls make sure when you're using
+client libraries most of them support
+timeout again if they don't then you
+should probably consider using a
+different library but make sure that you
+implement that always soft timeout
+doesn't automatically retry a task it
+doesn't know whether it should or not so
+you really need to be trying and
+catching that soft timeout if you are
+implementing a soft timeout which I
+recommend to make sure that your
+retrying if you hit it because you know
+most of the time is to do just a network
+being slow your database being slow
+something being slow that's ephemeral
+one's going to go away so you might as
+well retry that task another thing and
+this is an odd design choice that
+celery's part is the default task
+results state is pending so even if
+celery has no record of that result
+whatsoever either it's expired from
+cache or you've deleted it from the
+database or whatever slowly will tell
+you it's pending this is not very useful
+but if you know about it you know it's
+it's okay just know that you know if you
+set a cache expire time on your results
+and you get pending back as an answer
+it's not because it didn't complete it's
+probably because they either completed
+or failed and then got deleted from your
+results store and celery's just being
+helpful and telling you pending so that
+is</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

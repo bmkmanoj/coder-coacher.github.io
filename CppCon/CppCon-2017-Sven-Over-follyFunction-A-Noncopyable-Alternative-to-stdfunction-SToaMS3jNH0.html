@@ -1,0 +1,1045 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Sven Over “folly::Function: A Non-copyable Alternative to std::function” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Sven Over “folly::Function: A Non-copyable Alternative to std::function” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Sven Over “folly::Function: A Non-copyable Alternative to std::function”</b></h2><h5 class="post__date">2017-10-11</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/SToaMS3jNH0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">- Right, so hello everyone.
+I'm Sven, I am a software
+engineer at Facebook London.
+And I'm gonna talk to
+you about folly::Function
+a Non-copyable Alternative
+to std::function,
+which I started working
+on a year and a half ago.
+It's been modified and different issues
+have been fixed by some of my
+Facebook colleagues as well,
+and should be in a pretty good shape now.
+I guess most of you, being
+season C plus plus developers
+know what std::function
+is, have used it before
+so let me start with a tl; dr for you.
+So folly::Function is a
+replacement for std::function
+which, unlike std::function,
+is not copyable,
+so it's a move-only type.
+It is noexcept movable and
+also unlike std::function
+it enforces const correctness.
+I'll go into more detail
+about that, obviously later.
+It's as fast or faster than std::function
+in terms of execution speed
+and also compile speed
+on the relevant platforms
+where we tested it.
+It's been now in
+production use at Facebook
+for about 18 months so I can tell you
+a little bit about the
+experiences we've made
+and if you want to have a look at it,
+you can check it out.
+It's part of the folly library,
+which is Facebook's basically
+collection of useful things
+that we put together a library
+which you can get at github.
+Right, in this talk,
+I shall tell you a little bit
+of a theoretical introduction
+going from callable types
+to function wrappers.
+But then I will tell you specifically
+about the problems we
+had using std::function,
+which also led to the design
+decisions for folly:Function
+so I tell you about that.
+And I will just tell you more about
+what our experiences were whilst changing
+from one to the other,
+and during like I said
+the regular production
+use that we have seen now.
+Okay, so this theoretical introduction,
+Callable Types in C++
+they include function pointers
+or function references,
+obviously lambdas and
+any classes or structs
+that you define yourself if you define
+an invocation operator.
+If you happen to use a lambda
+that doesn't catch any data,
+or if you happen to define
+a member function off your
+structure class aesthetic,
+then those can all be cast
+into function pointers
+and they're completely stateless,
+which means that essentially
+just appoint to the code
+that the compiler generated.
+But often, you want to
+pass a little bit of data,
+a little bit of context
+with your callable object,
+so that would be, in the case of lambda,
+when you capture some
+data and in the codemark
+that you define you have
+access to that data.
+Or, in your struct or class
+when you define member functions
+or the invocational operator.
+As soon as it's non-static,
+the code in here will have
+access to all the states
+of this class object.
+You can go one step further,
+and define your lamba as mutable,
+or your member function as non-const.
+And in that case you only have access
+at the state in the sense
+that you can look at it,
+you can also mutate it.
+Alright, so what was this useful for?
+So passing callables
+generally is used for,
+this is like a stupid example,
+if you were to have a function
+work that takes an integer
+and returns a string
+and you want to call an
+asynchronous version of that,
+then you would probably
+code it in the sense
+that it takes the input parameters,
+and instead of returning
+the result right now,
+it will later invoke a little
+function that you pass it
+with a result when it has that.
+The problem here when
+you use this as your API,
+like I said, like a function
+point is very much stateless.
+So you give it a function process result,
+but that function will
+later only have access
+to like globally defined data variables.
+And usually when you do this,
+you want to pass a little
+bit of context with it
+so that the processResults
+function later knows
+what piece of work was getting the results
+from something like that.
+So, a function point is not the best thing
+to use in this API.
+If you work with older APIs,
+you sometimes see that you would
+pass to work asynchronously
+or to a void point that later
+then gets passed to your
+processResult function, which
+is workaround around that.
+But void pointers are not good there,
+they are not type safe and all that.
+So much better, we use a function wrapper.
+So instead of declaring
+your process results
+parameters as a function point,
+you use a function wrapper clause,
+which is a template clause.
+And the template signatures
+only the signature
+of the function, or more generally,
+the callable object that you need.
+So anything that takes a
+standard string as an argument,
+and returns void in this case,
+should be something that you can put
+into this function wrapper
+to pass it to your API.
+And I give you here like
+a super simplified version
+how you would implement
+such a function wrapper.
+A simplified and incomplete.
+But the idea is that your function wrapper
+will have to store some function pointers,
+and why the type of the
+function wrapper itself
+doesn't say yet which kind of
+object you later wrap in it,
+because it only gives you
+the function signature.
+This is called type erasure, basically.
+The magic happens when you
+define a templated construction,
+constructors in the assignment operators
+that can take any type
+and then extenuate some
+little bit of static
+code that can later run,
+take a pointer to the
+state that you store,
+probably on the heap or somewhere else,
+and this function wrapper
+to execute your function.
+So it will populate a
+function point of execution
+in this data structure.
+And you probably need more,
+you probably also need a function pointer
+to something that can
+later on destroy the object
+when your function wrapper gets destroyed.
+Okay, so this is super simplified,
+and this obviously exists in
+a more fleshed out version.
+And it's called std::function,
+so that's there already.
+What does the std::function look like?
+On our standard platform,
+the GCC standard library
+on x86_64 usually is 48 bytes.
+And 16 of those bytes are used
+for two function pointers,
+similar to what I just shown you.
+It starts the function
+pointer for executing
+or invoking your object,
+and it's also second function point for
+the management function
+that it extenuates which
+can copy your object or can
+delete your object, and so on.
+And all the remaining space, 32 bytes,
+can be used to store your actual object
+in the fact function wrapper itself.
+If it fits into 32 bytes,
+you can avoid another heap allocation,
+and just store it in place.
+If it doesn't fit in there, obviously,
+send function will make a heap allocation
+and only store the pointer
+to the object on the heap
+inside this space as well.
+As a matter of fact,
+std::function is copyable,
+and when you make a
+copy of a std::function,
+it makes a copy of the
+wrapped object as well.
+And as a matter of fact,
+it's also noexcept
+moveable, which will become,
+or the relevance of which
+will become clear in a moment.
+Okay, so typical use cases.
+I'm working at Facebook,
+and we have a large codebase
+using C++, so I can
+look inside and see like
+what are typical use
+cases as how we use this.
+And the two things that
+I sort of see everywhere,
+the two classes of use cases,
+is either passing
+std::function as a little task
+to libraries for
+execution at a later time,
+or in a different thread
+or something like this.
+And the other thing is
+to store those tasks
+for later execution, for instance,
+in the implementation of those libraries.
+In either case, you
+pass those tasks around,
+and typically they are
+only executed once, anyway,
+so there's very little reason why you need
+the std::function thing
+to be copyable for us.
+As a matter of fact,
+in those certain cases,
+there's never the need
+to make a copy of them.
+Okay, I want to give you
+a little bit more detailed
+examples here what it looks like.
+So, in this folly library,
+which is open source
+so we can look at it
+and use it if you like,
+we have an abstract base
+class in an interface
+called folly::Executor, which is basically
+interface defining things that
+can execute tasks for you.
+So implementation could
+be a CPU thread pool,
+so you pass tasks to this executor,
+and the thread will execute
+it when a thread is available.
+And what we use is std::function void
+to pass those tasks around
+because folly executor
+is an abstract base class
+and there's at method
+that you use to edit tasks
+is virtual, we can't use templates,
+we have to use a specific type.
+So the type that we use obviously,
+is or was std::function.
+To illustrate the other use case
+in folly we also have
+an implementation of the
+future and promise pattern,
+which you also know from
+the standard library,
+but ours is a little bit more fleshed out
+and feature rich and we couldn't wait,
+or didn't want to wait,
+until the standard library
+offers this features.
+As unlike the standard library,
+our future also has a .then method,
+where you can give it a little task
+that will be executed when your
+future actually has a value.
+And the result of the .then
+returns a future again,
+for the result of your little lambda,
+so you can change them and all that,
+it's super useful and we
+use this a lot, obviously.
+Again, the implementation
+uses std::function
+to store the call back
+because when you call .then,
+the future typically
+doesn't have a value yet,
+so we store the callback and later
+when the future has a value,
+can execute your little task.
+So that's all nice and well,
+what is the problem with
+std::function for us?
+So the biggest problem was
+that we often wanted to use
+move-only types and capture
+them in those little tasks.
+So typically, you would
+like to be able to store
+a unique_ptr or a promise of
+this future and promise pattern
+in these little tasks to make use of them.
+The problem here is that
+when you store non-copyable
+objects in your lambda,
+the lambda itself becomes non-copyable,
+and now this doesn't compile,
+because this gets eventually
+converted into a std::function,
+and std::function only
+works with copyable objects.
+So this will get you the compiler error.
+Which is bad, and people still want to do
+what they wanted to do
+so they find workarounds.
+One workaround was, this is the clean one,
+you just move your
+MoveOnly object on the heap
+and use a shared_prt to refer to it.
+Shared_ptrs are copyable, obviously,
+even if your object
+itself wasn't copyable,
+so you can copy the shared_prt
+in your lambda, use that.
+That works, that is fine to some degree,
+but it comes with overheads.
+So it impacts performance because A,
+now you have always
+extra memory allocations
+to store every single object on the heap,
+and secondly as you pass
+these things around,
+you have to increment and
+decrement atomic reference counts,
+which can also mess with
+your caching and all this,
+so this can have performance overhead,
+because this sometimes we use in code
+that executes very often
+and has to be fast.
+So people came up with
+a different workaround,
+and this is a bit nasty.
+So there's a class in folly as well,
+so like I said you can
+look at it if you want,
+it's called MoveWrapper,
+it's a template class.
+And basically it's a wrapper
+around an object of type T,
+and the MoveWrapper implements
+the copy constructor
+by moving the contained object.
+This is bad, because it
+breaks copy semantics.
+Making a copy of a
+MoveWrapper doesn't really
+give you too difficult objects afterwards,
+but one valid object
+that received the object,
+and one left over empty shell.
+You can think of folly::MoveWrapper
+if you were to put a unique
+point into MoveWrapper,
+that's a essentially
+the old std::auto_ptr,
+and everyone loved that, so
+that must be a good idea, right?
+So if you have any code that
+makes copies of objects,
+and then assumes that it has
+two valid objects afterwards,
+it just breaks when you
+pass these things around.
+On the other hand, this doesn't
+come with the performance
+overhead of the share pointer solution,
+so if you happen to know
+that your implementation
+ever does that, it never
+has to make copies,
+then that kind of works.
+But the compiler can't help
+you enforce these things.
+So that point, we thought like,
+okay, we need a different function wrapper
+to solve those problems.
+We requiring that all callable objects
+that you store in a function wrapper
+to be copyable is painful for us.
+And for most of our use cases,
+it's not helpful, it's not useful,
+because we never make those copies.
+And if we did, it breaks
+anyway now our code base
+because people use this
+move wrapper thing.
+So basically what you want
+the code from earlier,
+you just want this to work.
+This should compile and it
+should behave as expected.
+Okay, std::function problem.
+There's another problem
+that wasn't maybe super
+obvious for us, but while we're at it,
+std::function also has a
+lax idea of const correctness.
+So std::function is a function wrapper,
+and std::function itself
+has an invocation operator,
+and that is declared const, which means,
+even if you only have a const reference
+for your std::function,
+you can invoke your object.
+But it's happy with taking objects
+that have to have non-const
+references to be caused,
+so something that you take
+to state when you call it,
+you just put it in a std::function
+and now it looks like
+something that you can call
+without it mutating in state.
+This is not necessarily bad itself,
+the problem is just like the
+compiler can't help you anymore
+when you do this wrong.
+Normally const correctness
+help you enforce...
+Or enforcing const correctness
+helps you find those
+bugs and avoid those bugs.
+The compiler can't help you now,
+you have to make sure you
+write all the code correct.
+So, here comes folly::function.
+Folly::function, okay, how is it designed?
+Obviously, non-copyable.
+Why I say obviously?
+So, the thing is, what we wanted it
+we want it to be able to
+store non-copyable callables.
+But we also want to do this without like
+bad performance impact.
+So, it shouldn't internally
+do the standard checkpoint
+or trick because I said that
+needs to extra memory locations
+and it's expensive and all that.
+And also it should
+maintain value semantics.
+You should think of it
+as a thing containing
+and owning an object,
+and as you pass it
+around you pass ownership
+of that around as well.
+So basically what that means,
+that the folly::function,
+the wrap object itself,
+must also be non-copyable.
+But that's fine, because we
+hardly ever want to copy it.
+The other decision we made is
+it should be noexcept movable.
+Which is kind of important
+for non-copyable types,
+because you want to be
+able to use those types
+with STL containers and
+say instead of a vector,
+if it has to reallocate and
+move all your objects around,
+it will only use move symantics
+if move is guaranteed not to throw,
+because it will be problem
+if in the middle it throws
+and then what do you do?
+Move the rest back, that
+might throw as well.
+No, the STL containers would
+copy objects if they're not
+noexcept movable, which
+obviously is a problem
+if the object is not copyable.
+So it's kind of like,
+if you think about it,
+non-copyable types really
+have to be noexcept movable.
+And the other thing is that
+if you think about it,
+we expect many of our
+own classes to have
+folly::function members,
+and if folly::function
+wasn't noexcept movable
+then it would be like kind of contagious,
+all those other data structures
+that contain folly::function
+would become no except movable.
+And we rather want to live in a world
+where roughly everything
+is noexcept movable,
+so yeah, that's what we decided for that.
+We also decide to make a const correct,
+and like I said earlier,
+std::function kind of
+makes a mistake if you will
+that it accepts functions
+that mutate their state
+but appears as a thing that
+does not mutate its state.
+And now you can choose whether
+you should go the way where the
+state should be mutate-able,
+then you can accept anything
+but you'll also need a non-const reference
+of your function wrapper
+to be able to call it,
+or you go the other way and
+say everything is const,
+we only accept callables that
+do not mutate their state
+when we call them.
+And then it's fine that the
+folly::function also called
+as a const state.
+Those are the two options,
+and we basically have both of them.
+So it comes in two flavors,
+the folly::function template,
+which takes the function signature here.
+You can add const at the end,
+and then it's the const behavior,
+otherwise it's the mutable behavior.
+Implementation details,
+comparing with what I told you
+what std::function earlier.
+Folly::function objects
+are a little bit larger.
+They occupy 64 bytes.
+The implementations
+actually pretty similar
+to how std::function works.
+So folly::function also
+contains two function pointers,
+one that calls your actual object,
+and the other one that
+call to management function
+for moving your object,
+deleting your object, et cetera.
+And then there's now 48 bytes
+left for in place storage.
+The reason why we made
+it a little bit bigger,
+I mean this is a trade off.
+The larger you make the wrapper,
+the more objects you can store in line
+without extra memory allocations.
+But the larger you make it,
+the more memory you just waste if
+you end up storing small objects in it.
+So it's kind of like
+you can pick your size,
+and we just came down on 64 bytes because
+it aligns nicely with cache lines
+on our standard architecture.
+I think for a moment we also thought
+64 bytes is good because then we can store
+a std::function object
+if we have those still
+lying around in our code base.
+We can wrap this here without
+an extra memory allocation.
+However, that argument
+doesn't really work,
+because like I said earlier std::function
+is not noexcept movable,
+and in order to have
+folly::function no except movable
+we have to put all objects
+that are not noexcept movable
+on the heap because the
+pointer to the heap object
+we can always move that
+without throwing exceptions,
+but we might not be able
+to move the object itself.
+Speaking of wrapping one
+in the other of those two,
+you can absolutely wrap
+a std::function object
+in a folly::function, but
+not the other way around.
+The reason is just the
+copyability requirements.
+Because folly::function aren't copyable,
+you can't store it in the std::function.
+Other way around works fine,
+which is a good thing as
+you migrate your code base
+and your APIs, it's mostly
+kind of backwards compatible,
+if you change functions
+or take folly::functions,
+they can still accept
+std::function past them.
+Okay, and then we migrated
+to folly::function.
+It works mostly as a drop-in
+replacement for std::function.
+The places where it doesn't work
+as a simple drop-in replacement
+are those where you
+actually need copyability
+of your function wrapper.
+Those cases are surprisingly rare,
+I really didn't find many of those.
+The other thing is if you rely on this lax
+const correctness
+behavior of std::function,
+then you might run into problems
+when you switch to folly::function,
+but I think that is a good thing because
+if your code only works
+when const correctness
+is not enforced then that's kind of a bug,
+and should be fixed anyway.
+What we also learned is
+of those two varients, the
+mutable and the const variant
+of folly::function,
+in most places we need the mutable one.
+Like all const folly::function
+is used occasionally,
+but not very often.
+And what I also saw when
+I was migrating APIs
+that we often passed
+std::function as const references,
+which led to many sort
+of accidental copies
+of std::function.
+And what you have to do in order to
+make it work with folly::function,
+you have to pass them either
+as non-const references,
+or as available references.
+Most of the times, available
+reference is because
+you kind of move them
+down your API layers.
+This basically applies only to
+the mutable variant of folly::function.
+If you have the const
+variant of folly::function,
+then you can also pass
+it as a const reference.
+At least, if you want
+to execute the function
+in the function that
+you pass it to, anyway.
+So, migration has happened in many places.
+The adoption at Facebook is
+such that in the examples
+that I showed you earlier
+for the APIs, I showed you
+the folly::future example,
+that is not based on folly::function,
+and that was an instant win.
+Because no usercode had to change,
+but from that time on people could just
+move capture data in the lambdas,
+move only types as well,
+and it just worked.
+It's compiled and it works as expected.
+Folly::function also
+replaced std::function
+for the other example,
+the folly::Executor,
+the space class way can pass tasks
+to some implementations
+that execute the task later.
+That was a little bit more work because
+being a base class we have a
+good number of implementations.
+So you had to go through
+all the implementations
+and see if you could just flip the type,
+whether the implementation
+would still work,
+or whether copies were made.
+Which usually were just accidental copies,
+it was just copies where people
+forget to write standard move,
+not copies they made
+because they actually wanted
+to have a copy.
+And in those cases where the migration
+was actually non-trivial,
+it usually pointed to
+other problems in the code.
+For us, especially when
+you actually make copies
+of objects that was a problem because
+other parts of the code base
+never expected that to happen,
+so they used this rend
+folly move wrapper thing.
+But after a while, it wasn't
+that difficult, really.
+Now we have both, we have std::function,
+we have folly::function,
+and both can be useful.
+So, when you have functions,
+when you have code that actually wants
+to get a function pass and will later
+have to make copies of that,
+std::function is exactly what you need.
+I would say in pretty
+much every other case,
+folly::function is better because
+it's less restrictive for the user.
+If you don't need to make copies,
+don't force your user to
+give you something copyable.
+And then the thing for our code base,
+that might not be the
+same problem for everyone,
+but because we have lifts
+along with std::functions
+and the problems and we
+made these workarounds
+and we used folly::MoveWrapper
+as a workaround,
+we have this folly::MoveWrapper now
+in many places in the code base
+that makes it difficult
+to use std::function
+for its intended purpose,
+because if you use std::function with the
+intention to actually make copies,
+you might still have people
+passing you move wrapper objects
+and then copies are not possible at all.
+But that's like, maybe, a problem
+specific to our code base.
+Alright, I should show
+you some benchmarks.
+So I said it was as fast or better
+in runtime speed as folly::function.
+So this is a benchmark,
+the benchmark code itself is also part
+of the folly repository,
+so when you check it out on github
+you can rerun this yourself.
+And this is only a subset of
+the benchmark that it runs.
+But roughly speaking the upper half
+what is compared here
+is invoking a function,
+invoking a fn_ptr,
+invoking a std_function,
+invoking a folly_function.
+Standard memory, if you're interested.
+And basically, the
+important thing is just...
+Ah, wrong button.
+Is just this here,
+invoking a std::function
+takes 2.3 nanosecond.
+Invoking a folly::function
+takes two nanoseconds.
+So it's even slightly better.
+And then there's another benchmark
+which first creates one of those objects
+and then invokes it.
+So creating a function
+pointer doesn't really
+take any time.
+So, I guess that's probably
+a measurement error here,
+that it's slightly faster.
+But then creating a std::function object,
+and then afterwards invoking it,
+ah there we are, takes three nanoseconds.
+I was off by one line.
+Takes three nanoseconds for std::function,
+and for folly::function, 2.8 nanoseconds.
+So it's not really that
+important that it's faster,
+it was only important for us that we don't
+invent a performance regression,
+and that's obviously not the case.
+Alright, conclusions, all the
+things that I've said before.
+Folly::function is mostly
+drop-in replacement
+for std::function.
+It lifts the requirement for copyability
+of your wrapped objects.
+The migration to folly::function
+is usually fairly easy,
+makes the code look nicer in many places.
+It enforces const
+correctness, which is good,
+because the compiler
+can help you spot bugs.
+It's as fast or better as
+std::function at run-time.
+And after 18 months we
+are pretty happy, I guess,
+at Facebook with it.
+With that, I thank you all for coming,
+and I think we probably
+have a few minutes left
+for questions if there are any.
+(audience applauds)
+- [Man] I have one question about const.
+What does const mean for a callback?
+Does it mean that the callback
+objects itself is const?
+- So, const.
+I don't know if this is now
+more confusing, or helpful,
+but it's basically the const
+that you would put here
+in your own function.
+So const means that you
+can't mutate the state
+that you have packaged
+with your callable object.
+So in a lambda, when
+you capture some data,
+you can't change that data
+unless you declare the lambda mutable,
+then you allow it.
+And the mutable lambda is not const,
+can't be wrapped as a const thing.
+Whereas, the non-mutable
+lambda is const, and it's fine.
+- [Man] So it's basically the object
+with the operator callback.
+- Yes, basically const means that
+your object can be invoked
+from a const reference.
+If it's non-const, you
+need a non-const reference
+to the object to actually call it.
+- [Man] Hi, from what I
+see from your migration
+from std::function to folly::function,
+you don't have any API
+problems at Facebook?
+Or how did you manage that?
+- I don't want to say zero,
+there's always the odd case where
+there's like a little chain of things
+where you see you don't
+have to change one API,
+but like sort of a
+dependency chain of APIs,
+and at some point it
+gets maybe complicated.
+But like in general,
+it turned out to be easier than I thought,
+as in general in most
+places it was a fairly
+one to one replacement,
+and the most things I had
+to change, for examples,
+implementors of the executors class were
+the people were not
+careful and making copies
+of the task even though
+they didn't have to,
+just because they didn't
+write standard move,
+and that kind of thing so,
+just swapping the type broke the build,
+but that was super easy to fix.
+And in the few cases where
+it wasn't trivial to fix,
+it was really pointing
+to an underlying problem,
+I would say.
+- [Man] I think the
+question was about binary--
+- [Man] Yes, API--
+- Oh, sorry.
+So, say that again then.
+- [Man] So, my question was,
+given the way you migrated
+from those two functions
+in folly::function, it appears
+that you don't have any
+API problems so I'm just wondering
+how did you feel that you deploy yourself?
+- Yeah, that's more like a workflow thing,
+we basically statically link everything
+and build everything
+from current masters, so,
+it didn't have to be binary compatible.
+Good point, I never thought about that,
+because working at Facebook,
+and linking everything
+statically I never had to,
+so yeah, thanks for the question.
+- [Man] Just as an implementation detail,
+I wondered what the management
+function pointer was for
+inside the wrapper.
+- Okay, so this is somewhat
+an optimization thing as well.
+So basically, the code that
+the compiler has to instantiate
+separately for every type
+that you want to wrap in it,
+is obviously invoking your object,
+but then in std::function
+you have to be able
+to make a copy of that object
+when the std::function itself is copied.
+You have to be able to
+destroy the object when
+the std::function is destroyed.
+Std::function also has
+a couple of other things
+that we never needed like
+getting the type idea from the wrap type
+and things like this.
+And they basically bundled
+everything that is not invocation
+into one function so that
+you don't have to store
+that many function pointers in it.
+And it's like, the trade off is like,
+okay invocation is the standard use case,
+that should be fast,
+so we have a dedicated
+function pointer in the object
+to quickly execute the function.
+Everything else, operations
+that don't happen so often.
+So we bundled them all into one function
+so we only have to store
+one function pointer,
+if that makes sense.
+(Sven laughs)
+Obviously not.
+- [Man] I guess I don't understand
+where that function comes from.
+Is that another argument that you'd added?
+- No, so, think of it...
+In the implementation of
+the assignment operator
+and the constructor
+that can take any type.
+Basically there the compiler instantiates
+some other templated static functions,
+and stores their function pointers.
+So it's the compiler
+doing the work for you
+for every type that you have a pass
+to those function wrappers.
+I get a sessions over sign.
+There was like half a question,
+is it really quick?
+- [Man] I wanted to know if you
+used like multiple functions
+or you have this
+Frankenstein function that
+you store only the one function pointer,
+and the strength of the
+Frankenstein function.
+- So you mean this management function?
+- [Man] Yeah, management function.
+- So the point is...
+The question is whether folly::function
+does the same trick with
+this bundled function
+that does various management
+functions, and yes.
+The implementation is fairly
+similar to std::function.
+It's really just the decisions.
+You have to decide whether
+your type is copyable or not,
+and we made a different decision.
+But we kind of use all the same tricks
+of std::function in the
+implementation otherwise.
+Alright, sessions over,
+thank you all very much for coming.
+(audience applauds)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

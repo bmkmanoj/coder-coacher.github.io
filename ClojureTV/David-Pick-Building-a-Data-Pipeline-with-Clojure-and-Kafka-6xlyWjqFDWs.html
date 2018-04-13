@@ -1,0 +1,1070 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>David Pick - Building a Data Pipeline with Clojure and Kafka | Coder Coacher - Coaching Coders</title><meta content="David Pick - Building a Data Pipeline with Clojure and Kafka - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/ClojureTV/">ClojureTV</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>David Pick - Building a Data Pipeline with Clojure and Kafka</b></h2><h5 class="post__date">2014-11-22</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/6xlyWjqFDWs" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">thanks Alex I wanted to start by just
+giving a special thanks to the closure
+contre organizers when I was in high
+school we had a Model UN team and I was
+always really jealous that they got to
+go to DC and I finally feel like I've
+got to live that experience so yeah like
+Alex mentioned my name is David Pik
+I'm the technical lead for brain trees
+data engineering team so we work on
+everything from our data warehouse
+solution to our search and reporting
+infrastructure and a little while ago we
+were trying to figure out how to best
+get data into that system but before I
+get into that I want to talk a little
+bit about brain tree brain trees
+payments company and we try to make it
+as easy as possible for anybody to get
+money online so whether that means
+somebody needs to give you their credit
+card number their PayPal Bitcoin
+whatever that may be we try to make it
+as easy as possible for you so you can
+get back to building your actual
+business and while you may not have
+heard of us you probably have heard of
+some of our clients like github Stack
+Overflow uber Airbnb so yeah if you're
+trying to take money online feel free to
+check us out so before I get into
+talking about a data pipeline I want to
+talk a little bit about the problems we
+were trying to solve and then go from
+there
+and by far the the first and one of the
+biggest ones we had was trying to figure
+out how to get more data about boy bands
+we we really like boy bands of Braintree
+but in actuality we use a tool called
+Amazon redshift is our data warehouse
+and this just happens to be the first
+picture you'll find on Flickr when you
+search for redshift so the the problem
+we were running into was that keeping
+your data warehouse in sync with your
+primary databases is generally really
+difficult and that tends to be because
+of a few reasons the first and foremost
+being that deletes in your primary
+database when you have some sort of
+batch job the way so the way Braintree
+gets data into our data warehouse is
+every few hours we spin up a job that
+goes and looks at our database and
+because we're a rail shop we happen to
+have
+created at and updated add on every
+table and we can look at the updated at
+and say was this row change since the
+last time I ran my ETL job and if so
+give me that data and I'll ship it off
+to the data warehouse and that's a big
+arduous process we generate massive CSVs
+and upload them to s3 and then into
+redshift because that's how you get data
+in and deletes are really hard to keep
+track of when you have that kind of job
+basically if you go into your database
+and you delete a row and then your ETL
+job runs later there's no indication
+that that delete ever actually happened
+so unless you're using de Tomic it's
+really hard to figure that out and that
+ended up being a really significant
+issue for us in our data warehouse
+because we would go and we would upload
+data into redshift and then later we
+would go delete it in our primary
+application and it would hang out in red
+chefs so our data analysts would go and
+say my numbers look a little funny this
+you know this time I'm running my
+analytics and we would have to say well
+that data is actually gone in our data
+warehouse and we had no way of knowing
+it so you guys kind of got screwed sorry
+and in addition to that while we are
+able to keep track of what changed using
+those created and updated at columns
+it's really not great to have to
+maintain extra columns in our database
+just to make our ETL jobs work and
+that's not necessarily the case but we
+do have some immutable tables where we
+were just sticking created at and
+updated at on them for whatever reason
+just because like it's the rails default
+and it's really like it's extra space
+that's taking up in our database and
+we're starting to run into data size
+concerns and so those were the first
+things to start going so we had to
+figure out a way to continue to make our
+ETL process work without having any
+indication of what changed just by
+looking at a specific table in our
+database and then along with that those
+batch updates that I was talking about
+that work while we have created that and
+updated that are really slow it and
+totally dependent on how much data
+you've inserted since the last time you
+ran so you have no idea how long they'll
+take unless you go do some analysis
+about how much data you've inserted
+your database since the last time you
+ran your ETL job so a lot of times we
+would have analysts who would come to us
+and say you know people are asking us to
+give us numbers about you know the last
+day's transactions that we processed and
+we'll have to say well we did a lot of
+traffic yesterday so it's gonna take you
+know it's gonna take six more hours and
+we thought it was to get all our data up
+into redshift and so sorry they're gonna
+have to wait for their data which is
+it's not a great situation to be in and
+so this you know figuring out the best
+way to get data into our data
+warehousing keep it in perfect sync with
+our primary databases ended up being a
+pretty significant concern for us and in
+addition to our data warehouse the other
+tool that my team is responsible for is
+our search and reporting infrastructure
+so if you're a Braintree merchant you've
+probably seen this screen if you've ever
+logged into our control panel but
+basically what this lets you do is run a
+search over all of your data that you've
+ever had with Braintree so this is all
+of your transaction data and if you've
+been a merchant with Braintree you've
+probably got a lot of data if you've
+been there six or seven years this is
+every transaction you've ever run and we
+allow you to facet on a fair number of
+things you can click a bunch of
+different checkboxes the the drop-down
+then there's four I think 15 or 20
+different text fields so you can say
+customer name customer address stuff
+anything like that we'll do partial
+matches for search and you can do any
+any search over any date date range and
+while that's a really attractive
+prospect for merchants the system we
+first implemented when Braintree was
+really small and worked was entirely
+powered by sequel so you would click all
+those check boxes fill out some text
+fields and we would generate a really
+massive sequel blob and run that against
+our primary database and that turns out
+is not really fast it's really slow it
+to get even somewhat medium sized data
+sets will take 30 or 40 seconds your
+search will just spin there for a while
+and we actually don't have any way of
+asynchronously processing that we did or
+we didn't so we we didn't have a way for
+you to run a search and then us to run
+it in the background and just sort of
+let you know when you're
+was ready for you to go get data and so
+any search you ran had to finish in the
+50 seconds we we let a request run
+before we time it out so in order to
+combat that to make sure that the data
+would always be able to be returned to
+the client when somebody ran a search
+like this we actually just applied an
+arbitrary limit to our searches so you
+can only get back a limited set of data
+so if you're a small merchant this is
+somewhat okay it usually works if you're
+a big merchant your requests probably
+start timeing out and you call our
+support team and say what do I do now
+and our support team says well you
+should probably limit the scope of your
+search so if you're trying to get all
+your data for a month
+we say run four searches one for each
+week of the month and the bigger you get
+the smaller your search range has to get
+and that's not great to tell a merchant
+when they're trying to get their
+financial data it's really not what we
+want to do it's not the kind of
+interface we'd like to provide to our
+systems so we knew that this was a
+really big problem that we needed to fix
+water here so as we were talking about
+this we were sitting down and somebody
+said wouldn't it be awesome if we could
+just happen to Postgres as changelog
+that it uses for replication and then
+use that data to go into any one of our
+external systems and that ends up being
+a really powerful concept because what
+you're doing is you're essentially
+creating what you would do in this
+situation is you could essentially
+create materialized views that normally
+would live in your database and be
+forced to continue to be in Postgres but
+take your data get it out of your
+database and generate a materialized
+view in another system so redshift and
+elasticsearch now just become
+materialized views on top of your
+database that are always up to date and
+what we were thinking about this system
+thinking oh this would be really cool
+we realized that pretty much all of our
+external dependencies go down
+turns out red shift goes down probably
+every other day
+we'll just restart your instance without
+telling you sometimes one of your notes
+like the the machine dies as machines
+are apt to do and red chip goes away for
+a while and eventually it comes back
+with all of your data but it's probably
+pretty slow for a little while or it
+just stops accepting requests entirely
+and so we knew that our system had to be
+resilient to that if a change came
+through our question marks it had to sit
+there until redshift or elasticsearch
+was ready to accept it elasticsearch has
+very similar issues we know from a first
+talk it's not the most reliable system
+so we didn't want to treat elasticsearch
+as a primary source of truth database we
+didn't want to assume that once data was
+there it was going to stay there and if
+the cluster split-brain that rights were
+going to end up in the right place so we
+knew that we had to be able to allow for
+downtime of these back-end services and
+that in the event of down timing these
+back-end services we were able to get
+our data into the like continue to hold
+on to that data and not cause issues in
+the database and in addition to that we
+knew that if this back-end system this
+intermediary messaging system were to go
+down we also don't want to cause issues
+for our primary database because the
+worst thing we can ever do is have our
+data warehouse cause issues for our
+primary database and make it so that our
+merchants can't accept transactions we
+we want to continue accepting
+transactions no matter like in the event
+of catastrophic failure we should always
+try to keep continuing to accept
+transactions because if we don't our
+merchants can't get money from their
+customers and that's not great it's
+really not a great situation to be in so
+we're talking about this one day and I
+was talking to another guy on my team
+named Dave turns out that Dave's at
+Braintree really liked data engineering
+I don't know why it might be the
+alliteration but there's three of us on
+a team of five
+so and he goes well we can't really tap
+into the Postgres changelog that it uses
+for replication it's not something you
+can do until it till another few
+Postgres versions and we won't be there
+for years but there is this thing that
+we've used before called blondest
+replication and Landis is a trigger
+based replication system it's built on
+top of a pgq on top of pgq which stands
+for Postgres q + PG q was designed to
+basically do what we want
+asynchronous processing of live
+transactions so basically you can at
+commit time for a transaction you can
+run some arbitrary code and insert an
+event into a queue in your database and
+so what we did is we wrote a database
+trigger which is the same way Landis
+works that fires on every insert update
+or delete and when that trigger fires it
+inserts the what changed into this queue
+and we can consume that on the backend
+and use that to power our external
+systems and that gets us some really
+cool benefits you get the same acid
+semantics you get with Postgres so if
+your transaction doesn't commit your
+insert into PG q doesn't happen either
+and in addition to that it's extremely
+fast we know that our rails applications
+all have a persistent connection to our
+database and it's going to be fast
+because if it's not fast we have bigger
+problems than just our back-end system
+our rails application is going to have
+issues and we monitor that extremely
+closely so that's really beneficial from
+us because we don't want to make like
+creating a transaction take any more
+time than it would have before we for
+any external dependency cool
+so our system looks a little bit like
+this now we're running pgq inside of the
+database and some things that are
+consuming it and writing to redshift and
+elasticsearch and maybe any other system
+that we have but we still actually have
+an issue that we have we talked about
+before and that's what happens when one
+of those back-end systems goes down like
+they're at
+to do so if elasticsearch goes down and
+pgq actually only persists those events
+for about for an hour and a half and
+that's because like I said before pgq is
+designed to make itself fail before
+causing failures in the database so if
+the data size grows too big and pgq
+it'll just start throwing messages out
+after either a certain amount after a
+certain amount of time or after every
+consumer has seen those messages so we
+don't end up filling up discs on our
+database box and so that means if
+redshift goes down for an hour we start
+to lose messages and that's been known
+to happen so we in the middle of the
+night generally rich it's generally
+pretty good in the day but we we don't
+want to take that chance an hour really
+isn't that long if something goes wrong
+maybe the code that's consuming pgq and
+writing to the system has issues and we
+need to figure it out an hour really
+isn't that long and we need to figure
+out exactly what's going on and make
+sure we still don't can lose those
+events so we were talking about this and
+it turns out there's another system that
+had some pretty attractive properties
+for us and that was Apaches Kafka and if
+you guys ever try to find a picture of
+Kafka for a presentation it turns out
+it's really difficult to find one that
+isn't disturbing so this is the best I
+could come up with but Kafka is a
+pub/sub system it works from the outside
+it looks like it works basically like
+every other pub/sub system you've ever
+seen you have producers you have
+consumers and there's a Kafka cluster
+with multiple nodes if one node goes
+down you don't lose any data they fails
+over to another node things are okay and
+then there's topics inside of the
+cluster so it's basically like every
+other pub/sub system you have with
+probably less stuff it doesn't keep
+track of who saw a message it doesn't
+keep track of acts or writes Kafka takes
+messages and then your consumer can get
+them out by saying give me a message at
+a specific offset and the way Kafka
+topics work is that they're actually
+split up into different partitions and
+you
+determine what partition you want to
+write a key to when you write to that
+topic and the benefit of those
+partitions is that every partition is
+guaranteed to be on a single machine and
+the ordering guarantees that Kafka
+provides is that if you insert a message
+into a single partition it's always
+going to come out in the same order you
+inserted but if you're reading from a
+single topic it is not guaranteed that
+you'll get messages out in the correct
+order you may get messages from
+partition one before partition zero
+despite partition zero having written
+first so that ends up being really
+important later but the other important
+thing to know about Kafka is that these
+topics because they're just raw data
+we're not trying to keep track of acts
+or anything any sort of that metadata
+they get immediately written to disk and
+kept for however long you want so what
+you can do with Kafka is you can say I
+want to keep my data for a month so
+every message you write to Kafka will
+stay there until it's been there for a
+month and then it'll fall off the back
+end and you you can specify how long you
+want to keep data yourself and so what
+you get is a immutable record it's not
+really immutable because stuff falls off
+the back end but you get this record of
+everything you've done in Kafka for the
+past month the past year however much
+disk space you have and it's actually
+designed to run on spinning disks so
+it's really good if you say give me a
+message six it will pull the next
+messages in the partition into cache so
+you can get that stuff out really fast
+we've seen speeds of 250,000 300,000
+messages a second coming out of Kafka so
+it's actually really good at dealing
+with spinning disks and getting data out
+so you can have a lot of storage so we
+still we stored data for a week just
+because we picked it arbitrarily we can
+actually start data for significantly
+longer than that but that means that if
+one of our back-end systems goes down
+or our processing code goes down
+we can actually just rewind our Kafka
+stream and so the way that works is it's
+the job of the consumer to pick to tell
+Kafka which message it wants so consumer
+to will say hey I've been consuming and
+all of a sudden I realize elasticsearch
+has been down for the last hour or
+whatever half an hour an hour would be
+really bad for us last 10 minutes but
+I've consumed messages up through
+message eleven and I need to go back an
+hour in my data so I can as consumer to
+I can actually just say Kafka give me
+messages starting at message three again
+and rewind my stream and replay it back
+into my external system and that ends up
+being a really powerful concept because
+it means that not only can any of our
+back-end systems go down our processing
+code can go down and our queuing code in
+the database can actually we can stop
+reading it for a little while and then
+start reading it again and we still
+won't lose any data so before I get a
+little bit further I want to talk a
+little bit about how we're using Kafka
+to do these types of things and in brain
+trees architecture we are primary
+databases sharded so each one one of
+these is different shards like the 0 1 2
+&amp;amp; 3 are different shards in our
+infrastructure and we have a partition
+on two topics for each one of our shards
+we have a data stream and an event
+stream so the data stream is basically
+populated by that database trigger I was
+talking about before and by inserting
+every event from a single shard into a
+signal partition we can guarantee that
+the messages for a single database are
+coming out in the same order they were
+inserted so we still get those
+transactional semantics coming through
+Kafka and what we realized is that
+having a raw stream in the database is
+really useful but it's actually also
+really useful to publish domain events
+to a pub sub system and have other
+consumers consume them so we do
+something very similar with what we
+called the event stream which is just
+another topic in Kafka they can be
+written to direct
+rales and that has turned out to be
+really useful for other consumers of
+Kafka in our infrastructure we have
+other applications that consume
+transaction create a transaction settled
+type messages from our gateway and then
+do stuff with them and actually the
+first time somebody consumed that they
+configured that the back-end system
+incorrectly so the very first day we had
+this system in place we read a bunch of
+messages out of Kafka the back-end
+system was configured incorrectly the
+messages were thrown on the floor and
+they realized that and ten minutes later
+they fixed the configuration and rewound
+the stream and replayed those events
+into their system and it wasn't a really
+big issue they didn't have to write a
+bunch of custom code to go figure out
+what did we miss what's in the database
+how do i generate these messages again
+it's all just sitting there in Kafka and
+we'll be there for a significant period
+of time so I've been talking for a
+little while now and it turns out we're
+at a closure conference and I haven't
+mentioned closure yet and our system
+looks kind of like this we have pgq we
+have Kafka we have red shift we have
+elasticsearch we know we need to get
+data between all of them but we haven't
+really figured out how yet and so we
+were thinking about different options
+and as a Ruby rail shop it probably
+would have made sense to go with like
+your first thought would be that we
+would just do Ruby but what it turns out
+that's not what we did we went with
+closure that's kind of dark but that's
+okay so yeah like I was saying why would
+we go with closure given that we're a
+ruby shop pretty much every one of our
+other applications is written in Ruby it
+doesn't really make a lot of sense and
+it turns out that there's a couple of
+benefits of going with closure that you
+just can't do in Ruby like as most of
+you probably know being on the JVM is
+really useful for us because a bunch of
+these systems that we're now dealing
+with our JVM based so we have Kafka we
+have zookeeper which is used to manage
+Kafka fail overs we have elasticsearch
+these are all JVM based services and
+being able to use the JVM clients that
+are published by these
+like these tools is really useful if
+you're not using the JVM based client
+for Kafka you don't get a bunch of
+really nice features because nobody else
+has taken the time to implement them and
+you tend to lag behind the Kafka
+releases so if Kafka 8 3 comes out
+tomorrow the Java client is guaranteed
+to have all the same features to have
+feature parity but using the Ruby client
+we'd be way behind until whoever was
+maintaining the Ruby client decided to
+upgrade it and that's not really where
+we want to be we want to always have the
+client library with the best semantics
+for dealing with the tool that we're
+using in addition to that we are also
+processing a lot of different topics and
+inside of those topics were processing a
+lot of different partitions so we have a
+lot of stuff going on concurrently in
+the system and if anybody is used Ruby
+you know Ruby's not really great at
+concurrency so we thought about running
+a different Ruby process to consume
+every single one of our partitions and
+every one of our topics but it turns out
+that that's really a pain to manage and
+then you can't even you can't really
+communicate between those Ruby processes
+unless you use an external database
+something like Redis or whatever you
+were using and that's just another added
+dependency that you don't really need
+there's no point in having it here and
+the third thing that we liked closure
+for were the abstractions that provided
+so so like I'm to go through those I'm
+gonna start going through those now the
+first one was just infinite sequences it
+turns out that when you're dealing with
+a data pipeline it's just a really big
+infinite sequence that's coming from an
+external database so the Kafka client
+says generate me a consumer call this
+messages function which is just going to
+return an infinite sequence that will
+block when there's no new messages
+and that's provides a really awesome
+semantics for dealing with your external
+for Kafka and we ended up implementing
+something very similar for pgq where you
+can just say pgq here's
+give me all my messages in an infinite
+sequence and I'm going to process them
+and so from an application standpoint
+that's really great you don't have to
+think about the logic for dealing with
+your queueing system while you're trying
+to figure out the domain logic for
+processing messages and your code ends
+up a lot cleaner it's all abstracted
+away into this infinite sequence in
+addition to that something we are very
+aware of and do we're very aware of
+testing Braintree is a strong culture of
+testing we do TDD all the usual things
+you would expect from a rails company so
+testing is really important to us and we
+didn't want to change that while we were
+working in closure but when your
+infinite sequence will block when
+there's no messages on Kafka you can end
+up into some weird situations where your
+tests just hang so say you have a bug in
+your code and you try to write you write
+two messages two Kafka and you were
+expecting to write three and then your
+test tries to read off three messages
+and do some assertions on them well your
+test now just hangs waiting for the next
+message to come through and it turns out
+that in the beginning then happened to
+us a lot so the first thing we did was
+split apart the code that dealt with
+handling messages and the code that
+dealt with talking to Kafka so we have
+that infinite sequence and here in this
+process messages function we can either
+pass in an infinite sequence or in our
+tests we can just pass in a finite
+sequence and do some assertions on it
+and what that means is our tests
+actually complete even when we have a
+bug we get some reasonable output that
+allow us to help debug our code we can
+figure out what's going on instead of
+just our test hanging and having to
+control see it and going well the bug
+could be anywhere in our code base we
+got to go figure out what happened now
+which is it's really not a great
+situation to be in
+just stop closing
+so moving on the concurrency mechanisms
+provided in closure are generally pretty
+great but if you're not using Cory's
+think you want to start with something
+in the core of the library our our first
+stab at it was something like this and
+when we started this we actually had
+three Kafka topics for elasticsearch so
+we would break apart the data stream
+into just the the data we needed
+there were like emergence create a
+transactions delete the Train
+transaction insert which actually had
+inserts and updates and we just stuck
+those in threads and said well this is
+good enough we're gonna be processing
+forever we wanted this function to
+continue running forever and we'll just
+run these threads and things will be
+great and they worked out pretty well
+until the first time we sent a message
+that with data we weren't expecting and
+the code threw an error and our thread
+died and it turns out if you have a
+bunch of threads and one thread dies and
+the other ones keep running that thread
+is just not running anymore
+so you can run some try caches do that
+kind of stuff but really you you kind of
+want to log that error you want to know
+that that message didn't make it through
+and you want to do something about it
+and so it turns out that the error
+handling when you just use raw threads
+is some leave something to be desired so
+the next thing we did and I should
+preface this by saying none of us were
+closure experts I was the only one who
+had any closure experience going into
+this project and it was mainly it was it
+was not a lot it was not significant
+experience nobody else on my team had
+worked with closure before this so we
+pretty much tried everything so the next
+thing we tried was using agents really
+Oh agents are part of the core language
+they provide a better abstraction on top
+of threads and they have built-in error
+handling that's exactly what we need so
+we can we capture an error we have some
+logic to deal with the error either we
+you know send an email to the team we
+throw Nagios all or do whatever and then
+we we just continue with our thread and
+continue processing messages because
+chances are that one message had issues
+and stuff is okay and this is pretty
+good but it's really not what agents are
+intent
+before we ran into some very strange
+issues where that mutable we we didn't
+actually pass any state into the agent
+because we didn't really care about what
+they returned everything was talking to
+external systems and writing data around
+a bunch of places but we ended up with
+some really weird errors where one agent
+would die and another agent would like
+get that exception inside of it and we
+were having a bunch of issues with that
+and in addition to that it turned out
+that we wanted to talk between these
+agents we we had agents for doing a
+bunch of different things and in each
+one you had to keep track of messages
+for different merchants and doing a
+bunch of different things and agents
+just really weren't the right
+abstraction they're not meant to process
+forever and basically just didn't work
+for this process so logically the next
+thing we tried was core async and what
+ended up being really powerful for us
+was having a single go routine per
+merchant and what that means is that we
+would have a thread reading off a Kafka
+that would write to a channel so you had
+threads for anything that did io a
+single go routine for each merchant and
+each go routine it was that go routines
+responsibility for handling all the
+messages for a merchant so our
+architecture looked a little bit
+something like this and this works
+pretty well what this allowed us to do
+and really the big one of the big issues
+we had was that we also wanted to have
+the idea of being able to reload data in
+an elastic search or in redshift
+if elastic search got out of sync and we
+were suddenly missing a message for a
+merchant and we didn't notice it in the
+time window Kafka had we wanted to have
+the ability to say give me all of this
+data for a merchant again and send it
+through and what you have to do when you
+do that is while you're sending all that
+old data through if any new data comes
+in through the data pipeline for that
+merchant you need to hold onto it and
+wait to apply it to elasticsearch until
+all your other data has been written so
+what we were able to do was just create
+two new Kafka topics data stream reload
+stream reload we would send all those
+messages through and then in the
+merchants go routine we could say let's
+favor any data coming off with a reload
+topic we'll process all of it until it's
+gone and then we'll just have queued
+anything that came in on the real-time
+channels and then we'll flush those out
+and just continue processing as normal
+once we're done with our reload and that
+worked for a time but there's actually
+some issues with this model for us and
+it turns out that we don't like losing
+data if we were to shut down the system
+because we wanted to deploy new code and
+then start it back up we need to have a
+mechanism for saying when for saying
+when every message that's currently in
+memory has been processed and so it
+turns out you can you can do this with
+Cori sync you can close a channel you
+can continue to process you have to do
+this sort of top-down approach to let's
+turn off our threads that are reading
+messages figure out when they're done
+reading messages go into our distributor
+close all that figure out when it's done
+reading messages then do the same for
+our merchants and the same for our
+writer to elasticsearch and keeping
+track of that shutdown logic and having
+no way of guaranteeing that every
+message in a channel has been processed
+was really difficult for us and so we we
+grappled with this problem for a while
+and in addition to that we actually had
+some race conditions in in our
+infrastructure because we had no way of
+knowing once on elasticsearch something
+running new elasticsearch was done
+without creating basically a callback to
+one of our merchants go routines to say
+yeah I'm done processing all my reload
+messages start sending the real-time
+messages again because we actually have
+to write to elasticsearch in two
+different ways for a reload we do a bulk
+load into elasticsearch for a real time
+we do single writes so we ended up with
+a bunch of race conditions and a bunch
+of messages going between channels which
+we're essentially like callbacks like
+yeah I'm done with this thing
+and you can keep going so we grappled
+with this problem for a while and what
+we we figured out was that regular
+threads weren't enough agents really
+aren't enough and core async can do what
+we want but it doesn't really provide
+the semantics we want and so we looked
+around and we started thinking about
+this problem and it turns out that
+elixir and Erlang are really popular in
+Braintree right now so everybody's like
+oh actors have semantics for that you
+should look at actors so we did and
+actors ended up being a really good fit
+for this problem and
+some of the reasons for that were the
+that that shutdown logic is inherently
+built in actors you can say shut down an
+actor it will process it in box and then
+go away and let you know when it's done
+shutting down so we can do that top-down
+approach really easily we can just say
+shut down to our Kafka readers then shut
+down to our distributor then shut down
+to our merchant threads and then
+everything is hunky-dory we know we've
+processed all of our messages we haven't
+pulled any more messages off a Kafka we
+can do our deploy and start our system
+back up and we don't won't have lost any
+data in addition to that it actors kept
+the same semantics that go routines and
+core async help for us so we still have
+an actor for every merchant with a
+single inbox that deals with all of the
+messages for that merchant which means
+that our code to reason about how to
+handle data for all of our data you can
+think about just a single merchant at a
+time which is a lot easier to understand
+and the other thing is that it allowed
+us to put back pressure on Kafka it
+turns out that you can't write 300,000
+messages a second to elasticsearch but
+you can read off that fast from Kafka
+and when you read off you know a million
+two million messages into memory and
+you're trying to write two elasticsearch
+your GC times go through the roof so
+what you ended up doing was for our
+reload topic we could say do this as a
+synchronous right so we're gonna read
+off however many 10,000 messages send it
+through our entire system ready to
+elastic elastic search and make sure
+that synchronous while at the same time
+continuing to pull every real
+iMessage into memory because we don't
+get those fast enough and continue to
+write them so we had those different
+semantics and Corre async can do
+something similar with limits of channel
+sizes but that's a really big benefit
+for us because we can continue to use
+Kafka as a cue instead of just like
+messages funneling through it as fast as
+possible and like I said you we also
+help the actors help to avoid those race
+conditions because we can do that
+synchronous call to something that's
+writing to an elastic elastic search and
+say don't block my go routine or block
+my actor until this thing that you're
+writing to elastic search is done and I
+know it's done and then I can switch
+back over to processing my real-time
+messages so that everything comes flows
+into elastic search in the correct order
+and in order to do that we used a
+library called pulsar which is the
+closure version it's actually a Java
+library called quasar with closure
+bindings that provided these semantics
+for us so now our infrastructure looks a
+little bit like this we've got pgq in
+the database we've got a closure reader
+in between that writing to Kafka and
+then a bunch of different processes
+reading off of Kafka and writing to our
+external systems so a few lessons
+learned GC is the enemy when you're
+dealing with Java projects it doesn't
+matter if it's your closure project if
+it's your elastic search instance your
+Kafka instance GCE is going to kill you
+so try to minimize your DC pause times
+we we cared much more we didn't care
+that much about throughput we cared
+about sustained writes so that we could
+have a guaranteed amount of time the
+message would take coming from our
+primary database into our search cluster
+so minimizing GC pause times was really
+important for us and it turns out that
+in closure you want to use a much
+smaller heap size than you would expect
+and that helps minimize your pause times
+Rich's talked about this a few times
+that a smaller heap size
+counter-intuitively will help you
+because you have a bunch of short-lived
+objects in closure so you don't have to
+scan as much data and then in addition
+to that using the G 1 GC provided
+significant benefits for us it's a much
+more modern GC that isn't the default
+but comes with Java you can turn that on
+fairly easily the other thing that we
+realize is that monitoring our systems
+is really important and Java provides
+great tools for this so we use jmx for
+pretty much everything we get JMX data
+stats about how long our GC is taking we
+actually have published jmock stats for
+every one of our individual actors so if
+our system is having issues and say some
+single merchants data doesn't end up in
+elasticsearch we can live query our
+application and say what's going on with
+this merchants actor is all of its data
+queuing in memory and something happened
+is it dead we we can get insight into
+that really easily and that ends up
+being really beneficial for us it's not
+like a black box that's just running and
+we don't have to totally rely on logs we
+can actually inspect the running system
+the other thing to note is that you
+really don't want to use the default
+configs for any of these distributed
+systems
+so the elasticsearch default configs it
+split brains probably every 10 minutes
+if you run it in a multi-tenant system
+and it's just not great and it turns out
+that they do this because they want you
+to be able to get a running instance as
+quickly as possible on a single machine
+so the configs are all optimized for
+running on a single machine and not in a
+cluster the way they were intended to be
+so don't trust the default configs read
+through everything understand the system
+and go from there and just use a
+abstraction model that helps you to
+avoid race conditions so by creating
+this having the ability to do
+synchronous and non circuitous calls is
+really beneficial keep track of that and
+just a couple of future uses for this
+kind of system is really any
+materialized view of your database so if
+you have a cache system and all of your
+code for updating your cache system is
+in your application logic it kind of
+pollutes your application logic and you
+have to it's really difficult to keep
+track of but when you can have an
+external system that just listens to
+your database change log your cache can
+always be up-to-date and you don't even
+have to think about it in your
+application you can go straight to the
+cache which is really useful and makes
+your application code a lot simpler just
+some other uses we can now
+do a lot of different real-time events
+so our data scientists are really
+interested in doing real-time fraud
+monitoring based on this right now we're
+always like a you know a few hours
+behind try it with our fraud models
+because they have to wait until data has
+moved into other systems so they can
+actually just consume kafka themselves
+without causing any issue to our primary
+application and do these kinds of do
+basically anything they want to the
+other interests one of the other
+interesting things i've been exploring
+is report generation so we generate some
+pretty massive reports for our merchants
+especially are really big merchants and
+if you can consume a data stream or an
+event stream and it build up your
+reports iteratively you can actually
+just cut it at the end of the month and
+email it to the merchants there's no big
+query that has to run on your database
+there's no data intensive anything that
+has to happen it all happens in real
+time it just sort of builds up and you
+can break it down as much as you want
+send pieces and send send your customers
+whatever and basically any async data
+processing that you have that wants
+real-time events from any system is it
+ends up working really well in this
+scheme so thanks for coming
+I'm David pick on Twitter if you want to
+see pictures of food I make other than
+that you probably shouldn't follow me
+any questions
+other separate jaebeum's
+we don't run in AWS we run in our own
+data center and the latency talking AWS
+would have been terrible we like we
+can't afford to have that much latency
+for security or for our application no
+we like our entire data center as a PCI
+zone so we assume that if you made it
+into our data center you have made it
+past all of our security measures and
+you're okay
+so we're not using Erlang quasar is
+written in Java we didn't actually
+consider those we are not Java experts
+so we sort of searched around for a
+solution and that's what we came across
+and worked for us so we didn't consider
+those
+we have not had an outage of Kafka for
+more than an hour we we have had Kafka
+outages where data queued in Postgres
+but we were able to bring it back before
+that happen anybody else thanks for
+coming</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

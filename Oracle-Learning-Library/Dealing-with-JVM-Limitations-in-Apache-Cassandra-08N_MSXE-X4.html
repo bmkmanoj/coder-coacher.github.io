@@ -1,0 +1,1196 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Dealing with JVM Limitations in Apache Cassandra | Coder Coacher - Coaching Coders</title><meta content="Dealing with JVM Limitations in Apache Cassandra - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Learning-Library/">Oracle Learning Library</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Dealing with JVM Limitations in Apache Cassandra</b></h2><h5 class="post__date">2013-02-01</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/08N_MSXE-X4" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so welcome to talk on doing with DVM
+limitations in Apache Cassandra we're
+not going to talk really about using
+Cassandra or anything like that today
+but just out of curiosity has anyone
+used it wow oh wow I'm impressed use it
+in production Wow
+that's still not that all right Oh
+congratulations and thank you so I'm
+gonna I'm going to talk more about you
+know the low level stuff we do in
+Cassandra to get good performance and a
+good user experience on top of the JVM
+you know some of some of this is more
+challenging than others so if I were to
+summarize you know the pain points of
+building on top of the JVM in a single
+word or two words it would be garbage
+collection now especially with regards
+to pause time that that affects latency
+obviously so it in the database where we
+want to return response in milliseconds
+if not less obviously garbage collection
+is a pain but if I were to be permitted
+to bullet points and I would I would
+extend that to dealing with
+platform-specific code the DBM of course
+and Java has got this history of being
+write once run anywhere and that kind of
+fights the kind of optimization you want
+to do because Windows and Linux and
+Solaris are all kind of different
+animals when you get down under the hood
+so some of the optimizations that we
+want to do are going to be a little bit
+platform specific so so we the JVM kind
+of actively fights us doing this
+and I'll talk about how we how we work
+around that in some ways so in terms of
+garbage collection the state of the art
+as far as Cassandra's considered
+concerned is still doing concurrent
+mark-sweep we tried the g1 collector
+reports are that more recent
+do you want have been making progress
+but it's still your Cassandra just
+allocates too fast for it and so what
+happens is they can't keep up and it
+falls back to a stop the world kind of
+collection anyway even worse than than
+CMS did in in our experiences so we have
+a pretty good handle on what to do with
+with CMS to avoid stop the worlds and
+and primarily with avoiding
+fragmentation so we pretty much
+recommend sticking with that in the
+Cassandra world but the one alternative
+that the people have been successful
+with to my knowledge is azules Z JVM
+running the C for garbage collector kind
+of pricey but it works as advertised
+unfortunately that that's not a
+realistic option for the vast majority
+of use cases where we have hundreds of
+nodes that you know people want to
+standardize on the Oracle JDK because
+that that's what they've certified their
+application on and so forth so just
+really briefly the main the main
+challenge here when talking about you
+know garbage collection with low paas
+time is the compaction phase so what
+that means is when I when I've allocated
+space off of the heap and and then that
+that space is no longer used so it gets
+reclaimed I've kind of got a hole where
+that object used to be allocated and so
+what I need to do is you know if I if I
+have no ten megabytes of free space
+spread across a lot of these little
+holes and then Cassandra comes up and
+says hey I'd like to allocate a 10
+megabyte array it can't fulfill that
+request when until it combines those
+holes so that that combination is called
+compacting and it's painful because the
+garbage collector has to relocate other
+objects in memory to do that compaction
+process so in the CMS world the young
+generation is always compacted and
+that's actually always a stop the world
+collection
+not everyone's aware that that new
+generation collections are also stuff
+the world but they're you know they're
+they're quick enough that we can usually
+get by with not caring the young
+generation is stopped the world so when
+people talk about stop the world garbage
+collection they're typically talking
+about when the JVM has to go through the
+entire old generation and compact that
+that's yes that's typically what we're
+talking about there so what we what
+we've done in Cassandra is we've gone
+through our storage engine and try to
+address the main places where we
+allocate large contiguous amounts of
+memory if we if we allocate smaller
+amounts of memory the jaebeum's you know
+free list mechanism does a pretty good
+job of keeping track of where it can
+allocate objects of a given size without
+having to do that full compacting
+mechanism and life is good so the three
+main places where we've gone through and
+and done this where we've broken up our
+large allocations are these three places
+with and I'll explain what these mean in
+terms of the Cassandra's storage engine
+in just a second so those those three
+are the the bloom filter bit sets the
+compression offsets where we track what
+blocks of a compressed storage file
+correspond to which uncompressed offsets
+and then a large column values because
+cassandra actually technically allows
+you to store up to a two gigabyte value
+in a single column not necessarily the
+best idea we typically recommend that
+you keep it two single-digit megabytes
+but technically we will allow you to do
+that if you really want to so you know
+obviously when people are throwing
+workloads at us where they have column
+values of wildly different sizes that
+can be a source of fragmentation as well
+sort of user-generated fragmentation so
+I'm going to dig in a little bit into
+how the storage engine works and how
+this ties in to the fragmentation I'm
+talking about here
+Cassandra uses what's called a log
+structured storage engine meaning that
+when you tell us to update a row we
+don't go and change that row in place
+instead we keep those updates we pin
+those updates to a commit log and then
+we match them up in memory in a
+structure called a mem table that then
+gets written out sequentially to disk
+and then we new new values of rows in
+those new files on disk will sort of
+shadow older values so that when we go
+and read time we only give the newest
+values but we're doing that without ever
+having to do random i/o on writes so it
+turns out that this is actually a really
+good fit both for spinning disks because
+we've cut out all the random i/o on
+writes and then it's also a good fit for
+solid state disks because we're getting
+rid of write amplification so this is
+what this is really good for your disk
+lifetime and so then this is actually
+the the main source where there's kind
+of a sentiment about the storage
+industry that you know I can't
+necessarily trust solid state disks with
+my data because they fail faster than
+spinning disks the main reason that
+people have that experience is because
+you know these solid state disks are
+rated for a certain number of write
+cycles and right after the write
+amplification makes you go through them
+faster so there's a there's an entire
+presentation that a guy named Rick
+ransom gave on this subject I won't go
+into that any more today but you can
+google that if you're curious about the
+gory details so to illustrate what what
+I what I've been talking about when when
+I have a right ear so in the upper left
+some client is is giving me he's
+updating a column in one of in one of
+the rows in my storage engine so what
+I'm going to do is first I'm
+to upend of that tuple or that that
+column name and value tuple to the
+commit log and then I'm also going to
+put that into this this in memory
+structure called a mem table so if you
+look at this these slides that I'm going
+to go through there's this dotted line
+going down the middle and above the
+dotted line that's happening in memory
+below the dotted line means I'm doing
+disk i/o I'm writing something to disk
+so you can see from this that Cassandra
+is a sparse storage engine so you know
+you don't if you have an old column or
+the equivalent of an old column in
+Cassandra you that's just you don't
+write that column you know you don't
+have to actually include a value for
+that you just leave it out because under
+the hood we're actually storing the
+tuple of the column name that you're
+writing as well as the value so we can
+add some here in this slide we're
+illustrating that a new write comes in
+that's for another column in the same
+row so the user is updated a second
+column in the same row so you see in in
+memory that's that's been put together
+in the same structure you know we
+recognize that is part of the same row
+in memory but on disk since we're
+strictly doing a pens to this commit log
+it's it's a separate entry it's not it's
+not part of that same row structure so
+then we add some more data to different
+row maybe do another update to column in
+the first row and then our min table
+gets full so what happens when the min
+table gets full is we write that out to
+this we actually write it out in sorted
+order by row key for reasons that that
+I'll explain in a bit and and then we
+and we just stream that out to disk
+sequentially so one of the other things
+that this lets us do which is called
+flushing in Cassandra terminology is
+when we flush we can go to the commit
+log and say all of those
+you know modifications that we just did
+they're now secured on this they're
+durable on disk so you don't have to
+worry about replaying them if if there's
+a failure and you get restarted so what
+we'll do is we'll update basically the
+high-water mark in the commit log that
+says this is where you need to start
+replaying and if that entire commit log
+segment doesn't need to be replayed
+anymore we can recycle it and and and
+start and we basically put it in a queue
+to use later yeah so that's that's
+basically an optimization you can
+actually just throw away the commit log
+file and start a new one turns out it's
+more efficient to to save it and recycle
+it later so then if we go through this
+process again we have a bunch more
+updates the mem table fills up again we
+flush it out to disk again we have a new
+data file so these data files are called
+SS tables for basically historical
+reasons so you can see that you know
+since we're never doing update in place
+when I when I've made new updates to
+those same rows I didn't overwrite the
+data in the original SS table I wrote
+out a new one so you can see that these
+these SS tables are going to multiply a
+little bit as updates come in and we'll
+talk about how Cassandra deals with that
+later but but for now I just want to go
+into a little bit about what makes the
+SS table tick because this is going to
+explain what I talked about in terms of
+the fragmentation so what we have
+there's two main structures in the SS
+table there's basically an index that
+tells us where to find data that's
+actually stored in it and then there's
+the row and column data so what the
+index is composed of is basically keys
+and as well as samples of the columns
+corresponding to that key and you can
+think of them more as partitions and
+rows in the partition because that's
+actually what it corresponds to from the
+users perspective but internally to
+Kazan
+we're storing them as just rows and
+columns and so what happens if the user
+says I want to read column c5 from row
+k5 I'm going to go first to the index
+I'm gonna look that up lookup of where
+that role where that data is and the
+data file and then I can seek to that in
+the data file directly so what we do it
+to do this is this index file we keep a
+sampling of every one 128 entry in that
+index file we keep that in memory so
+originally this was just a big array of
+long basically so since data files can
+get large you can you know you can have
+hundreds of millions of rows in these
+data files you know where we're
+allocating you know 20 50 megabytes at a
+time for these index of samples so that
+that's a source of that that's a source
+of pain on startup because we're
+actually reading the samples in on
+startup but more importantly it's a
+source of ongoing fragmentation as we
+write out new data files as data comes
+in so that that's that's where that's
+coming from
+not not pictured here is the bloom
+filter where that comes in as the bloom
+filter is a probabilistic set of row
+keys and so what we do with that is that
+lets us tell us because remember we have
+multiple SS tables for a given user
+level table that he's defined with
+create table users for instance so what
+I want to do is when he says select star
+from users where username equals
+Jonathan I want to be able to go and
+only look at the data files that
+actually have data for Jonathan I don't
+want to have to go look in data files
+that you know Jonathan was never updated
+in so the bloom filter lets me rule out
+a whole bunch of data files without ever
+even having to look in the index I just
+asked the bloom filter do you have this
+ro key and the bloom filter will either
+reply no or it will reply probably and
+so that's where the probabilistic nough
+scums in and if it replies probably then
+we go through the index lookup so that's
+those two and then the last the last one
+that I talked about was compression
+offsets so the previous slide
+oversimplified just a little bit because
+when we ran out those data files we also
+compress it and this is really easy to
+do for us relatively speaking because we
+never have to go in and modify those
+rows once they're in the data file so
+now that that makes transparent
+compression much easier than an a/b tree
+based storage engine so what we have is
+that the compression looks like this
+where I basically have a big array of
+compression offsets that says I have
+these blocks of compressed data
+typically 64 kilobytes and so I'm going
+to tell it for every 64 kilobytes of
+compressed data here's what offset that
+corresponds to in the uncompressed a
+data file because that's what we're
+going to use when we when we try to read
+when we go and read the rows and columns
+the index file is going to give us
+uncompressed offsets in the in the data
+file so we have to translate that into
+what blocks do I now need to uncompress
+to give you your data so you know this
+this compression info is you know it's
+another big array that we were
+allocating so we needed to break that up
+into smaller arrays now there's been
+some research done into dealing with
+large arrays automatically primarily by
+IBM and there's actually they have a
+real time DVM that does this
+automatically unfortunately though the
+real time JVM last time I checked
+doesn't support you know
+good for Java heaps up to about 256
+megabytes or so so not not really it
+doesn't support heaps large enough for
+Cassandra where we're targeting 4 to 8
+gigabytes typically but but it's you
+know I'd really like to see this kind of
+you know automatic breaking up of large
+arrays I get into some more mainstream
+JVMs so so I talked about manually
+breaking up these arrays into you know
+it's kind of sub arrays in our
+compression offsets and an open bit set
+incidentally when we started off using
+the JDK is bit set that only lets you
+address an offset up to you know 2 to
+the 31st it's an ya
+because it's an integer offset these are
+the methods take so open bit set is an
+implementation that the Lucene guys did
+because they needed to do you know
+larger bit sets and have 64-bit
+addressing so their methods take a long
+so we we we took that and then we kind
+of we basically forked it to break up
+the arrays into sub arrays like I've
+been talking about so Justin just an FYI
+if you ever need a bit set that's larger
+than 2 gigabytes then open bit set has
+your back so the other thing that we've
+done I mentioned that users can provide
+very large column values and that can
+fragment the the heap as well so what we
+did there is we took a different
+approach and what we did is we manually
+allocate one megabyte large slabs that
+we that we take the mem table space out
+of and what we do is when the user gives
+us column value that he wants to store
+we put that into kind of a slice of that
+slab so under the hood it
+we're using the bytebuffer API and we're
+saying okay I want to reserve a piece of
+that slab and I'm gonna copy the data
+into it so that if he gives me a 64
+kilobyte column value now I copy it into
+the slab before it gets tenured so then
+cleaning up that 64 kilobyte though that
+he gave me that's just young generation
+garbage collection and it never
+fragments the heap this is actually a
+source of some current work that we're
+doing in Cassandra for 1.2 because it
+turns out that you know we have a what's
+called a slab allocator class and what
+that does is whenever the old slab is
+exhausted the threads that are looking
+to allocate will race as they allocate a
+new slab and then they're all happy
+again
+so what we're what we're doing is we're
+we're making it so the slab alligator
+will actually allocate one more slab
+than it needs currently so that it stays
+ahead of the allocation under very heavy
+update loads so this is something that
+you may have heard kind of an urban
+legend among mostly C developers
+sometimes you'll hear this from Python
+developers as well the bad news is
+there's a little truth to that and then
+the the part of the truth to it is when
+you're using things like like byte
+buffer or you know like concurrent skip
+list map there's a lot of overhead in
+terms of you know tracking all of those
+they have the internals of those objects
+before you get to the thing that you're
+actually trying to store so if you're if
+you're running a database where people
+are primarily storing you know 4 byte
+integers or you know 8 byte you know
+doubles or whatever
+now the overhead of those towards
+structures can be significant and what
+we found was in in the extreme case we
+get up to about 85 percent of
+memory we were using was actually for
+the this overhead and not for the actual
+data that we were storing so what one of
+the things one of the tools that we use
+for that I wrote a library called Java
+agent for memory measurements and what
+that does is it's just a wrapper around
+the Java instrumentation library the
+trick is that you actually have to run
+this code as a Java agent when you start
+the JVM to give it permission to to dig
+under the hood and what this does is it
+lets me ask java.lang that
+instrumentation given this object what's
+the total size of the heap that it's
+taking up you know including all of the
+internal overhead so that so that lets
+us get a handle on you know how much you
+know what that overhead actually is and
+the reason that we want to do that is
+early on in kind of the dark ages of
+Cassandra we'd make you tell us how
+often to flush the mem tables and you
+would need to turn that in terms of
+either a number of operations on the mem
+table or a number of bytes that you had
+actually inserted in terms of your user
+level bytes not including all the
+overhead so the so the number of bytes
+that you were giving me you know if
+that's only 15 percent of the total
+space and that's wildly inaccurate and
+and so this is a big pain point for our
+users because if you got this wrong well
+if you made it too small Cassandra would
+not be performant because it's flushing
+constantly if you made it too large then
+you would run out of memory and you
+would often run out of memory very
+painfully in a process we affectionately
+Finnish affectionately named GC storming
+because the garbage collector will be
+able to collect just enough to continue
+for a little bit longer at which case we
+will do another full garbage collection
+and it will take minutes
+many many many minutes before it
+actually realizes sorry I'm screwed
+and falls over and and you know raises
+and out of memory exception so what we
+did with this Java agent for memory
+measurements and doubling
+instrumentation is we were able to now
+have the user tell us use you know two
+gigabytes of my heap for mem tables and
+we can now actually go in and say hey
+mem table how large are you really and
+be able to flush at appropriate time
+before we get too close to the danger
+zone automatically so that that improve
+the experience a lot for sis admins
+running Cassandra so one of the other
+things that came out of this realization
+that you know sort of these you know
+we're using so much overhead for the
+containers for the data is that we do we
+do a thing called the row cash in
+Cassandra where to save having to merge
+different versions of your row from
+different places on disk will will
+preserve the the pre merged version of
+that and it's a write through cache so
+whenever you update that row will update
+the cache version as well and so if you
+ever asked for debt in that row and we
+don't actually have to go through this
+whole SS table lookup we just pull from
+the cache and give it to you so we get
+you know you know 50 you know 90
+microseconds
+when we're reading from the row cache so
+very very fast but we're wasting a ton
+of memory because of that that whole
+overhead so what we did was we just we
+decided to move the row cast out of the
+heat and so with the way we do that is
+we actually serialize the rows into
+basically malloc chunks of memory and so
+we wrote this class called
+free able memory that uses reference
+counting to track this this native
+memory that we've allocated and then
+clean it up when that if that
+it's aged out of the cache and you know
+not useful anymore so one of the things
+that we thought about was so this words
+really royal for the road cache we pay a
+small price in CPU because to actually
+give it back to the user we have to
+deserialize it temporarily but we're
+saving a ton of memory works very well
+could we do this with the slab
+allocation that we're doing with mem
+tables it turns out that it's painful
+because the the reference counting that
+we do on the cache path is relatively
+limited and there would be a lot more
+places we need to track it if we were
+actually doing it for the main men table
+path so that idea is on the back burner
+and likely to stay there unfortunately
+so I've been I mentioned that that we
+can generally overlook the fact that the
+young generation is stop the world but
+there's there's been attention that
+that's getting increasingly apparent
+recently as cord counts improved so
+you've gone from a relatively
+cost-effective server being 8 cores to
+being 16 cores to being 24 and 32 cores
+you know that's not even talking about
+you know what you get when you you
+really want to throw money at it so now
+the tension is that you want your young
+generation to be large enough that it
+can handle the allocation that all your
+cores are throwing at it without having
+to tenure that data because you didn't
+you you're you're young generations
+filled up before you finish the request
+that that allocation came from but in at
+the same time as your if you increase
+your young generation to you know not
+tenure that data that that you're
+increasing number of cores is throwing
+at it then the the part
+new collection is going to take longer
+and have a longer pause time so there's
+there's a tension there don't have a
+really good answer for this except that
+we probably need to tune
+Cassandra's defaults to use a smaller
+amount of young generation per core
+right now it'll do a hundred megabytes
+per core up to a quarter of your heap
+that's too much
+we're probably going to cap it at at 512
+K or or a gigabyte of young generation
+space so one of the other things that
+we've struggled a little bit with the
+storage engine is that copies kill
+performance and it can be very difficult
+in Java to avoid copying you know
+regions of memory it's especially when
+you when you're doing i/o so what we did
+about almost two years ago actually was
+we said okay we can avoid copies on the
+right path if we use a map so what we're
+going to do is we're going to map those
+SS tables that we've got into memory and
+then we'll just ask Java to give us a
+byte buffer back wrapping a native area
+of memory containing other data that
+we're asking for so we said okay we're
+just we're just going to use channel dot
+map and we'll just map the the data file
+right not so fast
+the file channel API will only do our
+rather the byte buffer API that channel
+is backed by only lets you access again
+32 bit offsets so what we have very
+frequently data files that are larger
+than 2 gigabytes so we said okay we can
+deal with this we can map by partitions
+or
+so we're going to take each of those
+partitions we'll map them separately and
+and that's a pretty good workaround well
+we it turns out we also support
+partitions that are larger than 2
+gigabytes so there's not a whole lot we
+can do about that we don't want to split
+a single partition across multiple
+mapped byte buffers because then we have
+to check for every byte that we're
+reading have I crossed that by buffer
+boundary have I crossed that byte buffer
+boundary yet and that that's actually
+more expensive than it's worth so we we
+say that as long as most of your
+partitions are under 2 gigabytes you'll
+be ok for the occasional one that isn't
+will fall back to buffered i/o which is
+actually a code pad we keep around for
+32-bit jaebeum's as well so now it all
+it works out pretty well in JDK 9 there
+supposedly moving to 64-bit array
+addressing and hopefully this this will
+be fixed and we'll be able to clean this
+up a little bit so so far you know we've
+run into a little bit of you know we've
+had to do a little bit of work around in
+here but not too bad here's where it
+gets messy what happens when I want to
+clean up one of those data files so I
+said at the beginning or earlier that
+we're never doing a overwrite in place
+so we need to be able to combine and
+clean up some of those old rows that we
+have sitting around taking up space on
+disk so we call that compaction which is
+confusing because we've been talking
+about garbage collection compaction now
+we're talking about Cassandra SS table
+compaction and I apologize on behalf of
+the the BigTable engineers who used the
+same word for that process so we've got
+we've got multiple SS tables what we
+want to do is we want to take those SS
+tables and you know throw away the data
+that's obsolete and only keep the data
+that's that's still relevant and so this
+that that's what we're doing we're
+taking
+multiple tables combining them into one
+so all these these SS tables on the left
+that we've compacted that we don't need
+anymore
+we need to unwrap those so we can throw
+them away and so it turns out that some
+operating systems by which I mean
+Windows won't let you delete a data file
+if it's still mapped so the problem is
+that the JDK does not expose any API to
+let you unmapped something you can map
+it but then you have to wait patiently
+for the garbage collector to decide that
+it's not referenced anymore at which
+point it will unmask it should it be in
+the mood to do so so what we did in
+older versions of Cassandra was we would
+track this with a phantom reference and
+so when the garbage collector did
+unmapped something we would we would get
+that notification via the phantom
+reference and we'd be able to go in and
+delete the file the problem was that
+users hated this because what would
+happen is if they'd going to go through
+deleting stuff out of their database and
+their disk space would not go down so
+this is this is not intuitive behavior
+to users of a database so now it was
+kind of comical because our word the
+workaround was no well don't worry about
+it because if Cassandra notices that
+you're low on disk space it will force
+stop the world garbage collection for
+you to clean that up and of course
+that's what everyone wants to hear right
+so we switched tracks and we decided
+that you know if the JDK wasn't going to
+let us do what we needed to do we were
+going to go behind its back so what we
+do is the way that the the JDK actually
+does the uh napping
+once the garbage collector says it's
+safe to do so is through a method called
+cleaner and so we actually use
+reflection to go in and grab hold of
+that method and and
+we unmapped something we go ahead and
+invoke that method on it manually and
+you know it's totally not portable I've
+no doubt if it fails to work entirely on
+you know you know Joe's JVM or whatever
+but that's that's that's what we got to
+do we the the old playing by the rules
+way was not acceptable
+now that ironically what this means is
+now since since we're were violently
+unmapped things out from under the JDK
+we we have to be we have to be very
+careful not to reference memory that
+used to be mapped and now is not because
+if you do that you will seg fault the
+DVM and and bad things happen at that
+point so it what what we did was we
+basically had two options we can
+reference count again everything that
+comes out of the neces table that's been
+mapped of which you know we looked at
+that and said you know we're never going
+to get all the bugs out if we try to do
+that or we can just go ahead and copy it
+out of the direct buffer when we read it
+and and then we don't have to worry
+about it getting unmapped later and
+that's in what we ended up doing so we
+were we've lost a little performance by
+doing this because we are now again back
+to copying things out it's better than
+it was back when we were doing buffered
+i/o because when you're doing buffered
+i/o now first you read it into a buffer
+and then you copy it again into your
+data structure so we skipped the copying
+into the buffer where we're relying on
+the operating system page cache to do
+that for us via a map so we were still a
+little better than we were back in row
+six but not not quite as fast as we were
+in a eight on this particular you know
+code path we've made up for it in other
+respects
+so our benchmark results are still
+better but we did lose some performance
+here but we it was worth it unbalanced
+to
+get the behavior that users expect that
+you know when you delete stuff this
+space goes down that's what that's what
+people need to see so that's kind of the
+introduction to stuff we do that the JDK
+doesn't really want us to do another
+thing that we do is do a lot of hard
+linking so that's where we basically
+tell the the filesystem I want to have
+two references to the same piece of data
+so we do this for snapshotting which
+works really well since since we you
+know again we're never doing update in
+place once we have that data file
+written out you know it doesn't change
+so if you tell me I want you to snapshot
+your data you know as of this point in
+time what I'll do is I will flush
+whatever that I have in the mem tables
+right now and then I'll just go ahead
+and create hard links to whatever set of
+data files I have and it's a little more
+complicated than that because we need to
+be consistent when while compaction is
+going through and turning things up but
+that's the basic idea so the only way to
+create a hard link up until Java seven
+was to use like runtime exec now for
+King every time you want to create a
+link when you want to create dozens of
+links yeah that's actually you know even
+with copy-on-write forking that can
+cause pain especially when people have
+told their operating system not to over
+commit memory at which point trying to
+do runtime exec to do a snapshot will
+actually cause it to swap because you
+fort that entire 8 gigabyte heap or
+whatever and so even though you're not
+actually going to do anything with it
+their operating system will say oh oh
+that's a huge allocation and that may
+get may need to be backed by actual ram
+so I'm going to start swapping so not
+also not a great experience so what we
+did was and what we still do is we use a
+library called Java native access DNA to
+invoke
+you know see see functions from the
+operating system so another one of those
+C functions that we want to call yes M
+lock all so this also relates to
+swapping so I'm this is a little bit
+Linux specific but there's there's a
+kernel parameter called swap enos that
+you can tune in Linux and it's commonly
+believed that setting swapping as to
+zero means you will not swap this is not
+true and as evidence I give you the line
+from VM scan dot C that's responsible
+for determining whether Linux should
+swap something it's basically saying you
+you can see that there's three
+components there besides swap eNOS
+so sloppiness can be zero and it can
+still decide that I'd better swap
+something so what happens in the in the
+Java world and in particular in a
+application that that it Maps a lot of
+data like Cassandra is Linux will go and
+go and say well you've really been
+reading these M map files a lot those
+are super important so I won't swap
+those but all this all this you know six
+gigabytes of your heap or so you haven't
+touched that in a wild I'm gonna swap
+that and so then when when Java girl
+gets around to actually going and
+needing to run a garbage collection
+against that data you know everything
+goes to hell very quickly so what we do
+is when we start up we call em local and
+we give it the the current argument
+which says just lock what I've allocated
+right now don't try to lock everything I
+allocate later which which is to say we
+don't want to we don't want to try to
+allocate we don't want it to try to lock
+our rope cache or most importantly we
+don't want it to try to lock all this
+stuff we're in mapping into RAM we just
+want to lock the heap into RAM so this
+does imply that you you should set your
+maximum heap size to the same as your
+minimum heat size this is what Cassandra
+does by default some of the other stuff
+that we use DNA for POSIX F
+five which lets us tell it that hey I'm
+writing out all this data in an SS table
+but I'm not actually necessarily going
+to need that right away so don't blow
+away whatever you have in your cache now
+for this data that I'm writing out at
+this instant it's you know if I need it
+again later I will ask but I probably
+won't
+similarly when we're going through and
+compacting this is this is a little more
+sophisticated
+I know these old SS tables that I'm
+gonna throw away some of those rows in
+there are hot in the cache so what I
+want to do is I want to ask it
+hey is art you know what what segments
+of this SS table that I'm compacting are
+actually part of your page cache right
+now and then as I go through and merge
+those I will I will ask you to you know
+preheat those in the new SS table that
+I'm writing out as well let's see that's
+that's a mink or an effing core what do
+we use if control for actually don't
+remember but it's in the source
+somewhere so digressing a little bit
+about dominative access this is what
+that looks like basically you just
+declare what what functions you need to
+call at the bottom here private static
+Nate event in McCall and then you just
+give it and you just need to initialize
+the library that you're using with
+native dart register so it's it's
+actually pretty cool and it wraps the C
+level of air no API into this last error
+exception which mostly works I mean well
+it works in that it will tell you if an
+error happens but you don't actually
+know what the error means unless you
+have access to the C headers on that
+particular system so it's better than
+nothing but you know the
+you know sometimes if we go and we call
+him la called and it doesn't work all we
+can log as far as Cassandra's concern is
+we got we got error one back so good
+luck repping for that right
+okay occasionally that usually
+everything works fine and when it
+doesn't it's usually the user has
+configured something and he didn't have
+permission as you know user Joe to lock
+eight gigabytes of stuff in memory so
+the the easy workaround is if you start
+seeing native error numbers in your
+Cassandra log is try running as root and
+seeing if that makes it go away and if
+it does then then you can adjust
+appropriately the permissions you've
+granted your Cassandra user there's a
+similar library out there called the
+Java foreign function interface that's
+used by JRuby and the JRuby guys swear
+to me that it's faster and better but
+it's also entirely undocumented so so
+should you feel like performing a good
+deed for the world of open source code
+document jmf i and and drop me an email
+but in the in the meantime DNA works
+pretty well for us we've we've actually
+dug into it and fixed a few bugs for
+them so at this point you know as far as
+Cassandra is concerned it's pretty solid
+so we don't feel any particular urgency
+to move off of it so just to kind of
+summarizes this last section you know
+Java started off with this you know 100%
+pure Java write once run anywhere and
+that's great but you know in 2012 you
+know people are using Java to run
+servers not to make you dance in your
+web browser so you know I really like
+the the Python approach which is that
+will give you portability where that
+makes sense
+but where it doesn't or where it's more
+effort than it's worth then hey will
+will will still expose that
+functionality in the standard library
+and
+trust you as a responsible adult to use
+that power wisely so the example here is
+there's a good new Red Line library
+which we actually also use in the
+Casandra shell which happens to be
+written in Python 2 that provides
+command line history and things like you
+know Emacs he bindings as you're editing
+your your command lines should you be
+into Emacs and so you know we you get
+that on on basically unix-style
+operating systems on windows you don't
+so on Windows the Cassandra shell does
+not really give you it doesn't give you
+the read line style editing so you can
+do things like you know try import read
+line
+catch an import error you'll fall back
+to whatever you were going to do on a
+system that doesn't support that so then
+you know that's a that's a place where I
+think Python made the right decision
+incidentally earlier this year lest you
+think that I'm on the wrong side of
+history here at PyCon earlier this year
+I gave a talk on what Python can learn
+from Java so I'm trying to preach to
+both worlds a little bit the other thing
+that's obsolete is you're trying to
+protect people from themselves so a
+great example of this is what we've had
+to do with within that I I get that M on
+map is dangerous and it can cause seg
+faults I know because I've made JVM seg
+fault by using it but when you need it
+you really need it and trying to protect
+me from that didn't stop me from seg
+faulting things it just it just made me
+have to go to reflection and
+non-portable code to get that to get
+that power finally one of the one of the
+other pain points much more minor than
+these other ones but but worth
+mentioning is that you know a lot of
+really useful stuff in the day VM is is
+hidden under this this banner of unsafe
+and you know you know Dragons be here
+and so forth and this is not portable
+even though you know pretty much any
+high-performance Java lie
+where is users unsafe even if they don't
+admit it and you know that some misc
+unsafe actually exists in the IBM JDK
+and everything so you know at least the
+important parts are as portable as you
+need them to be in practice so one of
+them make big places we use it in
+Cassandra is a library called
+non-blocking hashmap which which gives
+you significantly better performance
+with high thread counts than concurrent
+hash map does now this is also what we
+use for for doing malloc by the way you
+can ask some misconceive to allocate
+native memory for you which of course
+the decay needs because you can do that
+with direct buffers but we also use that
+to do our free able memory stuff and
+malloc and free that so this was fun
+because you know even though even this
+is though this is a real publicly
+supported option to the JDK this was the
+place I learned about it on Twitter this
+is as of as of Monday this was not
+documented on the list of DDK startup
+options so you know now that that's a
+problem when when knowledge has to get
+disseminated in ad hoc fashion like this
+and if you're curious about what this
+does by the way cassandra does enable it
+by default now if you're curious about
+what it does there's a blog post by the
+guy who wrote it and you can find that
+super super frustrating when when you
+have to crawl through mailing lists and
+blog posts to try to figure out what
+options you need to get the behavior you
+want
+so I first a little bit on on Java here
+today so I just wanted to end on a
+positive note from Cassandra oh six a
+couple years ago to 1.0 we
+right performance by 30% and read
+performance by 300% which isn't too
+shabby overall you know I I would I
+would still build Cassandra on the JVM
+if I had to do it over again it gives us
+the right combination of performance and
+you know rapid development in particular
+being garbage-collected
+almost all the time is the is the right
+thing to do it is nice to be able to
+escape into native memory for small
+pieces of the application like we've
+done and I wouldn't be sorry if that
+were given more first-class treatment in
+the DDK but as it is you know garbage
+collection is the right default so with
+that I'll be happy to take questions
+thank you sir you are doing God's work
+so that's the question is why do you use
+JMA and state of J&amp;amp;I because Dana is so
+much faster in in our experience so
+basically Jamie gets us close enough and
+I haven't looked at their benchmarks
+that the DMA people claim that they get
+within ten percent or so of day and I
+which is pretty good and that's worth
+not having to deal with distributing
+binaries for different systems i all i
+all i have to do is all of Cassandra is
+Java and then I just have to bind to
+live C and and maybe create different
+interfaces for different live seas and I
+don't ever have to deal with compilers
+and make files and so forth so small
+performance it but seems like it's worth
+it so far what's the the question is
+what's the overhead of using the the
+Java agent for memory management it's
+substantial you can't do it in real time
+so what we what we do is we take a
+sampling approach so basically every
+every time that I've done ever every
+doubling of operations that I do I will
+I will resample the mem table and see if
+the ratio of your data size to overhead
+has changed and then I adjust my
+assumptions accordingly but so what we
+do is we record the ratio and then for
+the in-between samplings I just track on
+how much the user data has come in and
+multiply that by the ratio to get an
+approximation of how much actual heap
+space it's taking up because it's
+far too slow to actually recalculate
+that every time we update it so we could
+yeah I mean we take you dumps frequently
+to analyze the characteristics but the
+thing is we want this to adjust itself
+automatically to different user level
+workloads
+right right right what it's adjusting is
+how fast do I have to flush those out of
+memory so that's what it's doing
+yeah I'll be glad to take Cassandra's
+specific questions offline but I want to
+keep this for you know what we're doing
+in the kind of the more lower level so
+the question is are we worried about
+circular references with our reference
+counting and no and we basically have to
+hand out at it to make sure that we
+don't need to worry about that but in
+this case the the native memory you know
+it's just a blob so you can't reference
+any other objects on the heap so it's
+not a problem the question is that we
+look at eh cash or anything like that
+so our caching is built on a library
+called concurrent leaked hash map which
+is basically it's basically part of the
+guava of map builder but it's been
+pulled out and made a standalone library
+it exposes a few tuning knobs that
+aren't exposed in the envelope aversion
+and it's it's substantially faster than
+eh cash so we yeah we don't need a lot
+of the fancy bells and whistles from ETH
+cache we just need a raw you know calf
+spit can provide at least recently used
+eviction and we get that with
+concurrently hashmap
+so the question is did we consider using
+a private API to map regions larger than
+2 gigabytes we could definitely do that
+using JMA and going straight to the OS
+and say it map this large region for me
+right the problem is that byte buffer
+only lets me address 32-bit 32-bit
+offsets so yeah but but if you start to
+use reflection to get to that then the
+overhead of reflection is is larger than
+what you want on the cache path maybe if
+you can outline what you're thinking of
+come get my card afterwards and shoot me
+an email then that would be interesting
+yeah we don't require JDK 7 yeah but
+ideally kisstixx is the end of life I
+think is this month or November so it's
+coming up hopefully pushed it out again
+so yeah we eventually we will require
+Java 7 but yeah there was another hand I
+think but guess he decided against it
+all right
+they're very basic basically the two
+gigabyte column valium limit is from
+byte buffers again that you know maybe
+we could click it around that but a
+having all of that is one single blob
+probably isn't a great idea to begin
+with and be it's awful it's awfully
+convenient to work with the day decayed
+and use byte buffers that I can pass to
+channels and so forth alright thanks
+guys</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

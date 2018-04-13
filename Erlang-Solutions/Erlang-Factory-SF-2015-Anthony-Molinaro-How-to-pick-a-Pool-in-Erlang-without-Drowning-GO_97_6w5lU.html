@@ -1,0 +1,1308 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Erlang Factory SF 2015 - Anthony Molinaro - How to pick a Pool in Erlang without Drowning | Coder Coacher - Coaching Coders</title><meta content="Erlang Factory SF 2015 - Anthony Molinaro - How to pick a Pool in Erlang without Drowning - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Erlang Factory SF 2015 - Anthony Molinaro - How to pick a Pool in Erlang without Drowning</b></h2><h5 class="post__date">2015-03-27</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/GO_97_6w5lU" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so I'm going to talk today a little bit
+about pooling an erlang and I'm sort of
+going to come at this from kind of a
+newbie perspective like if you don't
+know much about it and so there may be a
+lot of repetition here so just bear with
+me we'll get some interesting stuff at
+the end first up a little bit about me
+I've been working sort of on the web
+since near the beginning started out
+doing website development in 96 started
+doing sort of ads serving on the
+Internet around 97 98 so that brought
+this kind of high volume low latency
+serving into play and since 2008 I've
+been doing this I'm exclusively in
+Erlang I made a few assumptions about
+the audience like you guys probably know
+a little erlend you're at an early in
+conference you've most likely written a
+gem server to and you're kind of curious
+about you know pooling of resources in
+this case gen servers or processes a few
+things about Erlang that sort of come
+into play here is you know Erlang as a
+concurrent language it's built around
+these lightweight processes sort of
+shared nothing message passing and a
+common pattern that your knees in any
+server is I'm going to spawn a process
+for a request or action I'm going to do
+something with it and then I'm going to
+throw that away but oftentimes when
+you're in that situation you have
+certain information that every request
+needs to get access to state and you
+need a way to sort of get at that state
+what might this state look like this
+state could be configuration it could be
+you know a large cached file that you're
+keeping around to serve out really fast
+but span up a new process it has to get
+information to it or at least get a
+pointer to it and pass that information
+along you might have a large data
+structure maybe you're building a big
+search tree in memory and you don't want
+to sort of create that every time so you
+keep it around and pass some information
+to search it maybe you have persistent
+connections to a database system or
+something like that that you're keeping
+in a process so what are the options for
+sharing this state that you might have
+one you can recreate it every time you
+know maybe it's a really small you know
+data structure that you need to search
+and you just create it when you create
+the process you can use the built-in
+sort of
+sharing structures at stets nija maybe
+it's big enough you want us to get into
+some external database and actually make
+network calls you can also just like all
+right I'm going to put it in a process
+and then if it's in a process this means
+i can do things like send a message to
+that process to get the state send a
+message to the process to sort of set
+the state if i'm allowing that sends
+some parameters to a process combine it
+with the state in that process and
+compute something you can as I said
+before keep a connection in that process
+this is very common pattern you see like
+here's a process it's got a connection
+to a database I send some information
+over to the process the process then
+makes the call to the database
+formulates the response and sends it
+back so I went through and made you know
+some very simple you know template gem
+servers that kind of do this in this
+first one you know we have the standard
+get state call that has you know is
+doing a dense River call in our
+initialization function we'd be getting
+the state from some place and in our
+hand or call we'd be sort of taking the
+state passing it back maybe we're doing
+some work in this case maybe we're
+generating some large search tree data
+structure and our search call is going
+to send some parameters over your handle
+call is going to sort of do a search
+using those parameters in your tree and
+respond to the answer another one more
+final example this is kind of like okay
+the database connection or connection to
+somewhere example in your initialization
+function you're going to connect to some
+place when you call the get data
+function gen server call for get data
+given a query you send it across the
+connection you get the answer back and
+you send it out so you know this this
+looks great right but sort of what's the
+drawback of that pattern the one thing
+that I sort of neglected mention is that
+all of these are you know declared to
+basically be in the registry as the name
+of this module so you can just call the
+you know stuff module and you know get
+it this is great but back to that
+concurrency thing well this means that
+we you know the processes are with
+modeled as you have a Dikshit you have a
+process mailbox was essentially a queue
+for the most part we won't talk about
+selective receive but for the most part
+it's just serialized set of requests
+it's going through pulling them out
+looking at them and it's theoretically
+unlimited in length so you can keep
+piling stuff into it and not dealing
+with it and your cue gets really backed
+up and then you know villain x-oom
+killer kills your vm and then you're
+like what just happened and then
+inevitably you go back and it was
+logging but and there's only sort of
+limited support in the vm for any sort
+of back pressure and it's not really
+well documented as far as I've seen I've
+only seen on a few message board posts
+and things where it's like oh if your
+queue is backed up it'll bump the
+reduction counter of the caller I
+believe may have heard that in Lucas's
+scheduler discussion or something like
+that at one point but I'm not exactly
+how sure how well that works if you're
+in say it you know Jen's River call
+where you're waiting for something it's
+like bumping the reductions of the
+caller I don't know how that has any
+impact so you know these concurrency is
+good but there are these sort of
+limitations and this still works right
+but what it you know these is having a
+single process do that but it doesn't
+really scale across cores and so
+immediately what you find is if you have
+this and you have a lot of people
+calling it you got one core that's super
+super busy and the rest of them are
+doing nothing and usually if you're
+coming to Erlang from some other
+language you look to sort of what you
+used in the past to do these sorts of
+things which was oh I would just use a
+thread pool or something like that so
+you know what would I what would this be
+in Erlang well maybe it's the process
+pool or you know maybe a resource or
+worker pool or connection pool I wonder
+how I figure that out so you know I did
+what I figured most people would do and
+i went to get hub and did some searches
+so I searched for these in in sort of
+limited by Erlang as the language and I
+was like okay 12 results for process
+pool that's cool another three for
+resource and there's not many of those
+all right 18 for worker oh and up 19 for
+connection pool like wow that's like and
+then I looked through a man like oh but
+I know of at least seven other libraries
+that do something of this form that are
+not even in this list so I was like all
+right these are 59 libraries I found
+just on github
+and of those searches there was only one
+library that was listed in multiple
+results so it was sort of like but all
+the libraries kind of could do most of
+these things or would fall under these
+categories so I'm like well alright
+that's kind of interesting one library
+and it's not even the one I would expect
+is not listed in any of these so I
+decided okay well what if I didn't know
+what much you know how would i go about
+sort of figuring out how to kind of
+whittle this down to a short set so
+first i went through each project and i
+sort of decided to say to figure out is
+this project active like when was its
+last commit sir when was it created when
+was its last commit like is there code
+there are there you know recent open
+issues or more telling are there issues
+that were open three years ago and are
+still sitting in the github issues q and
+the next thing I looked at as well as
+this really a standalone sort of
+general-purpose pooling library or is
+this some sort of pool plus database
+library which a significant amount of
+them actually are so that kind of helped
+through you know get great of say
+two-thirds of them because it's all like
+oh this is pool boy plus you know our
+serve this is pool boy plus you know
+postgres this pool bus pool boy + react
+c or pool or plus react c or hot tub
+plus react see i think there was many of
+them the other thing i looked at as i
+said well i'm going to sort of play
+around with these i want to make sure
+that like if i decide to use them
+they're sort of ready for use so two
+things I sort of look for when i'm
+looking at open source libraries and
+deciding if they're ready for use is one
+do they tag releases are their tags in
+their github repo that have versions in
+them because you know what if you just
+have a master branch it's all but
+useless to me you know it pretty much
+means I'm going to have to basically
+like look at the exact commit and use
+that and make up a version and use that
+because the main thing you want is
+reproducibility in these things and if
+you are always pulling from master than
+when your coworker pulls from it two
+days later he might have some different
+library he's using and then I tried to
+actually just sort of like okay i'll
+include these in rebar and just see if i
+can just pull and build the depths and i
+actually found a couple where even
+though they were themselves built with
+rebar they used some plugins or these
+other things and just would not build
+themselves as a rebar dependency and
+even though they were interesting I just
+dropped them because I was like well you
+know they can't just get them to build
+by including them as a dependency so
+they're probably not worth sort of more
+time and this brought me down to you
+know a short list of which i whittled it
+down to 25 and you know several of these
+you probably know pool pool boy in
+pooler probably because these are you
+know they were the top of the list on
+several of that on at least the two they
+weren't on the same list but they were
+the top of a list on two different ones
+pool boy seemed by far the most popular
+just because it was included and used in
+many other of the other libraries
+further down the list pooler i called by
+the moat by far the most OTP because
+it's just and we'll get into it later
+structurally it's it says OTP as you can
+get and it was part of the building of
+it i guess like how can we like be as a
+as possible i included one that we sort
+of wrote at openx sort of around the
+same time pool was being written and
+have used in four years mostly because i
+knew it and also because it does things
+slightly differently in a sort of
+interesting way i included one that Fred
+had talked about a few years ago called
+discount just because I thought that
+it's sort of dispatch mastered method
+was interesting and I had actually
+played with it enough to kind of be
+familiar with it and then G proc
+actually comes with a module called G
+prof pool which does a lot of the things
+that these pooling mechanisms do short
+of actually managing the processes but
+we'll get to that in a minute I found a
+few others that were interesting but
+ended up having some problems one that I
+thought was interesting mostly because
+of the the text on it is it Leo pod is
+like as part of Leo FS which is some
+sort of a distributed database written
+in Erlang I don't know too much about it
+but in the first comment they said we
+used to use ettes what we stopped
+because it didn't work on large systems
+and I was like hmm that's the first time
+I've ever heard someone say that they
+were using ettes and then switched away
+from using ads unfortunately didn't have
+time to really sort of dig in there and
+their their implementation wasn't
+interesting other than that seemed kind
+of that the same as one of the others
+my sort of theory is that they probably
+did some testing back in that are 15
+days when there was still some issues
+with ettes unlike you know more than 16
+cores and you know we ran into these you
+run it on something with 24 cores and
+suddenly performances like really weird
+and you don't know why and then the you
+know reader group locking things got
+added and they got faster again another
+one that I found in the the bachelor
+repos was side job which is is sort of a
+pool and sort of not mostly it's a sort
+of it was interesting and they did seem
+to dispatch work based on scheduler
+locality and I actually sort of played
+around with this at one point and found
+sort of abandoned it because it it got
+to be too clumpy because of this this
+you know focus on staying local when
+spawning up workers PQ was interesting
+because it sort of used was one of the
+few that actually used at Jen fsm in
+it's sort of dispatch logic most others
+were just kind of straight gin server
+this actually seemed to use it fsm and I
+was like oh that's cool but I think this
+was one that it was like I don't know I
+failed to import Ruth rebar and build or
+something like that epogen anounced was
+a really interesting sort of connection
+pooling thing but this again sort of
+failed to compile as a rebar dependency
+I also looked at work or pool from Anaka
+because it had some blog posts and
+seemed to have been used in production
+but I couldn't find any tag releases of
+it so I sort of you know decided not to
+use that one either so then after
+looking at the ones that I sort of
+decided I've I found that these these
+things all have sort of two things in
+common you know these common components
+they'll consist of some sort of worker
+pool some sort of like set of processes
+that are supervised and are monitored
+and these are the things that you're
+distributing your work too and then they
+have what I'm calling dispatching which
+is some strategy for selecting one of
+the workers out of the pool and giving
+it work I then sort of looked at those
+and found many features which you can
+sort of use to differentiate and
+hopefully the size looks okay first of
+all was ease of use I basically said all
+right how much does it take to sort of
+you know integrate with this library and
+then there's various
+features of the worker pool that i found
+that sort of were distinguishing
+features one was you know can you have
+variable size in the worker pool can you
+specify a min and a max does it have
+that the other one is sort of autos what
+I come out I'm calling auto sizing like
+can the pool sort of grow and shrink
+over time and there's a couple ways that
+that I saw it done sometimes it's based
+on sort of the age of the worker other
+times it might be based on the idleness
+of the worker and the idea with these is
+you set a minimum you set a max you say
+out they're going to live at most this
+amount and then you sort of vary between
+the min and Max and they sort of died
+off if they've been alive for more than
+that amount and idle sort of works the
+same way except that it's sort of sees
+like well if this one hasn't done any
+work in a while it kills it off and then
+there's sort of the few features of
+dispatching one of which is the sort of
+method of dispatching most of them use a
+sort of check and check out type method
+a couple of them use more like a random
+method or round-robin few others in
+there and then in the process of
+dispatching there's sort of two ways
+that they can sort of dispatch work one
+of which is they can dispatch with an
+internal queue which ques up work if
+workers are all busy many other is a
+sort of fail fast mechanism where
+there's no work is available it just
+fails immediately and then I was I tried
+to sort of measure performance with some
+sort of simple benchmarking sometimes
+I'm going to kind of get into sort of
+the details of sort of how I tested and
+round and play with these libraries and
+all the link at the end all the codes on
+github you can go and play with them
+yourself if you want to so the first
+thing is I kind of created my life sort
+of example worker very simple Jen's
+server he just has this one function do
+I removed all of these sort of like you
+know registration of it so the start
+link just kind of returns it's going to
+return a paid the do function is going
+to take that page call the work function
+with a couple parameters and that's
+going to call like you know it's self a
+work function in the call and then I
+decided if I was going to do comparisons
+I would need to do well what's the most
+common of those you know different
+features that all of them sort of
+support so fixed size because not all of
+them supported variable sizing and also
+they all seem to support
+semantics and you know some of them also
+support cueing but they all did fail
+fast so first to take a deeper dive into
+pool boy as I said before this was kind
+of the most popular based on just its
+use in other projects in terms of code
+it was it's very small you know it's
+sort of like 306 lines of code 670 lines
+of tests that's it's by far the smallest
+of all the ones looked at it can both
+queue and fail fast and the queue can
+sort of be you know or fail fast and the
+queue can sort of be a lifo fifo so you
+can kind of like as things work gets
+queued up you can either have the most
+recent one worked on first or the the
+oldest one it has very limited support
+for variable sizing and auto sizing
+essentially you set a fixed size and
+then you can set an overflow amount and
+it will overflow up to that amount but
+if you're an overflowed process it will
+immediately be killed after it does its
+work so I kind of question how well that
+would work through you know a semi
+sustained spike because it seems like
+you'd be constantly spinning up new
+processes to deal with it and then
+they'd immediately be killed and it can
+pretty much store any pit essentially
+it's only requirement is that whatever
+thing you're storing it it has a
+startling function that returns a pit so
+you could use it to store supervisors or
+gen-f SMS or anything like that actually
+writing code to sort of integrate with
+it somewhere you'll be sort of creating
+in your supervision tree usually
+something like this that basically is
+creating a pool boy pool you give it a
+name you tell it what the worker module
+is you specify the size which in this
+case i'm specifying it is my maximum
+size and then i'm setting the overflow
+to zero because in this case i want to
+keep it fixed size when you actually go
+to sort of do work with it you're going
+to have to sort of check it out that's
+either going to give you full if you've
+used up all your workers because we're
+in fail fast mode at which point I kind
+of convert that to error busy otherwise
+I'm going to get back essentially a pig
+so I can call my worker to actually do
+my work and then I sort of check it in
+and return the result here
+I decided to kind of take a look at the
+details of what happens during these
+calls and I'm using a color here to sort
+of denote anything that kind of ends up
+being a process to process call is
+either going to be sort of like blue or
+red and those that are in red or ones
+that I feel could kind of contend if you
+have a lot of processes and doing them
+at once so in this case when you call
+pool boy from your caller it's going to
+check out which is a gin server call and
+pretty much any caller is all going to
+be calling that same gen server with
+that same call so I put this in red to
+say it's sort of contents and you'll see
+this in subsequent slides so you can get
+a sense of how they compare it decides
+if there's a worker available if not hey
+it's full if there is here's the pit you
+then have a page where you can call and
+do work and since it's been checked out
+of the pool you know you're the only one
+calling that one so that's ones in blue
+you get back your result and then you do
+a cast to check things in all right
+moving along to pooler so pooler has I
+said a very sort of complicated
+supervision tree where it's like
+supervisors supervisors of you know
+groups and all sorts of things and it
+it's pretty large compared to pool boy
+it's 841 lines of code thousand lines of
+tests is unique in that it supports sort
+of groups of pools using PG 2 which is
+something that the others don't it can
+both queue and fail fast it does support
+variable sizing and sort of auto sizing
+based on age the culling is a little bit
+noisy so when it actually kills off a
+process it actually uses OTP logging so
+you get a big sasal message and I tend
+to not like that when my pool is like
+every few minutes when something dies
+goes eight something just died and it
+can pretty much store any sort of head
+similar to pool boy in this case you
+know you can sort of tie it directly
+into your tree and have some stuff done
+using system parameters but I wanted to
+have them all work in a similar fashion
+so I kind of had to create a gen server
+just to call this one function to create
+the new pool but again you can give it a
+sort of maximum count and an initial
+count in these cases I just made them
+both the max it's got a max age in there
+and since it was so noisy I just set the
+max age really high so that's they're
+mostly just to kind of see that it's
+they're the the do function ends up
+looking you know pretty much the same
+just kind of the function names and the
+return codes are different in this case
+you're taking a member and getting back
+no members and you know but you and then
+returning the member afterwards and
+actually the call details actually look
+almost identical when you take a member
+you call this one you know Jen server
+that's managing it and it checks to see
+if there's a member says no says you ask
+you to paid you can call your server you
+can get the result there you go the next
+one is a gin server pool and this one is
+kind of unique in that it's sort of
+masquerades as the worker and that you
+don't really explicitly do any check-ins
+or checkouts and I'll show you that in a
+minute it's medium-sized foreigner so
+many lines of code zero lines of test
+code though I'm not going to apologize
+for that just have to say that you know
+we just test our code in production
+that's all it has been running you know
+in production for at least four and a
+half years or something so it does work
+but it does have its problem so we'll
+get into in a minute it can queue or
+feel fast or actually you can do both
+because you can actually set a limited
+queue size so it'll queue up to a
+certain number and then fail fast after
+that it supports variable sizing and
+auto sizing based on either age or idle
+and then it's really geared towards just
+gin servers only and and the reason why
+is because it actually never spawns the
+gin server that you give it it just in
+beds that in another gin server and
+proxies all the calls to it
+configuration is very is very similar to
+before and it was the idea was that
+wherever you had your gin server link
+you could just replace it with a gin
+server pool start link and throw in some
+extra options and it would just work so
+you can specify in your options you know
+min pull sighs max your idle timeout max
+age I specifying to not Q here and in
+the do function as you notice unlike the
+others this one actually just calls the
+baseline worker directly with the pool
+ID right so I didn't actually I
+technically don't have to change that
+unless I actually want to see if the you
+know that I got a request dropped
+so if you're actually cueing things and
+doing that like you don't change
+anything you just kind of like change
+where you do your start link and
+suddenly you've got a pool of gin
+servers where you had one before now the
+call graph looks a little different in
+this case you know when you make you
+know your caller is actually calling
+your worker but I sort of say well and
+in truth you're calling your gents river
+pool but you're calling a gents River
+call or cast or info of your worker and
+it's just getting picked up by the pool
+the pool seeing if it has a proxy
+available if it doesn't sir turning
+saying no I don't have one so I'm
+dropping your request if it does it sort
+of gets a proxy out of its internal
+thing it then calls the proxy the proxy
+itself is a gem server that just
+contains your worker as a you know uh
+funca as it contains the atom name of
+your worker as a function or as a
+parameter and it just calls you know em
+co len handle call directly in the code
+and just forwards the call along and
+gets the result out and will do sort of
+check in and check out right at that
+point so you never actually see any of
+the check in check out because
+essentially look it back response and
+they'll check it in if it can and then
+it'll sort of Ford the result back out
+and this is a you know it works well the
+main issue with it has been that in some
+servers where you actually have to send
+a bit of data to your worker you end up
+actually copying the data through a
+couple different places and the the gin
+server pool sort of dispatch process can
+get really backed up the next is
+discount which I found is unique back
+when I heard about it because it's got
+this stochastic based selection and it
+can either use at stables or name
+processes and that it sort of just
+randomly selects a resource tries to see
+if it can use it if it can't it fails if
+it can it goes goes ahead and does it
+again this is pretty small it's like you
+know 297 lines of code 361 lines of
+tests it's fail fast only like basically
+it'll stranded ly pick us resource if
+you get it you get it if not like you're
+done and this means that you it's up to
+you to sort of decide do I want to retry
+I mean I've
+done things in the past where I just
+call Erlang yield retry again do this a
+few times if it you know eventually you
+get a resource or you give up after you
+know 10 tries it only supports a fixed
+number of resources but this can store a
+sort of any sort of resource and
+actually the storing of a pidd ended up
+resulting in you sort of going through a
+couple of hops using discount you need
+to sort of started just a dispatcher and
+again I ended up sort of wrapping this
+in a gen server in order just to call
+this the start function and you give it
+this sort of as your resources your max
+pool size it requires that you have this
+info that you pass whenever you check
+something out and all of the processes
+that are checking it out sort of need
+this information and kind of the most
+efficient way I found of doing this is
+kind of just to throw it in a Moche
+global so when I created I stick it in
+this mochi global and then later on when
+I'm going to call it I get it back out
+on mochi global and then you know
+check-out check-in is very similar right
+and check something out you get that
+it's busy when you go to check something
+in you have to include essentially the
+reference that it gives you so you can
+do your work and then check it back in
+afterwards however it also requires that
+you implement a behavior and this
+behavior is actually what's sort of
+managing the resource itself so in this
+case in the behavior in the
+initialization function I actually start
+up the worker and I keep track of it
+spit as well as the arguments it was
+started with when you check out you only
+check out things well if you try to
+check out something that's already been
+checked out it'll actually come back as
+busy if not it'll basically say that I'm
+using it and return the pit in the
+checkout function and then the check-in
+sort of does the reverse and since
+things can die in this case when they
+die it just restarts them and that's why
+you keep around the initial arguments
+but this itself is running inside of a
+process so you end up with the process
+that sort of contains a reference to
+another process and so when you're
+calling you kind of have to hop the call
+graph for discount is nice because it's
+pretty much all blue you know there's
+there's no real places where things
+actually like call multiple processes
+are all calling in to the same gen
+server on checkout it sort of checks its
+internal locked able to get a lock if it
+doesn't get it it's busy if it if it
+does get it it sort of grabs a
+dispatcher and it does that through an
+internal server at then sort of calls
+that dispatcher module which is going to
+return the pit and then you know you
+call the worker across there comes back
+and then you do the check in and that's
+ends up being another cast and you
+eventually give up the lock so the final
+one I'm going to go into is G proc and
+what I'm really talking about here is
+your Jeep rock pool this offer is just
+the sort of dispatching method it's just
+the hey how do i select one of the
+processes in the pool and then it
+assumes that you're using G proc for the
+managing those processes jeep rock pool
+itself is be relatively small it's 558
+lines of code 98 lines of tests but jeep
+rock itself which you pretty much have
+to include is you know it's XL as i call
+it four thousand lines of codes 1,800
+lines of tests lot in there it does
+support sort of active queuing and that
+internally it actually will do these
+sort of like yield and try again up to
+some some amount of time or it does fail
+fast it does not support sizing because
+essentially it it just defers that to
+you so you can kind of decide to do it
+it stores really pits only the dispatch
+is purely ettes based in that it's just
+using the g proc tables there's no gents
+rivers involved and it does it it but it
+does require your worker to be modified
+and I'll show that in a minute so
+setting it up you have to you know call
+this Jeep rock pool new and you give it
+sort of a strategy in this case the
+claim strategy is that is the closest to
+the check and check out strategy so
+since I was going for what's most common
+that is the most common in this case and
+then I just construct a fixed number of
+workers just because that's the easiest
+and for each work or you need to call
+this Jeep rock pool add worker give it
+the pool ID and then sort of give it the
+name and the name in this case I give it
+the pool ID and then a number and then I
+have to actually pass that name and that
+ID to the worker itself
+and then when you actually go to sort of
+do something with it you claim and you
+actually pass it a function and the
+function is going to get back to pieces
+of information I forget what the first
+one was but it wasn't useful the second
+one is actually the pit so at that point
+i can actually kind of call the in this
+case the jeep rock worker which is my
+different from the baseline worker and
+I'll either get back false if it was
+busy or true in the result if I get back
+a results so the one difference that you
+have to make to your worker is you
+actually have to sort of connect the
+worker to the pool and what it's
+actually doing here is actually getting
+the pit of the worker and then
+associating that with the ID in Jeep
+rock that you're using so you can
+actually do the lookup now when you're
+calling Jeep rock and you go to claim
+something like it's pretty much just
+using the Jeep rockettes table and it's
+doing like at select so it kind of just
+finds one of these it doesn't find one
+its returns false if it does it sort of
+grabs that the pit out as making a
+second sort of X call to get that and
+then it can sort of use that to pass it
+off to the worker get back the result
+and it can sort of clear the lock in the
+first table and then sort of pass back
+the results so I kind of a pet
+implemented all of these and I wanted to
+do just like a little bit of comparative
+analysis so I wrote a very simple
+benchmarking thing and as I mentioned
+before in order to do this I kind of
+picked the most sort of common setting
+so i did a fixed pool size of just like
+20 processes and like running this on a
+laptop i did the fast fail config and
+then i would just spawn differing number
+of callers up to and then pass the pool
+size because i really wanted to see sort
+of how they started to behave when they
+were sort of being over driven and each
+of the little callers sort of gets a
+worker does it work in this case just
+sleeping a little bit it then sort of
+weights a little bit amount of time
+before it sort of does some more work
+and then it repeats for some number of
+iterations and that's just so that i
+could have like okay i'm going to have a
+you know 50 worker 50 callers all just
+like making calls and h make a thousand
+and then I just sort of measured a few
+different things and we can kind of go
+through the results real quick so the
+first thing I looked at is like okay
+what
+good vs busy results and already we
+start to see some some differentiation
+here in that most of those that that are
+not discount they actually you know give
+you good results and they all everything
+is good up to up to a certain point that
+pool size at the pool size they start to
+diverge and then sort of give differing
+numbers of results discount since it's
+possible even with low traffic to look
+up a random number and conflict means
+that you immediately get busy signal
+even at the beginning and if we look at
+the busy results we kind of see the sort
+of inverse of that graph and that it's
+like yep most of them are zero except
+for discount and then they sort of all
+sort of go up I also looked at sort of
+timing like how much time are these
+taking and remember most of these are
+just sleep times but it's sort of like
+it's what I imagined like it's pretty
+flat the minimum time up into the pool
+size at which they start to just drop
+because when you're in overload most
+things are just the minimum time is zero
+because everything is failing fast and I
+did notice that pooler for some reason
+in a lot of cases like never fully
+dropped to zero like everything else
+like I ran this many times and this one
+actually is the only one that didn't
+show it actually nonzero across the
+board so I didn't know what to make of
+that the average time you know kind of
+what you'd expect it's like flat except
+for you know discount because it's
+failing or it's giving busy sniggles
+half the time so there's going to be
+faster and then it starts to sort of
+drop off after that and the max times
+are kind of flat but sort of much higher
+I also looked at sort of a global
+context switches and this is mostly just
+to kind of look at them comparing them
+next to each other and it's kind of what
+you would would expect we're the ones
+that are sort of X based which are not
+actually switching between processes as
+much actually stay sort of near the
+bottom and it's interesting though that
+some of these kind of really flatten out
+and these these graphs even though I ran
+over and over and over again they kind
+of all look very much the same so so
+yeah i'm not sure like why pool boy can
+flatten out at some point and i'm sure
+it all comes down to the exact number of
+law
+you know operations done and and whatnot
+reductions also kind of show this and
+that as things fail more they actually
+sort of do less so the reductions kind
+of go up and then they sort of all just
+fall off and what I really wanted to try
+to get at and what I'm gonna bring up on
+the next slide even though it doesn't
+really show what I saw is mostly came
+about in our use of gin server and when
+we were in overload I would connect to a
+node and run and top and I could watch
+this one process that dispatch process
+and I could watch it spiked to like 100
+messages 0 msgs one hundred messages
+zero messages and I'd watch CPU like
+spiking insert doing that and I was like
+well is there a way for me to measure
+that and the best I came up with is I
+spin up a little gin server that sits
+there in like every couple of
+milliseconds we'll just like run through
+all the message queues and take the
+maximum of all of them and then I just
+after the run I just take what was the
+maximum during that run and I decided to
+graph it just to kind of see what it
+looked like and this was all over the
+place so every one of them look
+different so I'm like there has to be a
+better way to go about doing it anyone
+has ideas I'd love to hear them but sort
+of looked like this and that you know
+down here at the bottom we've got jeep
+rock and discount which stay pretty flat
+which is what you'd expect because they
+don't use a lot of they don't use a lot
+of gem servers so there's not a lot of q
+build up whereas all the others which
+have sort of one gen server you do see
+these like this like intermittent random
+sort of spike eNOS so given all this you
+know I sort of came up with kind of like
+general recommendations on when you
+might want to use one of these you know
+pool boy it's very popular it's very
+small and easy to understand a lots of
+people use it so probably lots of people
+could help if you ever have issues it
+may have issues with load but probably
+like not awful issues you know I mean in
+a short test of over driving at it was
+fine and only if you're in the you know
+insane world of every you know a bit of
+time counts then you might
+I not not not choose it pooler is close
+second it also seems you know used by
+other other projects and you know well
+maintained and whatnot but the fact that
+it is just so OTP made it just kind of
+like difficult to work with because it
+was hard to sort of like tease it out
+and put it just into your supervision
+tree and it's like so many like lines of
+code and does so much extra stuff to
+deal with like groups of groups and
+integrating with PG and all that I was
+like well in most cases i I don't know
+if I'd need to use it Jen's over pool
+like I said it's kind of really easy
+like to integrate with but you know it's
+only really been used at openx we
+haven't documented it well so you know
+what you see in these slides are
+probably the best documentation that
+exists at the moment if you want to play
+with it you know it feel free we like I
+said we've used it a lot discount is
+great for the reason stayed on its
+github page like if you're no you're
+going to be over driving a limited
+number of things and that you can
+failure is fine it's going to be the
+fastest one that you'll find out there
+and then G proc like seems that it
+should actually also be really good at
+this because it's really just using
+ettes I mean it doesn't even really have
+any gin servers that get interacted with
+on that dispatch stage but it does
+require that you sort of do a little bit
+of work to write your own sort of
+process management so if you want to
+grow and shrink pools or you want to do
+all that you kinda have to do that all
+yourself and it does require you to sort
+of change kind of existing workers given
+all this are there times when you
+actually don't want a pool and I think
+there are you know I mentioned a lot of
+cases where you do like oh I have a
+giant data structure that I need to keep
+around in memory and spawning them and
+creating any of them is expensive so I
+want a limited number I have some
+connections to a database or something
+like that but single gen servers can
+really almost sometimes never become
+bottlenecks if you're sending them a
+tiny amount of data and they're doing a
+tiny amount of stuff like they never
+really you know even if everyone's
+calling them once they really you can
+you can have some of them that you just
+never notice if you have a large fixed
+data structure that you're going to
+search but it's pretty much like fixed
+and that you don't change it a lot you
+can just compile that
+ahead of time and just embed it directly
+in the calls that it's being used in and
+I've used this a lot just you know using
+say CT expand or something like that or
+even just generating airline code with
+pearl you can do it and you can get
+really big data structures and their you
+know compiled and it takes a bit of a
+bit of time to compile them and they end
+up being enormous but you know I've had
+a module that had a function that had a
+hundred thousand heads and it worked
+great another is it sort of passing
+around ports so this goes back to the
+kind of connection pooling thing there's
+a pattern that is like oh you wrap a
+process around your connection and you
+just keep those processes around you
+want to make calls to the connection you
+send it to there and it sends it across
+the port this can be a little bit of an
+anti-pattern if essentially you're
+constructing say like a large IO list
+and then sending it across a pasta
+process boundary to something else which
+has been sending it to the port because
+what you're going to do is make a copy
+of that entire thing which is probably
+going to make that process actually like
+grow and possibly go through multiple
+GCS and things like that so I actually
+had a lot of success with just
+essentially having a small gin server
+that just kept a queue of ports around
+pulled ports out use them put them back
+into that and considering there's also a
+lot of servers and things already have
+ways to kind of reuse except ters and
+things like that I assume they were the
+interesting ways you could kind of like
+keep a connection open for all the uses
+of the same acceptor and therefore not
+actually have processes involved at all
+that's pretty much it the example code
+plus all the notes in the in the program
+the presentation are all in this repo my
+contact info is is is here I wanted to
+thank openx for giving me the time to
+sort of do the research and write the
+talk up and if you you know anyone is
+not currently doing erling every day and
+is interested in what we do it open ex
+and what we do with their lang at openx
+please come talk to me thank you guys
+and I know we're right at time but if
+you have questions I'll take them
+mm-hmm
+you
+well basically the way that I've always
+done that because essentially it's
+really hard to reproduce your production
+system especially when it's that scale
+is essentially canary based testing so
+you make a modified server that uses a
+different pooler pulling library and you
+replace one of your servers with it and
+then compared to one of your servers
+that doesn't have it and you know that
+that works if your business can support
+possible failures of a portion of your
+of your your stuff and you know I'm
+lucky enough that we can do that and so
+a lot of testing on production side of
+things was done using that the testing I
+did here was really just like I just
+want to kind of get some baseline
+comparative sort of stuff you could fork
+it and try to like crank up the numbers
+and see if you could get it to do stuff
+but I have a feeling that it's like
+you're not going to get a realistic test
+unless you just like kind of rip out the
+code now what this might give you is
+like I kind of show you an easy way to
+do all the different ones and the code
+has sort of complete examples so you
+could kind of just like do that to make
+the check in and check out as similar as
+possible
+yeah I I thought I had a slide but I
+must have maybe went through real quick
+the main reason usually ends up being if
+if the if the process creation is
+expensive in some way no no no not not
+not just not in spawning a process
+spawning a process is cheap but when I
+talk about creation it's really the
+creation of the state that that process
+is managing so you know the standard
+model of Erlang is like if you need
+state that a lot of people need to get
+at you kind of need to keep it somewhere
+in a process because that's how it keeps
+around state or you know if you can
+model as an ex or something like that
+that's great but say you build a you
+know enormous you know gb tree that
+you're using for search right and it
+takes you like 30 seconds to like build
+that up well you don't want to every
+time you have to handle that request
+generate one of those and you know we
+have this in our business of serving ads
+and that we have a really large search
+tree which is sort of all the
+advertisements that we need to consider
+and they each have rules associated with
+them and we need to go through that list
+and apply rules and figure out which
+ones match and don't and it's this giant
+data structure and it takes a good 20 30
+seconds to spin up so we want to have a
+sort of limited size of them and we tend
+to you know know that like okay the
+number of cores in the system is going
+to limit us so we will use the pooling
+up to the core size but it's really
+about like all I need to have some
+number of them now in some cases you
+might actually over subscribe because
+some things might be say a connection to
+a database that is somewhat expensive to
+to build up or a connection to a
+persistent back-end that could be
+expensive to build up and in those cases
+like you can / subscribe because most of
+the time they're spent sort of waiting
+on network but you still want to have
+say a limited number of
+and so those are really the cases where
+sort of you sort of reach for pooling
+like yeah if it's really cheap to spin
+them up and you can do it that's great
+yes well because sort of getting the
+state out of some other place is
+expensive like if yeah they're all the
+same so but I want to I want to run I
+want to run this query like if the
+things in my state are a collection of
+rules and I it's the same set of rules
+but I want to basically have multiple
+callers being having rules run at the
+same time like I can store those rules
+in say net stable and then I need to
+incur the cost of copying them all to
+the ettes table before I can service it
+but storing them in the state of the
+process they're kind of party there now
+like i mentioned like an ideal case
+could be like if your rules are fixed
+like pre compiling them into a module is
+going to be the fastest because that's
+going to be shared by everyone but again
+that's the same thing it's like you're
+sharing that or you know read-only copy
+of it but we have actually like rules
+coming and going all the time so that
+state actually like you know mutates and
+changes and even you know they should
+all be the same but they can vary even
+by minor amounts throughout time
+hopefully those answers those questions
+I don't know who is next I think he was
+next to
+no no I haven't I you know it it's hard
+even the amount of work in this was like
+multiple weeks of just like every day
+sitting down and just like messing with
+these things and reading through code
+and doing stuff and it sort of became
+very apparent with the number that vast
+number out there that like there was a
+limited amount of stuff I could do
+because I also didn't really like the
+way the benchmarking I did really was
+because it's kind of a super simple
+benchmark and I was like well it'd be
+cool to do something like fasho bench
+but I don't know how to use it and I
+don't have time to like learn it in the
+next like week to do stuff right so i
+think that there's like more that can be
+done it would be interesting to sort of
+like add more things in here and make
+the testing a little better and and be
+able to do that and hopefully i've
+provided since i provided all the code
+and all the all the benchmark stuff and
+how i generate all the graphs and the
+sequence diagrams it's like all on the
+repo so people can go and you know check
+it out and you know for kit and add
+different pooler pool things or other
+ones they find and things like that so
+the only most of the ones that I found
+like back pressure was I'll just fail
+fast and then let the caller sort of
+deal with with that or I'll cue it and
+then keep it around for a long time
+until the you know caller gives up right
+like they think that pooler has like a
+timeout based queuing so you can queue
+up to a certain time out I know the
+gents river pool support sort of time
+out on the calls but I also think it
+might be a little broken and so but
+nothing that sort of actively sort of
+combines like I don't know if you saw
+the talk on jobs before this in the
+other room but jobs is one that actually
+is really trying to do that right it's
+like sits in front of your things and
+basically does similar stuff like oh I'm
+using too many things i'm just going to
+sort of fail out really quick
+right and most of that is deferred to
+like the application layer because it
+tends to be very specific right like if
+you're writing a web app that's doing it
+like what do you do you have to actually
+design yeah but I didn't see any of the
+ones I looked at that really had
+anything like that I mean I assume you
+could do with maybe some callback
+functions or something like that but
+nothing that was that claimed in the
+documentation that it did that or
+anything like that but then there was so
+many of them and it was just going
+through them a brief amount was took a
+long time like there could be something
+I missed and I only looked on github so
+like I there was a couple I think that I
+found I mean they've found one that was
+not on github because I found it on like
+trap exit or you know whatever erlang
+central or whatever the new traffic's it
+is so yes and I didn't go into that too
+much but yeah some of them will monitor
+the calling process I think pooler mono
+it monitors the calling process other
+ones basically just you know if it never
+gets checked back in i think they I mean
+it's watching the process that's being
+checked out they monitor that so if the
+if the calling process dies I'm not
+exactly sure what happens in some of
+them so
+well the supervisor restarts the he's
+talking about the caller dying so you
+check out a resource and then you're
+doing something with it and then you die
+how do you how does it give check back
+in and some of them you know will
+actually have like a most of them are
+like they've wrapped things and try
+catches and then do some things like
+that to do it so that's more deferring
+to the client I haven't seen anything
+that does it wasn't a common feature
+that I saw on a lot of them but I think
+I saw it on pooler mavey I think that
+one might have been like it'll supervise
+your process and if it's short-lived
+it'll automatically check the resource
+back in but most of the others just kind
+of assume like no you're going to get it
+and you're going to work and you just
+wrap your stuff in a try catch and you
+know trap exit or whatever and then make
+sure that things work out yeah</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,1058 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>&quot;Building Scalable Stateful Services&quot; by Caitie McCaffrey | Coder Coacher - Coaching Coders</title><meta content="&quot;Building Scalable Stateful Services&quot; by Caitie McCaffrey - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Strange-Loop/">Strange Loop</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>&quot;Building Scalable Stateful Services&quot; by Caitie McCaffrey</b></h2><h5 class="post__date">2015-09-27</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/H0i_bXKwujQ" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">I'm gonna talk to you guys this
+afternoon about building scalable
+stateful services okay
+so um I'm kidding McCaffrey if you don't
+know me I'm a distributed systems
+engineer I currently work at Twitter and
+I'm the tech lead for observability
+there and then prior to that in a former
+life I spent a really long time working
+in the games industry on a variety of
+different games building out services
+that powered those experiences so what
+I'm going to talk to you guys today is
+some lessons learned in building
+stateful services and not databases and
+caches but actually bringing state into
+our actual services and the benefits and
+why we may want to do that and why it's
+beneficial moving forward oh that's like
+me on the Internet I will talk to you on
+the Internet so if you want to do that
+hit me up so we've been in this paradigm
+of programming state less services and
+this has worked really well for about
+the last five to ten years and we like
+your service is stateless and so then as
+you get more clients or customers or
+users of your API you just add another
+service and you scale out horizontally
+and this works pretty well and we use
+these databases that we talk to to store
+the canonical source of truth to be our
+history to be like the you know the the
+rock and are in our system that stored
+all of our states so that our services
+didn't have to think about it and this
+works okay and did for a while but the
+problem is is like our services do have
+state the applications we're building
+have state and we've been you relying on
+this abstraction if it's all like
+covered in this database and that gave
+us really strong consistency but we
+started to hit these limits where one
+database doesn't cut it anymore and so
+we've gone into this no sequel world or
+we were or were sharding you know
+relational databases and we're giving up
+some of these more strongly consistent
+properties and this abstraction of all
+of the data living and being taken care
+of by the database is leaky now it's
+leaking into our services because what
+we're actually doing when we have these
+states we have state that we're using in
+stateless services is we have a client
+making a request in the data shipping
+paradigm and so I go to the database and
+it sends me some data back and then I
+answer the request and then I'm going to
+return
+the result and then this data that I
+transferred over the network is just
+gonna go away and then the next time the
+client makes a similar request operating
+on a similar set of data it's gonna do
+the exact same thing but it got load
+balance to a different machine this time
+and so now we've like God and pulled the
+same data across the network onto a
+different machine to answer the request
+for the same user and then it gets
+thrown away again and so this can keep
+going on and on and so for applications
+where we have these chatty clients that
+are operating over a session over a
+duration or a period of time like think
+in games think in any of these
+applications where it's doing something
+for you like ordering a car or tracking
+your fitness workout or your like
+communication something about your state
+or your location to the service you're
+mostly just talking about yourself
+because we all like to talk about
+ourselves and so these applications are
+operating on the same set of state and
+like pulling them into all these
+different services load balancing
+between can be pretty wasteful so I'm
+going to talk to you about how you might
+want to think about building state full
+services and some of the benefits you
+can get from them and I'm gonna caveat
+this upfront this is not like a magic
+panacea that you want to use all the
+time stateless services are still
+incredibly effective in horizontal
+scalability is something that you still
+want to be able to do but you can get
+some really nice benefits well then talk
+about how you want to go and build these
+and start thinking about the trade-offs
+you're gonna have to make while building
+them and then we'll give you some
+real-world examples of some cool systems
+they're actually running in production
+today and doing very well that have
+become a stateful for a variety of
+different reasons and then I'll give you
+a quick cautionary like road map of
+things you might want to watch out for
+that are different than building state
+less services so if you try to do this
+at home these are things that pop up
+that you may not think about okay so the
+big benefit I see in state full services
+is you have data locality so data
+locality is this idea that you ship the
+request to the machine that holds the
+data to operate on it and I want to do
+this for a couple reasons one I get low
+latency I don't have to go and hit the
+database which is the canonical source
+of truth still probably at a service
+every single time I just have to hit it
+whenever I don't happen to have the
+state I need on
+machine and then so it's providing lower
+latency because we're doing less Network
+calls it's also really great for data
+intensive applications where a client
+needs to operate over a bunch of data
+and like have very quick response times
+so this is relying on the function
+shipping paradigms this is the idea of
+if a client makes a request or starts a
+session we still have to go to the
+database the first time to get the data
+and it moves into our service but then
+once that request has been handled we
+leave that data on the service and then
+the next time the client makes a very
+similar request which is gonna operate
+on that data it just has to talk to the
+same machine that it just that it
+already pulled the data on to and then
+this way I don't have to go to my
+database I'm not actually adding extra
+latency image my databases down I can
+still handle this request right and then
+the same thing happens like over and
+over again as long as I keep not needing
+to go back to the database as long as I
+can talk to the same machine that my
+data already lives on this is a nice
+world to live in another benefit of
+stateful services if you build them
+using sticky connections is you can get
+more available consistency models and
+I'll sort of walk through this so I
+think we're all pretty familiar with the
+cap theorem this is the idea that you
+have consistency availability and
+partition tolerance pick two you don't
+not get to pick partition tolerance
+because physics and so in a in this
+world when we have different levels of
+consistency that we operate against some
+are not available or not highly
+available right like they have our CP
+systems they are only on offered under
+CP systems and then if we want to have
+highly available forms of consistency
+you basically get right from reading
+monotonic read and monotonic right this
+is sort of like an induction tree but if
+we have sticky connections where the
+data for from a single user and like in
+the single model is always talking to
+the same machine then you can have these
+other consistency models that are
+stronger consisting guarantees like read
+your rights pipeline random access
+memory and causal consistency are a bit
+like AP in the CapSense and so this is
+actually really nice one of the first
+times I sort of came across this idea
+was a blog post that Werner Vogel wrote
+in 2007 from Amazon entitled eventual
+consistency
+see revisited and so he starts talking
+about building sticky connections in the
+sense of like Amazon's Amazon DynamoDB
+and the one of the points that he makes
+in addition to these consistency models
+is you're giving your clients sort of a
+nicer framework to reason about instead
+of having to think about oh my data may
+be pulled into all these different
+machines and all this crazy concurrency
+is having on if you just have your
+client talking to the same server
+because you have a sticky connection
+it's a little easier to reason about so
+it helps us out when we're programming
+distributed systems models okay so so
+those are some of the benefits let's
+talk about how you may want to go about
+building these so that you can take
+advantage of data locality so you might
+be able to take advantage of some of
+these better consistency models that it
+and still be available so the the basic
+idea behind a CV connection is it is
+exactly what it sounds like we have a
+client who's going to make a request to
+a cluster of servers and they're always
+going to get routed to the same server
+somehow they're always going to talk to
+the same server for their session or
+whatever the duration of what you're
+doing is going on so the dumbest and
+easiest to implement way is just to open
+up a persistent connection so this could
+be you know you open up a persistent
+HTTP request or you open up a persistent
+tcp channel or pick your protocol of
+choice it's super easy to implement so
+then you'll always be sent to the same
+machine because you're always talking to
+that machine over the same connection
+for the length of the session however it
+does have some problems associated with
+it obviously once the connection breaks
+the stickiness is gone and you're gonna
+get like round-robin to another server
+but the bigger problem here I think and
+that I've actually encountered in
+production that's caused outages is load
+balancing when you do this you're
+essentially making an assumption that
+all of these sessions all these sticky
+connections sort of last for the same
+amount of time and are gonna cause your
+seat or your conservator talking to you
+the same amount of load and that's not
+generally the case so what you need to
+do you can easily overwhelm a single
+server by having a persistent connection
+to many persistent connections sort of
+dogpile on one server that are very
+expensive or last for a really long time
+or doing a ton of work because you just
+happen to have a bunch of chatty clients
+and that machines gonna like go down
+real hard if you do not implement back
+pressure so I highly recommend or would
+say it's a requirement
+building persistent connections that you
+need to implement back pressure on these
+machines so that they can break
+connections when they're overwhelmed
+this way the client then has to
+reconnect um you could also in addition
+do some smarter load balancing logic to
+say like hey connect to a machine that
+has like the most resources free but you
+still need back pressure that's like a
+bare minimum requirement for persistent
+connections if you want to do something
+a little smarter and oh this this is
+more beneficial you can implement some
+routing logic in your cluster so this is
+the idea that a client can talk to any
+server in the cluster and then it will
+be routed to the server that has its
+data that's going to answer its requests
+where it's going to perform its
+computation and there's two sort of
+categories of problems I think about
+when solving routing logic in services
+is you have cluster membership who is in
+my cluster and like how do I determine
+like what machines are actually
+available to be talked to and then work
+distribution how am I going to
+distribute load across this cluster
+right and so we're going to go through
+those because there's actually a variety
+of different choices and they have
+different impacts and trade-offs with
+them so once again the dumbest thing you
+can do the easiest thing you can do
+which sometimes works right like I'm
+always a big fan of starting with the
+dumbest thing possible and then seeing
+if it meets your needs is using static
+cluster memberships this is literally
+like a config file that you deploy in
+your cluster that has all the addresses
+of the nodes and the machines in it and
+this works for certain scenarios
+although it does have problems it's not
+super fault tolerant so if a machine
+goes down you essentially have to
+replace that machine if you want to
+expand a cluster from an Operations
+perspective this becomes incredibly
+painful because you essentially have to
+take down the entire cluster and then
+bring it back up in order to do the load
+balancing correctly or in order to do
+the work distribution correctly oops
+sorry
+animations so what's going on here is
+that this is easy to do but it's
+operationally painful and it's also not
+a great choice for services that have to
+be highly available where you can't
+tolerate downtime where you have really
+strict SLA s so sort of the next better
+thing you can do is dynamic cluster
+membership and so this is just the idea
+that I
+add and remove nodes on the fly from the
+cluster and then when I just want to
+because of failure or I want to add
+capacity they'll just get added to the
+cluster and they'll start immediately
+taking load and vice versa if one fails
+or you know one needs to you can reduce
+capacity for whatever is in so there's
+sort of two main big ways of doing
+dynamic cluster membership that I've
+seen work there's gossip protocols so
+this is the idea that it's a protocol
+design where the machines are gonna chat
+just like you sort of would with your
+friends and knowledge spreads throughout
+a social group and they're gonna chat
+about who they can talk to you and who's
+alive and who's dead and then each
+machine on its own will figure out its
+worldview of who it thinks is in the
+cluster and so it's just deciding based
+on the messages that it happens to have
+received and in sort of like a stable
+state or a non failure mode environment
+we're not a lot of churn is happening
+all of the machines in the cluster will
+stabilize to have the same worldview of
+everyone being who's alive is alive and
+everyone who's dead is dead in the case
+where you have a bunch of network
+failures capacity is being added or like
+you have a partition in your network
+different machines in the cluster can
+actually have different world views of
+who is in the cluster so this causes a
+bit this is like one of the trade-offs
+that you need to make with dynamic
+cluster membership is if you want high
+availability right like these machines
+don't have to coordinate to figure out
+who's in the cluster they can each
+independently make a decision based on
+the knowledge that they currently have
+then then you use a gossip protocol but
+your code and your applications need to
+be able to tolerate this partition or
+this uncertainty where work may be
+getting routed to different nodes for
+brief periods of time during failure
+conversely if you need really strong
+consistency and sort of cluster
+membership like everyone needs to have
+exactly the same worldview you want to
+use a consensus system to do this and so
+you just you know you do this like in a
+typical way you interact with the
+consensus system it controls the
+ownership of everyone who's in the
+cluster and then when that changes like
+everyone goes and updates their
+worldview based on the consensus system
+that's holding the truth of like cluster
+membership the problem with this is that
+once again if that consensus system
+isn't available the nodes can actually
+route work because they don't know who's
+in the
+stur it's also going to be slower right
+because you're adding coordination to
+your system so sort of like Peter valus
+talked about right like we sort of want
+to avoid this unless we necessarily need
+it so I would sort of say this is the
+last resort when you're designing
+dynamic cluster membership if you need
+highly available systems and then
+finally I want to talk the second
+problem is work distribution right and
+there's a couple of different methods
+I'm gonna go through three there's
+random placement consistent hashing and
+distributed hash tables for determining
+how to move work throughout your cluster
+random placement sounds super dumb but
+it actually can be really effective in
+certain scenarios so this is the idea of
+I get to write to anywhere in the
+cluster so when I'm sending you're right
+from my client any machine that has
+capacity just takes it and then on read
+I go and I have to actually read from
+every single machine in the cluster to
+get the data back so this isn't actually
+a sticky connection but it is a stateful
+service in the sense of this is a good
+way to build like in-memory indexes and
+caches and I'll actually get to a
+real-world example that does this and
+like how it's used in the real world
+because it sort of sounds stupid if
+you're looking at just this example it's
+hard to understand like why it would
+ever work but it is nice where you have
+a lot of data and your queries are
+operating a large amount of data that is
+gonna be distributed over the entire
+cluster I think one that is probably
+more familiar to people is consistent
+hashing this came out of a paper in 1997
+from the World Wide Web about how to
+distribute workloads the basic idea here
+is you have deterministic placement of
+your requests and we've now mapped our
+nodes that are in the cluster to the
+same hash space as the requests that are
+coming in and so your hashing your
+request based on like whatever the
+session ID is or whatever the user ID is
+depending how you want to partition your
+workload and so then you just add the
+nodes get mapped to the cluster and then
+as a request comes in it also gets
+hashed on to the ring and then you walk
+right to find the node that's actually
+going to execute it for you this is
+really popular a lot of databases use
+this so like Amazon DynamoDB uses this
+Twitter's Manhattan database uses this I
+believe Cassandra uses this this is
+pretty pretty basic database we
+distribution because it is deterministic
+placement but the problem with the
+termina stick placement especially in
+services where users are coming and
+going and I don't necessarily need to
+keep your data in memory all of the time
+like a database does the problem with
+this is that you can have hotspots right
+you can run into the same problem where
+if your requests are not like evenly
+distribute or even if they are evenly
+distributed because this is a hash they
+actually have different different
+weights in terms of like the amount of
+work that they're gonna do based on like
+what each user wants to request and so
+you could easily end up with a hot node
+or you could just have a node that's
+kind of slow in your cluster and so like
+it's gonna get overwhelmed for a variety
+of reasons because like you know maybe
+it's discs or going bad or whatever
+there's like a but should think
+different things that can happen and so
+this does not allow you to move work if
+a machine gets overloaded so you have to
+allocate enough space in your cluster to
+run with enough Headroom to like
+tolerate the fact that this is
+deterministic and you can't move work so
+you're paying an additional cost to have
+extra capacity sitting around even in
+the normal case so finally I wanna talk
+about distribute hash tables for work
+just placement so the idea here is that
+I'm going to use a hash again to look up
+into a distributed hash table where I
+should execute this work and so that
+what happens is then I just look at this
+holds a reference to the node that I'm
+gonna go talk to you that's in my
+cluster and then if this is this is
+non-deterministic placement right
+because there's nothing that's forcing
+me to always go to note a I could easily
+remap this client in my system to go to
+node B or node C should note a become
+too hot or unavailable for some reason
+and so this actually has a lot of nice
+properties and I'll get to an example in
+the real world where this works very
+well
+okay so let's talk about stateful
+services in the real world I'm gonna
+give you an overview of free that I
+think are particularly interesting and
+that's sort of exhibit a the range of
+some of the stuff that we just talked
+about in terms of different ways you can
+configure and build your cluster out so
+scuba is from Facebook
+it's an in-memory database that they
+built and basically this is its this
+runs a lot of the workhorse for their
+query and analytics and revenue and
+performance debugging and has to be very
+very fast and has to be always available
+because they're doing things like on the
+fly right and so and I believe they use
+static cluster membership although I
+don't think the paper actually says that
+but from what I've inferred from what
+I've seen I think it's static cluster
+membership so basically what happens is
+they do this random fan-out on right so
+it's gonna write to any machine that
+happens to have it and then it's going
+to on read query every single machine in
+the cluster when it's executing a query
+and then they're going to then all these
+results come back in they get composed
+by the machine that's like running the
+query and then when the results are
+returned to the user a completeness
+metric is also returned so what's cool
+about this is like in order to get 100%
+of the data and to know that your query
+actually executed correctly and you have
+all the results every machine in the
+cluster would have to be available but
+like we live in a real world and that's
+never the case and so what they did is
+they built this in from the start to say
+I'm gonna tell the the requester what
+percentage of data that I have been able
+to successfully retrieve data from and
+then this allows them to decide if
+that's acceptable amount of uncertainty
+and so I think that's actually really
+really cool there's a paper on scuba if
+you want to go read more but this is
+actually a pretty neat system so they're
+not using sticky but they connections
+that they are using in memory for very
+very fast data lookups another really
+interesting stateful service that is
+sort of come out in the last year is
+over built this thing called Ring Pop
+and what it is is it's an odious library
+that allows them to do sort of like
+application layers charting for their
+dispatcher platform services and so the
+reason they built this is because if you
+think about what the app is doing like
+when you're ordering a car is it
+talking to the service and it's gonna
+like send your information and your
+location and then throughout the
+duration of the ride it's gonna send you
+more
+you're gonna update it with your
+location and information and then it has
+to process a bunch of payment and your
+drivers stuff and if you were getting
+load balance to different servers every
+single time and that data was constantly
+being persisted to the database and then
+pulled back in on every request that's a
+ton of latency on the service and it's a
+ton of extra load on the database so
+what they did is they went and
+implemented routing logic into this
+cluster and so that they can have all of
+your requests for your session directed
+to a single machine and so they do this
+via using the swim gossip protocol for
+cluster membership right so this is this
+is an AP customer membership thing so
+it's not always guaranteed to be totally
+correct but they made the choice to
+always be available because they'd
+rather have you be able to order a car
+then like to tell you like sorry we
+can't deal with this cuz leg zookeepers
+down and then they also use consistent
+hashing for doing work distribution
+throughout the cluster and so once again
+this has the problem where you can have
+hot nodes and there's really nothing you
+can do except for add more capacity to
+the cluster in that case even if you
+have a bunch of nodes that are
+underutilized this is a really cool
+project I highly recommend checking it
+out it's open source on github and there
+have been a couple extra talks and stuff
+around it if you want to know more
+finally I want to talk about Arlene's
+so Arlene's is a programming model and
+runtime for building distributed systems
+based on the actor model this came out
+of Microsoft research from the extreme
+computing group there and I actually had
+the pleasure of working with this group
+to productionize Arlene's when we
+shipped halo 4 so we rebuilt all of the
+halo 4 services primarily based on
+Arlene's and I've talked about Arlene's
+before and I've talked about the actor
+model before and I'm just gonna give you
+a quick overview so if you are
+unfamiliar that you understand what's
+happening but really I want to talk
+about the routing logic in the system
+because it's very cool and it's sort of
+how our leans does a lot of its magic so
+it's actually happening an actor/model
+is this idea for concurrent computation
+where actors are the core unit of
+computation actors can communicate with
+one another by passing asynchronous
+messages to each other throughout the
+cluster and when an actor receives an
+asynchronous message it can do one of
+three things
+or all of them it can send new messages
+or as many as it once it can update its
+journals in its internal state and it
+can create new actors so essentially
+what you end up having in a cluster
+running in any kind of actor model is a
+bunch of little state machines that are
+running and so you are inherently
+building stateful services when you're
+using the actor model if they are
+persisting any state between requests
+and we use this very heavily at halo we
+use them like in a little in memory
+right through caches so how this
+actually works though is we just deploy
+a bunch of machines and Orleans runtime
+takes care of the rest and so when we
+got a request it would go to any machine
+in the cluster and then the cluster
+would actually look up where the actor
+lived in the cluster and wrap that
+message to it and there's like thousands
+hundreds of thousands of actors on any
+clock on any single machine in the
+cluster so the way they do this is that
+use a gossip protocol for cluster
+membership because we chose to be highly
+available there's actually I think now
+that Orleans has been open sourced a
+zookeeper implementation of cluster
+membership but that's slower and so
+you're not going to get the performance
+benchmarks that are outlined in the
+Orleans paper um and then it for work
+distribution it does this interesting
+combination of consistent hashing and a
+distributed hash table that I'm going to
+walk through because I just think it's
+neat and I haven't seen many other real
+world systems use this so this is our
+aleene's cluster we have six machines
+and then there's a bunch of actors
+running on any machine I'm gonna get a
+request from a client that says hey I
+need to send a message to this actor in
+this ID and so then what a releases
+runtime is going to do is apply a
+consistent hash to that actor ID and
+that's going to tell it where the
+distributed hash table for that ID is
+located in the cluster so I'm gonna go
+and then go to the machine that has the
+distributed hash table entry for my
+actor this will then tell me which
+machine my actor physically lives on and
+then the request can get routed to that
+machine so this is this is cool because
+the consistent hashing part where you're
+doing the distributed hash table lookup
+is deterministic and so that's going to
+be consistent throughout the lifetime of
+and after and in the cluster it's not
+going to change but this is okay because
+when you think about a distributed hash
+table like you're just storing the key
+which is the actor ID and the Machine
+look
+which is just an address and it's the
+same for every single node in the
+cluster so this is like actually very
+evenly distributed and balanced workload
+however what our actors are doing is not
+necessarily evenly distributed in
+balance because even different types of
+actors can run in Orleans clusters and
+so we wanted to make sure that if a
+machine becomes hot or leans can help
+like rebalance the cluster for you so
+what happens is say that machine got too
+hot or the session died and then the
+client comes in the same client comes in
+it'll ask like hey I need to talk to
+this my actor again and so it'll get
+routed to the same distributed hash
+table or the same node it's piece of the
+distributed hash table and then that
+know the dish read hash table entry has
+now changed the aleene's cluster has
+actually updated it to say hey it's now
+on this machine and it does that for a
+couple of reasons one like the machine
+that you were talking to you before
+failed or the machine the actor you were
+talking to you before got like evicted
+from memory because no one was talking
+to it for a while or you your machine
+was running way too hot and Arlene's
+decided hey I'm gonna move this for you
+so that machine doesn't get overwhelmed
+and fall over and I'm gonna use some of
+this capacity that's not being used on
+this other machine this is one of the
+core reasons that we were able to run
+our lanes clusters in production at 90
+to 95 percent CPU utilization across the
+cluster so we were using the entire box
+because we were able to move work around
+in a non-deterministic fashion so I
+think that was pretty cool and I think
+it's like I would not recommend doing
+this for like a database but it is
+really neat when you start thinking
+about pulling state into services okay
+so finally I'm gonna talk about some
+things that are how you might run into
+trouble or like gotchas that you might
+not think of because you've been
+building stateful or stateless services
+for a long time so I think we all know
+or we should all know that unbounded
+queues are essentially like the devil
+and distributed systems and will like
+kill you really really fast because
+you're making implicit assumptions in
+state full services unbounded data
+structures like in-memory data
+structures on the box are like are this
+bad they will like hurt you really
+really fast because and we don't
+generally think about this I think in
+state less services because if you bound
+your inputs on any request then you're
+saying it's assuming that you're
+processing a reasonable
+sized amount of data on every request
+and then that data structure you create
+for that request is generally garbage
+collected or evicted from memory at the
+end of that request when you have state
+full services and you're persisting a
+bunch of stuff over over a span of
+requests you need to put an explicit
+bound on here because these could grow
+you know unbounded Li and then you run
+on a memory on your machine or your
+garbage collector gets really sad and
+decides it's gonna stop the world and
+garbage collects for a really long time
+and then that node essentially looks
+dead so this is something that you sort
+of have to work out I've actually seen
+production machines go down because this
+assumption that like we would never run
+out of memory and our clients would only
+a send us a reasonable amount of things
+over a stretch of a session like didn't
+happen cuz clients are not your friends
+they're not gonna do what you want them
+to you're also gonna have to deal with
+memory management and you do have to
+deal with this in stateless service to
+some extent but you don't have to tune
+generally as much so basically because
+we're in a stateful world and we're
+persisting data for the lifetime or for
+the lifetime of the session which could
+be you know minutes hours whatever days
+even things are going to get persisted
+into the lowest center or the the
+longest live generation of garbage
+collection so like g2 and the CLR and so
+at this point that's generally more
+expensive to collect especially if you
+have a bunch of references that are
+spanning generations of your garbage
+collector that's gonna get really
+expensive to collect and so you sort of
+have to understand stateful services and
+be aware of how your garbage collector
+is actually running or you could just
+say totally I'm not gonna even worry
+about it and go and implement unmanaged
+code like scuba is all in C++ I believe
+and so they like don't even deal with
+the garbage collector problem so like
+Orleans runs dotnet CLR and so that is
+the garbage collected thing we did run
+into this problem but we were able to
+work with our garbage collector and tune
+it and also realize we were just
+persisting a lot of state that we never
+used and so we sort of cleaned up our
+requests but you have to be a little
+more careful about what you actually are
+persisting because this does have an
+Associated cost with it
+and then finally the sort of last Gacha
+is this idea of reloading state
+typically like in state less services
+you're going to go to the database every
+single time and so you tune your latency
+to be acceptable based on like having a
+round trip right or you stick a cache in
+there to make it better in state full
+services there's actually a variety of
+different cases you can have the first
+connection of this session so that's
+actually generally gonna be your most
+expensive connection because there is no
+data in in anywhere in your service
+because it's probably been evicted if
+someone hasn't been talking to you for a
+while or ever before so you have to go
+get all this data from the database you
+have to pull it in so that they can
+start answering this the startup request
+and this could take a long time unless
+you're careful you want to be very
+selective about what you load on startup
+because you want it to look as close to
+normal requests as possible the best way
+to sort of benchmark and test this is to
+use percentiles very heavily because
+your average request latency is actually
+gonna look really really good because
+you don't have to round-trip to the
+database every single time once you've
+loaded it into memory and so but and you
+will really only detect that your first
+connection startup time is really long
+if you use percentiles another sort of
+gotcha with first connections is
+typically with state less services I'm
+going to make a request and if the
+request times out because I'm taking too
+long to talk to the database I'm then
+just going to like cancel the requests
+on the database and not pull that state
+into memory but with state full services
+you know the clients going to come back
+and ask you for that data like you know
+right away again
+and so you might as well just keep
+pulling it into memory even if the first
+request has failed and that client has
+timed out because then they're just
+gonna ask for it again on a retry and it
+will get routed to the same machine and
+then the data will just be there and it
+will be fast so like typically in Halo
+we had this issue where I think on games
+startup sometimes like the first
+connection would actually timeout and so
+we just kept pulling the data in from
+the database and then the next time the
+game box actually retried it would
+succeed if we're talking you know like
+hundreds of milliseconds of time and
+this actually wasn't user noticeable
+especially since there was a really
+pretty animation playing on the screen
+for them to watch and so then by the
+time it was like distract and then we
+got to do our things on the services and
+so-and-so them by the time they came
+back the second time we just kept
+pulling the data that we needed
+especially if it was like a player who
+had played a lot or we had tunnel load B
+just because our azor table we were like
+stressing that connection this worked
+really really well for us
+another thing that's gonna cause
+problems in terms of like reloading
+state is recovering from a crash so if
+you have to like rehydrate an entire box
+after recovering from a crash that could
+be expensive if you're not just like
+lazily loading everything and sometimes
+you can get away with lazy loading and
+sometimes you can't and then in the same
+instant wave deploying new code you're
+gonna have this problem or you have to
+put take down an entire box and bring up
+a whole nother box and if you can't in
+like not a terminus tically place things
+or you don't have dynamic clusters
+membership then this is also gonna cause
+problems for you so one interesting way
+to solve this that we sort of came
+across was or that I've come across is
+that Facebook published a paper called
+fast restarts at Facebook and this was
+actually designed for their scuba system
+because they had the same problem they
+had this in memory database that was
+holding like a ton of memory in data
+that was persisted to hard disk and so
+on a rack rack or on a deploy they would
+like take down the machine the process
+that was currently running and they
+would spin up a new machine and then
+they would have to read everything from
+disk and this took hours like per
+machine and because of their SL lays
+they had to do a very slow rolling
+restart of the entire cluster that took
+I think up to 12 hours so this is gonna
+slow your development team down a lot
+there's not a whole lot you can do to
+get away from that on a crash restart
+but hopefully that happens fairly
+infrequently deploying code though
+happens really really frequently or we'd
+like to tap in frequently because it
+allows us to iterate faster and try new
+ideas and do less risky deployments so
+they made this key observation that you
+can actually decouple the memory
+lifetime of a process especially or
+memory lifetime from the process
+lifetime especially in a state full
+service right so when they want to just
+deploy new code and they knew it was a
+safe shutdown in memory wasn't corrupted
+because like I told the process to
+shutdown it didn't crash then they would
+stop taking requests they would actually
+copy all of the data from the current
+running process into shared memory and
+they would shut down the old process and
+bring up the new process which would
+then copy the data from shared memory
+back into like the processes memory
+space and then they would start taking
+requests this took minutes and so they
+got their cluster research that time
+below down to like two
+this allows them to deploy much more
+frequently than they were able to before
+so that's I think just like a really
+easy trick that is really cool and we're
+actually looking at implementing it on
+one of the services that my team is
+responsible for at Twitter because we
+have sort of like an index that does is
+very stateful and when you have to
+restart a whole machine have to go and
+talk to our Manhattan database and
+that's really slow right
+compared to memory so in conclusion I
+hope I've sort of painted a picture of
+why you may want to start bringing state
+into your actual services and not just
+relying on your databases there are some
+really nice properties like data
+locality and available consistent more
+available consistency mechanisms that
+you can get there is a ton of thought
+that needs to be put into cluster
+membership and work distribution and I
+don't have one right answer for you
+although I tend to lean very much
+towards the available side so I would go
+with gossip protocols and then work
+distribution it's really going to depend
+on the workload that you're using there
+are a bunch of these successful stateful
+real world systems out there that are
+running and so like it's been proven at
+scale that you can do this and so it's
+not necessarily super scary although it
+is new ground and then finally be
+cautious this is new territory if you
+haven't done staple services before go
+through what is different what has
+changed what assumptions are you making
+and make sure you make them explicit and
+then finally I have a sort of like this
+is new space and like people aren't
+doing this so should I even bother
+reading papers yes yes you should
+because most of what I have talked about
+has actually just come from database
+literature and so this problems are
+already solved for you and you don't
+have to actually even be like the nice
+thing about implementing services you
+get to cherry-pick what you care about
+based on your application state and so
+you don't even have to go and implement
+the whole paper you can just pick the
+piece of the paper that you like and
+that problem is probably solved for you
+so I highly recommend reading papers do
+not reinvent your own protocols this is
+actually not new territory people have
+been working on this since like the 60s
+and 70s um finally I want to say thank
+you to some people who helped me out
+with this talk Kyle Kingsbury Chris
+Mikkel John Thompson Taryn eNOS Umbra
+thank you guys so much for all of your
+help and I that is all I have for you so
+I think we have time for like one
+question
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

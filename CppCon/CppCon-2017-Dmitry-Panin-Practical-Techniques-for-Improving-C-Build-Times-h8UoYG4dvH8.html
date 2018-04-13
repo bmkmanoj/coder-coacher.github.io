@@ -1,0 +1,1466 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Dmitry Panin “Practical Techniques for Improving C++ Build Times” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Dmitry Panin “Practical Techniques for Improving C++ Build Times” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Dmitry Panin “Practical Techniques for Improving C++ Build Times”</b></h2><h5 class="post__date">2017-10-24</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/h8UoYG4dvH8" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">Alright, hello everyone.
+My name is Dmitry, and I work at Facebook,
+and today I want to
+share various techniques
+we use at Facebook to
+make our builds go faster.
+The things I want to talk
+about are either open sourced
+or it's some fairly generic approach
+that you can apply to your build system
+or you'll talk to your code base.
+I will also try to go into
+little bit more details
+so that you have better understanding
+how particular technique work,
+and why it actually helps.
+Before I go into the topic,
+just a few words about me.
+I'm a software engineer in
+the ads infrastructure team.
+And you might be already wondering how ads
+are related to build time
+optimizations, right?
+And let me share my personal story here.
+For several years I've been
+working on various features
+in our ads backend system
+on things like performance, stability,
+scalability, and other buzzwords.
+Our ads backend is one of
+the largest C++ projects
+at Facebook so it naturally takes a long,
+long time to build.
+When I was working there
+I started thinking,
+I was waiting a lot of
+time for builds to finish.
+Our engineers, what they usually do,
+they start their builds and
+go grab some coffee, right?
+I think you all might do the
+same, but I don't drink coffee,
+so I started thinking
+is it really the fastest
+our builds can go, or can
+we actually make something
+to make them even more even faster?
+Like not so terribly slow.
+I started digging deeper into
+details of the build system
+of various techniques we
+already use at Facebook.
+This was all super
+exciting and interesting.
+You probably don't believe me, but anyway.
+Eventually I started focusing
+on build times optimizations
+as a full-time job.
+It turned out that it aligns really well
+with our team's mission.
+If ads engineers started to
+iterate on their code faster,
+then we can show better ads to our users.
+I'm sure everyone likes ads here.
+The Facebook revenue will go up,
+and everyone will be happy, right?
+Overall, I learned a lot of
+cool stuff while working there,
+and want to share here in my talk.
+Does it work?
+Nice.
+Okay, so let's start.
+Here's the things I want to cover today.
+Measurements.
+How can we actually measure build times?
+And why native approach doesn't work.
+Then we will talk about actual techniques.
+How to use opensource components
+to build your build infrastructure
+so that you can build while we build.
+Compiler toolchain.
+How to make your compiler faster
+without being a compiler guy, like me.
+I'm just a regular person.
+Codebase.
+Refactoring for fun and profit.
+The last one will be issues.
+Things that didn't work
+great, or didn't work at all.
+You'll see when we get there.
+Okay, so before we actually start,
+let's talk about why we
+care about build times.
+How many of you have long builds?
+Alright, and how many of you check emails
+when they wait for the builds?
+Or maybe Facebook?
+Twitter?
+Anyone Google+?
+No?
+(laughing)
+And after you checked, how
+often do you find yourself
+on Wikipedia after two hours
+reading about quantum mechanics?
+Alright yeah, I've been there too.
+Maybe you like fighting on swords?
+Yeah. We all do.
+Okay, I don't have exact numbers,
+but we have roughly
+speaking, 20,000 people
+working at Facebook, and
+many of them do write C++.
+No, it's not like all PHP.
+We have some C++.
+We just don't have that many
+swords in our office, right?
+So we have to make our builds go faster.
+But before we can improve things,
+we need to learn how to measure them.
+There was one famous guy
+at the end of 19th century
+who said that, and I think
+it's still true today,
+even after 100 years.
+Without proper measurement,
+you are really blindly going
+anywhere and just not really
+knowing any direction.
+It's really, really
+hard to find bottlenecks
+when you don't have any measurements
+like where you can do things.
+I actually have one war
+story I want to share
+before we jump into this topic.
+When we started measuring
+and analyzing data,
+we found exponential
+(mumbling) thrift compiler.
+How many of you know what is thrift?
+How many of you know
+what is Google protobuf?
+Okay, little bit more hands.
+So it's pretty much the same thing.
+You can think about thrift
+as a domain-specific language
+that helps you describe your
+interface of your service,
+and then generate some code based on that.
+Here is example of thrift files.
+We have some file A.thrift,
+and it has some description there.
+The nice property of thrift,
+it has includes, right?
+You don't need to put
+everything in one giant file.
+You can have nicely organized structure.
+You can include the file, and
+then use the types from there.
+Then you can run thrift compiler
+that will generate some files like types,
+reflection, and other cool stuff.
+When we started measuring build times
+we found that some of our files
+take several minutes to compile.
+Like not C++ compile, but thrift compiler.
+What thrift does, it reads
+some bunch of text files,
+and then write some text files.
+It doesn't do any fancy
+optimizations there.
+It's all relatively simple,
+but several minutes.
+That was really crazy.
+We started digging deeper
+into what's going on,
+so let's look into some example.
+We have file A.
+That includes file B1 and B2.
+And we have file C1 and C2,
+that depends on these files.
+When we need to parse file A,
+we need to know all the
+types from dependent files.
+In order to do it, thrift
+compiler goes recursively.
+It runs itself on B1,
+and it needs to parse it.
+It needs to know all the types in B1.
+To do that, it needs to go
+recursively to C1 and C2.
+When it does that, we
+go and protest file B2.
+That will go and protest file C1 and C2.
+I guess you see some pattern here
+that we found this bug, or
+maybe lets call it a feature,
+that thrift compiler does not save
+any intermediate information,
+so it will recursively
+jam into the source tree,
+and will protest the
+files over and over again.
+If we have N layers here, like up to Z,
+then the bottom layers will be parsed
+to the power of N times.
+It was really, really slow.
+The fix was quite simple.
+Just add some caching
+there, but the amazing thing
+that the bug there was like feature.
+It was there for ages.
+Like since the thrift was first built,
+and it was like 10 years ago.
+Okay, so how to measure build times.
+One approach we can do is to just
+instrument developer's machine, right?
+They do a build anyway,
+so let's add some logging,
+write to database, and
+then analyze results.
+The thing is, there are multiple factors
+that prevents you from
+getting non-noisy data.
+The data will be really noisy,
+so engineers, they build
+some different hardware.
+Like someone maybe run built on iPhones.
+I hope not, but someone might do.
+And the workflow can be different, right?
+Someone might modify just a few files
+like on the small project.
+Other will be building entire universe.
+They can experiment with
+different build options, right?
+Some engineers just try to try
+all the possible optimizations.
+Others are fine with
+just compiling their code
+and they're done.
+Also, there could be something
+else running on the machine
+like multiple builds in parallel,
+or bitcoin mining, whatever.
+Like people just do some
+weird things sometimes.
+There are also the problem
+with sparse points.
+Engineers don't normally
+work on the weekends,
+so sometimes do, but we
+will get not so many points,
+not so many data points there,
+and the data will be like, super noisy.
+So what we did?
+We decided to build some separate jobs
+and deploy them to
+separate servers, right?
+It's like continuously running.
+It checks the latest revision, builds it,
+modifies some files, builds again.
+Logs to some database,
+and over and over again,
+very tirelessly trying to
+get some good data points.
+It's all good, right?
+We have hardware configuration.
+We know and it's all fixed, so
+it doesn't change from time,
+and we can control environment there
+and not run some weird processes,
+like we would that's our do listing.
+We also thought about some
+workflows for engineers.
+We decided to select some workflows
+that I think we represent
+what engineers typically do
+when they work with their code.
+Let's look at the workflows.
+We decided there are
+three different workflows.
+One is clean build.
+You check out your new revision
+already based the latest version.
+You don't have any changes there.
+You just build it from scratch, right?
+What essentially this workflow means,
+that you don't have any local changes
+so we should be able to
+take it from the cache,
+and we'll talk later
+about the cache itself.
+Another workflow is some large changes.
+You build it once, and then
+you try to modify some headers,
+like in some core library.
+(sneezes)
+Bless you.
+And then it just triggers
+a massive free build
+of your project.
+When it usually happens,
+like I think everyone
+might have their util.H file.
+There just people put
+their favorite functions,
+and when you go and add your
+favorite function there,
+you just rebuild the whole project.
+We have multiple files like that.
+It could be the small change.
+You modify a CPP file, and
+it needs only build this one,
+and just link the result.
+And in this workflow,
+what really dominates
+is the link time.
+In nutshell, this free workflow,
+so they kind of represent
+three different aspects
+of the build infrastructure
+that we care about.
+First one tests the caching layer.
+Another one tests how build
+system handles many files,
+and the last one is linking.
+Okay.
+Let's talk about the infrastructure.
+I have questions for you.
+What do you think is
+the most important part
+of the infrastructure?
+Any guesses?
+Compiler?
+Yeah, that's a good one.
+That's the part that's hard to remove.
+Okay.
+(mumbling)
+Is that correct?
+Is that what you said?
+No, (mumbling) the different one.
+You?
+The suggestion was number of course.
+Okay, I'll tell you what
+I actually had in mind
+as the most important part.
+It's build system, right?
+How do you build stuff
+without having a build system?
+Internally, we use Buck to build C++.
+It's open sourced, available on GitHub.
+It's even have some documentation
+if anyone wants to try.
+It's also general purpose build tool.
+It can be used for Java, C++, Haskell,
+your favorite language.
+We just recently open sourced
+C++ specific wrappers,
+but that should help
+build in other opensource
+projects with Buck.
+What are the key features
+of the Buck we use?
+First one is a reproducible build.
+It means that the Buck
+runs build in the sandbox,
+which isolate the build
+from your environment.
+It should behave the same
+way on any other computer.
+The second one is incremental builds.
+Buck doesn't use timestamps
+to track the files.
+It uses the actual content so it can know
+that something needs to be rebuilt
+and doesn't try to do unnecessary job.
+And also, Buck was designed
+with built-in cache mechanism.
+This was done from the very beginning,
+and it has native support for that.
+Now a really brief overview
+how build rules look like.
+This will be useful
+later when we will talk
+about actual optimizations.
+So we use this declarative language
+where you specify your sources,
+and dependencies between them.
+And then the Buck can go and execute this
+in the right order.
+In this example, it will...
+If you have question, let's do
+them in the end of the talk.
+In this example it will compile
+all CPP files in parallel,
+and then do the linking
+in the right order.
+This is kind of simplified example.
+In reality, there could be more
+steps even not C++ specific.
+Something like running thrift compiler,
+or custom shell script.
+In reality, it might look like this.
+Does anyone heard about Folly?
+Yeah, so this is the graph of Folly.
+It's fairly tiny project.
+We have way bigger projects
+that depend on Folly,
+and the graph already
+is quite complicated.
+The Buck can handle such
+graphs perfectly fine.
+Okay, so let's talk about how Buck
+achieves incremental builds.
+The key concept here is key.
+Rule keys.
+The idea is to encode some
+information into the rule key
+so that if the rule key does not change,
+then we don't need to make a rebuild.
+In this example, we will
+hash some global variable,
+global parameters like Buck
+version, two chain versions,
+compiler flag, some environment variables,
+then add some build rule specific stuff
+like sources and dependencies,
+and put them all together
+in the cache key.
+There are different types of cache keys,
+and they differ by what
+we do with dependencies.
+We will talk about a little bit later,
+but now let's see how it actually works.
+We have a rule key.
+We go to the Buck cache,
+try to fetch the output,
+and if we are lucky we
+will get a cache key,
+and we will get the output.
+If we are not lucky, we will
+need to rebuild the rule,
+and then we will store it to the cache.
+Looks simple.
+For different types of rule keys,
+so there are three main
+types and there are others,
+but they are not C++ specific,
+so I won't cover them.
+There are default keys, input
+based, and manifest based.
+I have another quick
+question for you guys.
+Does anyone use a C cache?
+Does anyone heard of C cache?
+Okay, little bit more hands.
+Basically, they're the third
+type of rule keys in Buck.
+They're manifest based.
+They work really similar
+to what C cache does.
+Let's start with that.
+Let's suppose we have file A.A,
+which depends on others A and B.
+We want to get the output
+file, so how do we do that?
+We hash the file, and then try to, oops.
+Okay.
+Seems like something's
+missing but we hash the file
+and get the manifest like
+this gray rectangle there.
+And it contains several things.
+The purple one is a hash of
+file A, and the path to it.
+The blue one is the same for file B.
+We get a list of files
+that A was depending on,
+and we can check the
+actual state on the disk.
+If it matches, we get the cache key.
+We take another hash, which is green here.
+Sorry for inconvenience, and
+we can fetch it from the cache.
+That's how C cache works.
+However, this mechanism
+is really C++ specific,
+and it also fairly slow.
+We need to do two round
+trips to the cache,
+and we also need to compute the hashes
+of the several files on the disk.
+This can be quite slow, so
+Buck has two other mechanism.
+Two other rule keys.
+This is default rule key and input based.
+The default rule key is the one
+that's computed recursively,
+so to take the rule key for target one
+we need to first calculate
+the default rule key for target two.
+We do this based on the default
+rule key for target three.
+It's kind of recursive
+thing, but in reality
+it's actually really fast.
+We just need one traversal for the graph,
+and we combine all the information back.
+On the other hand, the
+input key is they use
+the output of some rule.
+If for rule two the
+output has not changed,
+then we don't need to
+rebuild the new file.
+Okay, so let's talk about Buck cache.
+The Buck cache, it has
+two types of Buck cache.
+One is Dir Cache.
+It uses the director in your local machine
+to fetch and store artifacts.
+It's useful in things like
+you check out a new branch,
+and then go back, or modified some file
+and revert the changes.
+But sometimes it does not help.
+If you check out the fresh revision,
+there is nothing on your
+machine that will help you.
+The Buck has this concept of Http Cache.
+It's something in the Cloud,
+so that's the Cloud for that.
+We use continuous integration
+to populate this cache,
+so there is the continuous integration
+that builds the artifacts and
+uploads them to the cache.
+And then the clients can check it
+and it actually work quite good.
+However, there are some
+problems with that.
+Here is the model of how we repo.
+We use monolithic repo
+with many projects there.
+The green dots are the commits
+for which the cache was populated.
+You are the user, you
+get the fresh revision,
+check out the latest one,
+and tries to build it.
+Seems good, but it turns out
+that the second commit here
+is some change to Folly.
+It's our core library that
+everything depends on.
+Basically, this commit will
+invalidate the whole cache,
+and the cache becomes useless here.
+You wait several hours
+and become not happy.
+What we decided to do
+is to build this rebase
+who can build script.
+The idea is continuous integration
+when it runs on the project.
+It will write to database
+which committed populated.
+When the user wants some specific revision
+it will query the database, get results,
+and then check out this revision.
+However, there are some problems here.
+First of all, we need to educate all users
+to start using this script
+because they need provide the input,
+like which project they want,
+and we have many
+developers, and it's really,
+really hard to educate all of them.
+Another thing is what if you want to work
+on multiple projects like
+project four and project two?
+Which committee will choose?
+It will be suboptimal either way.
+We built another mechanism.
+We call it warm revision.
+The idea is that one's enough.
+Contbuilds were populated
+for specific commit.
+We will mark this revision as warm.
+And then the search control
+client will use that by default.
+We have some our own wrappers
+on top of search control client
+so we can actually inject any
+functionality we want there.
+It works quite good.
+What happens if you build
+multiple different projects?
+Suppose in this example you build
+project one and project two.
+It turns out that a lot of projects,
+they share core libraries.
+Even if you don't get the full cache hit,
+you might still get a really good one.
+Okay, so as a quick comparison,
+we have two mechanisms
+rebuilt to rebase-to-contbuild,
+and warm revision.
+Rebase-to-contbuild provides
+about 100% cache hit rate,
+and it's really, really helpful.
+It helps us to reduce the build times
+from hours to just several minutes.
+It requires education at
+suboptimal with multiple projects.
+On the other hand, warm revision is about
+just 30% slower in our cases,
+and it works by default,
+and everything's great.
+Okay, so now you can check out
+your clean builds workflow,
+and it works great.
+What happens if you have many files
+that you modify and cache?
+Cache and workflow cannot
+really help you here.
+We use distcc.
+How many of you know what is distcc?
+Okay, that's good.
+Yeah, that's a pretty ancient technology.
+It's been there for decades,
+but it works surprisingly good.
+The way it works, we compile the file.
+We preprocess file locally,
+send it to remote cluster,
+and then get results back.
+This really helps to move CPU.
+Intensive workout of your local machine,
+and not be bottleneck on
+number of course or CPU there.
+Okay, so often the disks
+becomes the bottleneck for the builds.
+There are some simple ways to help here.
+One is to take SSD disk.
+Sounds simple, right?
+It could be quite expensive
+and not available to put there.
+There is poor man's approach.
+Put your builds on tmpfs.
+The trade-off is you will have
+less memory for other things,
+but it might be a good trade-off.
+Alright, so let's talk about compiler.
+We talk about infrastructure.
+Now let's go a little bit deeper
+and let's talk about build modes.
+The build modes is the thing we use
+to distinguish different purposes.
+We use mainly two build
+modes, dev and opt.
+One is for development,
+and another is for deploy into production.
+Naturally, they optimized
+for fast compilation
+versus fast run time.
+The developers, they
+usually use their dev mode
+when they test locally,
+but when we deploy to production
+we need to be really fast and efficient.
+We use different compilers there.
+One is clang for dev mode
+because it's just make faster compiles,
+and gcc usually produces
+more optimized binaries.
+We disable all optimizations in dev mode
+'cause yeah, let's make it compile faster,
+no matter how slow it will run.
+We use dynamic mode, dynamic
+linking as a linking step.
+Let's talk a little
+bit about linking mode.
+In dynamic mode, and the
+difference between them.
+Dynamic linking is quite cheap
+so you kind of need to only
+reference your dependencies.
+You also can do incremental linking.
+You can start linking
+libraries as they build.
+While for static mode
+they package everything
+into one executable, so you need to wait
+for all the jobs to finish
+to start linking step.
+Also, the files might take a really,
+might become really huge.
+Essentially, if you
+build hundreds of tests,
+then each of them will contain their copy
+of some same library.
+Static linking is more
+friendly for deployment,
+so you just take this
+file, deploy to production,
+and not worry about dependencies.
+Okay, so let's talk about
+how to speed up compiler.
+One thing we found, it's
+just let's update it.
+In April this year, we got about 20% win
+just by updating our compiler.
+There are more details
+in the LLVM mailing list,
+and really thank everyone
+who is working on LLVM.
+We are super happy to get these free wins.
+Okay, so what else can
+you do with compiler?
+Okay, there is this thing
+called profile guided optimization.
+How many of you heard this term before?
+Nice, okay.
+We got about 10% win in
+our compilation times
+by using profile data when we build
+our clang, our clang compiler.
+We use profile data from Folly,
+as we think it represents the workflow,
+the code base, quite well.
+It kind of complicates
+your update compiler step,
+but if you automate this, then
+you will preserve these wins
+for future updates.
+Okay, so let's now talk about
+how we can speed up linking.
+Let me show first what's the problem here.
+Suppose you have large build tree
+and you modified some CPP file
+in the leaf notes of the tree.
+Then you will get this linking chain
+that goes all the way to the top,
+and it can take quite some time.
+How we can make it better?
+One thing is to just link less data.
+If you use this flag
+visibility-inlines-hidden,
+it will take inlined class member function
+and not put them into
+result in shared object.
+We got really huge wins
+like 50% in link step
+just because there is less data there.
+Like it just compiles faster.
+It links faster.
+However, there is one problem with that.
+Does anyone know which one?
+No?
+Okay, so the problem is static variables.
+In this example, there is variable wall
+that kind of shows how many
+times function bar was called.
+If we use the flag mentioned
+on the previous slide,
+each of the files test1 and test2
+will use their own static storage.
+This kind of becomes a bug, right?
+You expect your output
+return one, two, three,
+but it returns the different things.
+Fortunately, there is solution for that,
+and actually two solutions.
+One, you can move your
+implementation to source file
+once the function is not
+inlined, it works fine.
+The other one is to annotate the function
+with this attribute.
+If for some reason you still
+want to preserve inlines.
+Okay, so that's good.
+What else can we do with dynamic linking?
+First of all, let's
+explain another problem.
+Suppose you do some
+implementation only change,
+so in this function answer
+you return 42 instead of zero,
+and then it again will
+create these re-link chain
+in your build process.
+In practice, you will
+just be fine with changing
+the result library with the new one.
+The build system doesn't know that.
+Okay, so a really quick overview of ELF.
+ELF stands for executable
+and linkable format.
+It's really quite complicated.
+What you need to know about it,
+that it has metadata
+and a bunch of sections.
+It turns out that the
+linker actually needs
+only three sections from this file.
+Dynamic, dynstr, and dynsym.
+If we can somehow remove
+other sections from the file,
+then from the point of view of linker,
+the output won't change, and
+the build system will know
+that it doesn't need to
+rebuilt the whole binary.
+We put ELF, some post-processing
+on the ELF files.
+We first compile, get shared object file,
+then run post-process by
+removing the old sections
+rather than these three ones.
+It looks like this.
+The file changed, library also changed,
+but the library interface did not change.
+Let's see how it helps
+with the re-linking.
+We have this scheme, and
+if we replace all libraries
+with this interface, then
+from the point of view
+of the linker and the build system,
+it only needs to re-link
+the library seven here,
+and doesn't need to
+re-link the whole tree.
+Okay, so how to use it?
+If you use Buck, probably
+a lot of you guys use,
+you can put this option in config.
+Very simple.
+If you don't use Buck,
+you can implement this
+in your own build system
+by just using objcopy.
+The thing to note here is that you need
+to change section address as well,
+because if you remove some sections,
+the other ones might get
+the different address,
+and it will introduce the
+noise in your linking step.
+We've been talking about dynamic linking,
+but there are things we
+can do with static linking.
+There is this flag which you can pass,
+and it will run linking in parallel.
+In practice we found that N equals four
+works perfectly fine,
+and it kind of the best
+points of on trade-off curve,
+and we got about 30% on
+the link step in this case.
+Okay, codebase.
+What can we do with codebase?
+Okay, this one is fairly straightforward,
+but still worth mentioning.
+If you have large file,
+you often will wait
+on these two to finish.
+What you can do is you can split in house,
+or in moparts, and reduce
+the bottleneck time.
+Yeah, very straightforward,
+but still very effective.
+Okay, template instantiation.
+There is this interesting
+feature like extern template,
+which you can use to save on
+template instantiation time.
+The thing here is once you do that,
+instead of instantiation,
+the template in every translation
+unit that includes Foo,
+it will be instantiation only in cpp file,
+and you will save some time.
+Though you need to use this carefully,
+'cause it might be manual process to do,
+and if it doesn't give you
+wins, then what's the point?
+There is another problem
+here that if you include Foo,
+then you also need to link with Foo cpp.
+In some build system,
+it might be problematic
+to enforce correctly
+because their messages,
+they're just not great.
+In Buck, we're able to track the headers,
+so we know that you cannot
+really use some header
+without depending on the specific target.
+Okay, yeah, that probably
+sounds surprising to you guys,
+but apparently there are some cases
+where using templates
+can actually help you
+with your build times.
+We got about 50% wins for certain files.
+I will not go into details.
+There is Eddie who will give
+a talk tomorrow on that,
+and feel free to go to the
+talk if you're interested.
+Alright, okay.
+You have another problem.
+You have your nice library full,
+and you perfectly crafted
+all dependencies there,
+and it works great.
+But suddenly boom, someone
+added some giant dependency
+somewhere deep inside
+your dependency tree.
+How actually you solve this,
+it could be real large,
+and we've seen on the Folly example
+that the build graph sometimes
+not manageable to do.
+Fortunately, we have mechanism for that.
+We have query language built into the bug,
+and by running this simple comment,
+it will show you dependency
+graph between these two targets.
+Then you can run and visualize it.
+It might look something like this.
+I'm not sure if it can be seen,
+but there is on the bottom your target,
+and you can now reason about the graph
+and see where this dependency was added.
+Alright, issues.
+Yeah, we tried some things, and
+they didn't work that great.
+Okay, let's talk about them.
+One thing we did long time ago,
+I think even before we were using Buck,
+we were writing, populating the cache
+from developer's machines.
+It felt natural, right?
+You build and then you populate,
+instead of just typing some
+continuous integration.
+Whatever.
+Turned out that this is
+sometimes doesn't work.
+It works, but it actually
+uses a lot of space
+in your cache for no reason.
+If you have some build options,
+experimenting with build options,
+it will create a separate
+universe in the cache.
+Or if you have your local changes,
+it will also upload them to the cache,
+but probably your colleagues does not make
+that similar changes so
+they can benefit from that.
+Also, we had data corruption.
+Like when someone was
+working on build system,
+and changed the way cache
+keys were calculated,
+it uploaded to the incompatible artifacts,
+and when these artifacts were
+fetched for other developers,
+they get some really
+strange error messages.
+Writing to cache from
+developer builds, how about no?
+Okay, and next thing we
+tried was clang modules.
+Yeah, everyone excited about modules
+and how they help with build times.
+Worth noting that these clang modules
+is not the same as Modules TS.
+The Modules TS is fairly new
+thing and it's being developed,
+while clang modules, it's been
+there I think, since 2015.
+And the last year on CppCon,
+Google folks made a talk
+how they used these modules in production.
+We also are all super excited to try it
+and adopt for our code base.
+Let me give a brief summary how they work.
+Basically, you don't need to change
+any syntax of your codes.
+You just put this module map
+files along with your sources,
+and they explain the module interface.
+The compiler will know how
+to deal with this stuff
+if you pass some special flags.
+The nice thing that it
+doesn't require any changes
+to your code base, I
+mean code base itself.
+Like you don't need to put
+some weird imports in your code
+that not all compilers understand.
+You can do incrementally transitioning
+for more and more files.
+Okay, looks great, but apparently
+we started experimenting with this
+and found a number of small issues
+which we managed to work around,
+but we also found a
+couple of major issues.
+This one we reported in April this year.
+Basically, the clang will crash
+when using capturing lambdas like this.
+We have quite a few
+places in our code base
+where we use lambdas, so it was not great
+for have compiler crashing.
+The second one was this one.
+We reported it in July.
+The error was not crash this time,
+fortunately that was good,
+but it was quite weird.
+Basically, it meant that some name
+had same mangled name
+with another definition,
+but it was for the same function.
+After some experimenting
+we found that this happens
+when you pass lambda
+from templated function.
+In this example, if we remove
+templates from function bar,
+or pass something else
+not lambda to class F,
+then it works fine, but with
+these conditions, it's not.
+Again, we have quite a few
+places in our code base,
+so this slowed our adoption.
+Okay, so think that's mostly it.
+I guess I was too fast in some places,
+but okay, so let me summarize
+the things I talked here.
+I think one of the most important thing
+is to actually think how
+you measure your builds.
+You can probably not start measuring,
+but start thinking about your workflows
+and how what the bottlenecks
+could be, is really helpful.
+Caching and distributed builds
+were the most effective
+things to speed up the builds,
+and it's fairly easy to use them.
+C cache and DCC for example,
+they provide some transparent wrappers
+that you use instead of your compiler,
+and it works under the hood.
+Also, you can tune your compiler
+without going into internals.
+Like just update it with new version
+and people work in
+there to make it faster.
+You can always refactor your code base
+to make it more compiler friendly,
+or use some techniques to save here.
+Alright, yeah?
+That's it.
+(applause)
+Please use mic, yes.
+- [Audience Member] I'm kinda curious
+if you guys use, what
+is it, unity builds--
+Oh yeah.
+- [Audience Member] That sort of thing.
+Do you guys use those?
+No, we don't.
+The question was, do we use unity builds?
+I assume by unity builds
+you mean like putting a lot
+of CPP files into one giant
+CPP file, and compiling those.
+Yeah, so we don't use this,
+and we actually sometimes
+go the opposite approach
+of trying to split them
+because often you have your large file
+and you can increase parallelism
+by splitting into multiple pieces.
+- [Audience Member] Ah, excellent.
+Do you do that because your link times
+don't end up being sped up by this?
+So it's not only link times.
+Even if you put everything
+into one CPP file,
+the compilation time for this
+can increase dramatically.
+- [Audience Member] Mm-hmm. Yeah.
+I guess we didn't really--
+- [Audience Member] Would
+your link times not get,
+like if you took 100 things
+and you turned them into 10 things,
+and then you linked them together,
+you'd have 1/10 the data to
+link though, and I thought--
+I see.
+The question was maybe the link
+time then getting improved.
+In our experience, the link time,
+they are substantial like couple minutes,
+but the majority time you
+spend compiling the files.
+If you use dynamic
+linking, then the linking
+becomes even less of a problem.
+- [Audience Member] Okay, thank you.
+Okay, thank you.
+- [Audience Member] Do you a
+gold BFG, or some other linker?
+I think we use gold, yeah.
+That's what I know.
+Yeah, the question was do we use gold BFG
+or any other linker?
+- [Audience Member] I
+was trying to understand
+what does the cache actually contain.
+Like in O files and the
+hash of the CPP NH files.
+Mm-hmm.
+The question was what the
+cache actually contains.
+Do I understand correctly,
+you mean like general cache,
+or like this manifest-based caching?
+- [Audience Member]
+I'm not sure which one.
+The one for C++, which--
+Yeah, so actually cache can
+contain different things.
+For default keys and input based,
+they contain the actual
+artifacts like .O files.
+For manifest-based keys,
+they contain two types of artifacts.
+One is manifest that
+describes your caching state,
+to some extent, and
+the actual object file.
+Actually, Buck cache is
+kind of general purpose
+key value storage.
+In some cases, we store
+some additional metadata,
+not only the object files.
+- [Audience Member] If you want to protect
+your code base from other users
+of that cache, is it safe?
+If you don't want to
+expose the code itself.
+Yeah, I'm not sure if I understood--
+- [Audience Member] If I
+have access to the cache,
+do I have...
+Okay, can you get--
+- [Audience Member] Not
+supposed to see the code base
+it was based on.
+I see.
+I guess the question was about security.
+If we have things in the cache,
+kind of do we protect it from other users?
+- [Audience Member] Yeah.
+Even if I'm allowed to use the O files,
+but not allowed to see the code base.
+I guess we don't have such cases
+as you're not allowed to see code base.
+We have one monorepo where people
+just check it out and use it.
+There is no such problem that
+you are not allowed to see
+like particular code.
+It's like basically
+open for all developers.
+- [Audience Member] Okay.
+Thank you.
+- [Audience Member] I
+have a lot of questions,
+but I'll ask--
+We can also follow up
+offline if you're interested,
+but you can ask some--
+- [Audience Member] We'll talk offline.
+I have just one question now.
+You mentioned the HTTP cache,
+and you mentioned a local cache
+for the developer on his disk.
+Is it a true second level cache
+in that if he's doing a clean build
+and when he gets the
+stuff from the HTTP cache
+he adds it to his own cache?
+Yes, yes.
+The question was, is it two level cache?
+A dual cache in HTTP?
+The answer is yes.
+We always try to populate the local cache
+even if we fetch
+information from HTTP cache
+so that it can be useful
+later if you switch branches,
+or go to previous state.
+- [Audience Member] Hi,
+thanks for your talk.
+I had a couple different questions.
+The first was, well all of VM supports
+the three different methods
+for collecting profile information.
+There's the front-end based,
+late IR instrumentation,
+and sample-based digio.
+Which ones have you tried, and
+which ones work best for you?
+The question was what type of...
+If I understand correctly,
+the question was about
+different types of
+collecting profile data.
+Actually, I don't know, but we have Igor
+who might know more.
+So I guess the answer was
+we build coangle with GCC
+like with other compiler
+because GCC produce
+faster results, usually.
+We use the mechanism built inside GCC.
+- [Audience Member] Okay.
+You can come and talk offline.
+I guess that's the expert here.
+- [Audience Member] Okay.
+The second question was kind
+of unrelated to build times,
+but about your debug configuration.
+You're using clang with
+modules and shared libraries?
+We don't use modules because
+we had number of issues.
+- [Audience Member] Okay.
+What was the other thing?
+- [Audience Member] Oh, the third one
+was going to be about
+how and if you use PGO
+with the swift compiler, if at all you do.
+Mm-hmm.
+Okay, maybe let's talk offline.
+- [Audience Member] Thank you.
+- [Audience Member] Yeah,
+you showed the example
+about this new dependency
+that was changing method.
+Mm-hmm. Yeah.
+- [Audience Member] What
+kind of metrics did you use
+to figure out what dependencies
+might be problematic?
+Yeah, so the question
+was about this finding
+an expected dependencies,
+and which metrics we use.
+Let me think.
+I don't think we actually
+have any metrics.
+We kind of just use the general sense.
+If we see something is big,
+then it might be worth optimizing.
+But unfortunately, it's kind of hard
+to analyze the graph
+itself with the metric.
+- [Audience Member] With
+your release builds,
+what size are your L files?
+Like say, with the debugging information
+for your release ones.
+I guess those are fairly large things.
+What kinda size do you
+guys end up working on?
+'Cause you were saying like
+a couple minute build times.
+I'm kinda wondering what that--
+The question was about size
+of our resulting binaries
+in the release mode.
+I think it's couple gigabytes.
+- [Audience Member]
+Just for one executable?
+Yeah.
+Is it large?
+I don't know. (laughs)
+If you have--
+- [Audience Member] A
+couple of gigabytes, okay.
+No, no I think that's in the right scale.
+Okay, I'm seeing about the size--
+If you have kind of many
+tests, as I explained,
+then each of them will be couple gigabytes
+because they essentially
+contain all the libraries.
+- [Audience Member] Okay, cool.
+Thanks.
+- [Audience Member] Do you have any tools
+as part of like your
+(mumbling) integration process
+that help you route stuff?
+Like missing for declarations
+that could reduce includes
+and adder files, and trim the dependencies
+to a minimum to improve
+incremental builds?
+Mm-hmm, I see.
+The question was about tools
+for forward declarations.
+I don't think we have any tools.
+We tried using include
+what you use in the past,
+like long time ago, and it didn't work.
+I don't think anyone remembers why,
+but so we don't use it right now.
+- [Audience Member] Okay, thank you.
+- [Audience Member]
+Apologies if I missed this.
+Did you say what your build
+times were when you started,
+and what you managed to reduce them to?
+Yeah, so the question was
+what was the order of changes
+when we started.
+The changes I described
+were on the time span
+of multiple years.
+It's not like we kind of
+started and then finished.
+It's like ongoing process.
+Kind of the order of magnitude,
+if we turned off the caching
+and ad optimizations,
+it might take several hours to build.
+- [Audience Member] And now?
+If you get a perfect cache hit
+you just get couple minutes.
+Like maybe five, 10.
+Okay.
+- [Audience Member] Did you
+try pre-compiled headers?
+Yeah, great question.
+That's kind of the things
+like include what you use
+and pre-compiled headers.
+The things I was planning
+to include in the talk
+when I was preparing, but turns out
+there are not so many
+interesting details there,
+rather than we tried, it did not work,
+and kind of people don't
+really remember why.
+So probably it's a good
+point to go and revisit
+some of the approaches.
+- [Audience Member] I
+don't know much about Buck,
+but will Buck help you
+with pre-compiled headers?
+Yeah, we actually have some.
+When we were trying to
+use pre-compiled headers
+we aided support to Buck.
+I think we even aided the
+multiple pre-compiled headers
+so you can use different
+pre-compiled headers
+for different libraries.
+I guess there were some issues there.
+I honestly don't know details.
+- [Audience Member]
+Last question is distcc.
+Did you have to change
+your code base at all,
+or your build system at all to maximize
+the efficiency of distcc, or
+was it sort of just turn-key?
+It just worked?
+I don't know if we do anything.
+So the question was, did we do anything
+to improve efficiency of distcc?
+As far as I know, no.
+We kind of turned it, but
+maybe something was done
+before I started the
+research in the other things.
+- [Audience Member] Thanks so much.
+Thank you.
+- [Audience Member] You
+mentioned you use distcc.
+I'm curious how fast of
+a network do you have
+to make that reasonable?
+'Cause when we use it we always run
+into the network bottleneck.
+The question was, how fast is our network?
+I don't know, but it's fairly fast
+so it's not really a bottleneck there.
+We kind of have all infrastructure
+like inside data center,
+we don't need to, it's fairly fast.
+Yeah, sorry.
+Don't know, just don't
+know the actual numbers.
+- [Audience Member] Thank you.
+- [Audience Member] One more question.
+Have you heard about or tried zap CC?
+Zap CC?
+No, I haven't heard.
+I guess it's analog of GCC?
+- [Audience Member] It's
+not quite analogous.
+It's supposed to be a
+server-client based compiler.
+It stores state so you can
+keep asking it to compile
+more and more files, and the
+first one takes the longest,
+but the subsequent ones
+it does much faster
+and you can do it incremental based.
+Interesting.
+Do you guys use it?
+- [Audience Member] No.
+It's only just barely out.
+I haven't tried it yet.
+Interesting. Okay.
+Yeah, I hear about first time about it,
+but thanks for pointer.
+Interesting.
+Okay.
+Okay, I guess that's it.
+Thank you.
+(applause)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

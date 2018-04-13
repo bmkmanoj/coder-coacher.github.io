@@ -1,0 +1,784 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Brandon Kase - Composable Caching in Swift | Coder Coacher - Coaching Coders</title><meta content="Brandon Kase - Composable Caching in Swift - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Curry-On/">Curry On!</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Brandon Kase - Composable Caching in Swift</b></h2><h5 class="post__date">2017-06-20</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/4oyauqLfIcM" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">for the delay and looks good all right
+hi I'm Brandon I'm an engineer on the
+iOS core experience team at Pinterest
+and today I'm going to talk about
+composable caching in Swift and if you
+don't know Swift it's okay if you're
+using a functional language that's
+decent you can do all the things that
+were going to talk about this so why do
+you care about caching getting stuff
+from the network is slow getting stuff
+from disk is little bit faster getting
+something for memory is very fast but we
+have very limited memory limited disk so
+so when we actually want to retrieve
+something big or something latency is
+important we want to associate it with a
+key and then and store it in these
+layers and when we retrieve it we go
+through this this this process okay so
+so key goes in we first track memory if
+it's there we return the value if it's
+not there we check disk if it's on disk
+we write back to RAM and we return the
+value it's not on disk then we hit the
+network if the of hitting the network
+fails we fail if any the network
+succeeds that we like to do is go right
+to memory and we return the value okay
+and sorry this is this is in the context
+of like a mobile application right so
+we're getting let's say an image okay
+but this seems where the process works
+on the back end as well okay so key goes
+in we might have some map some
+dictionary on one particular machine if
+it's not really we might fall back to
+memcache which is shared across the
+bunch of servers and if it's not in
+memcache that we might have to make an
+expensive uh PC call to our data store
+service but at the same time you know
+whenever one of the Wailers succeeds we
+write to the layer above right so that's
+let's look at more examples okay image
+caching you all of an image is the key
+we look for a bitmap in RAM and we look
+for JPEG on disk before loading the
+network for video caching if you're
+doing stuff on if you're making an
+iPhone app for example the the memory
+layer is handled to you by your
+framework so so you only need to care
+about
+desk so in this case we only have a disk
+above the network but even model caching
+can be thought of in this way so so for
+this example we have a user profile and
+our key is a user ID we look up the
+structured profile data in memory and we
+get we fall back to JSON on disk a JSON
+over the network okay but in all these
+cases we have the same sort of structure
+we have these individual pieces that
+we're stacking on top of each other and
+and you know in the video case we only
+care about the disk in the network in
+the other cases we care about that extra
+Ram part
+but I've drawn the boxes in this way for
+a reason because it's not just useful to
+treat the disk in the network as you
+know one type that you can instantiate
+multiple values for but it actually
+makes sense to have one instance of a
+disk and network layer and share that
+across all of our caches in our
+application and reason for that is that
+for inherently shared resources on your
+system if you have one instance one
+thing in your application
+communicating to that resource things
+become easier I'll make this more clear
+so disk ok for our cache let's say our
+disk layer of our cache we only want to
+store one gigabyte ok if we have one
+single object let's say that that is
+responsible for writing to that gigabyte
+of space when we get up to the edge you
+know we know what to do we know when
+we're over we know when we're about to
+go over if we have multiple multiple
+managers talking to a disk then when you
+get close to the gigabyte you either
+sacrifice correctness if you're ok with
+going over a little bit or you have to
+communicate between these processes if
+you have to you know cache writes in
+flight and and and the networking radio
+is another example of this we have
+limited bandwidth and we have some
+requests that might be high priority and
+some requests - might be low priority
+and if those are going to two separate
+places we have to rely on on our
+operating system primitives for
+prioritizing
+which is not ideal all the time so with
+all that in mind let's get started
+what's code so swift what is Swift Swift
+is a language that has protocols
+protocols are these cool things that
+many of you may not be familiar with but
+you can think of them as like a
+blueprint that can be adopted it's kind
+of like an interface or a trait in other
+languages it has some nice features one
+of them is called associated types and
+so in this case we want an associated
+type for a key and associated type for
+value and and what this means is it says
+any concrete type that implements the
+protocol the cash protocol has to
+provide a key in a value okay but at
+this point we don't know what they are
+and and now we can think about what do
+we want our cash to do we want to be
+able to get a value given a key okay but
+that operation might be slow so instead
+of returning the value we're going to
+return the future of a value and and for
+those that aren't familiar think of a
+future as a value that represents some
+asynchronous computation that may or may
+not be completed and it can fail and
+additionally we can chain we can chain
+transformations on to this future on
+success or on failure and we get back
+new features and and you'll see how
+that's used in a bit but think of it
+just as like an asynchronous data piece
+of data so set another thing we want to
+do give it a key in a value we want to
+write to the cache and this might be
+slow so we put it behind a future but we
+don't care about the value so we just
+use void okay it's not with a protocol
+we can create instances all right so
+here's a ram cache where generic on K
+and V as long as the keys are hashable
+so that's that we're cause there and
+we're going to bind key to K and value
+to V that's what the type alias keyword
+doesn't Swift and our get method is just
+going to look up this key in a hash map
+that's why we want the keys to be hash
+ball and I've set method can write to
+the hash map okay pretty straightforward
+for this cash we're generic on K okay as
+long as the keys can be converted to
+strings and and will bind key to care
+and will bind value to a byte array
+which on iOS has NS data and what we're
+going to do is we're going to md5 hash
+the string the key and get a file name
+and then we're going to use that file
+name to look up the bytes in the file
+and to set bytes to the file okay so we
+have our two caches that we have random
+disk but this isn't what we want okay at
+the application layer I don't have to
+think about going through my my layers
+to get to my value I just want to query
+one thing and I either get a value or
+fail so what we want to do is we want to
+stick them together so this is a picture
+of two things stuck together or a kite
+or something we can take this and turn
+it sideways and we have this this
+process so a key comes in Oh No thank
+you
+okay I hope nothing else tell me if
+something else cut off okay so so Sookie
+comes in we check Ram if it's there we
+return the value that's the viral arrows
+in this diagram it's not there you
+follow the gold arrows we check disk
+it's on this be right back to R and we
+return the value if it's not on disk we
+fail right so nothing about this depends
+on RAM and disk so let's just erase that
+and as long as the keys are the same
+type because we might fail on the first
+ones just to check the second one as
+long as the values are the same type
+between the two caches because if we if
+we do succeed on the second one we have
+to write back to the first one with the
+same value then this process can type
+check for any two caches okay and and if
+we want to hide this process from from
+consumers of this API in their
+application logic then what we can do is
+we can take this whole process and wrap
+it inside a cache okay and and now we
+have a cache that you can give it a key
+gives you a value or it fails right so
+that's pretty cool let's implement it so
+I hope this doesn't cut off um in Swift
+we can use extension to add methods to
+any any classes that implement protocols
+okay so so we're going to add a compose
+method onto here I'll explain the
+signature in a sec don't be scared but
+what this is going to do is it's going
+to add a compose method to any class
+that implements cache okay so excuse me
+so so what does this do it says first of
+all it's a method so it acts on some
+cache and it takes another cache which
+has type of B as a parameter and and B
+has to be generic because because you
+know we want to be able to combine Ram
+and disk for example and those are two
+different types okay but but this only
+works in the case where the keys are the
+same and the values are the same lesson
+that's the way I cause at the bottom and
+due to a limitation and switch type
+system we're going to return a basic
+cache which is just a dumb wrapper
+around the getting set
+methods such that we can pass them as
+lambdas okay so so to implement this we
+pass a lambda to get and and this
+dysfunction takes a key and it first
+checks the first cache that's the self
+get okay
+that gives us back a future that future
+succeeds we return it and if it fails
+then we execute the closure on the right
+that's what the or else operator does on
+futures so so if we missed on the first
+cache then try the second cache it's the
+other yet if that succeeds that we can
+map over the future and then we can take
+the resulting value and set it back to
+the first cache before returning it okay
+and then set takes a keen of value and
+it writes to the first cache and writes
+to the second cache in parallel and this
+is mostly going to work in all
+situations and it will work for all
+practical situations but John Hughes
+pointed out to me that there is a flaw
+in this inset in particular if you take
+two caches and you compose them and you
+take that cash and you compose it with
+one of its constituents then you're
+you're composed set behavior that's
+really weird and everything breaks down
+so don't do that and you don't have to
+do that with this framework so I'm kind
+of hand waving here but if you're if
+you're thinking very carefully you might
+find where things break down so this is
+composed okay now we can use it we can
+take some cash a compose it with some
+cash B and we get a cash C alright and
+this C is a cash that we can get and set
+which is cool and that's not all we can
+add another cash you can compose with
+another cash X and we get back seed a
+cash right and in our example we have
+gram and disc and we actually do have a
+third cash that is useful so we can
+model the networking layer as a cash a
+cash that always misses so to say so so
+the get we're you know our keys are URLs
+and at our get method of our cash
+it's the network for the resource and
+gets back bites the the set method would
+just know up and you know you could
+implement and network cache where to set
+an F it actually sent data to your
+back-end let's say but usually you don't
+want that so now that we have three
+things we have a decision to make
+compose acts on two caches but we want
+to combine three things so so we can
+first combine Ram a disk and then the
+network or we can combine disk and
+network and then put way I'm at the
+front ok and if you if you think about
+it and you draw a really large picture
+and then you can prove yourself but
+these are equivalent and I'm not going
+to show that there but you can draw it
+yourself so so these are equivalent
+which means that this compose operation
+is associative
+ok and then we can consider this cache a
+capital is misses there's no violet
+arrow it's just the gold arrow if we
+have this cache misses misses I'll call
+it the identity and we take the identity
+and we compose it on the left that's the
+top diagram when a key comes in then
+we'll go to the ruler cache that we're
+composing the identity with and it'll
+either succeed or fail as it would if we
+hadn't composed anything at all
+all right in the second case our real
+cache is at the front key comes in if a
+value is there we return it just as we
+would have done if we hadn't composed
+anything and if we fail then we'll fail
+again just as we would if we hadn't
+composed anything so so because identity
+behaves like this alright and because we
+have an associative binary operator then
+we have a mono it this is what a mono it
+is so if you didn't know consider
+yourself illuminated I guess that's
+right you so that word okay so mono mono
+is a cool they're really awesome I love
+them you can do interesting things now
+in context of caching we can we can
+smash together a bunch of caches we can
+start with the urbanity we can combine
+with ram and disk and network and get
+back just a single cache image cache
+that does all the things we want boiler
+we can choose to compose dyskinetic
+first because our composed operation is
+associative and then we can store that
+in a variable and
+use it across our entire application
+across all of our cash stacks which is
+really really useful but we're not quite
+done okay so if you people call our disk
+and our network give us bytes but for
+image caching for example we don't want
+to deserialize a JPEG image for example
+in the memory layer it's too expensive
+so we want to store uncompressed JPEGs
+like bitmaps in our memory cache
+and same with like our models right
+we have JSON data on disk but we don't a
+store JSON data in memory we want to
+sort the the fully parse structured data
+in memory so so we have this this type
+mismatch here remember I said the values
+needed to be the same between the two
+caches for a composed operation to work
+out so it's like we're trying to combine
+a circle in a triangle and that doesn't
+work so we need to make it work let's do
+some magic let's transform caches okay
+so give it a little turn circles into
+triangles and the way to turn triangles
+in circles if I have a cache that gives
+me circles and I want to catch the give
+me triangles then I should be able to
+have it and you do need both transforms
+I'll show you for example we have a way
+to turn bytes into a bitmap which on iOS
+is an estate on UI image and we have a
+way to turn a bitmap into bytes and I
+have a cache that gives me bytes then I
+can expose a view of that cache that
+gives me bitmaps
+which I can then compose with a memory
+layer with this map values
+transformation okay
+so just want to point out these
+transform caches are like kind of
+virtual they provide a projection on the
+same underlying cash you haven't
+actually changed our disk cache to store
+bitmaps for example which would be too
+expensive we want to store JPEGs but but
+we're able to view it as if it's stored
+bitmaps by hiding this transformation so
+in a picture we have this cache that
+stores JPEGs and you have
+transformations photos and backwards and
+we can wrap it up in some wrapping paper
+that looks like a triangle and and the
+types of work out so let's implement it
+have a way to insert within the
+triangles and where they turn triangles
+into circles we have a cache that gives
+us back circles we have to subvert
+Swift's type systems or using basic
+cache and it's going to give us back a
+triangle so what's implements it get we
+have a key we access the original cache
+and we get back a future of a circle and
+we need a future of a triangle so we can
+take that a future of a circle and map
+over it with a circle of triangle
+transformation and we get back a future
+of a triangle in this type checks and
+then I set here this is this is the new
+cache so so we're given a key and a
+value and the value is a triangle we
+have to write it back into a cache that
+accepts circles okay so so we need the
+inverse transform here and that's what
+we need both the Fouad and reverse
+transfer so of course you know there's
+nothing that ties us to circles and
+triangles so we can do bytes and bitmaps
+and there's nothing that ties us to
+bytes of bitmaps so you can just make it
+generic and this works for any any two
+values okay so this is how we transform
+caches if you're a Haskell person you
+can think about the functor going on
+over here it's not quite a normal
+function and reverse transform so this
+is actually an invariant functor with
+respect to the value so on just the
+value if you can provide throw it on the
+reverse transform to to transform it if
+you don't understand the slide it
+doesn't matter but if you do maybe it's
+interesting especially this next part so
+if you add a phantom type parameter and
+you type it is the cache - if you type
+alias that type parameter to the
+original value then you have a proform
+for instance and all the laws work which
+is cool if you don't understand that
+doesn't matter so key transformations
+key transformations so what we need to
+do we need to take a cache that accepts
+keys and return a cache that accepts
+some key k2 okay here we only need to
+provide a reverse transform
+all right so here if you think about it
+we're returning a new cache so we're
+given the new key and we need to store
+it we need to query the old cache so we
+need to provide a reverse transform all
+right inset we're given the new key and
+we need to set into the old cache
+okay good
+so so we only need the inverse transform
+here if your picture person if we have a
+triangle the circle we have a cache that
+accepts circles we can expose a view of
+that cache that accepts triangles
+instead and if you want an example a
+disk cache like strings because we're
+going to md5 it and our network cache
+likes URLs so in order to put them
+together we might want to map the keys
+of a disk cache into some cash that that
+is there some some projection of the
+cache that exposes a view that accepts
+URLs and so we can provide a reverse
+transform at URL to string and get back
+a cache that takes URLs as keys ok
+hopefully you followed that and you can
+ask question again
+Dover salute to me if you're confused
+about this part what song do we have
+here we don't have a standard functor
+because we don't look forward transform
+we only have a reverse transform so if a
+contravariant functor with respect to
+the key okay so so caches are kind of
+cool in this way because it's a
+perfunctory if you use the value as the
+parameter and it's a contrary functor if
+you use the key as a type parameter as
+your your functor real parameter i don't
+know how to say it so it's kind of cool
+now we can now we can put things
+together life is good and and that's
+good right we can we can take we can
+associate just good network together and
+we can we can put them together because
+we have the key transformation and then
+we can put the memory layer on top after
+we have done a transform after we've
+done the the
+map transform so that we don't do the
+expensive computation of decompressing
+images over and over and over again and
+the code for this is three ones which is
+cool and this is what it looks like in
+production which is awesome it's three
+lines you know three to five so so we
+have a disk cache we compose it with a
+networking cache we have some disk and
+networking cache value that we use
+across all of our stacks and then in
+this case we're going to map over the
+disk and network and transform it into
+some view that accepts bitmaps and then
+we're going to compose it with a ram
+cache that accepts bitmaps and now now
+this thing is something that we can use
+in our application to to query for
+images which is cool so that's good but
+there's a problem so so here's a real
+example right so so a really messaging
+app to users are messaging each other
+and they have their avatars their
+profile pictures next to their messages
+if they each have sent ten messages to
+each other and we're putting the app for
+the first time and you know it's clean
+install then if you think about it
+concurrently ten requests were then go
+in and they're going to ask the memory
+layer do we have this image and they're
+all going to fail then ten requests are
+going to go into the disk layer and
+they're all going to fail and then ten
+requests really go into the network
+layer and they're all going hit the
+network for the same URL so that's bad
+we we don't want to hit the network ten
+times here right that's very bad we only
+want to hit it once or if you're
+thinking about both profile pictures
+twice so what we want to do is we want
+to reuse in-flight requests so let's
+let's do that so what we can do is we
+can set for all caches everyone who
+implements the cache protocol if your
+keys are hashable then this reuse in
+flight request method will be available
+to you and and what this what this does
+is it takes a dictionary that map's keys
+to in-flight requests which are just
+futures and it's going to return a view
+of that
+- but the types the same same key in the
+same value where our get instead of just
+you know asking the cash for the value
+we're going to check the dictionary
+first and if it's there then we're done
+and if it's not there then we can make
+the request to the cache and store the
+future in the dictionary for future
+future accessories of this cache and set
+is the same and if you ignore you know
+some extra logic for freeing maybe some
+Atomics to make this thread safe this is
+basically the implementation it's
+completely decoupled from the idea of
+networking which is really really nice
+okay we can take this reuse in flight
+and and apply it to a network cache and
+now we get a smart never cache the smart
+network cache when we get the same URL
+twice in short time proximity then we
+only get back one future it's the same
+reference all right so we've only made
+one in-flight request so we solve the
+problem if you're thinking to yourself
+if you've ever made a mobile app before
+or done something with a front-end
+application you may be thinking like all
+caching libraries provide a solution to
+this right now the interesting thing
+about this particular solution is that
+like I said it's completely decoupled
+from the notion of ax hitting a network
+so what we can do which most caching
+libraries cannot do is we can take this
+and instead of applying it directly to
+the networking layer we can apply it to
+the composition of the disc in the
+networking layer right so now if there's
+a request in progress like creating the
+disc or reading something from disk we
+can reuse that future it's in between a
+disc of the network we can reuse that
+future and if it's in the middle of a
+network we can reuse the future which is
+really really useful and and this same
+technique applies for any sort of cache
+agnostic operations that you want to do
+for example concurrency throttling like
+if you want to say only five requests at
+a time can be processed by this cache
+you can you can define it in a way
+that's agnostic of the underlying cache
+and then you can apply it to
+compositions of caches which is really
+awesome so now we just add this we use
+in flight to our first line and this is
+a cache stack for loading images and
+that's it it's pretty cool so what we've
+done right is is we've taken this
+inherently complex problem of caching
+that that is usually solved in five
+different ways across your app let's say
+or on your back-end where you know you
+have one imperative disgusting place
+where you do image caching and one
+imperative disgusting place review video
+caching want imperative disgusting place
+where you do model caching if you're
+stuck with api's that are imperative and
+and we've we've taken that and we've
+minimized the surface area so we only
+have to deal with the imperative api's
+for networking in one place wrap it up
+in a nice wrapper and reuse that across
+your application excuse me so it's
+pretty awesome that's that's good we can
+do it now we can we can compose a disk
+and network together first we can we can
+compose with a ram layer that that is a
+decompressed bitmap for example because
+we can do transformations and we can
+apply transformations to caches or
+composed subsections of our layered
+stack of caches by writing these
+extension methods so I'm pretty thirsty
+okay so that's good we did it now if you
+want to use this and you're writing
+Swift which may be one person in this
+room is hopefully there's this library
+called Carlos that implements these
+ideas and it is open source on some of
+the names the methods might be a bit
+different and I don't think the
+documentation shows some of this
+formalisms that we went over but but
+it's pretty awesome it's created by
+Vittorio me Saad and their twitter
+handles are here there is a pure script
+implementation that that I made to help
+myself formalize the pro functor and the
+contravariant functor and the mono so
+there's a link there and I'll give a
+link to the slides and
+and that's that's it I'm Brandon that's
+my Twitter my Pinterest link to the
+slide back and thank you so I think
+there's time for questions
+great all right thank you thank you so
+much
+so this is on yep okay so so what I
+would like to use what I would have
+liked to have used is Bright Futures I
+think any the Bright Futures
+implementation is quite good in this
+slides i pseudocode I didn't use the
+exact methods from great features um
+Carlos implementation of this library
+has rolled their own futures and they're
+a little bit different they have this
+notion of cancellation as well but in my
+application I wrote an adapter between
+the two so I didn't have to think about
+it
+when you like money crows within a short
+time frame and can send them yes that
+that is one of those cash agnostic
+transformations that actually exists in
+the Carlos library okay so yeah it's
+awesome but yeah it's an example one of
+those things that you write in a few
+lines of code that can be used across
+any any subset of your caches your cash
+stack yeah yes I'm sorry say that last
+bit again I think that the I in a sense
+it kind of is a lens because it's a pro
+frontier right so if you go to that pro
+clunker optics talk later today then
+you'll see that I haven't actually done
+that work myself but there's definitely
+something interesting there but it's a
+lens under a monad so if this it's some
+optic I don't know the name I'm sure
+there's a nice yeah
+yeah so the cache invalidation and so
+I'll give you I'll tell you what the
+Carlos library does which works well
+enough so so the interface the cache I
+lied and I showed a simpler
+implementation and there's also this
+extra method that's quite ugly but it's
+kind of useful which is just on memory
+warning which is when the operating
+system tells our process that we're
+using too much memory and so any K act
+to that callback to clear itself so you
+want to do that for any cache that uses
+a lot of memory and then the internals
+of the disk cache would whenever like a
+new a new value needs to be written you
+could implement some sort of like LRU
+least recently used a cache eviction
+strategy and that's sort of an
+implementation detail of your cache that
+you hide behind the interface so the
+answer to your question
+yes yeah so that that is an interesting
+problem that doesn't come up that much
+on the front end so I haven't thought
+about it but but I bet there's some
+interesting cool look work to do in
+there yeah just check it out
+any other questions yes sure this yes
+I'm so Swift so actually to be fair so
+there's a long story here swift Swift
+moves fast so I'll repeat the question
+what is this underscore okay the Swift
+language has breaking changes with its
+syntax every version in the version of
+Swift that existed when I first we have
+to slide swift swift actually does
+something unique that many languages
+don't you wear when you invoke functions
+and methods you provide the name as well
+for your parameters in the latest
+version of Swift you are supposed to
+provide names for all your parameters in
+the version of Swift that existed when I
+wrote this particular example sighs I
+didn't update it the first parameters
+name is omitted when you're invoking the
+function but the second parameter and
+the third and all subsequent parameters
+require you to pass that name and which
+is really nice it's like an extra bit of
+documentation that you get in your type
+signature and in your non your signature
+I guess in your invocations so that you
+understand what is going on but in this
+particular case when we're mapping our
+values it's not useful to say at least I
+don't think it would be useful to say F
+and F inverse so the underscore says you
+know I don't need to provide that name
+on invocation
+resting the name parameters yes thanks
+any other questions
+yeah well so so the way the way that on
+the way that I did that so so if you
+remember the disc in the network layers
+we used across all my cash stacks and
+those are all are storing different
+types but basically if you provide sort
+of a I don't know if it's upper bound or
+lower bound whatever but so basically at
+the lowest level the distant network
+they deal in bytes so as long as you
+provide a way to serialize and
+deserialize then that can store
+everything so so that's how I
+accomplished that particular bit and I
+think it's just like if you can find a
+type like if you want to store three
+different types of things three distinct
+things then the type of your value would
+be like an algebraic data type with
+three cases and you just provide a way
+to either in memory you can just store
+it or if you provide a way to serialize
+and deserialize then it'll work
+any other questions we're out of time
+all right</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

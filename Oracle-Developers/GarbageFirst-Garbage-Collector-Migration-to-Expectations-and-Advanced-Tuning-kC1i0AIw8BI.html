@@ -1,0 +1,1464 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Garbage-First Garbage Collector: Migration to, Expectations, and Advanced Tuning | Coder Coacher - Coaching Coders</title><meta content="Garbage-First Garbage Collector: Migration to, Expectations, and Advanced Tuning - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Garbage-First Garbage Collector: Migration to, Expectations, and Advanced Tuning</b></h2><h5 class="post__date">2015-06-05</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/kC1i0AIw8BI" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">here's what you can expect in this
+session what we want to have you take
+away from here is learn what you need to
+know to experience Nirvana
+in your evaluation of g1g see especially
+if you're migrating from parallel GC to
+G 1 or from CMS GC to G 1 and we'll walk
+through a couple of applications where
+we've got an application that was
+running parallel GC and we've migrated
+it to G 1 and what our analysis and our
+steps were with that and we'll do the
+same thing with an application that was
+run in CMS GC so you get a chance to
+look at some methodologies and
+approaches that we used a little bit
+about ourselves
+I'm charlie hunt I'm the architect of
+performance engineering at
+salesforce.com to my right here is as
+Monica Beckwith Monica is the
+performance architect at server G and to
+the right of Monica is John cots person
+GC engineer a little bit on John John's
+worked with the hot spot JVM for
+probably going on 12 to 13 years I would
+say at least half of that anyway he's
+been working on garbage collection so he
+probably knows G 1 GC about as well as
+anybody on the planet so it's nice to
+have John here with us so for an agenda
+I'm going to start the talk here with a
+little bit of preparation work that you
+want to do ahead of doing your g1 GC
+evaluation I think it'll make your work
+and your efforts a lot easier a lot less
+stressful then I'll hand it off to
+Monica who will talk about a parallel GC
+to a G 1 GC migration and then she'll
+hand it off to John who will then go
+through the CMS GC 2 G 1 migration and
+at the end I'll come back and do a
+summary of things and give you a little
+recipe if you will a few steps of some
+things to watch out for some things you
+could take away along with you and that
+you could take back with you and do some
+of your evaluations with so preparation
+work how would you like a little bit
+less stress and your performance testing
+I think all of us would like a little
+less stress right well here's my advice
+define your success of your performance
+testing in terms of throughput latency
+footprint and capacity and the approach
+that you can take here's go gather your
+stakeholders of your application go grab
+your your product manager go grab a
+couple of users of that application grab
+the developers start asking them
+questions and ask them in these areas of
+throughput for instance and the types of
+questions you can ask are what's the
+expected throughput can I fall below
+that expected throughput and if so how
+long what throughput can I never fall
+below how's throughput measured is it
+transactions per second is it messages
+per second is there one metric as your
+multiple metrics and where's throughput
+going to be measured is it at the
+application server is it going to be at
+the client in terms of latency what's
+the expected latency can you exceed the
+expected latency if you can for how long
+what latency should you never exceed
+this is a very important one should
+always want to take in the worst case
+latency how is latency going to be
+measured is it response times is that
+some percentiles or response times
+is there one metric is there just one
+response the percentile response time is
+there multiple metrics words latency
+measured is it at the application server
+is that the client you also want to take
+a look at how that latency is being
+measured the actual logic is it really
+accurately measuring the latency is
+there a possibility that you might be
+missing something is it something like
+you're taking a timestamp at the point
+at the beginning of the writing of the
+response or is it at the end of when the
+entire response is gone can a GC in
+between or at the end or in the
+beginning in there somewhere
+deviate or have an impact on how you're
+measuring latency in terms of footprint
+similar sorts of things how much RAM can
+you use how much RAM can you never
+exceed
+how much memory cans are how his memory
+consumption going to be measured what
+tools are you going to use at what time
+during application execution are you
+going to take that measurement another
+one capacity what's the expected load
+usually this is in some terms of
+concurrent users or concurrent
+transactions some injection rate how
+much additional load or capacity do you
+need to support usually this is some
+factor of the expected load maybe it's
+to X of the expected load the capacity
+metrics are usually in some combination
+of either concurrent users and injection
+rate the concurrent transactions in
+flight and oftentimes you can use CPU
+utilization as a capacity metric the
+last one power consumption so power
+consumption might also be a requirement
+what's the expected power consumption
+one of the things that we've observed is
+changing BIOS settings and power
+consumption can have as much of a
+15-percent effect on latency and CPU
+utilization so this is another
+requirement to take a look at so once
+you've got these inputs you can start
+your experimental design you start to
+ask questions of yourself well do I have
+a workload that can be configured to
+test this application based on that
+requirements input that you got from
+your stakeholders maybe you have to do
+some additional development maybe need
+to enhance one and do you have an
+environment where you can test this once
+you've got this an experimental design
+together go share that plan of how you
+plan to test this with your stakeholders
+you're likely going to get some feedback
+and some assumptions that you've made or
+they've made and you maybe need to get
+some clarification on it the thing that
+you want to get out of this you're going
+to get agreement with your stakeholders
+and how you're going to test it and how
+you're going to evaluate it and what's
+most important the big thing out of it
+is going to save you a bunch of house
+gonna relieve the stress so at the end
+of that everybody is much much happier
+I'm going to hand this off to Monica who
+will walk us through the migration of an
+application from parallel GC to g1
+Thank You charlie
+good morning everybody so let's move on
+that was very fast
+your first section went down really fast
+so we have lots of slides and we were
+kind of timing it earlier and we were
+kind of worried if you are not gonna be
+able to complete everything all right so
+when should you consider migration so
+for parallel GC which is a throughput GC
+you know if it cannot be tuned to meet
+your latency goals okay
+and maybe even your footprint goals
+right so usually the the thought is that
+for throughput you can you know let go
+of the footprint so you can increase
+your heap size to get more throughput
+but say you don't want to do that and
+parallel GC cannot meet your footprint
+goals so in those situations g1 will be
+you know g1 will be able to run with a
+smaller Java heap and and the reason is
+that the way parallel GC collects the
+origin it does it during a full GC stop
+the world pause and and what that means
+is if you can have parallel threads
+during that and you can use parallel
+owned to have the old generation
+collection being Perl but it's for the
+entire heap so your heap size determines
+kind of determines the how much time it
+takes to collect it right for g1 that's
+not the case you can collect it during
+your mix collections you can collect it
+during if the regions are completely
+free then during your concurrent cleanup
+and then of course you can fall back to
+a full GC as well so g1 can work with
+smaller Java heap and of course your
+maximum load capacity will be kind of
+lower than g1 because even has the
+concurrent overhead right so which even
+has more overhead than parallel GC so
+you should use these factors in when
+you're considering migration migrating
+to g1 so so what is our advice if you
+can turn to in parallel GC to meet your
+throughput latency footprint and
+capacity
+then you should stay with barrel GC
+because it's working for you right
+everything is working for you and if you
+cannot then you should try considering
+moving to g1 and and then again your
+application is if your throughput is
+your main goal anyway and the parallel
+GC is the best throughput GC there is
+right so if you're meeting everything
+else and okay for your throughput GC
+you're using C so it depends on your
+heap size have you look we can talk
+about it later but it depends on your
+heap size and stuff like that so the
+comparisons are not really apples to
+apples actually nobody likes me using
+the world apples to had a discussion
+about it last last night but anyway so
+it's not really a you depends on your
+heap size and stuff like that so they're
+there it's kind of little different here
+okay but what we can talk and John masa
+meet su probably has more examples for
+that one right okay okay so now this
+this particular for this particular
+application the end user thought that
+they did a really good job so in fact it
+they think that they can do better than
+the adaptive size policy option so they
+turned that off and they said they
+survival ratios they set their nursery
+size with that xmn flag right there and
+then they had the permission related
+flags here but they're still not we're
+not happy with their because they were
+not meeting their goals and I'll talk
+about the goals later so they wanted to
+move to G 1 GC and they wanted to
+evaluate G 1 GC so so the thought is
+that they just wanted to plug out their
+use parallel GC and plug-in used G 1 GC
+and they kind of knew about the past
+time target goals so they said ok they
+wanted to keep the pass time target at
+250 milliseconds and and then of course
+there's something called the initiating
+heap occupancy percent with which G 1
+which is basically the marking threshold
+so and one of the reasons we were
+highlighting it over here is that is the
+default and it is there it's you you I
+mean you don't really have to set it on
+the command line because it's default
+but if we wanted to highlight the
+difference because g1 does have
+conference face Ferrell GC does not so
+that an option is very important for
+anybody migrating from parallel to g1 to
+understand that does have that kind of
+sets the marking threshold the
+concurrent a multi-phase concurrent
+marking so so does that make sense would
+that does that make sense to you because
+you know you would think that that's
+what is needed right but that's not
+right Ji Won has by by by doing all this
+so basically you have this survival
+ratio you have the nursery and what what
+are you trying to do is you're trying to
+tell g1 that you can do better job so g1
+has the adaptive heuristics but by kind
+of kind of trying g1 to with these
+nursery bounds you are telling it you're
+doing a better job at it
+so you're kind of telling it to not use
+this adaptive heuristics and that's not
+a good idea especially when you're
+trying to evaluate g1 especially when
+I'm trying to establish a base language
+g1 let g1 do its adaptive nests and then
+you can work with it so when you haven't
+been trying to establish a baseline do
+not overload your command line and so so
+this is what you should be actually
+doing you you don't need the nursery
+size because g1 has by nature it's
+designed to be fun 5 percent to 60
+percent the nursery bounds and based on
+your past angle GMG one has a prediction
+logic that it'll select a good nursery
+and it'll you know it was the prediction
+logic will predict it for every pause so
+the trees it could resize your nursery
+potentially recess a nursery for during
+every pause so you let g1 do its job and
+so we just basically took out all the
+other kind of tune the the highly tuned
+stuff that the user had done and we went
+with a really basic which is used Ewan
+and your pastime goal and of course you
+had your heap initial and Max set
+already so now let's look at it so this
+is what I was talking about these were
+the goals of the for the end user for
+the customer so the customer expected
+that at the expected load you would see
+two seconds response time at 99th
+percentile and no response time above 10
+seconds and same is true for the 2x so
+they wanted to see that the expected
+load and a 2x of the load and and the
+reason and some for some of you may
+think why is it 2 seconds why is it that
+high it was basically the nature of
+their application they had heavyweight
+transactions they were waiting for
+handshaking you know the DB triggers the
+async and sync activities so that was
+the nature of the application I mean I
+don't have problems with that and they
+had a rambling it to it six six gigs so
+they could only give six kicks to the
+JVM so what were their observations with
+parallel GC what made them decide to
+evaluate G one so they were observing
+2.5 seconds latency at 99th percentile
+so which is above their goal the goal
+was two seconds it's about that and we
+also got them to measure the CPU
+utilization it was about 29% which seems
+all right so so they didn't even bother
+evaluating the 2x they were already
+blowing the goal with the with this just
+the expected load right so they didn't
+even bother with the 2x so let's look
+quickly look at your peril GC heap
+sizing again remember they have they
+turned off the adaptive size policy for
+parallel GC they then went with the
+survival ratio and nursery size
+hard-coded so they didn't want they had
+they think that they had children and
+that was the best they could get and the
+best was not good enough right so the
+starting place for G 1 GC again just the
+g1 GC
+you know use you NGC and then the banks
+juicy possibilities that's all it's
+needed the heap occupancy is again it's
+shown here just to highlight that g1 GC
+has concurrent phases all right you
+don't need that on the command line if
+you're gonna go with the default which
+is 45 all right so the initial
+observations with G 1 GC the 99
+percentile response time was 1 point 4
+seconds which is better which is with
+definitely the goal was two seconds G 1
+G C is already meeting and exceeding the
+goals right and so it's 44% reduction
+and the initial observation with CPU
+utilization G 1 GC is utilizing more CPU
+now 30 n and that's 39% so are we done
+right as you would ask yourself this
+question right now are you done or
+should we just move on to the next to
+get the 2x expectance the expected load
+no we're not done because we just
+established the baseline we haven't
+really looked and how to improve it
+remember those guys went with the
+exercise with parallel GC to tune it and
+they kind of went over it the user that
+precise policy did the survival ratio
+they did their nursery size so we should
+we should try to you know get at more
+tune configuration for G 1 as well so
+don't move on yet just just look at your
+g1 GC logs and also remember that the
+CPU utilization to 39% that's concerning
+because because if at the expected load
+you're that high what's gonna be at 2 X
+of explored right so where do we start
+whenever we and then Charlie family
+would agree with that we love looking at
+the GC Lance is because these are the
+things you know these are called the
+patterns that we look for in the GC log
+and and these are the low-hanging fruits
+that we can optimize so we look for to
+space overflows in recent 7 update for T
+builds you will see two space exhaustion
+which is kind of more appropriate and
+I'll talk about that soon and then we'll
+look at full GCS we look for full JC's
+right grab for full G sees
+and why do we do that because we want to
+avoid them
+there is no there's no need for us to if
+we wrap for your application to really
+go to to speaks exhausted or full GCS
+because there are the ways like a
+century one GC has can collect the old
+generation at different stages so you
+shouldn't really go you know you can
+optimize these guys out of your log so
+what our evacuation failures so these
+are basic occupation failure means that
+when G one was trying to evacuate any
+some region it could be
+Eden or survivor or the old region it
+was trying to evacuate a region and it
+could not find a region of free region
+to evacuate that region into so that's
+what it means it's a little different
+than what you may be used to when we
+talk about to space overflows with
+respect to CMS or or parallel GC which
+we'll be talking about to space in that
+land we're talking about the s 0 which
+is survivor 0 and survivor 1 so we're
+saying we couldn't evacuate from
+survivor zero which is called the from
+space and survivor one which is called
+the to space so that is a different meat
+that has a different meaning for G 1
+which means that we couldn't find any
+region to evacuate to it could the
+region could be from you know you were
+trying to evacuate to survival regional
+you're trying to evacuate to the old
+region you just couldn't find any region
+so why do you want to avoid that - space
+overflows and exhausted whatever I mean
+the messenger's is different but
+evacuation failures in general are very
+expensive to deal with so any object
+that has been already evacuated its
+object references must be updated and
+the region must be tenured and any
+object that has not been evacuated its
+object references must be self forwarded
+and the region is tenured in place and
+and usually this is a common pattern
+with almost all the logs that have seen
+evacuation failures eventually lead to
+full GCS and full GCS are single
+threaded in g1 as of now as of today so
+in full G C's collect all regions and
+but unfortunately single-threaded so we
+want to avoid that
+so we did so when you looked at the log
+what would we see we saw these messages
+and this was a log before 7 update 40 so
+we saw this 2's place overflow message
+right there and then we saw a full GCS
+and that was about every 25 minutes we
+would see that kind of thick message and
+that's not good and you can see the full
+GC took about 3 seconds the the to space
+overflows took about six hundred and
+twenty eight milliseconds so what do we
+do next now we know that we have some
+other issues that we can take care of
+and we found out found that out from the
+log itself so what do we do next and I
+love this option it's called print
+adapter size policy option it is very
+helpful it gives out
+ergonomic details and tells you exactly
+what you what happened during every
+pause and I'll give an example in the
+next slide so look at the GC logs for
+those areas leading up to the to space
+overflows and full GCS so for this
+particular log what what what we saw was
+the there are three things highlighted
+here first
+there was a concurrent cycle initiation
+request second the allocation request
+was about little over six six megabytes
+and third it was a concurrent humongous
+allocation and I will talk about
+humongous allocations very soon enough
+and and there was not a single so this
+pattern is okay it's good to know it's
+good to identify but if you just see a
+couple of them then then it should it
+should not be alarming but here in this
+case we saw 250 of those in two hours
+and that is alarming just because of the
+nature of what we saw it was a humongous
+allocation so g1g see you know the hope
+the whole concept of humongous
+allocations is that G when GC would
+allocate those humongous objects out of
+the old generation out of the old
+generation and it will call it a
+humongous region so the hope is that
+they're not too many humongous objects
+basically not too many humongous regions
+and second hope is that they are
+long-lived but in in this particular
+case
+it seemed to be a lot of humongous
+objects and they were not long-lived and
+that's why they were causing problems
+and so let's talk about him on this
+allocation so objects that are greater
+than 50% greater than or equal to 50% of
+G ones region size I've considered
+humongous allocation and humans object
+allocation and collection is not
+optimized for jiwon and and and again
+the reason is because we want them to be
+we think they are long-lived and we
+think they're not that many so we just
+keep them you know in the old generation
+and we don't kind of move them back and
+forth and collect them during mixes GCS
+okay and g1 region size is determined
+automatically and JVM launch time it's
+ended based on your initial heap size
+your Java heap and you can override it
+there is an option called g1 each region
+size and you can override it the only
+thing is that it can be anywhere between
+1 Meg to 32 Meg's and it must be a power
+of 2 so what next so we saw from from
+the log from the log we saw from the
+print adapter size policy enabled long
+we saw that the object allocation the
+size was about 6 point 4 Meg's and so
+how do we how do we tune tune g1 GC to
+avoid those over to space overflow
+messages so we need a region size that
+can accommodate those 6.4 megabytes and
+kind of make it a regular object not
+humongous object so so what did we do we
+try to increase your region size make
+sure that it's so how do you do that
+first make sure it's a power of 2 and
+make sure it's between 1 mega and 32
+Meg's right so if you do a 50% of 16
+Meg's it's in equal to 8 minutes 8
+minutes is more than 60 point 4 Meg's so
+let's use 16 Meg regions so a quick note
+here is that when you're trying to so
+the JVM at launch time will tell you if
+the region size is not aligned with the
+initial or maximum heap size so if
+you're using 5 gigs then you have about
+325 5 gigs by 16 Meg's as 320 whereas if
+you're using
+5,000 Meg's and that by 16 Meg's it zone
+is equal to 3 1 2.5 so make sure that
+you're aligned with the region size and
+in this case we were because we used 5
+gigs ok so now we introduce that option
+that we just decided we needed it was g1
+heap region size is equal to 16 Meg's so
+now let's see how that changed our
+output right the application response
+time so the 90th percentile response
+trying time dropped to another 25% to
+one point zero five seconds so remember
+we had the peril GC was 2.5 seconds G 1
+GC baseline was one point four seconds
+and now we are better better than that
+at one point zero five seconds and
+that's how the graph looks and that's
+the black line shows the 1999 percentile
+risk requirement so observations with G
+1 region size at 16 Meg's the CPU
+utilization dropped it's still higher
+than parallel GC because we are doing
+concurrent work but the utilization
+dropped from 39 to 33% and and and the
+reason I you know I would say that it
+dropped was remember when we were
+looking at the log or with print
+adaptive size policy enabled we see that
+concurrent cycles were getting initiated
+they were requesting conference I can
+initiation because the occupancy
+threshold remember the marking threshold
+I was talking about earlier so if the
+occupancy the heap occupancy is over the
+threshold you will you will trigger
+concurrent cycles so with these
+humongous allocations we were triggering
+concurrent cycles back before 250 of
+those right so so because we were trying
+to allocate it in the old generation
+that's why so when we kind of made it ok
+and we tried to allocate it in the
+younger generation itself we kind of
+reduced the concurrent work and that's
+why we kind of got back the CPU time
+that we were spending earlier ok and
+this this is how the graph looks the
+utilization is much better lower is
+better of course so with the g1 region
+size that one ingredient scan
+below the one in blue basically so are
+we done yet
+no I would I would say no because we
+should go and look at the GC Lance again
+maybe there are some other potential
+improvements and remember we haven't yet
+tested that to X expected load also and
+and the CPU utilization is like higher
+as well so we went back and we looked
+and we couldn't find anything basically
+is what the slide is saying no humongous
+allocations no adaptive ergonomic issues
+and we looked at so what we tried to do
+is we're trying to look at the heap
+occupancy prior to mix GC cycles and we
+were reclaiming well enough so we were
+reclaiming about 300 to 900 mega
+megabytes per cycle during our after a
+concurrent cycle and mix GC so I think
+we were pretty happy so we said it's
+really good and the marking threshold
+was was okay we could have adjusted the
+marking threshold but we thought it was
+okay at that because you know the cycle
+is pretty delicate if you make make it
+too high or too low too low you kind of
+keep on wasting CPU cycles too high you
+could start your marketing cycle later
+you may not be able to keep up and you
+may eventually have to spec's exhausted
+messages so we are good and this just
+says that we are good we didn't want to
+go further into tuning so so now we move
+on to the to find out how we do at 2x
+expected load capacity goal so I think
+the results here showed show that those
+numbers at 2x we were about 1.2 seconds
+which was about 150 milliseconds higher
+than yahwah at 1x and the CPU
+utilization was about 1.8 X higher than
+at 1x which is which is good so this is
+how it looked the 99th percentile is
+right there at expected load g1 was
+shown in green at 2 X alone g1 is shown
+in blue and that's pretty good and the
+CPU utilization again 1.8 X difference
+right there
+so finally are we done yet yes we are
+again why because our requirements are
+met we did additional performance tuning
+you're kind of happy where we are right
+now and most importantly the
+stakeholders are happy as well so
+everybody's happy
+all right I'll hand it off to John to
+talk about CMS and g1 migration Hey
+so I just let you know I got the short
+straw by dealing getting CMS so my
+experience with CMS is limited as some
+of the Oracle guys will tell you so it's
+really TT g1 and the fact that it's one
+of the framework collectors and I think
+that's why I came to garner anyway so
+let's move on so CMS people have CMS
+application computer applications run
+with CMS why would you consider moving
+to g1 well as Monica and Charlie
+basically said is when you know CMS
+can't meet your requirements we have
+been agreed with it with the
+stakeholders so as we see as typically
+can see CMS does suffer from a
+fragmentation this year and that will
+typically result in you know you're not
+making your requirements CMS does have
+footprint issues it maintains a
+dictionary of object sizes for for
+artists eyes fire allocation requests
+and again with fire fragmentation or
+with a large distribution of object size
+ease the number of buckets in that
+dictionary can get large so as a result
+we've typically on sometimes we see do
+you want running with a smaller heap and
+we sometimes see g1 running with more
+CPU within CMS and we'll show you that
+in the upcoming slides why would that be
+the case well as Monica says of Oh CMS
+is concurrent the it's it's marking is
+concurrent and it's sweeping is
+concurrent that's typically done by one
+set of threats
+whereas g1 has a couple of concurrent
+processes both marking is done
+concurrently it has its own pure threads
+and our say updating is done
+concurrently which is a different set of
+four different power
+so as a result that there typically is
+more more pressure on the system okay so
+we went through this exercise with with
+this a second application that was
+running under CMS here were the expected
+requirements so the Lord was 1,500
+concurrent users with roughly two
+transactions per second the 99th
+percentile latency rerp response time
+requirements was 250 milliseconds and
+the max latency remember Mike Charlie
+talked about max latency you can't lie a
+bit max latency you can lie about the
+other things we can't lie about max
+latency she can be no more than one
+second we had actually 12 gig of ram to
+play with and further for the vm so that
+was actually quite nice and we you know
+the the requirements also stipulated
+what a 2x load capacity would be so we
+were looking to just basically double
+the number of users not necessarily
+double the number of transactions but
+basically double the number of users
+okay so this was the CMS configuration I
+hope people have like itis when you see
+this I know this is your basically you
+know you to get the best out of any any
+any piece of software you typically have
+to tune and configure and you know there
+was obviously a lot of experimentation
+went into the y'all coming up with these
+flags so as I say this you know this was
+but this is a lot of flags and you know
+one of the things with g1 is we wanted
+to reduce the number of likes but what
+people be successful or not so an
+initial potential g1x is a g1
+configuration so based upon what Monica
+said there well exercise for the
+audience is this look good
+gifts them on a coconut okay
+no doesn't get imported Monica say we
+basically don't want to use any young
+generation sizing at all so we want to
+take anything which basically pins or
+restricts g1 offer you know manipulating
+the size the young generation so
+basically anything to do with survival
+ratios new ratios tenuring thresholds
+all of that stuff should go and also you
+know there may have been good reasons
+for setting the parallel GC threats to
+b12 and the concurrent GC threats to b4
+we probably want to remove that if we've
+got enough cores on the box you probably
+want to be starting off with a number of
+course so again you want to remove it
+you know there's no much point in tying
+one hand behind your back away from the
+earth sir okay so you know so basically
+with CMS here's what we saw
+so we basically at the 99th percentile
+we were meeting the requirements our CMS
+was meeting the requirements at 240
+milliseconds but look at the max latency
+my claims he was you know five to five X
+horse many reasons for that
+you know probably most likely concurrent
+mode failures Phil GTFO GC probably
+enjoy slightly injured by fragmentation
+and the 2x capacity we weren't the CMS
+was not meeting the requirements for the
+99th percentile it was basically set in
+about 60 milliseconds above that and
+look at the response timing the maximum
+latency or maximum response time 8
+seconds
+again so not necessarily good so why did
+we what did we go from un enter the logs
+and you know what we what did we find
+well we saw what I said promotion
+failures and just will highlight what
+those are so you can see here that this
+promotion failure basically took almost
+6 seconds of real time there are is some
+parallelism in there so the real
+was a little bit higher sorry the the
+use of time was a little bit higher but
+still six seconds for this particular
+thing was just not good just does no so
+let's remind ourselves again up at the
+CMS spikes Luca gained lots of likes
+let's arrange ourselves again but they
+are starting point for g1 so no heap
+sizing so if you notice the xmn is going
+survivor ratio is going all of that
+stuff is gone
+based upon what was the expected of live
+data size we decided to bump up the I
+hop to from the default 45 to 50% that
+was purely based upon an observation of
+how much live data was in the heap from
+the logs so so some first you have
+basically first you with g1 results with
+a van initial configuration was 99th
+percentile it's pretty good 78
+milliseconds I mean they show it by the
+graph where well you were beating it you
+know well cool pretty much well in hunt
+okay what's the ball Betamax well so max
+max latency well again yes what's what
+was the what was the requirement we need
+to know more in a second so g1 doing
+very fairly reasonable good job done so
+let's check your CPU utilization so g1 a
+little bit higher as I said you know
+because we have a wee bit more
+concurrent activity going on so we
+actually had a d4 percent increase on
+CPU utilization I would say that's noise
+you know what to be honest with you
+Marnell cpus are quartz or are so much
+over capacity so you'll see this a
+couple of iterations here you know this
+is an iterative process and I hope that
+people actually get that but this is
+very much an evolutionary process you
+start off you're doing big chunks and
+you're you're you're seeing big changes
+and you keep on going you know make
+smaller and smaller refinement and your
+changes until you eventually stop until
+your ROI is basically it's not
+or CFRA at that point so are we done
+here
+well not quite of all we meet the
+requirements you know I'm sure just by
+looking at the logs we could probably
+get do better so and we also want to
+check our 2x capacity and to see where
+we are there do we meet that so the
+client run run or they have the
+application with 2x capacity remember 2x
+capacity was 3000 users as opposed to
+300 you have 1500 users see Emma marrow
+transplant two transactions per second
+so what was the what was the 99th
+percentile so CMS went up a little bit I
+went from 240 to 310 as we saw g1 went
+up a little bit as well it went from
+77th yard up to 103 but again what was a
+requirement 250 so we meet that we're
+good the max latency again can't lie and
+max latency so what was our what was our
+requirement our requirement was no more
+than a second oh look that g1 not quite
+so good there we're sitting there just a
+bit basically almost six seconds you
+know we're a lot it's better than CMS
+but doesn't meet the requirement so we
+got some work to do there okay CPU
+utilization so again basically CPU twice
+almost doubled utilization almost
+doubled CMS went up ho up a higher so
+again look seem looking good there's no
+requirement on CP and CPU utilization
+this is mostly like how are we doing you
+know what's how much Headroom do we have
+left in the system so what do we do we
+have to solve this six second max
+latency issue you know that's that's
+that's that's that's an issue so let's
+go look at the logs shall we
+so when we looked at the logs what did
+we find
+well we found really really long are set
+up dating times and this will basically
+highlight that look here
+I mean basically we got this pause took
+like you know almost a second and look
+where most of the vlog showed where was
+most of the time is short this was 980
+milliseconds doing our setup dating you
+know so that meant we basically spent
+less than you know 20 milliseconds
+copying data you know and actually of
+moving data around most of his stuff was
+updating the ourselves alright so how
+can we leave it at that
+well we do have some tuna tuna boats
+with vengi 1 so G 1 tries to set aside
+10% of the pause time to devote to stop
+the world are say updating well it
+sounded like in that previous pause we
+spent almost 99% overtime so what do we
+want to do we want to try and reduce
+that so the best way of doing that is to
+reduce this flag so the default is 10 so
+by reducing the the are say updating
+post 10% like you push more work on
+other concurrent threads and you can
+also set the number of concurrent
+threads so by default default it
+defaults to parallel GC threats but you
+can actually override that it one one
+word of warrant one little piece of
+advice it doesn't make sense to me set
+this higher than the number of cores or
+Hardware threads you have in the system
+because if your thresholds are such that
+all other payment threads are running
+then you're effectively all your cores
+are running are set updates and as a
+result your application isn't
+necessarily doing any work not
+necessarily a bad thing because the you
+know basically when that when the when
+the ammonia retention drops down the the
+threads will start to go back to sleep
+but doesn't make sense to to you know
+specify more than the cores of threads
+on your system okay
+so my taste system had 12 virtual
+processors so we're currently using 10
+at 10
+GC threads so let's change the the
+parallel OTC threads to be 12 so we
+actually get the you know use the the to
+spare set CPUs on the system that will
+also set concurrent refinement number of
+concurrent refinement threats and let's
+reduce the the percentage of time we
+devote to our say updating so all of
+this should basically move worse work to
+the concurrent domain so one thing we
+have to watch it for as an increase in
+CPU utilization
+okay so revised g1 flex concurrent fake
+number two okay so you can see the
+additional flags here so what did we see
+well so of an 18 is so in the 99th
+percentile we basically did go up
+we were so meeting the goal of 250
+milliseconds but we basically went up by
+90 milliseconds just because we're
+pushing more where we're pushing more
+work to the concurrent domain so there's
+you know the you know the pause these
+are typically going you're going to
+start to see longer pause ease but
+they'll be amortized still beating CMS
+and as I said we're still good with our
+requirements so what's the what about
+the maximum response time that was
+keyboard we're looking for look there so
+we sacrificed you know a little bit of
+Rupert and a little bit of response time
+and they are in the 99th case to Matt to
+satisfy the maximum latency so basically
+if you're the unlucky saw it who said so
+who gets out five-second latency you
+don't want us here okay so looking good
+CPU utilization well this was actually
+surprising we only went up by one
+percent yeah this was it's very unclear
+why that is a case but I mean
+I mean I was I was expecting more but
+you know we'd have today again to do but
+to figure out why why we didn't see more
+but it's looking good
+so again are we done yet far as my kids
+would say are we there yet
+Wow no wait I mean I'm sure we could get
+some more if we start looking at the
+logs again so now we start to delve in
+in the micro level with the logs okay so
+well what did we find
+well as Monica returned with the
+parallel GC case there was some
+humongous allocations well we didn't
+find that so
+Bango is that no knob well kadia space
+it was reclaimed we were basically
+reclaiming about 10 to 20 percent of
+Java heap of the journey each marking
+cycle and each mix GC cycle
+so I basically meant we were hitting you
+know been marking finished we were
+hitting about 90% of the heap so
+basically no evacuation failures there
+because we were we were finishing
+marking reclaiming space you know and
+plenty of time for me no to me
+we weren't basically avoiding the race
+to the application allocation ring so as
+Charlie says and we're talking previous
+talking but as a delicate balance
+between you know you're marking cycle
+you don't want to start the too early
+you don't want to start the too late
+because you want that to trying match
+your allocation and your promotion rate
+because this is what cleans up your old
+generation effective way so if you're if
+you lose the race that's where you start
+to see the evacuation failures okay so
+after two iterations well are we done
+now I would say so I mean there was
+nothing no other low-hanging fruit and
+the in the application logs to show
+where we where we could go
+so we made the requirements we we were
+70 milliseconds less for the 99th
+percentile response time we were 400
+milliseconds less than the maximum
+response time imposed by the the client
+and we we be both also with 2x expected
+lost with a slightly lower CPU
+utilization it's
+% but I'll take it so are we done so
+after a couple of iterations yeah I
+think we are until the person until the
+client comes back and says let's go
+ahead let's go through and do it again
+or the application changes and you have
+to go through the entire exercise again
+so everybody who is happy at least for
+now
+so with that I'll hand you over to
+Charlie again he'll go through the
+summary of what we've talked about this
+talk
+thank you John so what I want to do here
+in this summary is to give you a bit of
+a recipe or a sort of a step-by-step
+approach so if you start down this path
+of evaluating g1 or migrating from one
+of the other collectors what sort of
+things would you be looking for so
+clearly you want to understand your
+criteria to be successful in your
+evaluation in other words it's that
+notion of getting your stakeholders
+together getting a clear understanding
+of what your requirements are does it
+make sense to migrate the g1 you want to
+be able to answer that question and when
+you start it don't over tun start your
+g1 evaluation with the minimal settings
+start with an initial and a max-heap
+size potentially a pause time target and
+where to start the marking cycle and in
+particular don't use these sizing of the
+young generation do some GC analysis use
+some tools to give you a high-level view
+to identify troublesome periods and then
+go look at the raw GC logs and what you
+want to look for there is take a look at
+a couple of GC events prior to that
+troublesome period and then take a look
+at what happens afterward to see how are
+recovered and then from there you can
+take a look and see what sort of things
+do I need to take a look at as far as
+the decisions that g1 was making for the
+ergonomic decision so you would use this
+print adaptive size policy to help you
+identify what's going on one of those
+things that you might see is humongous
+object allocations and if that's the
+case you'd want to increase the heap
+region size if you're seeing to space
+exhausted
+two space overflows the marking cycle
+might be starting too late then you'd
+want to remove any young gem sizing if
+you happen to be using some or you'd
+want to decrease the initial heap
+occupancy percent or increase the Java
+heap size the initial and max size if
+you see hi remembered set update times
+increase the number of parallel GC so
+that's if you have budget available to
+increase those you don't want to
+increase this above the number of
+Hardware threads this will also increase
+the number of concurrent refinement
+threads you can do this independently of
+parallel GC threads if you want to you
+can also decrease the g1 remembered set
+update pause time percent any of these
+can potentially increase CPU utilization
+so you're going to trade-off some things
+here to gain a benefit in the other to
+observe remembrance that update and
+remembered set scan information there's
+three command line options here you can
+use and you can use these to identify
+whether the updating or the corseting of
+remembered sets is being pushed off onto
+the mutator threads so if you happen to
+see large remembered set update times or
+you're seeing some things interesting
+related to remembered set processing and
+handling you can take a look at what's
+going on here when the GC Logs with
+these three command line options if the
+time from when the marking cycle starts
+to where it finishes looks like it takes
+a long time you can increase the number
+of concurrent GC threads and again by
+doing this you may observe an increase
+in CPU utilization if the marking cycles
+are running too frequently look at the
+amount of space that's being reclaimed
+in the mix GC cycles after a marking
+cycle completes if you recruit
+reclaiming very little space per marking
+cycle and mix GC cycle then you probably
+want to increase the initiating heap
+occupancy percent
+the note here is that the more
+frequently that you have the marking
+cycles and the mixed GC cycles you're
+likely going to see higher CPU
+utilization because you're running these
+concurrent cycles more frequently the
+last one one we didn't talk about in our
+migration which we do see on occasion is
+is reference processing so you want to
+look for this tag in a GC log line and a
+g1 GC log line you'll see a section
+that's labeled other and there's an
+example here that shows the other part
+of a GC log line and you can see that
+there's a very high reference processing
+time relative to the overall pause time
+on a GC remark log line you'll also get
+reference processing time these should
+be a fraction of the overall pause time
+for an evacuation pause or a remark
+pause and if you see this sort of ratio
+where it's dominated by or a large
+portion of it or maybe a better way to
+say this it's a fraction of the overall
+pause time you want to enable parallel
+reference processing so with some
+additional info here from Java one it's
+unfortunate from a scheduling standpoint
+that they didn't schedule this session
+on Monday so if you happen to have miss
+the deep dive that John and Monica and I
+did on Monday go get the slides for
+you'll get a much more detail into the
+the inner workings of g1 and how it
+works
+if you happen to have missed the
+hands-on lab that was yesterday go find
+the materials for it excellent lab good
+learning material for GC analysis tools
+J clarity has some very good GC analysis
+tools they're currently adding g1
+analysis you can find more information
+about the de clarity tools at J clarity
+com it's one of the few tools that not
+only does some analysis but also offers
+you some suggesting that when it comes
+to tuning we often use a corporal or
+some kind of specialized J free chart or
+spreadsheets to do our analysis and if
+you can
+as you do this evaluation if you can
+share your observations and your GC logs
+the hot spot GC use a
+OpenJDK java.net you'll get a lot of
+feedback and you probably get a lot of
+questions answered there and in
+conclusion happy g1g see trails and
+we've got about five minutes for
+questions so quite that chap over there
+asked a bit what with cereal GC well we
+make the easy answers is for some heap
+sizes especially small hundred small
+heap sizes you know in hundreds up to
+you know 128 256 megabytes serial GC me
+actually give you reasonable throughput
+because you're not necessarily have any
+overhead associated with kicking off
+parallel tasks you know as the heap
+sizes get up or the amount of data you
+have to copy goes up that cost becomes
+less of an issue and then you'll start
+to see the parallel GC becoming well
+bloke start you know you're beaten
+serial GC but for like client client
+tape workloads you know and you know in
+the end it hundreds of key or up to the
+hundreds of megabytes serial GC will
+probably work frame
+you mean what do you mean for the VM or
+for the VGC that's not gonna but I don't
+think the hotspot can actually be
+configured that way because you'll have
+compiler threads
+there's even within the actual Java
+system itself you have reference and or
+threads faint noise or threads you know
+it just did a bare minimum so so it's
+probably not gonna work
+you're I mean even if you run a accent
+you know and interpret it you know get
+the compiler threads and if you're run
+with the serial GC so you only
+well but if you want the maximum
+throughput overall you probably want to
+give it as many feds as you can it's you
+can do it but you know the compiler the
+compiler the GC has you know the number
+of dates can be configured do I
+recommend that hmm I can not really
+because you the whole idea is you want
+to try and you know you're you could be
+potentially blocking your application
+you know while you're waiting for
+compilers to finish if you do that and
+then the your your individual circuit
+would probably suffer so I mean feel
+free but you know your mileage may be
+any g1 by setting parallel GC threads to
+one and if you did that and if you
+compare that to something like serial GC
+essentially what you'd be doing is the
+advantage that you might gain is you'd
+be able to have mix GCS where you'd be
+breaking up in essence the notion of a
+full GC a compaction so although you may
+have some concurrent activity that's
+going on so you're gonna have to do some
+scheduling of threads that are gonna
+have to be scheduled so you're gonna
+have an impact on throughput because
+you're gonna have some concurrent
+refinement threads you're gonna be
+having concurrent marking threads
+they're gonna be executing so if you
+have only one Hardware thread those are
+gonna have to be scheduled and it's
+going to take away some throughput in
+your application but the advantage that
+you may gain from it is once you've done
+a marking cycle and you start to move
+into mix GCS where you start collecting
+all of young gen and an a portion of old
+generation rather than collecting all of
+young generation and compacting it
+you'll be able to collect just part of
+old generation onyx Mitch mix GC so
+that's where you might get the benefit
+from but you will sacrifice something
+and throughput
+see threads you know so your concurrency
+see threads need to work with your
+applications and you will see these your
+concurrent power not pauses but the
+concurrent multi phase concurrent cycle
+will take longer a lot longer you'll be
+like if you do that I think we didn't
+explain it an experiment just foolishly
+I ended up doing that and I saw 15
+seconds from the beginning of the
+concurrent marking cycle to the end 15
+seconds it took it's not fully stuff
+it's not something the parts are stopped
+the world and multi-threaded but but the
+total dig took about 15 seconds and you
+know I don't think you want that you
+were talking about maximizing throughput
+right so yeah so it's it's a possible
+thing it's happening we can only
+hypothesize as to what the behavior
+would be so we get another question
+so you say you knock the one so at some
+point do you want to talk about what
+okay so so what so I so the question is
+is at some point we're gonna have to
+mention young generation flags yes if
+you know your application well enough
+you know and you think you can do a
+better job feel free
+you know you one will observe them and
+though if you tell it to say I need a
+2gig young generation it's going to give
+you a 2gig young generation and is going
+to collect that young generation and if
+you tell it using that I want that young
+generation in 200 milliseconds it's not
+going to say I am going to give you 200
+milliseconds I'm going to give you I'm
+gonna collect 2gig so I have a paper on
+info queue and I actually addressed that
+and we were talking in the paper I'm
+talking about evacuation failures and
+and what to do step by step or whatever
+but there was an example in this this
+was a benchmark this person was running
+a benchmark spec jbb 2013 I think and
+what what they did is they knew that
+their life dataset was really small and
+they had a good enough amount of heap I
+think I was stuck there 12 gigs or 15
+gigs so they said why not why do I
+bother with g1 going through these you
+know kind of analysis that you know kind
+of adapt to heuristics I know I have
+enough live data in the old generation
+for our tube to to be able to suffice in
+the old generation so I'm going to pin
+my nursery so they did XM n is equal to
+5 gigs so guess what happened so now the
+end of my and they did not adjust the
+IHOP the marking threshold so the IHOP
+was starting earlier was not reclaiming
+enough what and and then so these
+promotions started happening in the old
+generation is still not reclaiming
+enough because
+lab data set was you know it it was it
+was just not working enough and then
+when the the heap was getting almost 95%
+utilized g1 wanted to reduce the nursery
+now and it could not because
+unfortunately you tied it you tied it at
+5 gigs so now g1 is going into 2 space
+overflows as a as a side effect of you
+over tuning your nursery and that is the
+problem that you can see in this this is
+a real case example very life example
+it's on the info cue article and I have
+if I was to just generalize that I would
+say that the thing that the concepts to
+understand what g1 is if you're going to
+size young generation you basically are
+telling g1 that I think I can do better
+at meeting the pause time goal by sizing
+young generation because you are as an
+essence disabling some of its
+adaptability the other thing to
+understand is that when you start a
+young collection which II one regardless
+of its size it's going to collect all of
+young gem so if you set a pause time
+target g1 can adaptively size young
+generation between each collection and
+that's based on the adaptiveness that is
+that it has built into it so when you
+fix it you fix it to a certain size it's
+going to dictate you know depending on
+what's in there for references and where
+references are pointing to is going to
+dictate how long it's going to take to
+do that collection so when you fix a
+certain size you are basically telling
+it to ignore the pause time goal okay
+okay
+hmm no no it's not so the question is is
+g1 Nomura where no it's not
+in our testing we have tested with 200
+plus gigs and we all said I think
+somebody did a 1 terabyte - do you
+remember that yeah so actually the the
+the largest heap we tested was a 1.5
+terabyte heap the it was interesting you
+know collecting and I think we said the
+young generation to be close to half a
+terabyte yeah justjust de-stresser
+scalability I mean Monica Monica can
+talk more about the scalability and the
+200 gig time but the it can handle heap
+size is that large
+I've tested with parallel compared
+Maryland and it does really good job at
+being highly scalable the only thing
+that we I think I saw was that I had to
+increase that I have a bit to get the
+maximum making it more scalable so that
+it can cover more of the the entire heap
+so at 200 gigs if you're not utilizing
+200 gigs and then you say I'm not
+scalable it's not because do you one did
+something wrong it's just not you know
+you're not utilizing it so we had to
+push the marketing pressure higher so
+utilize the entire heap that's
+Oh
+okay so so there's another article my so
+introduction to g1 article on info cube
+that kind of compares these collectors
+and why actually g1 should work out well
+I mean there are cases about the
+evacuation failures that eventually lead
+to full GCS and and the goal is to avoid
+them because we don't have to deal with
+we shouldn't have to deal with them with
+g1 and that's a point there the way we
+collect yeah yeah that's the goal yeah
+yeah and then they're wasted you're not
+doing it right if you yeah you're not
+doing it right if you're not if you're
+hitting that is what I mean and there
+are there is or CC enhancements ers in
+the Oracle bug database about paralyzing
+the Fuji C's you know I'll leave that up
+to the Oracle team to determine what
+priority of that is but but there has
+been some investigative work done done
+for that there is a little bit of a
+trade-off in this area you know on the
+one hand you'd say of the cases of why
+you hit full GCS a single-threaded G C's
+where CMS or the reasons why you hit
+full GCS are basically eliminated with
+g1 so on the one hand you'd say well you
+should be able to tune g1 to the point
+where you can avoid it on the other hand
+you also have the thing of if you did
+multi-threaded full GC for g1 will it
+give somebody the false sense of
+security where they run the application
+and they don't look at the GC logs where
+they could give additional you know they
+could get additional gain out of it you
+know I hadn't thought about that until
+recently where my initial reaction was
+why don't we why don't we have
+multi-threaded full GC and to space
+overflow handling but as I thought about
+it more and more and started to come to
+conclusion while maybe we don't need it
+because we should be able to avoid that
+situation and if we do have it while
+maybe we're given somebody a false sense
+of security
+words getting some pretty strong hints
+to get out of here</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

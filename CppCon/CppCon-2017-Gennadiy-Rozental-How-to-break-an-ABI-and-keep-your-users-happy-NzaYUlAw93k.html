@@ -1,0 +1,1314 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Gennadiy Rozental “How to break an ABI and keep your users happy” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Gennadiy Rozental “How to break an ABI and keep your users happy” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Gennadiy Rozental “How to break an ABI and keep your users happy”</b></h2><h5 class="post__date">2017-11-03</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/NzaYUlAw93k" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">- Okay, I'll start, so welcome.
+See if this even works.
+Hello, my name is Gennadiy Rozental.
+You might have seen me around
+as a Boost contributor.
+But these days I daylight and moonlight
+as a software engineer
+on ABSL team in Google.
+And we bring in Google
+common C++ libraries
+to Abseil services.
+This will be hopefully easy for you,
+most of you, and I'll
+try to make it easier
+for you as well, so there
+won't be a lot of code.
+Instead, we'll do a little bit of software
+engineering archeology.
+So feel free to ask any questions,
+and in fact, I probably
+would appreciate it.
+We'll have some discussion
+so it makes sense, what we do.
+So you heard status to
+announce our release,
+and it's just initial release.
+I can assure you there will be a lot more.
+And might of also had the chance
+to listen to John's talk yesterday,
+where he described some
+of the technical debt
+shackles we had to break
+to free these interfaces for you.
+And technical debt is the bane
+of most established libraries,
+and Google is no exception.
+Today I wanna tell you the story,
+and one more war story
+we had to fight through
+to pay the debt.
+And to make it more relatable, maybe
+I'll introduce a few key players first.
+So strings, we're all familiar with that.
+And it's actually been
+used for C++ forever.
+From early on, string
+classes were present.
+So maybe rogueware string, queue string,
+probably your own string class in 90s,
+if you has the chance
+to program in the 90s.
+So they all had slightly
+different interfaces.
+But they essentially
+presented the same idea.
+Continuous character buffer in memory.
+Eventually, it's all
+culminated in a standardization
+of basic string template.
+We have std string and std
+wide string specializations.
+Initially in the standard,
+there was not a lot
+about how strings should be implemented.
+So it didn't enforce.
+There was some, but not much
+about enforcing specific
+implementation of standard string.
+So the library, standard
+library developers
+were free to do whatever they want.
+And I've seen a lot of implementation,
+from straightforward, something like this,
+like check the buffer, size, capacity,
+some kind of growth factor, usually,
+which is probably not a data member,
+but somewhere in the logic.
+And then more sophisticated approaches,
+two prominent ones, again,
+probably most know them.
+Know them both, which is COW and SSO.
+COW, or copy on write, was an approach
+which essentially adds a reference count
+to implementation somewhere.
+And the idea is it allows to
+avoid copying the buffer
+in a copy construction
+and only makes a copy when you
+actually need to mutate it.
+And it works well, if you
+only copy strings around.
+But it has one big disadvantage.
+It's the very same reference count
+which essentially made this string into
+shared pointer to string
+and has same problems
+as shared pointers, as
+it needed to increment
+and decrement the counter
+on every copy, on every destruction,
+and Google does a lot of them.
+And so this,
+because we do have a very highly
+multi-thread applications.
+And it results in a very significant
+visible performance overhead.
+Another alternative or
+family of alternatives
+were based on small
+string optimization, SSO.
+So the idea for the
+small string optimization
+is that we take the size
+of the buffer pointer
+and capacity, and maybe string,
+and utilize the space to
+actually store the string.
+So the string class becomes
+kind of value class.
+We can do it for small enough strings.
+Actually it's if string is less than
+some kind of pre-defined constant.
+It all, again, depends on the limitations.
+This is not how it's implemented.
+But it could be implemented this way.
+But again, most important for us to know
+that this is very different
+from what it was before.
+The memory layout is different.
+So these strings had an advantage
+for small strings, because you don't need
+to allocate the memory.
+You actually use less space, less pressure
+on the allocator, and it
+improves cache locality.
+So these are just two well-known
+string implementations.
+One more thing that I would like to
+kind of remind you is inline namespace.
+Again, most probably you know this.
+Inline namespace is a feature of C++11
+which allows us to
+change the implementation
+and keep the public name.
+So in this case, we have function foo
+in the namespace N.
+This is its public
+name, N colon colon foo.
+While the compiler does its work,
+will give it different name, which is
+kind of based on N colon
+colon underscore one,
+colon colon foo.
+So this allows us to have one public name
+and theoretically we can
+change internal name,
+change implementation.
+And what's most important,
+we can link together
+two different implementations
+to the same function.
+So you can, this function,
+for example, it's built once.
+Then you change your mind
+and implement it differently.
+Change the inline namespace, and you can
+build another translation unit
+with different implementation,
+and you will able to
+link them all together
+into the same application.
+It will work.
+So this is really why you
+would use inline namespaces.
+So finally, let me introduce
+one more key player,
+which is application
+binary interface, ABI.
+So we're gonna reiterate on
+it a little bit later today.
+But for now, it's easier to think of ABI
+if we match it against API.
+So API, application programming interface,
+is the interface to your
+library on a source code level.
+Well, ABI is interface to
+a library on machine level,
+on machine instruction level.
+After the compiler builds your library,
+this is how we interface
+with your library.
+And it contains, usually,
+a lot of details,
+it's platform specific.
+But most important for
+us will be memory layout
+of your types defined in your library.
+So classes can have the
+same API but different ABI.
+We've just seen it.
+COW and SSO std string implemented
+exactly the same standard
+but have a different ABI,
+different memory layout.
+Okay, so without further ado,
+let me tell you the tale,
+tale of a standard string imposter.
+So Google has a long history of using C++.
+It started early, and for
+wherever we are using C++,
+we started with GCC 295.
+And at the time, it used a string
+which was implemented
+using some flavor of SSO.
+Being pre-standard string, pre-C++98,
+GCC 295 actually did not have a namespace.
+And string class resided
+in a global namespace.
+So this works for Google for some time,
+and we didn't upgrade for several years,
+until standard settled.
+But by that time, string class is used
+all over the place.
+Now, huge, huge sort
+of base, which was like
+one million lines of code at the time.
+(laughing)
+And starting with GCC
+3, it implements C++98.
+And it's build with the standard,
+and it comes with new
+string implementation
+based on copy on write.
+And it was fashionable at the time.
+And GCC used that implementation
+for GCC 3 and GCC 4.
+So Google wants to move to
+that new standard library
+to actually use the standard.
+We were using pre-standard
+implementation before that.
+So as far as I can tell, it's around 2003
+that was an effort to do that.
+The task seemed unfeasible
+for two reasons.
+One, we realized that we have
+these million lines of code,
+and we have no idea how to go and sprinkle
+std colon colon everywhere.
+We didn't have the tools.
+Whole process took a few
+years, going back and forth.
+But while we do that, we also realized
+we have another problem.
+The COW string is slower
+in these Google use cases.
+It's slower by about 2%,
+which is significant.
+It's a lot of money for Google.
+So just because someone
+wants to make code clean
+and add std colon colon,
+Google's not gonna do that
+because 2%.
+So we were contemplating this for a while.
+And GCC releases 4.1 around 2006.
+And it implements now C++03.
+We really wanna move there.
+And we're still having
+the same two problems.
+Standard library is namespace
+std, our code isn't.
+And we still have a COW-based std string.
+Our code base is now bigger.
+It's 10 million lines of code.
+So we decide eventually
+to bite the bullet.
+We will use user integration.
+So we have using std vector,
+so very uncommonplace,
+and use that header instead of vector.
+And that allows us to, oops, sorry,
+not to, okay, sorry,
+so that allows us to
+not detach our code, and
+switch to standard library, almost.
+Almost, we still need to
+deal with the string, right?
+That string still is not good for us.
+It's still slower.
+So what we decide to do
+is, well, what the heck.
+We are using global string anyway.
+We will have our own string,
+our own string, which will
+be much better than standard,
+which will use a small
+string optimization.
+It will implement it, and we'll use that
+instead of standard string.
+At the time, it seems like valid decision.
+And we actually didn't even
+implement the whole string.
+GCC came out with both
+COW string and SSO string,
+which was called versa-string
+and reside in X bits.
+We just redirected most
+of the implementation
+to X bits versus string
+and end up with a tiny class,
+and that's how the standard
+string imposter was born.
+Well, long while we lived in uneasy peace
+with this standard string.
+We learned to hate it.
+We learned that it cost us, and
+approximately by 2015, the C++11 came out,
+and, well, C++11 came out in '11, but
+by 2015, GCC came out with the
+corresponding implementation.
+We were ready to do something.
+But
+we still need to do,
+okay, I wanted first to tell you
+what we learned from our
+experience with this imposter.
+Because we used it for eight years,
+and we were really ready by
+'15 to move away from it.
+But why?
+First of all, we realized that just number
+of open sourcing efforts.
+We are trying to open source Google code.
+And every time someone tries to do it,
+this string, different spelling
+of string was a problem.
+How I can open source this?
+Would I need to support
+back and forth conversion?
+That's why we've seen
+a number of open source
+just being released once and never touched
+again after that, because it's just
+a nightmare to support,
+conversion back and forth.
+One of the reasons, at least.
+We also obtained number of
+third-party dependencies
+which used standard string S interface.
+So the dependency was
+actually using std string,
+not our string.
+So when we wanna communicate
+with that library,
+we had to construct
+string, operate on string,
+convert our global string and std string.
+So we had a number of interfaces
+where we had overloads for string,
+a global string, a std string,
+or specialization for global
+string and std string,
+and then conversion between
+string and std string,
+just because we needed to
+switch by the interface.
+And that led to performance overhead.
+Well, so one thing, that
+for every new developer
+which comes on board to Google,
+every new C++ developer, they need,
+among many other things that,
+many other quirks of
+Google C++ development,
+they need to learn, don't use std string.
+Use this string instead.
+And people slipped, and as a result
+it is a bunch of unnecessary comparisons,
+again, conversions, because just
+std string compiles.
+It's not that it's not visible.
+This class is visible,
+just shouldn't use it.
+And once again, saw some
+performance degradation.
+And on top of all that,
+by 2015, our code grew
+to 150 million lines of code.
+I wanted to give you one bonus anecdote.
+I've learned this while working on
+preparing our common
+libraries for release.
+So as it happens, this comparison worked,
+but this comparison was never defined.
+There's no operator comparing
+std string and string
+in Google code, but it worked.
+And the reason it worked was
+that it is completely separate
+class called stringpiece,
+which is what you know
+now as Abseil stringview.
+So it resided in the global namespace.
+It looks approximately like this.
+So this class stringpiece,
+it was constructable from,
+implicitly constructable,
+both from std string
+and global string.
+And it resides in the global namespace.
+And it also has operator equal,
+which also resided in
+the global namespace.
+All of that leads to
+this comparison working.
+And as far as I can tell, no one in Google
+actually realized it.
+(laughing)
+So that was true from all
+the other operators as well.
+Until I actually moved stringpiece
+into the Abseil namespace.
+(laughing)
+And it broke.
+And it broke, so that's
+ADL wonders at work.
+And one more reminder, don't define
+anything in global namespace.
+It's not yours, it's shared resource.
+So getting back to our tale.
+So 2016, Abseil team is tasked with
+open sourcing Google common libraries.
+And we get fed up with our global string.
+We wanna get rid of it.
+We cannot live with it anymore.
+We cannot open source our libraries.
+You would laughed in
+our face if you'd say,
+oh, use this global string also,
+along with our library.
+And it also wouldn't be possible
+for us to do conversion
+back and forth, right?
+On the plus side, thankfully
+to Chandler's team,
+we now have tools.
+We have tools, so we actually can go
+through all our, what is it,
+200 million lines of code
+which we had at the time, and actually go
+and sprinkle std colon colon everywhere.
+Well, in a semi-automatic manner.
+It only took us half a year, I think.
+But we get there.
+We pretty much do not have
+global standard symbols anymore.
+We have std colon colon everywhere.
+But for string, we still
+need to deal with the string.
+So what are we to do with
+this COW-based string?
+It's still a performance hit.
+So obvious question, can we just go
+in standard library implementation
+and just replace it?
+We have a standard library implementation.
+We can build it.
+It's a separate story, I'm not gonna,
+out of the one and a half
+years that I dealt with this,
+I remember probably spent eight months
+trying to move the build system from
+whatever the standard
+library has to what we need.
+But that's separate, unrelated story.
+But anyway, so can we
+just go in the build,
+change the standard
+library implementation?
+So obvious answer is no.
+We still have pre-built
+third-party dependencies.
+If you just go, don't change the symbol,
+change the ABI of a class, it will break
+the second it hits the
+third-party dependency,
+which uses std string.
+They're not gonna be,
+there will be different memory layout,
+and it will break.
+So we cannot change the standard string.
+So we need to somehow serve two masters.
+We need the same library,
+have a std string
+which works with a third-party dependency,
+and we need also same
+library, add a different,
+SSO-based std string which
+will work for Google code.
+So
+we did find a solution, but
+we had to do one concession.
+We cannot deal with a
+third-party dependency
+which has std string, and in fact,
+as we found out later,
+anything from STL in API.
+Why?
+Because even if we magically
+have these two classes
+coexisting, we cannot pass
+it through the API boundary.
+You cannot take std string
+with one memory layout
+and pass it to the library which expects
+a different memory layout.
+It's not gonna work.
+So with a little bit of pleading,
+on various Google teams, I was able
+to eliminate all of this, which
+some of them were eliminated,
+some of them were built from sources,
+some of them were wrapped
+into extern C APIs.
+We don't have anymore
+third-party dependency
+which has standard library in API,
+pre-built third-party dependency.
+We still have a third-party dependency
+which depends on standard
+string, standard library.
+So now with this out of the way,
+this is the skeleton of what I did.
+This is
+approximately the solution.
+You can take a look, but this is really
+not that complicated.
+So effectively, the same skeleton was done
+pretty much for every header
+in the standard library implementation.
+Well, the only exception
+is that in this case,
+this is string, I had two different
+string implementations.
+But for everything else,
+it just conditionally adds
+inline namespace.
+What did I do next?
+I can build the standard library twice,
+one with version symbol undefined,
+and one with the version
+symbol macro-defined.
+And I can actually link
+all of it all together
+into a single, fat standard library.
+So when the version symbol is undefined,
+we get a symbol which will be used
+by the third-party dependency.
+When we build the Google code, we do
+define the version symbol macro.
+And as a result, the Google code
+will use new SSO-based strings.
+And the standard library
+will include that symbol.
+And there's a different mangled name,
+std Google basic string.
+And it all resolves.
+So it's not very pretty, I'll admit.
+And our standard library's twice as big.
+But miracle of all miracles, we have now
+two standard string inside, implemented
+in the same standard library.
+And that ends the story of
+our standard string imposter.
+And the second part of this talk,
+I'd like to see what lessons we can learn
+from our tale, from our
+experience with this.
+I'll be talking about mistakes,
+but really, I'll be talking
+about mistake-tolerant
+software design.
+Well, the word mistake, it's
+a little bit misleading.
+It's not necessarily mistake.
+In practice, it could be indeed a mistake,
+in your design or implementation.
+But it could be also
+change in requirements,
+it could be that you didn't
+have a tool to do some change
+at the time, and
+time passes, usually is how it goes.
+With time, you realize your mistake,
+your requirements changed,
+or you got a new tool,
+and you feel the need to do some change.
+It doesn't matter why.
+And you need to pay the technical debt.
+You need to fix your mistake.
+So lesson number one, I hope we
+can agree, we need to face reality.
+Mistakes are inevitable.
+We've seen a few examples in this story.
+Standard body probably
+shouldn't have allowed
+COW-based strings in C++98.
+As a think side, but still, maybe.
+They probably shouldn't have.
+It probably was not a good idea by GCC
+to release COW-based
+string in GCC 3 and 4.
+And Google could've
+avoided a lot of headache
+by investing into tooling sooner
+and to allow the switch to
+std namespace much earlier.
+It would have probably
+took a week in around 2003,
+if we'd had the tools at the time.
+Now, lesson number two, fail faster.
+I know we all know this.
+The longer it takes to fail,
+the more expensive it is to fix.
+This applies to everyday development
+when you develop your code.
+You want your IDE or whatever you use
+to show you've typo'ed right away,
+even before it compiles.
+And some IDEs do this these days.
+Then you want your compiler to show you
+your mistake very quickly.
+We want light, quick compilers,
+if not compilation then linker error.
+If not linker error, we want some kind of
+runtime assertion.
+And the worst mistake we can do
+is a mistake which requires
+some kind of logic mistake,
+which require you to debug and spend
+however long it is
+needed to debug the code
+to figure out what's wrong.
+And finally, lesson number three,
+probably one of the best advice
+you can give to somebody
+in library designers.
+Assume you're gonna get it wrong.
+This applies to everybody
+in this room, me including.
+And despite how long you do this,
+it might be one year or 20 years,
+despite the best intentions
+and preparations,
+sooner or later you
+realize you got it wrong.
+So we need to prepare for that.
+So what does it mean in practice?
+In practice, if you know
+mistake is inevitable,
+you wanna design software
+which is easy to fix.
+Right?
+This applies both to mistakes in design
+and mistakes in implementation.
+And the second practical consideration is
+it's always, always
+easier to fix a mistake
+if you don't need to break a contract.
+So contract is a little bit,
+it's not exactly legal sense,
+but in software engineering sense.
+Both your library API
+and ABI are the contracts
+between you and your clients.
+So what kind of contracts we should prefer
+in mistake-tolerant software design?
+Let's consider API first.
+Again, it's not language lower view.
+So API is essentially set of interfaces
+exposed by the library, right?
+So it consists of types, free
+and public member functions,
+maybe a few other things, right?
+In C++ there inline namespace.
+So classes do have a guarantee,
+like std stringview for example,
+can guarantee that it's
+trivially copyable.
+And it's possible it's a valid guarantee.
+What is missing in this?
+The fact that class is a class.
+This is not part of it, and probably
+should not be a part of your contract.
+In most cases, we do not want this
+to be a part of our contract.
+This allows you to make the mistake,
+today makes a change like this,
+and do not break the contract.
+You did not promise the
+class would be a class.
+And that's exactly the reason
+why we don't want anyone to formal declare
+any one of our classes, because
+we don't promise you that.
+We did not promise you that
+this is going to be class.
+We did not promise you
+that anything, really.
+We promise you the name.
+And here's the name, foo.
+This case, we introduce an alias,
+but it might as well be
+complete specialization
+or a few other things, right?
+It's all valid if you didn't promise
+the class be in the class.
+And if you broke someone,
+it is their responsibility.
+Because you did not promise,
+they broke the contract.
+Contract with a function, essentially
+defines how it can be invoked, right,
+what it does.
+So given these inputs,
+this function produce
+these outputs and have this side effect.
+This is contract with a function.
+Undefined behavior, absence of guarantee.
+It can also be part of a
+contract for the function.
+For example, standard string construction,
+based on the null pointer
+is undefined behavior.
+It is part of specification.
+Specification says this
+is undefined behavior.
+This is the contract for this class.
+Undefined behavior allows
+you to, if necessary,
+change in the future and
+restrict this undefined behavior
+to something defined, to
+restrict your side effects,
+restrict your outputs,
+and specify the behavior.
+So in fact, my advice,
+un-define your behavior
+as much as you can afford.
+It is not your responsibility to worry
+about users breaking your contract.
+There are tools for that,
+and this is not your responsibility.
+Your responsibility is to define
+the best contract for your library.
+Again, what was missing
+from that discussion
+about function contracts?
+Most commonly, the signature.
+And sometimes also
+performance expectations.
+So again, you don't want to promise
+anything about the signature.
+It allows you to change the signature
+without breaking the contract.
+For example, in this case,
+I've added optional parameter.
+But it might have been
+turning the function
+into function template or
+turning it to something else.
+Maybe it can become a lambda.
+There are variations what it can be.
+So in summary, in mistake-tolerant design,
+promise the least, demand the most.
+We want the least restrictive contract
+on the function output and side effects,
+so the least restrictive contract
+for the function outputs and side effects
+so that we can restrict
+it further down the road.
+And we want most restrictive on inputs
+so that we can relax
+the restrictions later.
+Right?
+Let's talk about ABI.
+So ABI, application binary interface.
+Again, we're still not gonna
+talk about it too deep,
+because ABI, it's platform specific,
+it's a big specification,
+and there's a lot going on
+which is involved with how the compiler
+will generate your binary,
+what it looks like.
+So ABI, as I said, difference from API
+that it defines interface to your library
+on a binary level.
+In specification, we'll see it includes
+processor instruction set.
+It includes sizes, alignments of types.
+But most importantly for us, it's include
+memory layout of your
+types visible to the user.
+So what is the memory layout?
+In most cases, what it is
+is content of virtual table.
+Layout of virtual table is defined by ABI,
+but the content of virtual
+table is important.
+And data members and base
+classes of your class,
+all of that together
+defines an ABI memory layout
+of your class.
+Now, visible to user part.
+Memory layout implementation details,
+for example, if your class
+uses some kind of Pimple
+which are hidden in a source file,
+they do not become part of an ABI.
+Practically, you don't
+need to know specifically,
+in most cases, unless you
+optimize the size of the class.
+And in many cases, you do.
+But if you're just worrying about ABI,
+you just need to know that given this set
+of virtual functions, this set of fields,
+set of base class, in that order,
+that defines the memory
+layout of your class.
+As soon as you change any
+of that, it will change.
+Also, ABI controls these
+calling conventions,
+the way our arguments
+are passed to functions.
+It depends on some attributes of the type.
+For example, if the type
+is copy constructable.
+For example, in this case, if you
+construct object foo and
+pass it to TakeFoo function,
+most likely what will happen, it will
+be passed to a register.
+It would just be a value
+just passed to register.
+But if you make the
+change like this, it will
+be passed via the pointer.
+And that pointers only point to register.
+You can go if you want, I have to check
+if it's on a good bolt.
+Finally, mangled name.
+So mangled name is a unique
+name compiler generated for your
+symbols in the library.
+We all know that.
+So we know that the
+class name is not enough,
+also have a namespace.
+But in reality, we also
+need to know what function,
+for example.
+You need to know types, names,
+type of all the arguments.
+Maybe it's a template function,
+so the template arguments,
+all of them together
+somehow produce unique name.
+This is very complicated.
+Well, somewhat complicated rules,
+how this name is generated.
+There's really two things you need to know
+about mangled names.
+First, we need to know that if you change
+only some of your implementation details,
+like for example you change
+the order of these fields,
+mangled name will not change.
+And that's why specifically,
+we were not able
+to just go to standard
+library and implement
+it differently, because
+mangled name didn't change,
+but memory layout would've changed.
+And we've got an ODR, one
+definition rule violation.
+ODR violation you can find
+in many scenarios in C++,
+but ABI breaks in many
+cases are ODR violations.
+On the flip side, you can also,
+you need to remember that sometimes
+some innocent change will
+change your mangled name,
+even without changing the ABI.
+And thus will break an
+existing pre-built code.
+For example, if we go from this to this,
+the API, one can say
+the API didn't change.
+We just added the
+variatic, made it variatic.
+So but ABI, the mangled name will change.
+So if you'd expect the
+pre-built library not to break,
+most likely it will.
+Depends on compilation,
+the platform, sorry,
+but most likely it will.
+So summarizing what I said about ABI,
+your library ABI is a brittle flower.
+There are many ways to break it.
+I listed some of them here.
+You can reorder things, change
+the calling conventions,
+change your mangled name.
+So again, in mistake-tolerant
+software design,
+un-define your behavior and
+do not make any ABI promises.
+You will likely need to break them, so
+better not to risk it.
+Instead, you can prepare for the time
+when you will need to break it.
+So this is one approach, well,
+probably one of the preferable
+approaches these days,
+and to use inline namespace.
+So when the time comes and
+you do need to change ABI,
+you will change your inline namespace,
+and you will be able to
+support the situation
+where you have old library build
+with your old version of your code
+and new library of your code,
+and they will happily coexist
+inside the same binary.
+You prepared for binary break.
+You can also have an
+opinion that I don't know
+anything about ABI.
+I don't support any ABI at all.
+Effectively, build from source.
+If you use header-only library
+or even if you source library,
+can say, always build me from source.
+This is essentially Abseil view.
+We want you to build Abseil from source.
+You can in theory take Abseil,
+pre-build the library,
+and link with it once,
+but don't expect anything.
+You don't even expect
+that we, year from now,
+change, and it will be
+able to link together
+with old version of Abseil.
+We don't promise anything about ABI.
+If you really, really want
+to promise ABI stability,
+in some cases you do,
+there are a few approaches,
+essentially which all comes down to
+make sure that the memory layout
+visible to the user is stable.
+And there are a couple
+well-known ways to do it,
+using Pimple, using std any, and various
+other opaque pointers.
+Okay, so a few conclusion remarks.
+Paying technical debts is expensive.
+It is not cheap.
+If you can do, it is often worth it.
+Even better,
+mistakes are inevitable, so assume
+that you are going to get it wrong.
+Better be prepared.
+So thank you for listening,
+and enjoy making and
+fixing your own mistakes.
+(applause)
+- [Man] Hey, I have a question.
+You showed in the API
+that you're trying not
+to promise anything.
+For example, you gave
+foo and then you said
+using foo equal foo, and
+then that's still legal
+cause that-
+- Using foo equal will do, I think.
+- [Man] Yeah, using foo
+equal, and using that.
+So I mean, it's nice to say,
+but you can't,
+you keep the API, but it's
+going to break compilation
+because the user now needs to build
+a different type of class,
+he used foo as a different
+class now, right?
+He needs to create-
+- Foo is an alias, but
+the existing user code
+will build perfectly fine.
+Foo is an alias to goo
+now, goo is the class.
+And foo used to be a class.
+So any kind of statement you had,
+construction objects of type goo
+will continue to work.
+- [Man] Oh, so the foo
+and goo have the same...
+- Yeah, you've had a chance
+to see the John talk,
+he will go, if not, I
+recommend you see the slides
+and maybe video, he'll go
+in more details into that.
+But it will work perfectly fine.
+That is the recommended
+way to do some refactoring.
+- [Man] Okay, I think I understand now.
+Okay.
+- [Audience Member] Hi, great talk.
+I had a question real quick.
+So the other foos that you had
+before you went into the left slide,
+do you consider that solution a hack?
+And if so, in your ideal world,
+what would have been your
+more permanent solution,
+if you could implement that?
+If that makes sense.
+- I think, well, it's
+clearly not ideal, right?
+The library is twice as big,
+so it's recent overhead.
+Symbols is longer.
+There's small overhead on that as well.
+And ideal solution would have been
+build everything from source.
+Build, leave a head, make
+all the dependencies,
+build all the dependencies from source.
+If you can do it, and I think eventually
+we will get there, this
+will be our solution,
+and we will be able at
+that time, switch to libC++
+instead of libstd C++.
+(man talking quietly)
+LibC++, we probably will
+build from source as well.
+- [Man] Pretend I don't know.
+(laughing)
+You said a couple times
+that doing inline namespace
+to create for standard library requires,
+doubles the size of it.
+Why didn't we just pass
+the new name for string,
+since that was the only
+thing that's got the problem?
+- This was an original idea.
+Let's just duplicate string.
+And it didn't work, we burned,
+problem is the string,
+the moment you duplicate string,
+you need to realize that
+string is everywhere
+in the standard library.
+String is every exception type.
+You duplicate exception type,
+you need to duplicate the
+function calling the exception
+through, what are they
+called, hiding exception.
+And the moment you do that,
+it goes south from there.
+You need to duplicate
+pretty much everything.
+- [Audience Member] To move that,
+most likely you will show
+ways to keep your ABI stable.
+Is one option to expose extern C API
+so it makes things much simpler.
+- Extern C API just by itself
+does not mean you have a stable ABI.
+Extern C, just like anything else,
+if you have a struct and you suddenly
+change the content of that struct-
+(man talking quietly)
+It is somewhat more stable.
+And that's why that's one of the options
+what I dealt with, how I dealt with
+third-party dependencies was
+I wrapped it in extern C API.
+But ultimately, this is not decent,
+just use an extern C and you're good.
+You still need to be
+careful, maybe a little bit
+less overhead work, but still,
+extern C will require some work.
+- [Audience Member] Thank you.
+- [Man] I'm curious, how
+does the inline namespace
+trick interact with ADL?
+(laughing)
+- It will work.
+I mean, what specifically?
+- [Man] Well, so say you have
+inline namespace one,
+inline namespace two,
+and your namespace,
+and you have a function
+that's in inline namespace two,
+and it takes the type, but you're using
+inline namespace one with that.
+Will they, can you call
+the function by ADL,
+does that work?
+- I would need to double check this.
+As far as I remember correctly,
+effectively, you can assume
+it's not there at all.
+- [Man] The inline namespace, you mean?
+- Yeah, it will say, it is
+in namespace N in my example.
+And it was kind of in a namespace N,
+if you have two inline namespaces.
+- [Man] Thank you.
+- [Audience Member] Just another question,
+just you were using time to create
+the new thing called
+string, the Google string.
+Do you think that the whole
+thing would become easier
+if you wouldn't insist
+on using the name string?
+I mean, if you just called
+your strings COW string
+or something like that?
+Or would just make things harder?
+- How we named our global string really
+doesn't matter much.
+We could've named it our
+favorite Google blessed string.
+(laughs) It would've
+still been same problem.
+- [Man] And we had all this
+stuff that was already written.
+- Exactly, and we
+already, by the time we're
+inventing our imposter, we
+already had a bunch of code.
+And our problem is that
+we cannot rewrite it.
+So if we would want to name
+this class something different,
+it means that we would have to go
+and everywhere name that string
+class somehow differently.
+- [Audience Member] So
+you were already using
+std string?
+- We are using not std string.
+We were using global string.
+- [Man] I've got a question.
+I was wondering, did
+you consider attaching
+the third-party libraries where
+instead of editing the header files,
+only accepting strings
+that were of the old form
+so you go through and
+just remove the std string
+and write your code the
+copy-on-write string
+in all of the third-party
+header files where you could?
+- Well, we're talking about third-party
+which is pre-built.
+They have a fixed header.
+They're pre-built.
+- [Man] But you can just
+change the text of the headers
+to be COW strings.
+So that when you pass through the call,
+you can actually get those ones.
+- I'll probably think about what it does.
+But even in that scenario,
+if I understand you
+correctly, let's say
+we go into third-party
+library header, change the name,
+instead of include string, we'll write,
+include string, then say
+string is, I don't know-
+- [Man] It's just editing them to be
+the internal, so the
+name's the internal name
+that they're using for the other build.
+- I still need to pass the
+string the library expects.
+If I'm internally using a different string
+with a different memory layout,
+at the very least I will
+end up with a memory error,
+with a corruption.
+- [Man] No, no, I was
+saying just to change
+so the header file, it says std string.
+- Okay.
+- [Man] But you want that to be actually,
+you want that to be the COW string.
+So just in the header
+files for the libraries
+that you can't rebuild, you
+just change them to COW string,
+but to the COW string.
+- [Audience Member] Or you can build
+with std string being
+copy-on-write string in the binary.
+- [Man] Yes, so you just
+change all of the header files
+that refer to them to COW string.
+- [Audience Member] But
+the binary's already built.
+- [Man] Yeah, so the binary's
+built with COW string,
+and so when you integrate-
+- Google will be using-
+- [Audience Member] They won't change all
+the matching names in the binary.
+(laughing)
+- [Audience Member] And COW
+is the same number of letters.
+(laughing)
+- [Man] Okay, I think I have
+the name under it, I'm sorry.
+- [Audience Member] No, that's okay.
+- Okay.
+- [Audience Member] I guess
+I'll take it back, it wasn't.
+(laughing)
+- [Man] This is a bit sharp.
+You mentioned symbols being longer.
+So say in the titanium API
+mangled, std string is less
+and has a really short mangled name.
+- Yes, I know.
+I can talk for-
+(person talking quietly)
+It is, it is an impact.
+It's actually still
+somewhat work in progress.
+There is an impact.
+And indeed, the compiler has shortcut
+for the symbols in the std namespace.
+Let's say that we'll
+have to deal with that.
+This is less of a problem.
+- [Man] Yeah, so Google's
+been paying that cost
+since forever, since it's never been
+using std string, so
+this change presumably
+didn't make it worse.
+- Yes.
+(laughing)
+- [Audience Member] So back
+to changing the header file,
+could you have a COW
+string at mangled name-
+- Okay, turns off.
+- [Audience Member] Like in place?
+You just have it in std string
+and then have your own std
+string mangled differently?
+Does that make any sense?
+- [Man] I guess you
+could couch our string,
+or Google string instead
+of an inline namespace,
+but truly nest the namespace.
+- [Audience Member] Yeah, yeah.
+- [Man] And we're using declaration.
+But then ADL stuff wouldn't get through
+and other things like that.
+- Yes, no, this will not work.
+The ADL will not allow us to do that.
+- [Man] Got it, okay.
+- Any more questions, guys?
+No?
+Thank you, thanks a lot.
+(applause)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,953 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Shenandoah: An Open Source Garbage Collector (JEP 189) with an Ultralow Pause Time | Coder Coacher - Coaching Coders</title><meta content="Shenandoah: An Open Source Garbage Collector (JEP 189) with an Ultralow Pause Time - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Shenandoah: An Open Source Garbage Collector (JEP 189) with an Ultralow Pause Time</b></h2><h5 class="post__date">2015-06-02</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/4d9-FQZZoVA" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">okay I'm nervous and nobody else is
+coming in so let's start I'm Christine
+flood I work for Red Hat I have a long
+history with garbage collection I was
+working for son back in 1998 and I was
+part of the research group that bought
+you brought you the first work-stealing
+parallel collector and part of the
+original g1 implementation team one of
+the questions I want to head off now is
+why is Red Hat building a garbage
+collector people ask me that all the
+time and for me it made perfect sense to
+me because we're committed to open
+source we're committed to Java and we
+want to make the open source world
+better so I'm here to talk to you about
+work I've been doing on a project called
+Shenandoah
+I am scrupulously honest with you so
+it's not pause 'less we do stop the
+world to scan the roots but all of our
+evacuation happens while your Java
+program is running so our pause times
+are in the small handful of milliseconds
+okay I tend to talk very fast when I'm
+nervous so I want to encourage you guys
+to ask questions to slow me down and
+it'll make everybody's life better
+otherwise I might be done in 20 minutes
+so yes our goal is eventually to get
+this put back in open JDK we might
+release it in Fedora first just to iron
+the bugs out because that's part of our
+model as we put things out in Fedora and
+then once they're stable we move them
+it's all in C++ it's all out there I'll
+show you the URL where you can download
+it and play with it okay so the other
+question is why do we need another
+garbage collector and the answer that is
+clear because anybody that's ever had so
+have their application wait for a pause
+knows the frustration of GC pauses I
+mean working in a managed runtime is
+awesome not having to chase down your
+memory errors in your code is awesome
+but waiting for a GC pause especially in
+the world of today where we have service
+level agreements and and other
+commitments to respond in a certain
+amount of time and having a GC go off
+for
+or my gosh a minute can totally wreck
+your day so this is where I'm gonna do
+the little overview of what it's an open
+JDK now the very first garbage collector
+was serial GC and believe it or not
+that's still useful the open shift guys
+at Red Hat who want to use you know a
+minimal amount of resources and have a
+constrained footprint they're pretty
+happy with serial GC right now they can
+you know give their program a small
+fixed amount of memory and they can give
+it a goal saying you know I want you to
+come back here when you can so if your
+program ramps up your data and then goes
+down again serial GC is really good
+about giving that memory back so that
+another JVM can use it next came
+parallel GC that's the one you want to
+use if you're interested throughput if
+all you care about is end-to-end
+performance parallel GC is your friend
+if you don't care about you know maybe
+going off line for a little bit to do a
+pause that's gonna give you the best
+throughput if what you're concerned
+about is pause times with the current
+open JDK of garbage collectors you're
+gonna want CMS CMS will stop the world
+to do a young generation evacuation so
+the time it takes to copy the young gen
+and then a couple of times for some word
+scanning some bookkeeping for doing the
+full generational mark-and-sweep
+collection that's the best pause time
+you can get right now so the idea behind
+g1 way back in 2001 was that we would
+take the best features of concurrent
+marking sweeps we would have the
+concurrent marking that happens while
+the program is running and the best
+features of garb of parallelism so that
+we can do the evacuation in parallel so
+g1 was supposed to be the best of all
+worlds and it kind of is if I had to
+pick one of these that I was allowed to
+use that what you want would be the one
+I would pick but the issue yes
+I am not qualified to answer that I have
+been told by people that they're very
+happy with it I can tell you what the
+problems with it are I can tell you what
+the problems with it were back in 2001
+that's a great story
+you know buy me a beer I'll give you
+I'll give you all the scoop they have
+solved most of those issues but there
+are still some and the biggest issue in
+my mind is that it still stops the world
+to evacuate regions and so you still
+have claws times and in in generational
+g1 which is the one that came after the
+one I worked on you still are stuck in a
+generational mindset and I am not
+convinced that the wind for generational
+systems even back in 1984 was that
+objects die young I'm convinced that the
+wind for generational systems was that
+you have few pointers from old to young
+generation and so keeping track of those
+pointers that you can collect the young
+generation that work was less so I think
+that's part of the reason why
+generational g1 was a win Shenandoah
+does not enforce a generational
+structure on you if your program is
+generous I will get into this later if
+your program behaves in that way and
+your objects are dying young you will
+naturally pick the young regions to
+barbra collect but if you're doing
+something like cache coherence or
+something where your objects live for
+you know the worst amount of time for a
+generational collector just long enough
+to get tenured and then they die
+Shenandoah will find them for you and
+will do the work there okay so the pause
+times are similar to CMS now that's
+actually your CMS is still doing a young
+generation evacuation so technically we
+should be better than CMS but CMS has
+been around for a long time and I'm
+going to be happy to just meet the you
+know the sort of low pause times of CMS
+it's reaching base like g1 in some sense
+you can think of it as just adding
+concurrent evacuation to g1
+and concurrent compaction so why is
+concurrent compaction difficult right
+this is something you know all these
+collectors were done in the early 2000s
+why didn't somebody just put concurrent
+compaction in fact that and these little
+guys did but that's not really easily
+available to all of the openjdk
+community in all situations so why
+didn't somebody put it back into openjdk
+and the answer is that it's not obvious
+how to do it now what I did well here
+are this is why it's why it's difficult
+so let's say your java program is
+running and you have some stack frames
+and your you have a stack frame for a
+method foo and a stack frame for a
+method bar and they have some values and
+they have some pointers to some
+references but here you have this
+reference see this object see that's
+pointed to by stack frame and by objects
+in the heap so if I want to move that
+while the heap is running while the Java
+program is running I need some sort of a
+you know transactional memory or
+something so that everybody agrees when
+that object is moved where its addresses
+and that's really hard now there are a
+couple of ways you can do this you could
+you know put memory protections in place
+so that if anybody goes to look at it
+they'll take a trap and they'll fix
+things up and that's that's the way as
+well.did there's if I understand
+correctly and that's a great theory I
+wanted to try a different way so what I
+did like all good computer scientists is
+I let added a level of indirection right
+you get a hard problem you add a level
+of indirection and it gets easy so I
+have actually added forwarding pointers
+to all of my objects in the heap so as
+you can see object a and object B still
+point to object C but because everything
+in directs through the forwarding
+pointer once they go through that level
+of indirection they'll point to the new
+copy of C that's in C prime okay this is
+this is controversial this is the big
+the big risk that I'm taking actually
+it's not just me there's a whole group
+of us at Red Hat including Roman Kinki
+who's been a major contributor so are
+you willing to pay an extra word project
+and what is the cost of actually doing a
+double read for every time you do an
+object rate so once you go through this
+double read you can access all of the
+fields in that object until there's some
+sort of a memory sync how expensive is
+that going to be there's there's
+research out there that shows that that
+read barrier should be less than 5% of
+your execution time okay so I'm going
+very fast I'm gonna be done quickly so
+the benefit to this strategy is that you
+can still walk the heap all of your
+tools that you have out there like for
+dumping your heap are still there you
+can choose your GC at runtime so just
+like you do - X X colon plus use G 1 GC
+you can type and use gen and o GC and
+it'll bring up Shenandoah so if you're
+you know if you're testing your
+application was different she sees its
+plug-and-play I don't have to try and
+not move my hands too much it's a
+software only solution there's no
+there's no special hardware mechanism in
+place to make this work so how does it
+work
+liked you yes is that a question
+nothing but the idea that they did was
+they ran an application with him without
+read barriers nothing else changed and
+their time came in at between 3 and 5
+percent longer when they had ribery errs
+no okay I'm used to thinking an
+end-to-end run times so if you were
+running you know a small application
+that did I don't know what are you gonna
+do HelloWorld is a stupid example
+something bigger I'm saying that this
+should be less than 5% longer if it's it
+is but you're not getting the pauses and
+so how what percentage of your time is
+spent in pauses now okay
+I don't have the numbers for you but um
+I have a little bit of performance at
+the end of the talk so maybe that's a
+better time to talk about this are there
+any other questions before I move on yes
+that's the main thing is okay so the
+forwarding pointers if the object has
+moved these two objects are going to be
+on different cache lines so you're
+taking a read somewhere that you don't
+have to to get to the read where the
+actual object lives that's the cache
+miss if you're unlucky and you're
+forwarding pointer is on a different
+cache line than the actual object which
+can happen that can lead to a cache miss
+dating the forwarding pointers are
+co-located in the heap with the objects
+they are all get to what our read
+barriers look like in a minute but it's
+just a negative eight a load of negative
+eight yes
+when we do an evacuation we copy the
+objects to a new place and we give them
+a forwarding pointer there and that
+whole region goes away I'll have more
+pictures that'll make that more clear
+okay so we did that so just like yes
+Azul has solved that via memory
+protection on from regions and I'm about
+to say something that's going to get me
+in trouble but what that means is that
+everybody that accesses things in that
+region have to stop to copy that object
+and I would posit I'm a little nervous
+here that a read storm with everybody
+stopping to copy objects is almost as
+bad as a pause so with this solution you
+can read in from space as long as nobody
+has written to that object so reads
+don't cause copies only writes yes
+no we can't take questions now but a
+read does trigger copies and when you do
+the flip you're doing a lot of reads I
+think that the usual collector is
+awesome I wish you guys would
+open-source it and I could run
+head-to-head against it that would be my
+that would be the best thing ever is
+just to understand from a research
+perspective which of these strategies
+makes more sense the days where I tried
+to get these rate barriers in right I
+was thinking you guys were so smart
+because we actually have to put the read
+barriers into the hot spot compiler
+everywhere that you're reading an object
+that or whatever anyway okay so we have
+regions we have a concurrent marking
+thread like concurrent mark and sweep
+that walks over these regions it figures
+out what objects are live in each
+regions so we can pick the ones with the
+most garbage to work on so this was sort
+of the promise behind garbage first is
+that we would concentrate our GC work on
+the regions with the most garbage so as
+you can see here I've got a couple of
+regions that don't have a lot of live
+stuff in it those are the ones that I'm
+going to copy to my to region so how we
+pick the threshold for what becomes a
+targeted region we don't have those
+answers yet this is not production-ready
+we have a bunch of different strategies
+and I'll get into those in a little
+while but we need to pick the right
+regions and we need to evacuate them
+while your program is running so alright
+so concurrent marking rather than doing
+what traditional garbage collectors do
+which is starting by their routes and
+copying objects and then reading the
+card-table we take the concurrent
+marking which tells us which objects are
+alive and then we walk through the
+target heap regions copying those
+objects
+so concurrent marking told us in this
+case that all these objects were alive
+and we needed to move them but this
+object down there wasn't so we leave
+that one behind and just in if I haven't
+put this home yet we are copying these
+objects while your program is running
+out from under you and everything still
+works so when do we reclaim the free
+space this is the situation that we ran
+into in that the original strategy was
+we would wait for the next concurrent
+marking to finish and update all the
+references and then reclaim the free
+space unfortunately that float can get
+kind of awkward so we have another mode
+that we run into where you can do a
+second stop the world phase and update
+the references and free things more
+aggressively again it's just another
+short pause and a quick updating of
+references and you can choose which way
+you want to do it like I said I'm
+interested in learning more about the
+program behavior and how things work to
+get to a garbage collector that works
+for customers so right now we're still
+in the strategy where we're playing and
+we're trying things and we're working on
+them there are two of us working on this
+project for Amman in myself Roman does
+it eagerly and I do it lazily okay so
+this is this is a nice graph just to
+give you an idea of how shenandoah works
+so you have your Java threads running
+along happily we stop the world to do an
+initial marking this is the same thing
+that CMS does basically it looks at all
+of your routes and starts the marking
+from the routes we could eventually make
+that be a pause list but that's not our
+first step so we stopped the world to do
+an initial marking we start the Java
+threads up again while we do a
+concurrent marking we have a second
+phase to do the final marking the
+finishing up with the marking I'll talk
+about why we need those two pauses to
+get the marking right but then during
+the final marking we also copy the roads
+too to space and update the routes in
+our threads before we start them again
+and then we start the Java threads up
+again and we do concurrent evacuation
+we're using work-stealing for
+or the concurrent marking and the
+concurrent evacuation so we can use as
+many threads as you have extra if you're
+worried about getting that done quickly
+but if you're worried about giving in
+any threads to your Java program as you
+can you know we can we can do it you get
+to chew so this is just a picture
+showing that foo points to the firm
+region copy as soon as a right to a
+happens we need a consistent copy of a
+so as soon as you do a right to a that
+generates the copy to to space and the
+updating of the forwarding pointer so
+here you see in our friend region we
+have a that's been copied because
+somebody wrote to it but everybody is
+perfectly happy to read from B as long
+as the data and B hasn't changed the
+Java threads can keep going and making
+progress so one of the added benefits of
+forwarding pointers well we can be lazy
+about updating references now whether or
+not you think that's a good idea we can
+debate but the thing is we don't have
+any remembered sets so if any of you
+have been trying to get things really
+parallel and updating a card table is
+actually hindered ugly said that it
+updating the card table can hinder
+parallelism for him because he's got
+areas in in disparate memory that he's
+worked very hard to make the threads be
+independent but because they're trying
+to touch the same region in the card
+table they're not getting the
+parallelism that they wanted we don't
+have any remembered sets so we don't
+have that bottleneck in g1 the
+remembered sets at least way back when
+when I was doing xi1 work they could get
+big so we have no remembered sets at all
+all of the cost to you in terms of space
+is in the forwarding pointers and you
+know about it we're all upfront that's
+where it is that's the that's the cost
+you're paying there's no you know back
+back VM work that's that's being done
+that you don't know about
+all right so concurrent working uses
+something called snapshot at the
+beginning so how do we how do we mark a
+heap that's moving out from under us
+while we're marking it and this is this
+is what this is in concurrent
+mark-and-sweep
+it's in g1
+and we decided to use it too because it
+was there so basically anything that's
+live at the start of initial marking is
+considered live as the graph mutates we
+need to keep track of those mutations
+and I'll show you how in a minute so
+anything that's been allocated since the
+initial marking is also considered live
+this means that we're not going to be as
+aggressive about collecting young
+objects as other collectors might be and
+we might need to change that in the
+future all I know for now is that's how
+it works
+we might at some point a Dunedin we
+might you know maybe escape analysis
+will get better and then we won't have
+so many young objects I don't know so
+concurrent working if you're being lazy
+like I am it can be used to update
+references it keep tracks keeps track of
+the amount of live data for each region
+and tells us which objects need to be
+evacuated
+so what's tricky about sa tabi so if at
+the start of concurrent marking you have
+X pointing to Y and then sometime during
+marking you have an object it's already
+been marked Z they get set to Y but X is
+updated to point to W Y will never get
+marked so G one CMS and and shenandoah
+all have a write barrier that says that
+if you write a reference to an object
+you need to add the old value onto a cue
+to make sure it gets scanned that's part
+of our write barrier but everybody has a
+right barrier so it's not that much more
+expensive so how do we move the object
+while the program is running the same
+way we did it when we did parallel GC we
+make a speculative copy we Kaz the
+forwarding pointer if the Kaz succeeds
+great if the cast fails that means
+somebody else moved the object and that
+means that because we're using
+thread-local allocation buffers in our
+to space we don't waste that space we
+just roll it back so I think I said this
+before but I'll say it again reading
+objects in a from region doesn't require
+an evacuation
+writing an object does here we need to
+have one consistent copy of the object
+that everybody agrees on if we allowed
+rights in from space while the garbage
+collector was copying objects as
+possible that we could lose one of those
+rights
+so our invariant is that rights must
+occur in two space
+if you're going to write an object
+that's in a collection set in a region
+as part of the collection set we will
+copy that object first before the write
+happens so another thing that we do that
+well we we solve all references before
+we write to them so we never write a
+pointer into a from space object in a to
+space object it's possible that it
+already had some but we'll get those
+later but this is just to maintain
+consistency all right no I'm being
+honest right I I'm an old researcher I'm
+not a marketing person so one of the
+things we were surprised by was caz this
+work is basically you know Baker and
+Brookes forwarding pointers and those
+guys all did this stuff in the 1980s or
+earlier the thing I didn't anticipate
+was cast they didn't have to deal with
+cash so compare-and-swap was actually
+hard for us and we had to figure out
+that when we want to do a casts of a
+reference we actually have to copy a
+because we're going to write to it you
+have to copy before you do a write we
+have to copy the the compare value
+because we want to make sure that we've
+got the right compare value that we're
+comparing against and we also have to
+compare we have to copy the object that
+we're going to write into it so that we
+only rate a to space copy so for us at
+least casas can be expensive and I I
+just want to let you guys know this that
+this is something that we're aware of it
+has the potential that if everything was
+in a from space region it has that
+should be one cast is actually now for
+Casas
+all right so this doesn't mean their
+rights are unbounded we're limited any
+objects above a certain size are
+considered humongous and they're treated
+specially and we you know the absolute
+worst case scenario was the calves where
+we actually had to copy three objects so
+let me talk a little bit about
+unconditional raid barriers the first
+thing everybody wants to do is put an if
+statement in and say if you're in the
+collection set then do this and you know
+even even my coworker insisted on trying
+it because he didn't believe me
+but in reality and unn contended kaz a
+sorry an unconditional read barrier is
+faster than a conditional in all cases
+so all our read barrier does is before
+we read a printer a pointer we read the
+value that's just the address above it
+and then that's what we use to read the
+field
+that's our Ribery er it's cheap so our
+write barriers are a little bit heavier
+duty because we need the SAT be write
+barrier but we also need the copy before
+rights this is part of that overhead
+that I'm talking about this is not a
+free lunch right I am NOT saying this is
+one collector to rule them all if what
+you're concerned about is pause times
+and your heaps are large like you have a
+hundred gigabyte heap this is a
+collector that you might want to
+consider if you're like the open shift
+guys running a hundred JVMs on a machine
+or something I made that number up don't
+hold me to it you might not want to be
+paying this cost so the costs space an
+extra word per object again I'm being
+honest right you don't know how big your
+remembered sets are all right this this
+is this is the space we need time we
+have read barriers no other garbage
+collector you know pinche DK has them we
+have a more complicated rate barrier g1
+has a complicated rate barrier for
+maintaining their remembered sets so I
+don't know if our write barrier is
+actually
+gently worse than theirs but it is worse
+than CMS the benefits chance let me
+finish the slide nugget to you the
+benefits are that we have a very
+constrained pause it's only the amount
+of time it takes to scan and copy the
+roots right now that's one of the things
+that's on my question list right does it
+make sense to have compressed hoops
+compressed
+oops when you're targeting a hundred
+gigabyte heap yes that was an
+unequivocal yes how many people think
+that you need compressed hoops with a
+hundred gigabyte heap okay so that's
+that's four people out of maybe a
+hundred okay of the people that use a
+hundred gigabyte heaps how many want
+compress tubes it's still three but I
+don't know how many people had their
+hands down I we haven't done that work
+that we could do it we just haven't done
+it yet it wasn't on our top ten list yes
+thank you so we haven't tackled
+compressed dupes yet I'm out here I'm
+gathering feedback from people who
+actually care about this thing these
+stuff um yes I will get to that it's all
+I have a slide for that where was I
+okay well let's just move on all right
+so we have something working we can run
+it
+we've run SPECT ABM SPECT jbb we've
+passed the smoke test we've brought up a
+clips we've run a thermostat if you
+don't know about thermostat it's a
+really cool product from Red Hat open
+source for monitoring new java programs
+we've started gathering big apps great
+running our stuff on spec jb b is good
+but we really like to have you know okay
+so people at red hat that do performance
+stuff or running spec to ABB with heaps
+big enough that they never have to GC
+and that just astounds me right that was
+not something I anticipated I thought
+that the spec jdb had to constrain their
+heaps so we're looking for applications
+that can't do that and we're also
+looking at running expect a BB in a
+constraint here we're also looking at
+gathering customer applications to see
+am i running on the time losing people
+we're actually looking for customer apps
+if you have a big app if you're using a
+hundred gigabyte heaps heck you're using
+a 50 gigabyte heap and it's open source
+application I'm gonna go I'm gonna put
+my name up and my email address we'd
+love to hear from you
+we're trying to put together a testbed
+yes 2013
+I was told by our performance guys that
+they give it a big enough heap that it
+never G sees maybe that's what they
+meant I I'm telling you that from what I
+was told there are people out there that
+have figured out how to game the system
+for speck jbb yes yes the region size is
+completely configurable on the command
+line and humongous objects are kept off
+to the side and we hope to never touch
+them g1 is trying to tune for pause
+times we're not because we don't pause
+so if you want to make here I mean we've
+run with gigabyte regions we I mean we
+we do not have well we just put in a
+full GC but the only reason we put in a
+full GC was for benchmark gaming right
+if you're running benchmarks they all
+call system GC and then they start up
+again with this nice tidy heap so we put
+in a full GC to do that but we have no
+expectation that we will fall back on
+full GC ever okay
+30 reaches 10 reach whatever it is oh I
+suspect what we would do is in the
+worst-case scenario we would pause long
+enough to copy the contiguous to copy to
+give you the contiguous reads free space
+the other solution might be I don't know
+to do a rage honking we haven't really
+thought about that
+all right chunking seems like an
+excellent solution to that problem to
+allow you to use discontinuous
+discontinuous regions but no I don't
+have that yes g1 does something called
+array chunking where it copies parts of
+arrays and not the whole thing at once
+so it already has support for some of
+this sort of thing one of the things
+that I can I sent out I'm brutally
+honest we don't have the heuristics down
+right we can be lazy and she see as
+little as possible we can be eager NGC
+as frequently as possible we tend to be
+running somewhere in the middle right
+now where we're doing our testing but I
+suspect that this is something that
+customers are going to end up having to
+configure to meet their application
+unless we do enough testing to find one
+solution that fits everybody this is one
+of those things that you may end up
+having to tune so I had to have a
+performance slide I'm not very happy
+about this one but just before I gave
+this talk at strange lib two weeks ago I
+ran SPECT a VM compiler just to see what
+our max pause times were and so g1 has
+an average of 31 milliseconds we have an
+average of five and a half or eight and
+three-quarters depending on which of the
+phases it is we have a max pause times
+between ten and fifteen we really want
+to get that down to ten milliseconds and
+we have some ideas they have a max pause
+times 75 and our total time Shannon
+spent in GC is about a little less than
+half that's just giving you an idea that
+we're real and we actually have
+something working these are not final
+numbers if you want to take me out
+and spank me about these on go ahead I'm
+not so I had to put a what
+oh I don't have it up there I just ran
+it expect a bein on the box you could
+get those to you one pause times down if
+you you know set your minimum pause
+times what your GC time would go up
+there's all kinds of tricks to play and
+you know feel free to download our stuff
+and try it yourself and tell me what you
+get all right here is these are the two
+papers that this were I mean I almost
+feel like this isn't really all that
+original because it's based on Brookes
+forwarding pointers that was done in
+1984 and it's based on the g1 paper that
+we did in 2001 so what do we need to do
+to make this real we need to do more big
+application testing we have a lot of
+verification code in place we use
+protection on memory regions like as old
+as just to verify that we don't
+overwrite to from space we do things
+that walk the heap and make sure that
+it's that it makes sense we feel like
+we're on you know if you fairly strong
+theoretical ground but we really want to
+put this through some big applications
+of customers because I know from my
+experience that GC bugs don't show up in
+the first you know the first two minutes
+you're running they show up in your 24
+hour tests so anybody that has a big app
+that's open source send it to us
+it's benefits for you because Shannon
+Dell will be tuned to run well on your
+app and it's a benefit for us because
+we'll actually have more confidence to
+make sure that it will run customer
+applications well yes
+yes I we should talk and if you send me
+an email that would be great let me go
+back my email address is on the next
+slide but that would be awesome just to
+know that you guys could run it we can
+also Red Hat has been known to do
+confidential agreements with customer
+data if you want us to run it and test
+it but not put it out in the open but
+clearly I personally would prefer open
+source so that we can make our results
+public and other people can duplicate
+them okay here's the here's the Bugaboo
+this is why we're not production ready
+we put our read barriers in in the
+interpreter and C 1 and C 2 and in C 2
+we put them in at the parse time because
+that was the easiest thing to understand
+where they needed to go now the good
+news is we're confident that we have all
+the read barriers in that we need the
+bad thing is that by doing this some of
+sitio optimizations aren't getting run
+so we're not hitting the 5% that I told
+you that we were shooting for and I I've
+been talking to people one of my main
+goals through this conference was to
+talk to the compiler weenies and find
+out whether there are some solutions and
+I've come back with some ideas for how
+to fix that the one I came in here with
+was to move the barriers to right before
+cogeneration but maybe I can add macro
+nodes that will follow along with the
+reads but won't actually impair the
+optimization as we go along
+that's the thing we need to fix before
+I'm going to tell the world that they
+need to try this because it's going to
+say uh solve all of our problems
+we're not quite fast enough yet we need
+to do more heuristics tuning and that's
+where the big apps come in how big does
+your collections that have to be where's
+your threshold for what makes sense to
+copy that sort of work we need to do
+real hard performance work we want to
+eventually get to round-robin three
+stopping I'd really like to be able to
+say Shenandoah was a puzzle of garbage
+collector that we only stopped one
+thread at a time I think we can get
+there we have a back-of-the-envelope
+calculation for how to do it you pull
+one step at a time getting the the small
+pause times first in getting them
+bulletproof and industrial ready is our
+goal
+NUMA awareness look at that did you see
+that reaching picture that's perfect
+right you have your allocation in
+regions and when you do your evacuation
+you evacuate regions from one Numa node
+to another Numa node on the same the
+same pneumo processor we have the
+capability to do better on Numa with
+this collector and you could do it with
+g1 as well
+but that's on our list is something that
+we should tackle I've heard people say
+GC is a solved problem
+I don't think GC is ever gonna be a
+solved problem we can always do
+something better okay so we are red hat
+we are a fully open source please
+download our stuff and try it if you
+feel the urge to dig in and and figure
+out why it's not doing what you expect
+it to send this patches we believe in
+doing all of this out in the open there
+are a couple of blogs yes
+okay let's let's take one man I have an
+official JEP out there I spent 15 years
+working for son Oracle I'm not very good
+at how you do the process from the
+outside to getting a jet push through
+but or but but redhead is committed to
+open source and we're committed to
+pushing upstream and if it's at all
+possible if I make the performance case
+and it's at all possible or goal is to
+get it put into open JDK yes I don't
+have I don't have the performance
+numbers for that if you want me to pick
+a number out of my hat I'd say like 25
+gig but don't hold me to that I mean I
+might come back next year or the year
+after and say look this is great on
+anything over 16 gig right those other
+collectors were all generated in 2000
+when we were heading we were targeting
+200 megabyte heaps and 50 millisecond
+pause times so from that perspective
+anything above 2 gig is not something
+that they were expecting in fact there
+have been some bugs even as recently as
+last year with CMS not expecting heaps
+over to gig I'd say there's two blogs
+mine is hopelessly out of date
+but I made it an action item to go and
+update it Romans is better this is work
+that that woman and I have both done he
+deserves a lot of the credit I wish he
+could have been here feel free to email
+me with questions or to try and download
+the code and and and send bugs I'd love
+to hear from you yes we have it working
+on eight when I left Roman was busily
+working getting it upgraded to the
+latest version of 9 I haven't talked to
+him but I suspect he's got it working on
+9 by now he he is very good about doing
+the bring overs and keeping things up to
+date but be in mind that you know I have
+seen things take as long as twice as
+long right now because of the where we
+put the read barriers so don't expect a
+huge speed up but to expect to see
+pause times even now yes yeah okay I'm
+gonna wave my hands a lot here and I'm
+gonna tell you things that you know okay
+if you read the Java memory model and
+your technical you know your you've got
+your language lawyer hat on when you
+read the Java memory model it's okay to
+read a value that has since been
+overwritten by another thread as long as
+you haven't hit a memory sync so we're
+hoping that the read barriers go in once
+on an object and as long as there are no
+memory syncs that's it that that we have
+that one read barrier and then you can
+keep going working with the copy of the
+object you have as long as you don't do
+a rate and once you do a write then you
+have to make sure that your rights are
+consistent with other threads rights our
+hope you know it the statistics from the
+list machine days yes I'm that old are
+that the reads are seven times more
+prevalent and writes so the idea that
+you can read from from space and have a
+cache hit most of the time seems like
+it's probably a fairly reasonable idea I
+know that was a lot of hand waving right
+because the garbage collector is out
+moving them out from under you so you
+know during the last part of the garbage
+collector while we're doing the last few
+objects everything's going to be into
+space and all of your reads are going to
+have to go through the forwarding
+pointer if they haven't been updated so
+I really don't know are there any other
+questions are we gonna end early
+wouldn't that be awesome
+I guess we're done thank you for coming
+to listening to me I'm always amazed
+that</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

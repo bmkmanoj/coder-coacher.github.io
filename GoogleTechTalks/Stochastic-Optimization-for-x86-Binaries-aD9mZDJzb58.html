@@ -1,0 +1,1665 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Stochastic Optimization for x86 Binaries | Coder Coacher - Coaching Coders</title><meta content="Stochastic Optimization for x86 Binaries - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/GoogleTechTalks/">GoogleTechTalks</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Stochastic Optimization for x86 Binaries</b></h2><h5 class="post__date">2015-01-13</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/aD9mZDJzb58" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hello everyone thanks for coming so this
+is Eric he's gonna give a talk on
+stochastic super optimization for x86 64
+he's a grad student and at Stanford and
+CS he's just finishing his ph.d and
+writing his thesis and shopping for an
+academic job so uh yeah that go ahead
+okay thank you Jeff thank you everybody
+for coming hopefully by the time future
+generations are watching this on YouTube
+there will be a little pop up telling
+you Eric has since graduated in the
+meanwhile I'm here today to talk to you
+about some of the work that's been going
+on for the past three or so years in my
+research group this is joint work with
+my advisor
+Alex Aiken and my colleague Raoul Sharma
+so to start this talk I generally like
+to begin with a bit of motivation that I
+think just about everybody if you get
+behind which is that even now in the era
+of multi-core there are still a lot of
+important application domains out there
+that are compute bound on this slide
+I've shown just a couple of examples
+whether they be scientific simulations
+cryptography rendering programs I could
+go on and on and on with this but as I'm
+sure anyone who's worked in any of these
+areas or maybe even yourself would agree
+obtaining really high performance
+optimization in these areas is very
+painful
+certainly there are quite a bit of tools
+available for mitigating this problem
+especially lately there has been quite a
+bit of revitalized interest in compiler
+research whether it's domain-specific or
+otherwise but what I'd like to argue to
+you today is that to obtain truly the
+very best performance it's still
+necessary to go in and exploit all of
+the really dark corners of a hardware
+instruction set and how it interacts
+with machine resources and it's
+precisely for that reason that today the
+very best code that's out there the
+highest performance code is still
+written by hand by experts and assembly
+now the work that I'm going to be
+showing you today is an attempt to
+improve on this it's a fully automated
+method for modifying the assembly
+implementation of high performance
+kernels such that they're able to either
+match or as I'll show you in many cases
+even outperform code that's written by
+experts what I'm going to show you
+is probably going to seem crazy and you
+might start scratching your head and
+saying all this could never work
+hopefully by the end of the talk you'll
+of hung on to that you'll still think
+it's crazy but you'll leave wanting to
+tell all your friends about this thing
+that actually somehow does so here is a
+quick outline I'm going to start out
+with the description of what stochastic
+optimization is and how it works this is
+going to be absolutely the simplest
+possible implementation and it's only
+going to work for fixed point integer
+kernels without loops then from there
+second half of the talk I'll discuss
+extensions for handling kernels that
+contain floating point computations now
+and again I will stress that everything
+I'm going to be talking about today is
+going to be with respect to loop free
+kernels only in the interest of time I'm
+not going to be able to get into work
+that we've done to extend all this to
+code that contains loops but if you are
+interested in addition to these two
+papers here we also have a paper in oops
+lo 2013 which talks about that so
+definitely check that out
+meanwhile here is an example to get
+started with on this slide I've shown
+two implementations of a 128-bit integer
+multiplication kernel that's used in
+open SSL's implementation of RSA this is
+very high-performance code and really
+it's only useful and so far as its
+high-performance fast enough to be
+invisible to the end-user basically the
+takeaway here is that every instruction
+counts to get this code the code in the
+center was compiled from C source which
+I've suggested on the left here using
+GCC with full optimizations enabled and
+then the code on the right here was
+produced using a stochastic optimizer
+that we've built called Stoke maybe
+eyeball these two but please don't stare
+too hard I'll highlight the important
+bits for you they are these the code
+which is produced by Stoke is 18 lines
+of assembly code shorter than the code
+produced by GCC it's 60% faster and
+what's really cool is that it's even
+slightly faster than the handwritten
+assembly that's shipped with the library
+at the time we originally performed this
+experiment and the reason why that is is
+that the stokoe takes advantage of a
+number of very target specific
+optimizations among other things it
+permutes its inputs and non-trivial ways
+and
+and to distinguish registers to take
+advantage of fast Hardware intrinsics
+which completely eliminate control flow
+divergence and increase throughput which
+is all very cool and I'll come back to
+that but for now what I really want you
+to take away from this example is this
+that code was produced completely
+automatically and I'm going to show you
+how so to explain how all of this works
+first I'd like to develop a little bit
+of intuition for how we've gone about
+formulating this problem here I've drawn
+a sketch of what I'll call the abstract
+space of all possible loop-free assembly
+programs which for reasons that I hope
+will become clear in a moment the
+community is taken to referring to as
+rewrites this is a very large very large
+very high dimensional space and it's
+it's much larger than the two I'm using
+here to for the sake of visualization in
+fact for me to even be able to draw this
+box around it at all I have to make a
+qualification to you that all the
+programs in this space of fixed length
+now in this space programs correspond to
+points here's one of particular interest
+this is the code that I just showed you
+in the center of the previous slide
+which was produced by GCC o3 and because
+this is the code that we're interested
+in optimizing in particular we refer to
+this point in particular as the target I
+now because we're interested in
+optimizing this code in particular what
+I can do is I can go ahead and I can
+partition the space into two disjoint
+sets in blue I've shown the set of
+rewrites that are functionally
+equivalent to the target and in white is
+everything else and I've drawn several
+of these blue regions here to stress
+that there actually many interestingly
+but also distinct ways of implementing
+this kernel as I just suggested to you
+the code that's produced by Stoke is
+often a separate region over here on the
+left because the algorithm that
+implements is actually quite different
+from the one that the code produced by
+GCC uses to help get an intuition for
+what I've done here in this picture
+might help to think about a slightly
+higher level optimization task imagine
+if you were sitting down optimizing
+sorting routines one of these regions
+might contain all implementations of
+bubblesort modulo optimizations and
+another might
+all implementations of quicksort for
+instance if that helps
+great take that intuition and now scale
+it down to the level of loop-free x86
+kernels and remember this is just a
+visualization so at some point as we get
+deeper and deeper to the details this
+will break down a little bit but for now
+it's good so if you're comfortable with
+that an equivalent way of visualizing
+this idea is with a binary indicator
+function so here I've shown the value of
+this function or such a function along a
+slice through the space which passes
+through the two codes that I just showed
+you the Stoke code and the GCC code the
+way I'm drawing this as function is zero
+for all points that correspond to
+functionally correct rewrites it's non
+zero otherwise and even though I'm just
+showing you a slight function through a
+slice here this function would be
+defined for all points in this space and
+now if you're comfortable with the idea
+of a function being defined over the
+space that what I can do is suggest to
+you that there probably or there are
+many other possible functions for
+measuring the quality of these points
+some simple examples would be code size
+expected power consumption expect the
+number of cache misses expected runtime
+and the formulism I'm showing you here
+the only feature that any of these
+functions would share is that lower
+values correspond to better rewrites so
+here's a hypothetical example of an
+expected runtime function you'll notice
+in particular the lowest point on the
+curve corresponds to the code discovered
+by Stoke indicating that this would be
+the fastest code along the slice or is
+the GCC code is good but it's only a
+local minimum and here I've also noticed
+that just because we rewrite is
+functionally correct it doesn't
+guarantee that I'll have a low
+performance cost so in general what can
+we expect we can expect that these
+functions will be quite poorly behaved
+they'll be sharply discontinuous highly
+non convex and they'll just be full of
+these local minima so given this
+formulation of the space what I'd like
+to do now is make a non-standard but
+what I hope is obvious assertion which
+is that program optimization is really
+nothing more than a very high
+dimensional search problem so given a
+point of interest this target program
+the goal of any program optimizer is to
+just produce a rewrite with the lowest
+possible performance cost which is also
+functionally
+in the context of this picture here the
+goal is to find the lowest value on the
+blue performance curve for which the
+green correctness curve is zero that's
+the way we think about this problem
+before I jump into how we our solution
+let me first just take a moment and try
+to place this in the context of existing
+approaches here I've shown the behavior
+of a traditional optimizing compiler
+what we have is a simple syntax directed
+translation will produce something like
+this unoptimized LLVM code here on the
+right and the application of standards
+and semantics preserving techniques like
+dead code elimination constant sub
+expression elimination what have you
+will eliminate most of the inefficiency
+of this code and produce something like
+this LOV mo3 code here but this is of
+course complicated and two compilers
+often won't agree on the results so here
+I've noted that LLVM with full
+optimizations isn't quite identical to
+the code produced by GCC with full
+optimizations and regardless none of the
+standard optimizations that we're
+familiar with whether they be target
+dependent or otherwise are sufficient
+for escaping this region of points on
+the right here and producing a program
+that looks something like the code
+produced by Stoke completely a different
+approach to this problem which is
+guaranteed to work in the long run is to
+simply guess in check every possible
+implementation in this space this sounds
+sort of wild but it works surprisingly
+well for RISC instruction sets and even
+in some cases for this machines in the
+past my adviser Alex and one of his
+students were able to produce some
+pretty interesting optimizations by
+building a database of all possible x86
+program fragments of up to three lines
+of code which was that was the upshot
+the down shot was this took over a
+compute month to do so and at 11 lines
+long the code produced by Stoke on the
+left here is well beyond
+fortunately the scope of what we'd hope
+to discover using only this technique
+one way to address this scaling issue is
+through the use of expert written
+equality preserving transformations so
+the idea here would be beginning from
+any one of these correct implementations
+and known
+correct implementation these rules would
+be repeatedly applied to enumerate a set
+of points that ideally would cover most
+of these regions then this much smaller
+set could be traversed in a reasonable
+amount of time and the most performant
+code could be returned as a result well
+this works quite well as well the key
+issue here is that missed axioms
+correspond exactly to miss the
+optimizations and what's even worse than
+that is the code that's produced by
+Stoke has this actually really
+interesting property which is that there
+is no sequence of small equality
+preserving substring transformations
+that will never be able to connect it to
+any one of the programs on the right
+here it turns out that the only
+transformation that will accomplish this
+is the one that produces the optimal
+code all at once which is great but if
+we had that we wouldn't have a problem
+to solve to begin with so well this is
+good doesn't quite work for us lastly
+just a quick nod here program synthesis
+is an approach that removes this
+dependence on expert written axioms in
+quite a few ways unfortunately in the
+interest of tractability most of these
+programs operate on high-level ir's that
+use bit vector calculus
+rather than directly on executable
+assembly and as a result they have no
+way of reasoning directly about the
+performance properties of the code that
+they ultimately produce so although
+these techniques do work and they work
+quite well and quite often they can be
+thought of as throwing a dart which will
+land somewhere on this picture in a
+correct region but beyond that there
+isn't anything we can say about the
+performance so finally this brings me to
+our approach which is to overcome these
+limitations by using random or
+stochastic search that's the title
+our approach is similar in some sense to
+brute-force enumeration in that its
+content to experiment with incorrect
+implementations however it sacrifices
+completeness and the interest of
+tractable runtimes the idea is pretty
+simple here's how it works first set of
+synthesis threads are initialized to
+random code sequences and random walks
+are used to discover as many of these
+different regions of correct
+implementations as possible not all of
+them will find them some will
+just wander off and then next for as
+many of these regions as we were able to
+find a new set of random walks or
+performed an attempt to discover the
+most performant code in each region and
+what's sort of crucial here is that
+nothing constrains these walks to stay
+within a region that they're initialized
+to so though some leave and never come
+back like this poor guy on the the left
+over here many are actually able to
+discover useful shortcuts that
+experiment with temporarily incorrect
+solutions like the one on the right here
+which temporarily leaves this blue
+region and maybe even more interesting
+than that is that it's often the case we
+find that it's these threads in
+particular that end up producing the
+most interesting results
+get more into that in a little bit but
+for now that's the big idea hopefully
+I've given you some intuition as to how
+all of this works and gotten you excited
+about it so now let's let's get into
+some details so a high-level for this to
+work as I've described it to you we need
+two things we need a search procedure
+for performing the random walks and we
+need a formal method for encoding and
+combining these correctness and
+performance functions that I just showed
+you turns out that these two issues are
+pretty tightly coupled but what I'll do
+is I'll discuss each in turn first of
+all for search procedure we use MCMC
+sampling which along with a host of
+other random search techniques is more
+or less the only known solution method
+for very high-dimensional irregular
+search spaces like the one that I've
+just showed you essentially all this is
+is a random process for drawing samples
+from a function where a symbolically
+closed form representation isn't
+available you can't write out the
+semantics of the function mathematically
+using some nice notation turns out
+though that this property is crucial
+because in general we wouldn't expect to
+ever have a nice representation of
+either the correctness function or the
+performance function that I just showed
+you how this works is it was actually
+originally developed as a technique for
+sampling from probability distributions
+but it turns out that it can be applied
+to search because it has a pretty
+interesting property which is it draws
+samples or in the context of
+circuit visits a rewrite in proportion
+to the value of the cost function so as
+I've shown here in this example MCMC
+sampling would draw samples from the
+function I've drawn on the left here in
+proportion to the histogram that I've
+drawn on the right the higher values are
+visited more frequently than the lower
+values I'll say more about cost
+functions in a second but for now just
+remember that lower cost correspond to
+better rewrites so what this means is
+that if we take our cost function and
+negate it
+we can guarantee that lower cost higher
+quality rewrites get visited more often
+than higher quality higher cost lower
+quality rewrites and although it's true
+that we don't get any guarantees with
+respect to convergence rates what we
+find is that for all the application
+domains that we've looked at this turns
+out to work quite well in practice so
+here is a high-level sketch of the
+algorithm this actually is more or less
+the algorithm we start by selecting an
+arbitrary point in the space for
+synthesis this is any random rewrite and
+for optimization this is any rewrite
+from a region of one of those correct
+one of those blue regions of correct
+implementations and then for as long as
+we have the computational budget to do
+so we just repeat we propose a random
+modification to the current rewrite and
+evaluate this cost function but the cost
+function is decreased meaning that the
+code is either gotten faster or more
+correct that's great modification is
+accepted and the current rewrite is
+updated but if the cost function is
+increased meaning the code has gotten
+either slower or somehow more broken
+with some probability which I'll call an
+acceptance probability depending on how
+bad that increase was it might be
+accepted anyway and that's all when time
+is up we simply look back at all the
+samples we've taken and we return the
+lowest cost sample that's also correct
+to the user in practice there are some
+nasty details which I will gloss over
+rather quickly if you're interested in
+the details I would recommend you once
+again to our pick right so welcome back
+you you missed some stuff not too much I
+guess what was I saying
+right before I go on I will stress this
+last point there's no magic here for
+everyone who missed what I said you can
+just assume it is magic
+in principle there are many other
+randomized search methods that we could
+apply to this problem in our experience
+MCMC sampling is just a nice trade-off
+point between experimental results and
+complexity of implementation so here are
+the random transformations used by our
+implementation of MCMC sampling as
+required these are all organic symmetric
+and importantly no expert intuition is
+built into them these moves are simple
+to implement and satisfy a well-known
+sort of black magic design criteria for
+MCMC sampling which is that they strike
+a balance between inducing small local
+modifications and large global
+modifications and the center here I've
+shown the fragment of a rewrite
+remember rewrite is a point in the space
+of programs and the goal of one of these
+transformations is to move to an
+adjacent rewrite so for each move here
+in a second I'll highlight the changes
+in red
+first insert moves create a new random
+instruction at a random location in the
+code so here we have a new individual
+multiply instruction added delete moves
+remove a random instruction maybe it
+turns out we didn't want this move as
+badly as we thought we did
+instruction moves will replace a random
+instruction with a brand new replacement
+so in this case the and has become a
+shift arithmetic October moves replace
+only the instruction mnemonic for random
+instruction in such a way that the new
+opcode is correct given the types of the
+old operands operand moves are similar
+except with respect to operands instead
+of opcodes
+finally swap moves will exchange the
+location of two random instructions
+hopefully with a little bit of thought
+you can convince yourself that these
+transformations are alone two alone are
+sufficient to transform any rewrite into
+any other good now on to cost functions
+here I've shown the cost functions using
+our implementation of Stoke we use two
+one for each phase for synthesis which
+is the search for regions of correct
+implementations we use just the
+correctness function random walk start
+from an arbitrary point in the space and
+they attempt to discover zero cost
+correct rewrites which we believe to be
+closely surrounded by other correct
+rewrites that's the blue regions here
+again and for optimization which is a
+search for the best rewrite and each of
+those regions
+we use a cost function which is a
+weighted sum of both correctness and
+performance functions and it's combining
+these two functions that allows a search
+procedure to trade correctness against
+performance and to experiment with these
+shortcuts that I mentioned a second ago
+through temporarily incorrect
+implementations I'll talk about our
+implementation of both of these
+functions in turn in both cases as I
+suggested the primary design criteria
+was computational throughput that's
+because again MCMC sampling works only
+as well as it's able to maintain a very
+high proposal throughput so to get
+started talking about that in principle
+a binary indicator function that I've
+already shown you would suffice as a
+correctness function but in practice
+MCMC sampling is much more effective
+when it's applied to smooth cost
+functions so though on the limit it's
+guaranteed to explore passed even these
+very sharp discontinuities and practice
+convergence rates are much faster for
+functions that are characterized by
+smooth transitions like I've suggested
+on the right here as a result instead of
+simply classifying a rewrite as correct
+or incorrect it's preferable to be able
+to quantify partial correctness okay so
+how do we do that for x86 assembly
+programs a fast method for doing this is
+to simulate both the target and the
+rewrite on identical inputs and just
+compare the results so here I've shown
+an example of an input which I'll refer
+to as a test case this is simply a
+snapshot of an x86 hardware execution
+context or slightly more formally it's
+an assignment from live in hardware
+locations whether they're the
+general-purpose registers the SSE
+registers or locations in memory whether
+they be on the stack or you just jump in
+can they they can hear me now okay
+once we have a test case simulating both
+the target and the rewrite on that test
+case will result in two distinct machine
+States one for each execution and then
+given those two States what we can do is
+produce a fast approximation of
+correctness by just comparing the bit
+vector values in the live out memory and
+register locations in each and in order
+not to over fit a single input we can
+generalize this approach to as many test
+cases as we like here's a simple method
+for comparing bit vectors which is to
+sum the number of bits that they
+agree on in the example on the left here
+I've shown the bit vectors produced by a
+target on a rewrite for a subset of the
+general purpose registers just a X
+through DX here and assume that only
+register a X is live out for this
+particular example using the miss method
+we would assign the rewrite of cost of 3
+for 3 incorrect 0 bits so whereas the
+right answer was all ones we've got 0 0
+1 0 all three of those zeros are
+incorrect and the plot on the right here
+shows the best result obtained over time
+using this as a cost function for a
+synthesis thread on the OpenSSL kernel
+that I showed you at the beginning of
+this talk for comparison I've also shown
+the results obtained by a purely random
+search thread on the top here takeaway
+is that after 30 minutes the search
+failed meaning it was unable to find a
+zero cost correct rewrite so although
+this is perhaps intuitive and close to
+what we need to make this work there's
+still something that needs to be changed
+before it actually does and sort of the
+the thing that we're missing is captured
+in this example here which is something
+interesting to note about these two bit
+vectors is that the rear it actually has
+produced the correct value this string
+of all ones here only is put it in the
+wrong location and registered DX and
+what we can do to account for this is to
+define an improved version of this
+function which returns the minimum bit
+vector difference across all of these
+registers and adds a small penalty in
+the face of this example just one for a
+correct answer or a near correct answer
+in a wrong location in this case we
+actually get I would argue a much more
+appropriate almost perfect positive just
+the penalty one figure on the right here
+now shows a substantially improved
+performance and in fact with some small
+modifications to account for what it
+means for a rewrite to produce undefined
+behavior like a seg fault or
+floating-point exception this is the
+cost function that we use in our current
+implementation of Stoke as I suggested
+earlier our primary design criteria here
+really is speed so quite a bit of
+engineering work has gone into making
+this computation as efficient as
+possible I would love to say lots more
+about this but I'll have to reserve that
+for conversations offline here I'll just
+summarize the results our current
+implementation of Stoke has a JIT
+assembler for the entire x86 64
+instruction
+set which lets us simulate rewrites
+directly in hardware in addition to
+guaranteeing semantic correctness the
+hardware is a faithful representation of
+the specification as opposed to what you
+would get with a potentially buggy
+software emulator this is also quite
+fast a peak throughput even after you
+take into consideration the sandboxing
+which we have to inject or guarantee
+that natively executing random code
+sequences doesn't crash our machines
+this implementation is able to safely
+dispatch between 1 and 10 million of
+these test cases per second that's
+correctness now performance which will
+be brief in contrast to equality the
+performance metric used by the
+optimization phase of our approach is
+relatively simple because our
+implementation of Stoke is concerned
+with minimizing expected latency rather
+than attempt to measure performance
+directly for a particular rewrite we
+just look up the expected latency of
+every instruction in the rewrite and
+some of the results and of course this
+ignores almost all of the interesting
+second-order effects that are introduced
+by a modern system machine hardware
+engineer who's watching this is probably
+cringing it turns out for the kernels
+that we look at though this seems to
+work pretty well in practice
+finally I will note that because our
+goal is correct code and it's necessary
+to formally check correctness and
+performance there is a little bit more
+work that we have to do for guaranteeing
+correctness we take a relatively
+standard approach which is to encode
+most target and a rewrite as SMT formula
+and use an off-the-shelf solver like z3
+to query for inputs that cause the two
+functions to disagree the proof fails we
+can just back the search up to the last
+rewrite that had a verified actually
+correct equality cost of zero and as a
+useful side-effect if the search fails
+the counter example that's produced by a
+failed proof can actually be fed back
+into the system as a new test case and
+as a result improve the predictive
+powers of the correctness function and
+to deal with performance estimation
+error for our performance function we
+just record the top n percent best score
+and rewrites obtained during
+optimization and we either hand them all
+back to the user which is already
+something that a traditional compiler
+can't do give you more than one
+interestingly distinct implementation
+we just compile and run them on an
+actual representative workload and
+return the truly fastest results of
+either so that is the whole idea from
+start to finish now that you've seen how
+it works here's a demo of stoked being
+applied to that open SSL code that I
+showed you earlier in this video stoke
+is going to begin execution from an
+empty code sequence and attempt to
+synthesize a functionally correct
+rewrite on the left I'll show the best
+code discovered so far and on the right
+I'll show the current code that it's
+evaluating along with costs associated
+with them above this is a little bit
+faster than real time given our current
+implementation which takes about so
+running it's a video I get nervous every
+time like it's not going to finish I
+know it's yeah so this is this is with
+reference to our firm implementation
+which can do this in about
+two-and-a-half minutes in addition to
+this code we've also evaluated our fixed
+point implementation the one I've just
+described to you on a number of other
+kernels and the interest of time I won't
+dwell on these too long I'll just
+summarize them quickly from Summa
+kiwannis work on program synthesis we
+have a benchmark of 25 loop free kernels
+that range in complexity from turning
+off a bit in an integer to rounding up
+to the next highest power - which is
+actually more complicated than it sounds
+it takes about nine instructions to get
+it right from the Blas package we have
+the body of SAC speed to demonstrate our
+ability to reason about vector
+intrinsics and from Alex's students or
+hutsuls work we have some linked list
+benchmarks to demonstrate our ability to
+reason about programs that modifydate me
+I won't as I said I won't dwell on these
+results in the interest of time other
+than to say that the runtimes for the
+synthesis and optimization phases of our
+tool which I'm showing on the top here
+all tractable and that's starting from
+code compiled with LV mo0 we're able to
+produce rewrites either match or
+outperform the code that's produced by
+GCC o3 and ICC o3 and even in some cases
+for about more than 20% of these
+benchmarks outperform expert hand
+written implementations one thing I will
+note very quickly is
+this plot is actually a little bit out
+of date now this is from our 2013
+solution at plus we have work in
+submission now where we've revisited
+these experiments and we basically
+reproduce the results and brought the
+runtimes down by over an order of
+magnitude so as before where some of
+these benchmarks can take up to 30
+minutes now we can reproduce the results
+in about two and a half before I wrap up
+this part of the talk I don't certainly
+don't mean to leave with giving you the
+impression that there aren't interesting
+problems that need to be solved here's a
+simple failure case that we can't
+synthesize the correct implementation
+for which is this rounding up to the
+next highest power a few benchmark to
+sort of give you an intuition for why
+this is and the table on the left here
+I've shown sample outputs produced by a
+correct implementation of this function
+and an incorrect function that always
+returns zero so the inputs on the left
+here the correct implementation returns
+the result Center implementation will
+always return zero turns out that this
+incorrect function is extremely
+attractive to a search process it's both
+simple to discover and it's only ever
+wrong in a single bit and it's also
+immediately adjacent to just about every
+single program all you have to do is
+blow the program away and replace it
+with something that returns zero
+developing techniques to escape from
+strong minimum of this form to discover
+the true global minimum is something
+that we're currently looking into and it
+wouldn't be corrected me to say we can't
+do this because now we can do this but
+if you're interested in how we do it now
+I'd be happy to talk about it offline
+okay that said moving on up until this
+point all of the optimizations that have
+shown you have preserved complete
+bitwise correctness unfortunately and
+that's all well and good for fixed point
+computations there are many interesting
+fixed point computations out there
+unfortunately this is very difficult to
+do for floating-point computation
+performing optimizations that also
+preserve correctness full bitwise
+correctness is a task that compilers and
+experts alike are notoriously bad at but
+maybe surprisingly it was surprising for
+me it turns out that for many
+interesting applications this is an
+unreasonable rolling
+for in the first place as a simple
+example there's no reason I would argue
+why a compiler should insist on
+preserving a full 64 bits of
+floating-point precision if it's with
+respect to a computation that takes
+inputs that are given to it by
+scientists who only know the values to
+two significant digits what's the point
+what I'd argue we'd really like to do
+instead is perform optimization in the
+presence of weakened requirements for
+correctness that the transformation
+don't have to preserve floating-point
+semantics exactly as written so to get
+you thinking about this idea here's
+another example if you got through the
+other code slide and you're excited to
+try to get through this one please don't
+do that this one is just horrible look
+at the code on the left here is a
+handwritten implementation of the
+exponential function which is based on a
+12 stage Taylor series expansion the
+expert who wrote this cared enough about
+performance that you already ripped out
+support for certain special
+floating-point values like not a number
+and infinity but he didn't sure that for
+well-behaved inputs this is correct up
+to 64 bits of floating-point precision
+the code on the right here again was
+produced by Stoke and it's based on
+something like a Taylor series expansion
+only it contains strange constants
+multiplications have been replaced in
+many cases by adds terms have been
+dropped terms have been added and there
+are in many places rotates and shifts
+which to the best of my knowledge
+approximate arithmetic and are also
+slightly faster interesting once again
+their takeaways here are the Stoke code
+was produced completely automatically
+it's also 25% smaller and 57 percent
+faster than the original implementation
+when you say okay that's great sure I
+can generate random code and it would
+probably be faster to but what's really
+cool here is that when we took this code
+and we embedded it in a high-performance
+scientific simulation we're able to
+produce a 27 percent overall simulation
+speed-up and in spite of the
+strange-looking implementation for
+inputs in the very small range that were
+exiting exercised by the simulation the
+results were correct
+within a very small error bound much
+smaller than the maximum acceptable
+error that the scientists were running
+this simulation specified as the the
+bound beyond which results can't be
+trusted and so why is this possible it
+turns out it's because the uncertainty
+that's introduced by slightly incorrect
+results in this kernel is negligible
+compared to the uncertainty which is
+introduced in the course of normal
+application execution elsewhere so cool
+so to explain how Stoke was able to
+generate this code then here again I've
+drawn the abstract space of all possible
+programs however this time there's an
+important difference which is that
+notice that the rewrite produced by
+Stoke isn't in a blue region at all it's
+over here in the centre of the slide
+that's because strictly speaking it's
+not correct
+for floating-point codes there's another
+difference here the optimisation des is
+actually a little bit worse or a little
+bit more difficult than what I showed
+you earlier most floating point
+instruction sets are very sensitive with
+respect to low-level transformations
+what that means is that even some of the
+most basic arithmetic identities that
+you would expect a compiler to have at
+its disposal like the associativity of
+multiplication and addition they don't
+actually hold and so what this means is
+that for floating-point codes these blue
+regions here are actually very small
+each would contain an implementation
+like a Taylor series expansion or
+chebyshev expansion and it's very small
+handful of semantics preserving
+variations on that idea which actually
+can hold with respect to the instruction
+set but once a traditional compiler has
+done its job and applied those
+transformations there really isn't much
+work left to be done here
+oh again what I'd argue we'd like to do
+is to make qualifications with respect
+to what it means for a rewrite to be
+correct we like to say things like this
+rewrite only has to work for positive
+inputs I'm never going to run this code
+on negative inputs this really only has
+to produce results that are correct up
+to 30 bits of floating-point precision
+I'm never gonna have enough significant
+figures to know that value to that
+precision in this picture here I've
+represented these qualifications by
+expanding the borders around each of
+these blue regions and importantly what
+I've also done is shown that if we're
+able to produce these qualifications
+the code that's produced by Stoke which
+used to be all by itself is now part of
+a qualified correct region of its own
+along with its nearest strictly speaking
+incorrect but for the sake of this
+example correct enough neighbours and if
+we're lucky enough that our application
+domain allows us to make qualifications
+long enough what we find is that in many
+cases we're able to join the regions the
+blue correctness regions surrounding
+both the original expert code and the
+code produced by Stoke and if we can do
+that a random walk beginning from one so
+that's not synthesis the time it's just
+strictly optimization only beginning
+search from an expert written code we're
+able to produce the optimization code
+that I showed you a moment ago so again
+that's the intuition and now with the
+remaining time I'd like to get into the
+details of how this works so what do we
+need in this case we need two more
+things in addition to what I showed you
+earlier aside from these changes
+everything else is going to stay exactly
+the same first we need a new correctness
+function one that encodes a formal
+version of what it means for a
+floating-point program to be sort of
+correct given a test case and second we
+need a new formal verifier to ensure
+that a story right is sort of correct
+for all possible program inputs for
+measuring partial correctness we use a
+metric called alts which measures the
+distance between a real number
+like Yi on the number line here and the
+closest representable floating-point
+value I've drawn these circles in this
+cartoon here on the bottom and when it's
+apply when this metric is applied to do
+floating point values as I've shown here
+it can be thought of as simply counting
+the number of representable floating
+point values between the two it turns
+out this is widely used as a measure of
+error in the scientific simulation
+community as a definition of what it
+means for a floating point result to be
+correct half is considered to be a gold
+standard because it's as close to
+mathematically precise as a
+representation will allow you to be but
+that's very in fact is very difficult to
+obtain and most applications settle for
+one or two and they often won't agree on
+what those one or which inputs those one
+or two or with respect to so one
+implementation might produce an off
+error of one where for the same input
+another implementation might produce an
+all bearer to
+in just a second I'll show you how we
+can obtain some very cool results by
+substantially weakening this requirement
+and saying we'll settle for up to
+millions or more ULBs of error
+nonetheless with this definition the
+modifications are pretty minimal we
+execute the target or rewrite just like
+before some the old error between values
+and live outputs and round off errors
+below a user-defined threshold down to a
+correctness value of zero the real
+challenge in this application domain is
+in guaranteeing that a rear end is
+correct within an error bound
+even though equivalence of loop-free
+codes is decidable decision procedures
+for testing floating-point equality
+don't generally scale beyond five lines
+of code which is far below the length of
+the benchmarks that we've come across
+abstract interpretation techniques
+generally speaking can't prove complete
+bitwise let alone partial correctness
+for many of these benchmarks and neither
+said of these techniques can handle
+mixed fixed and floating-point kernels I
+could say a lot more about this the
+bottom line is simply for purely fixed
+point codes we have off-the-shelf
+solutions that we can use to guarantee
+that an optimization is correct for all
+inputs if codes contain even the
+slightest amount of floating-point
+computation there's no standard
+technique that we're aware of for
+solving this problem so rather than
+attempt to prove that an optimization is
+correct within an error bound for all
+possible inputs what we instead do is
+try to produce a high confidence claim
+that we believe this to be true encoding
+this goal was easy we just define an
+error function that counts the au pair
+and live outputs between the target and
+the rewrite on a test case and once we
+have that encoding all that remains is
+to solve now for the maximum value over
+all possible test cases and check that
+it's below the users upper bound in
+general we could expect this function to
+be poorly behaved and have no
+closed-form representation but as I
+hopefully just convinced you that's
+precisely the sort of problem that MCMC
+sampling is well suited to in fact
+compared to the formulation I showed you
+a moment ago for searching through the
+space of x86 code sequences formulation
+for this domain searching through the
+space of all test cases is much simpler
+all we need is a single transformation
+which I've shown here for exploring the
+space of test cases one that randomly
+modifies the value of a live-in value
+using this transformation for as long as
+we have the budget we just as before
+repeat the following pros a new test
+case and execute the rewrite if the
+error has increased
+great we accept the change we're looking
+for test cases I've produced the largest
+errors errors if not if the error has
+decreased some probability depending on
+how much the error function is decreased
+we'll accept the change anyway and as
+before when time is up we check the
+maximum observed value see whether it
+ever exceeded the bounded by the user
+and then we either return success or
+fail with new test case and there is a
+new problem here which is the question
+of when to terminate search it turns out
+there are several well-known methods for
+checking whether a sequence of samples
+has uniformly explored the entire domain
+of a function as I've suggested in the
+figure on the right here as opposed to
+the one on the left and if these tests
+pass what that means is we can be
+relatively confident that MCMC sampling
+that discovered all of the local Maxima
+of that function because it's explored
+the entire domain and we know it takes a
+majority of its samples from points that
+produce the largest values and if we can
+claim with high confidence that we
+visited all the local Maxima of the
+error function then I can also claim to
+you with relatively high confidence that
+we visited the global maximum of course
+this is only a claim and this technique
+would be inappropriate for safety
+critical applications where formal
+bitwise correctness or formal
+correctness with respect to a
+user-specified upper bound is absolutely
+required like you know checking the
+launch codes or whatever but for plenty
+of real world applications where
+regression testing is the de facto
+definition of correctness right now this
+works well and I would argue is a
+significant improvement over the state
+of the art so in addition to the
+exponential kernel I just showed you we
+also evaluated our floating-point
+implementation on a high performance
+implementation of the C numerix library
+and a ray tracer and before I finish up
+I'll hopefully show you some of those
+results I'll start out with lib IMF this
+is intel's implementation of math h
+kernels in this library are all written
+by hand and they're about two to three
+times faster than they flowed like the
+new implementations and here at showed
+optimization results for three of those
+kernels sine log and from left to right
+in each of the plots on the top here
+I've compared lines of code against
+performance improvement lines of code is
+the dark blue
+performance improvement is the light
+blue curve in a vertical slice through
+any one of these curves corresponds to
+the optimization that was obtained for a
+different user specified maximum alt
+error so from all the way on the left
+here zero error meaning give me a
+rewrite which is bitwise equivalent to
+the target code that I'm giving you all
+the way on the right which is two to the
+64 bits of all error which says I don't
+care what you give me I'm going to give
+you back return zero because it's all
+the same uh so of course the performance
+is through the roof all the way on the
+right but what I want you to take away
+from this is that as we move to the
+right and increases maximum acceptable
+old error we get a performance
+improvement and a reduction in code size
+and it smoothly interpolates between
+both sides of the curve it's not as
+though we get the win all the way at the
+end when all of a sudden the user
+doesn't care about what we're getting
+back then what we've effectively done
+here is generate substantially faster
+arbitrary precision versions of this
+library that smoothly interpolate
+between double precision single
+precision 1/2 all the way out to boolean
+precision if that were something that
+you could through some application be
+interested in below these three plots
+here all I've done is I have
+superimposed the error functions for
+each of the points along these curves up
+top here I've done I've just done this
+to suggest to you that although the
+error functions are complicated they're
+not particularly perversely poorly
+behaved and our validation technique
+terminates quickly with a maximum value
+here I've shown the result of applying
+Stoke to the implementation of a ray
+tracer even before we consider
+optimizations at sacrifice correctness
+Stoke is able to obtain a 30% speed-up
+over the original implementation just by
+performing bitwise correct optimizations
+like the ones that I showed you in the
+first half of the talk which improve the
+performance of vector panels the image
+that I've shown on the left here is
+actually pixel for pixel identical to
+the image that's produced by the
+original implementation again it's 30%
+faster than the original but there's
+more to be done here it turns out that
+the depth of field blur in this image
+which is the blurring on the horizon
+there is produced by repeatedly randomly
+perturbing
+viewing camera angle in the innermost
+loop of this code and what we can do is
+apply Stoke to this kernel and set the
+maximum acceptable opa are appropriately
+low so that we can produce code that's
+close to two times faster than the
+original implementation and although
+this code doesn't exactly obey the
+floating-point semantics which were
+originally specified the results are
+almost completely imperceptible on the
+right here I've shown a few pixels
+highlighted in white that disagree
+between the two images and I would argue
+that had I not shown that to you I don't
+think you could tell the difference
+between the two and just to wrap up as a
+fun example of how you can get exactly
+what you asked for without realizing
+what it was that you asked for
+if the maximum acceptable error is set
+above the variance of the random noise
+that's used to introduce the blur then
+Stoke is content to eliminate most of
+the kernel altogether in fact that
+eliminates the entire kernel so if the
+ground truth implementation is
+perturbing the camera a small bit and
+you tell Stoke well I don't care about
+floating point errors above a certain
+value it will say well then not doing
+anything as equivalent it gets me within
+that error bound the code is as you
+would expect a lot faster because it's
+not doing anything but in this case the
+error is noticeable you could see the
+blur on the horizon here which
+completely disappeared because the
+kernel that induces it is gone and as a
+result just about every pixel is wrong
+in one way or another so you're on the
+right again
+error pixel highlighted and won just
+about every pixel is life so with that I
+suppose I should probably wrap up I will
+conclude and again make the claim to you
+that for many interesting real-world
+application domains even a single
+assembly instruction can still make a
+difference our approach to this problem
+is a new one it trades completeness in
+favor of stochastic search and it's able
+to experiment with temporarily incorrect
+optimizations in interesting ways to
+obtain results that either match or
+outperform the
+produced by production compilers and in
+many cases also the code produced by
+expert assembly writers I also want to
+step further than that and propose that
+for applications that can tolerate a
+loss of precision this technique is also
+a viable method for sacrificing
+correctness in favor of even smaller
+code and still higher performance
+there's lots more to this story which
+unfortunately I don't have time to get
+into
+there's the extensions to loops which I
+mentioned briefly at the beginning of
+the talk and there's also work that
+we're currently pursuing for
+automatically synthesizing hash
+functions random number generators
+malware attack strings all sorts of cool
+programs just to name a few but for now
+let me just say thank you I really
+appreciate you coming to this talk
+watching on TV wherever you are and I'm
+happy to take questions or hang around
+as long as people are interested
+afterwards to chat thanks all right
+thanks Eric so if you have questions I
+have a microphone so one thing that went
+by that I did not understand for
+correctness you're going to just on the
+the fixed point computation not the
+floating point for correctness well you
+go ahead and actually run the program on
+test input but for performance you're I
+mean since you are running it on the
+actual machine why don't you just time
+that for performance rather than
+approximating it by summing latencies to
+answers that is oh good question two
+answers to that the first answer is in
+order to obtain an accurate enough
+performance estimate we would have to
+run the kernel sufficiently many times
+that the overall throughput of the
+algorithm drop and second answer even if
+that weren't true we're not executing
+the kernels natively or xìng executing
+the kernels
+along with the instrumentation that will
+sandbox that so you wouldn't be getting
+a performance estimate of the kernel
+you'd be getting a performance that's
+another current you have the questions
+why these specialization with respect to
+loops you mentioned that your algorithm
+doesn't handle it yet and that you're
+working on it but do loops not fall
+naturally into the the Markov chain
+Monte Carlo framework if you're just
+permuting instructions all of the loop
+instructions should be there as well yes
+yes certainly so again there are two
+answers to that question slightly well
+let me say it like this they're always
+going to be two parts to this story
+there is the search part of the story
+and then there is the formal
+verification part of the story
+you're certainly correct that the search
+part of the story requires almost no
+modification right the instructions
+which induce looping behavior jumps
+labels what-have-you or in some sense no
+different from an add instruction or a
+multiply instruction so modulo some
+additional implementation and the
+sandbox that we use to execute our
+programs natively which will check for
+infinite loops yes we could just be
+using the exact same search procedure
+that I showed you with a couple of small
+changes to the proposal mechanism to
+search through the space of looping
+programs the real complication is once
+you go to the formal verification side
+of the story checking for equivalence of
+programs with loops is no longer
+decidable so you're never going to have
+a completely general-purpose solution
+for this problem
+so what's necessary is both coming up
+with a clever mechanism for checking
+certain types of loops and then biasing
+search towards finding optimizations of
+that flavor that you have some hope of
+verifying now that's it
+for certain application domains I would
+argue it's perfectly valid to just take
+the vow that the validator and throw it
+out the window again the definition of
+correctness is some guy wrote a couple
+of regression tests and he runs them
+while he gets coffee so
+or we're probably running more
+regression test inserts than this guy is
+so could work just fine thank you sure
+why isn't insertion and deletion
+sufficient for the set of
+transformations well with respect to
+well yeah you were yeah you yeah you all
+told you had transformations for
+changing out there ah I see you're
+absolutely right
+insertion and deletion moves are the
+only transformations you need to explore
+space and in fact when I tried to lost
+over an argument for ERG audacity the
+ability to transform and code sequence
+into any other the proof is just that
+take the original code sequence delete
+everything and insert everything else
+it's it's just an empirical optimization
+in practice people have found that MCMC
+sampling works well if you can mix small
+transformations and large
+transformations so there's redundancy in
+there an instruction move you could
+decompose into an opcode it's followed
+by operand moves in some cases it seems
+to make the search search seems to
+converge faster when it has the ability
+to make a large jump by proposing an
+instruction that's almost correct and
+then oh this is a familiar face if
+you're going to I guess I have to ask
+this if you're going to generate a an
+optimization that's useful in in a
+general library context which means that
+it's also going to be usable in a
+multi-threaded context you have to work
+you presumably have additional
+correctness concerns right because in
+addition to in addition to ensuring that
+you get bitwise they said this the
+correct output you also have to make
+sure that you're not updating you're not
+overriding data that you weren't
+supposed to even if you write the same
+bits back yes that's absolutely correct
+so that's
+weakness that's that's a weakness that
+you've identified and what I would argue
+as a strength of our approach which is
+right now our tool is completely
+compiler agnostic use whatever tool
+chain you like you spit out a binary and
+then we'll take a look at that binary
+and will optimize it now there's plenty
+of extremely useful information and
+whatever compiler you use such as a
+volatile annotation which is completely
+disappeared and if we don't have access
+to that then we're missing a sort of a
+crucial piece for this verification
+puzzle certainly we could look towards
+techniques for in some cases we could
+verify correctness in the absence of
+those annotations an alternate approach
+might be to produce an optimization and
+not only not just produce an
+optimization as correct for all possible
+inputs but produce an optimization and
+tag it and say this optimization is
+correct under the following assumptions
+and then you could imagine you have a
+high performance code and you could say
+on this particular use of context you
+can make these assumptions I'll just dig
+through my box of optimizations oh
+here's one that matches did I I think
+the question all also applies without
+any volatile annotations of the like in
+that if I if I really want to move a
+byte from one location where is he I
+want to update to a particular byte in a
+search location by adding one to it I
+could do that by reading the whole world
+updating the byte in the middle and
+writing the whole word back which might
+have the same cost or even be cheaper
+than just updating the byte but in a is
+sort of in a multi-threaded setting
+wouldn't be correct so even in the
+absence of those annotations I think is
+still another sort correctness criteria
+in here yeah and there's an even more
+general way of I think stating that
+problem which is that correctness is
+with respect to an execution model right
+so you're sort of identifying some of
+the nastier
+of a concurrent execution model so if we
+could make if we had a particular
+application area in mind and we knew
+which of those assumptions we had to
+make then we could put together a formal
+correctness check with respect to that
+definition of correctness or again we
+didn't know what assumptions you were
+making we could just verify our code
+under and different definitions of
+correctness annotate them and scroll
+them all the way so in your preamble you
+mentioned that this sort of addresses a
+problem after you've solved your memory
+movement choreography have you got a
+story for that how do you deal without
+rhythms which are limited by a small
+cache and the way in which they manage
+that so that is so there are many
+different granularities of optimizations
+what you're describing is an
+optimization at the granularity of
+memory traffic the optimization that
+were primarily concerned with or
+slightly smaller granularity than that
+so I would say as presented this
+implementation isn't immediately
+applicable to that problem scope of
+kernel or let me say it like this the
+scope of kernels that we are we look at
+are between 10 and 100 lines of assembly
+whereas memory effects like that
+typically take place at a much larger
+scale application which we can't
+consider so I would say our approach is
+complimentary to another tool which
+performs that type of optimization now
+that said in principle I don't think
+there's anything that restricts the use
+of this approach to only assembly level
+code and it's possible that an
+implementation that was targeted at a
+slightly higher level like memory the
+level of memory traffic would work you
+just need yeah there's two parts to the
+story there's a search part and there's
+a verification part so you'd need a tool
+for verifying of the transformations you
+require correct and you would need a
+mechanism
+for searching through implementations
+that traded various performance
+properties I'm just gonna say there are
+tools like fftw and other especially
+domain-specific tools that actually do
+these memory optimizations for
+particular kinds of applications they're
+not stochastic and they're just you're
+doing brute-force enumeration through
+some search space but they do exactly
+what you described your variation
+function essentially Carton essentially
+is a form of point mutation did you
+consider whether there might be some
+plausible form of crossover that you
+could use to search the space better so
+let me make sure I understand the
+question the question is or let me
+rephrase it different let me let me try
+to rephrase a question my own words I
+showed you a set of transformations for
+exploring the space of programs and I
+made no claim to you that these are the
+best possible transformations or the
+only transformations ahead nor did i
+make a claim that they were minimal
+because as i said they were redundant
+there so the question is whether some
+sort of crossover transformation might
+be useful as well and this is where I
+think you mean I have two code sequences
+let's imagine and I take the first half
+of this code sequence and I bolt it on
+to the second half of this code sequence
+right and and then the reason why I
+asked about you know some form of
+crossover is doing it literally by just
+picking a point to cross over in the
+initial and final sequences is probably
+not plausible but there might be some
+way to divide the two and then remix the
+parts that are is plausible the there is
+a complication there which is that there
+are so I sort of glossed over this but
+we are in in proposing these random
+transformations we
+maintaining certain invariants and the
+codes so for instance we're maintaining
+the environments that we never read from
+an undefined location and in doing
+mutations of this form I think the
+likelihood that you break one of those
+invariants goes through the roof so well
+this could be useful particularly if we
+could constructively propose these
+transformations so that that invariant
+held I think we could get some mileage
+out of it but when the alternative is
+our rejection sampling basically putting
+two codes together checking no undefined
+read okay throw it away
+our proposal rate would drop
+substantially we have the room until
+four o'clock correct yeah I think some
+til someone comes and takes the door
+down yes
+you come in with pitchforks I was
+wondering why bitwise correctness and
+not like normal correctness like if they
+correct interest a thousand and one the
+answer a thousand seems more correct
+than the answer one I'm well outside my
+expertise here so maybe it's a naive
+question no I think that's actually a
+very good question I think the the the
+general answer is there will always
+there's a set of interesting application
+domains and there's a set of cost
+functions some of those cost functions
+will be particularly well suited for
+some domains and some will also be
+perversely poorly suited for other
+domains and I don't think you'll ever be
+able to come up with a cost function
+that is well suited for all possible
+domains what you're describing I think
+the the trick is in coming up with a
+cost watching a cost function to a
+domain in such a way that you're able to
+produce results but you haven't also
+inadvertedly limited the quality of
+those results by picking out
+cost function that somehow biases you
+away from an interesting part of the
+solution space so for some applications
+that might work perfectly well in fact
+that's basically another way of saying
+what our flowing point correctness
+function was the number of representable
+values between a thousand and a thousand
+won is pretty close to the the function
+you would get by just counting the
+number of integer values between a
+thousand and a thousand on one so not
+something we necessarily did our
+primarily our fixed point benchmarks for
+cryptographic and their bitwise
+equivalents is somehow more interesting
+more appropriate than integer but you
+could just again you could just imagine
+domain where integer comparison would be
+more appropriate sure all right no more
+questions
+thanks Eric</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

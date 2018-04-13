@@ -1,0 +1,973 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Finding Subtle but Common Concurrency Issues in Java Programs | Coder Coacher - Coaching Coders</title><meta content="Finding Subtle but Common Concurrency Issues in Java Programs - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Finding Subtle but Common Concurrency Issues in Java Programs</b></h2><h5 class="post__date">2015-06-02</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/Oi6-pXX11qw" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">welcome to how not to Java concurrency
+and how to find if you did it wrong
+let's start with a few introductions I
+work for a company called Coverity we
+find we write static analysis tools that
+find quality issues security issues and
+test coverage issues in many languages
+including Java my name is Mark winnowed
+I'm in charge of writing and maintainer
+Zahra maintaining our checkers to find
+bad patterns of concurrent code I see a
+lot of bad concurrent code in the wild
+both commercial and open source today
+we're going to be seeing some open
+source samples but I assure you I've
+seen just as bad or worse than
+commercial products and let's introduce
+who you are or who I'd like you to
+pretend to be for the purposes of this
+talk imagine that you are a employee or
+developer at a organization that writes
+concurrent Java code and that you have
+been tasked with the task of updating
+some of your code making it better
+making it more concurrent with the help
+of another developer Bob now Bob's an
+old hand at Java but he's not an
+extremely principled coder he believes
+that speed is everything not just a very
+important thing but absolutely
+everything correctness is a bit of an
+afterthought he gets great satisfaction
+from writing clever code to get the most
+out of this application and he believes
+that trying some code out once or twice
+is plenty testing your managers assigned
+him to help you write some concurrent
+Java code I'm certain you're all very
+excited so of course this is a
+pedagogical exercise and imagine how
+imagine accepting Bob's help as a way to
+introduce you to some bad patterns of
+concurrent code if you're a novice think
+this is preparation for handling someone
+like Bob in your own organization or
+preventing you from becoming Bob to
+someone else if you're an expert think
+of this as a way to guide you through
+seeing some examples of these problems
+happening in real code we went and
+looked at the Tomcat Eclipse and Android
+benchmarks of sorry projects and saw how
+their code changed over time and what
+concurrency defects had been
+removed over a number of years and what
+ones hadn't we chose these projects
+because they are open source they have
+open get comments and in at least two of
+those cases open Bugzilla comments and
+you've all heard of them so you know
+that there's probably at least a few
+competent people working on them however
+they still fall victims to these sorts
+of problems so poor we move on the
+patterns that we do are gonna discuss
+here are very low-level these are going
+we're going to look at some monitor
+style concurrent code so locks weights
+that sort of thing and if you have a
+choice don't use these things as your
+first resort if you can try to use
+higher-level
+higher-level structures that hide some
+of these patterns from you if you have
+to write new code that involves these
+structures try to hide it behind a
+library or a higher-level structure of
+your own making however sometimes you'll
+be working with legacy code the
+instructions will be appearing in places
+where you wouldn't have chosen to put
+them but it may be too costly or too
+expensive or too unpredictable to change
+it to do something you'd prefer so the
+first thing we'll look at is
+multi-threaded lazy initialization or is
+it far too often is sacrificing
+correctness for speed so imagine that
+you want to lazily initialize a
+singleton in a single-threaded program
+this get inst function seems to work
+just fine this is in this function we
+have a inst which holds the singleton
+we've hidden it as private and we have
+this public method that will get inst
+and if it hasn't been initialized
+initialize it but when you test this on
+in your new multi-threaded code that
+calls it you end up with all sorts of
+problems it seems that different threads
+have different copies of the singleton
+just bad things happen so how would you
+go about making this a Heusen thread
+state function an easy answer but you
+might think of this des just to lock on
+some lock for the entire body of the
+function and you go check this in but in
+your code review Bob objects that this
+requires you to get the lock every time
+we're going to be
+just initializing at once why do we need
+that why do we need to acquire that lock
+every time that'll require us to block
+if it's held there's a performance
+optimization we can do so he suggests
+taking this code that we saw in the
+previous slide and changing it like this
+as you can see he's taking that check
+against null he's moving it outside the
+synchronized block and his reasoning is
+that since we only need to set in to the
+first time synchronizing to check for
+null is completely unnecessary so what
+do we think about this statement no I'm
+getting some mumbles of no from the
+crowd I'm assuming that people don't
+believe Bob's rationale here so to see
+why it's wrong Bob is indeed not right
+let's take a look at Bob's optimized
+code in action if it's called by two
+threads at around the same time so
+imagine that in thread one we start
+calling the function we check if the
+instance equal to null see that it is
+then thread one is paused thread two
+checks if it's is equal to null sees
+that it is thread one then starts back
+up goes through the rest of the method
+returns inst and thread two goes back it
+starts back up initializes inste ghin
+and returns it we have taken our
+singleton and we have made it no longer
+a singleton the takeaway here is that
+the JVM can start and stop threads at
+will you need to be very careful to
+prevent undesired interleavings like
+this one and one of the few tools you
+have in your toolbox is that holding a
+lock when the JVM may be randomly stops
+you now pauses you for a bit will
+prevent another thread from entering a
+critical section guarded by that same
+lock until you've because until you've
+finished and released it Bob's undaunted
+when you point this out in your code
+review and he says in that case I have
+an idea just how to check inside the
+synchronized block like so so now Bob
+claims now we can't have in to be
+initialized multiple times so what do we
+think about that claim is Bob right that
+this code can't be initialized moult and
+that inst can't be initialized multiple
+times this way actually the code will in
+still only be initialized once in this
+code but his code still isn't correct
+there's a different subtle problem and
+it all comes down to this line and what
+it actually means it looks pretty simple
+but it actually breaks down into
+multiple parts when we call new well new
+my hobbs will end up creating a raw my
+option this mob hasn't had any
+initialization done except every
+reference field will be set to null and
+every primitive fields such as int will
+be set to zero or something like it
+after that
+this will be passed as the dis object to
+the constructor which will perform the
+sorts of initializations that we
+actually want to have happen and after
+all that this will be assigned against
+so we can imagine that deep down in the
+bytecode this one line may be written
+may be rewritten to look a little
+something more like this so as you can
+see we've got the fields of this raw
+object being set to the values in the
+constructor and we in the end assign the
+raw object chanced but notice that none
+of these operations actually depend on
+each other that is if we reordered them
+in any order including say this one it
+would be just as correct from the
+perspective of the current thread so
+this may be giving you some uneasy
+feeling seeing that we have this check
+for null outside of the lock and do we
+have any guarantee about which of these
+orderings will end up happening and the
+answer is that we don't the JVM can
+reorder code including byte code that
+makes that makes up a single operation
+supposedly in - in many different orders
+and it does this basically to take
+advantage of the fact that some
+operations may be fast to perform the
+data that the member the variables that
+are involved are all real
+the CPUs cache but some are all the way
+out in main memory and so it will try to
+make progress on what it can while it
+waits for data to come from potentially
+a long time away so imagine if we so
+there's one so basically the JVM can
+reorder this code so long as the reorder
+the effect of the reordering looks the
+same to the current thread and so long
+as it doesn't move code out of a
+synchronized block or to the other side
+of it moving code around inside a
+synchronized block is perfectly okay so
+let's imagine what happens if we take
+that line and replace it with this
+ordering we saw in previous slide so
+once again we have two threads and
+imagine that thread one calls this lazy
+initializing getter checks offense is
+equal to null so you said it is acquires
+lock checks offense is equal to null
+once again it sees that it is
+initializes in stew the raw miops which
+has not had a constructor run on it yet
+now thread 1 is paused and thread 2
+checks of instance equal to null and
+inst is not equal to null instance
+contains a reference to this miyabi
+instance which has not had the
+constructor run on it which we promptly
+returned so we've returned an
+uninitialized my abs and the constructor
+is still running this can only lead to
+good things we may make decisions then
+on the fields being null which may not
+be the right ones or we may start
+storing things in my ops which are later
+overwritten by the still running
+constructor so this is a very well-known
+pattern I imagine that some of you in
+the audience know what it's called
+whatever you want to call it out yes
+this is double check locking and it is
+and although it's a very well described
+pattern you still see it a lot in the
+wild so what can we what can we do to
+prevent these sorts of bugs so an easy
+way to do this is to prevent for making
+that decision before everything is
+finished running just hold the lock
+while check in the field for null so we
+take away that outer check and just use
+this code instead if this code looks
+somewhat familiar
+it may be because it is we're right back
+to our original solution and Bob is
+furious about this he says this problem
+seems really unlikely is fixing it worth
+the extra slowdown so I would respond to
+this objection with two questions what
+slowdown and how unlikely Bob may be
+worrying about slowdown that doesn't
+exist anymore in the early days the JVM
+it was indeed true that acquiring a
+uncontested lock could be an expensive
+operation but nowadays that's no longer
+the case of mostly due to the
+optimization the lightweight locking
+optimizations in the JVM also in this
+how unlikely question remember that in
+computing unlikely can happen quite
+often if you've got a million different
+users using your codebase every day and
+this happens and one in a million chance
+you may be surprised at the amount of
+support calls you get about it so this
+um isn't just something that I made up
+this in 2004 a developer open up Eclipse
+bug that one right there very similar to
+this with this comment as you can see
+he's noticed some double check locking
+in the code he doesn't have any evidence
+but he says you know good coding
+practices let's get rid of this two
+years later someone someone who a
+maintainer comments saying that adding
+this synchronization here will cause
+measurable slowdown and to fix this
+properly we require at least three
+additional syncs the whole three so
+instead he added to do comments and
+moved on a month later someone came to
+complain that they were having a very
+hard to reproduce bug which they had
+traced back to this very same double
+check locking code and he left this
+comment in the bug which sums up my
+sentiments exactly on this isn't it
+better to have slightly less performance
+instead of possible threading bugs so
+here we have the actual code that was
+responsible we have this in a window of
+co-vary Connect this is the UI that we
+use to present defects that our analysis
+finds it as you can see it's running in
+a regular browser we have mechanisms for
+triaging code seeing if you think it's
+an actual bug how major it is etc
+but let's get rid of all that for now
+and let's focus on the code itself so as
+you can see this is a very classic
+double checked lock example we're
+checking if classloader is equal to null
+once inside the lock and once outside
+the lock and if classloader is not equal
+to null we return it if PLAs letter is
+is null after both these checks however
+we assign classloader this new VCO this
+new bundle class loader object this is a
+classic double check lock and indeed it
+had classic double check lock issues
+premature optimization has been said to
+be the root of all evil and I'd say this
+is especially true in concurrency before
+you make a clever optimization involving
+your locking remember that even if it
+looks okay to you rare bugs may be ver
+may be much more likely in a user's work
+flow than your own or in a testing
+workflow if you do have slowness that
+seems to be coming from locking check
+whether or not you have unnecessary
+contention see if the locks protecting
+too much data if it's protecting
+unrelated critical sections that is if
+the critical sections could be indeed
+guarded by entirely independent locks or
+if some expensive operations such as
+opening files or open being database
+handles can be safely moved outside the
+locked region so we just saw unsafe lazy
+initialization and let's talk a little
+bit about choosing your locks or what
+not to choose so you got some tests
+you've got a task to make the following
+code thread safe up till now it's been
+used by only one thread but someone
+wants to share it between two threads so
+now you have to know it has to be made
+thread safe so they can use it that way
+and as you can see we just have this
+items field which we want to it's a it's
+an array and we want to expand it by one
+add a new item to the end and copy the
+contents of the old array into the new
+one so as you think about how you would
+do this
+don't worry because Bob's got under
+control he already has his code checked
+in and sends a to you for review saying
+that he was going to lock on items and
+he's doing this because synchronizing on
+items will make it so that another
+thread can't change items so what do we
+think about this claim
+I see someone in the front groaning but
+that's what I did when I saw this but
+yeah this is actually a surprisingly
+common misconception and it comes down
+to a comes down to a misunderstanding
+what's synchronizing on a field does
+synchronizing on a field does not
+prevent another thread from making
+changes to that field it what it does is
+it acquires a lock on the object
+contained in that field so if the fields
+contents change it could end up in bed
+in a bad state as we'll see here so
+thread 1 calls that code locks on items
+assigns items to that temporary assigns
+this new this new arrayed items and puts
+this new item at the end of it the JVM
+then pauses thread one starts thread 2
+which turns which locks on items and
+this the previous lock on items actually
+doesn't exclude this one because it now
+contains a different lock and these
+different contents allow thread two to
+just blithely continue on in and assign
+items this new array and notice that
+we've made it so that it's as if this
+assignment never happened and who knows
+what problems we can run into when this
+array has null just sitting in one of
+its slots on this uh so this is bad and
+the takeaway for how to prevent this
+don't try not to lock on mutable fields
+instead of locking on something like
+items just create a new field which is
+used entirely as a lock make it as
+simple as possible type object or if
+you're using at the higher level block
+object and just use it only as a lock so
+this was actually responsible Tomcat bug
+four six nine nine zero and as you can
+see it's very similar to the code that
+we saw earlier here they have members
+which is an array object sorry a field
+holding an array object and as you can
+see we're going and assigning members
+some new contents right here
+sorting it which I'm certainly could
+only lead to good things if another
+thread ended up going into members and
+started messing around with that field
+so this we don't know whether or not any
+actual consequences came to this but the
+Tomcat developers certainly thought that
+it could this is a quote from their
+bugzilla saying that whilst there aren't
+any explicit bugs caused by this it may
+be behind some of the harder to
+reproduce bugs once again this is an
+unfortunate feature of concurrent sin
+book of concurrency bugs once you find a
+pattern that you know can be problematic
+it may be hard to ask the question of is
+this really causing problems in the
+field safer to just fix it and hope that
+in and hope someone doesn't prove you
+wrong so moving on to a different chunk
+of code Bob sends you the following code
+for review and as you can see this is
+once again lazy initialization of sorts
+we have this app CTX which is going to
+be the context for an app running in one
+thread but there's this sis CTX which is
+shared between multiple threads and as
+when the first time in app CTX gets
+assist CTX
+we want to initialize that singleton and
+return it so Bob claims that this code
+is correct because synchronized ensures
+this code is thread safe what do we
+think about that claim anyway so it's if
+it seems like people are seems like
+people are fairly solidly on the no camp
+but if anyone's unconvinced take a look
+at the fact that SC is that sis CTX is
+once again static which can end up with
+some problems so the quest so you may
+ask what is the synchronize modifier do
+synchronize modifier it sounds like
+something that may do something very
+clever it sounds like something that may
+do something intelligent looking at the
+code looking at the fields of the guards
+and choosing the exact right lock to
+protect them but it does something far
+simpler in the case of a static method
+synchronized just locks on the
+containment class object representing
+the containing class and for a
+non-static method like this one
+it's actually syntactic sugar for code
+that looks a little bit more like this
+so guts is CTX just locks on this when
+we enter and when we return unlocks and
+if we and so imagine that we have two
+apps CT X's each running each in their
+own thread and the code and their data
+structure may look a little something
+like this with ab c-- TX 1 and ab c-- TX
+2 having different different per object
+fields including their this which
+remains unlocked initially and they have
+and they share an SCT X which is shared
+between both of them so app C TX ones
+thread starts first locks on this
+manages to acquire that lock checks if
+SC TX is equal to null sees that it is
+sees that it is then AB C TX 2 s thread
+starts up locks on this once again is
+able to acquire that lock checks if SC
+TX is equal to null sees that it is puts
+a new value in SCT X and returns it then
+thread 1 starts up again and remember
+because they're locked on different lock
+objects they can't they can do this they
+can run at the hood run at the same time
+right there SC TX initializes is
+initialized to a new object which is
+returned and once again we have defeated
+our singleton pattern the takeaway from
+this is that you should always guard any
+field with a lock object that is shared
+as widely as it is so rather than
+relying on the synchronized modifier or
+synchronizing on this what we should do
+is to guard a static field we should
+create a static object which is used
+only as a lock and a lock on that
+instead this was responsible for Android
+bug I'm not saying all those digits but
+that one and as you can see once this we
+have this M system context which is
+static and initially assigned to null
+and once again we have this lazy
+initialization pattern that's get system
+context method we check at that system
+context is equal to null and assign M
+system context a new value if if it is
+and return it and if we had locked on a
+static Const sorry final field rather
+than this this would be perfectly fine
+but because while this was locked on
+instead it caused this bug which caused
+loss of display info username and
+permissions I really hope they weren't
+using 0 to mean something like root so
+let's talk about weight and notify or is
+it far too often as threads
+communicating poorly imagine we have a
+situation much like the following where
+thread one consumes results from thread
+two so we see that we have process item
+from Q which just tries to grab an item
+off the job queue per and process it and
+we have this put item in queue which
+will try to add an item to the job queue
+this code will work perfectly fine so
+long as job queue is never empty but
+what if it is this job queue is using a
+linked list so if you remove an item
+from a linked list that is that has no
+items you'll get a no such element
+exception thrown which is probably not
+what we want to have happen a wrong but
+simple way to solve this would be to
+just try to a loop until job queue is
+not empty but that's not a very
+neighborly thing to do to your computer
+it can we'll turn it into a nice little
+heat sink busy waiting is not what we
+want to do here so what can we do
+instead now before I go into this
+remember we're talking very low level of
+patterns if you can find a high level
+pattern and for this particular example
+there absolutely is one you should use
+it instead but you could solve this
+problem with the weight notify pattern
+the way weight notify generally works is
+you have these calls wait and notify all
+don't use notify use notify all the and
+what happens is when you call a weight
+on a lock while holding that lock
+the current thread stops running
+releases loc and it's placed on locks
+weight set wear weights say it's just a
+special structure that all locks have
+that keeps track of the threads that are
+waiting for them now when you call
+locked up notify all while holding lock
+this starts up all the threads they're
+in the weight set which all attempt to
+reacquire the lock and because they can
+only acquire the lock one at a time
+they'll one at a time complete their
+critical section release it so on the
+basic pattern is that you call late when
+your thread needs another thread to
+satisfy some condition such as making
+your job queue not empty and you call
+notify all when your thread has
+satisfied a condition for another thread
+by say adding an item to that job queue
+so here's just let's just look at how
+wait and notify may work in some program
+where we have the lock represented over
+here and as you can see this lock has a
+field that shows who it's locked by it
+has a weight set which is currently
+empty and this is where threads that are
+waiting to be notified on this lock will
+go and we have this set of threads that
+are currently blocked on acquiring the
+lock so you can imagine that thread blue
+can start up acquire lock call weight on
+it which will cause thread blue to
+release lock and be placed in the weight
+set leaving thread purple free to
+acquire the lock and call weight and
+thread red to do much the same thing now
+imagine that thread green acquires lock
+and calls notify all well notify all
+will do is it will just take the current
+contents the weight set and move it so
+that they are blocked on acquiring lock
+so once green releases lock one of these
+threads in this case purple well end up
+winning the race to acquire lock and be
+able to continue with what it was doing
+now notice that when knows that it
+wasn't blue the first or read the last
+that ended up kept getting lock you
+can't really predict which of them will
+win in this case purple in the middle
+ended up acquiring it after purple is
+done it will release the lock so on and
+so forth so Bob is very excited about
+this pattern and he writes the following
+code to use it to solve that problem so
+here you can see that he's trying to
+hold the lock as briefly as possible
+once again showing his characteristic
+tension speed and half and if he manages
+to if if the job queue is empty
+he'll acquire the lock wait on cue lock
+and and once the queue is no longer
+empty he'll remove an item from the job
+queue process the item in the other
+thread he's got this fairly
+straightforward add item to Q which
+choirs lock as an item to the queue and
+notifies all once it's done so what do
+we think of Bob's code here is it
+correct does it look pretty good the I'm
+going I as you probably can guess it's
+not the and to see why let's look at
+Bob's code in action we're going to see
+something very similar to the lazy
+initialization examples that we saw
+earlier so imagine that thread blew the
+consumer thread calls calls it's get an
+item from the queue and checks at the
+job queue is empty it sees that it is
+right afterwards the producer thread has
+started up locks on the lock adds an
+item to the job queue and notifies all
+to let all waiting threads know that
+there's items in the queue the condition
+satisfied you can wake up and continue
+on but the weight set is empty there's
+no threads to notify so notify all will
+end up being a no op and the producer
+thread will release the lock and
+continue doing whatever was doing before
+it called this function now the consumer
+thread starts back up acquires the lock
+and waits and remember the reason why
+it's waiting is to wait for there to be
+items in the job queue to process so the
+consumer is waiting while there are
+items in the queue and as it turns out
+unnecessary delays
+short unnecessary delays are the least
+of your worries here imagine if you wait
+on a stale condition you may get lucky
+and just get woken up by the next notify
+all that happens but what if the next
+notify all is depending on you waking up
+from that wait state imagine that
+through the producer won't put any more
+items on that queue until that job is
+consumed you can end up with something
+that looks a lot like a deadlock so in
+order to prevent these you should always
+check the wait condition while holding
+the lock Bob hears their complaints and
+comes back with a second version so he
+takes this code that he had before and
+he modifies it in the following way now
+the now he's doing a lot of stuff but
+the primary the primary thing you should
+notice for this talk is that he's moving
+this wait condition inside the locked
+region and now he claims that we will
+only wait when the queue is empty so
+what do we think of Bob's claim now and
+is his code correct no twitch
+the that's actually that's actually a
+good one and that's and that is a
+potential problem it wasn't the one I
+was aiming for because you actually
+don't even need multiple consumers oh
+yes he pointed out quite astute ly that
+if there are multiple consumers and they
+and and one item is placed into the
+queue they can both be woken up and both
+try to consume an item from the queue
+and one will end up getting the short
+end of the stick but we actually don't
+even need multiple consumers for there'd
+be a problem here and the reason why is
+buried deep in the wait documentation
+saying that a thread can also wake up
+without being notified interrupted or
+timing out a so-called spurious wakeup
+this is a slight infidelity that is
+introduced on a number of low-level
+operating system structures that object
+outweigh corresponds to for performance
+reasons including Linux so with this in
+mind if bob's running on a platform that
+has various wake-ups it can do this so
+the consumer calls this calls this
+function locks on the key lock checks if
+job queue is empty sees that it is and
+waits now if we're anything short of
+terribly unlucky eventually the producer
+will come put something in the queue
+will wake back up everything will
+probably be fine unless there are
+multiple consumers but if we're really
+unlucky we're having a very bad day
+today a spurious wake-up can occur the
+consumer will wait right back up remove
+an item from the queue and it will do
+this while the job queue is empty now in
+this circumstance we'll only get a no
+such element exception thrown but you
+can imagine that in other code that is
+less toy like the consequences could be
+far more severe so how do we fix this
+problem the standard way as recommended
+by the Java object I'll weight
+documentation is to just always check
+your weight condition inside of a loop
+so here we have this if statement that's
+being used to check the condition
+we'll just remove that and use a while
+now if we end up getting a spurious wake
+up and we end up waking back up before
+this condition satisfied we'll go
+background check the condition and see
+that we need to wait some more and wait
+again
+so this bug has also happened in the
+wild this is responsible for Eclipse
+bugs three six six zero four eight it
+was initially diagnosed as being a
+deadlock when control X was used to cut
+text in some circumstances it was
+eventually rediagnosis a wait occurring
+and never waking up it remains on fixed
+to this day but the time out on that
+wait was set to 30 seconds which is you
+know that works and here we can see the
+bug in two thousand four code you can
+see that we are acquiring this lock and
+deterministically waiting and there
+we've got something that looks a lot
+like the lake condition happening out
+there outside the try once again this
+remains unfixed as of four four at least
+so go check it out if you want to so we
+just saw waiting and notify and how not
+to do that so let's talk about there
+about how you can prevent new
+concurrency bugs of bees and other
+patterns and how to fix the ones you
+already have the first steps writing
+good concurrent code is not to get
+overly clever and not getting overly
+clever depending on what you're doing
+may mean don't write concurrent code ask
+yourself if you need a multi-threaded
+program in some circumstances you can
+well you can do perfectly fine with
+single thread and save yourself a lot of
+headaches ask yourself if you're direct
+if you want to use lazy initialization
+if you really need it if you've got
+static resources that multiple threads
+need to consult think about just eagerly
+uh early initializing it using static
+and see if any of your performance
+benchmarks notice and ask if there's a
+higher-level structure you can use for
+place wait and notify oftentimes wait
+notify don't need to be called directly
+you can find something higher-level that
+already wraps them for the purpose you
+want and Java dot util dot concurrent
+dot blocking Hugh actually does exactly
+what we wanted for that example we saw
+earlier if you call it you can
+if you call a certain method on it I
+forget exactly what it's called the
+behavior will be that if the queue is
+currently empty it will wait until it is
+not empty and then returning something
+hmm
+yes Pole I think was the one I was
+thinking of but yes but sometimes there
+isn't something that does exactly what
+you want and where sometimes it's
+already written this you're dealing with
+legacy code and it would be expensive
+and unpredictable to remove it so
+standard methods for testing and
+standard methods for preventing bugs
+helps somewhat education and code
+reviews are great for getting the rest
+of your team up to speed on these bad
+patterns and code reviews especially are
+a great way to notice if these patterns
+are coming in and use it as a teachable
+moment to prevent the person responsible
+from introducing them in the future and
+testing of course always good for just
+trying to scare out these bugs before
+they hit the field but their use can be
+a bit limited they're sorry their
+effectiveness can be a bit limited
+education and code reviews of course
+don't fix pre-existing problems it
+doesn't matter if you all swear a blood
+oath that you're going to write correct
+concurrency code from here on out if
+you've been writing it drunk for the
+past six years you're going to have to
+deal with that now for testing
+non-determinism limits the effectiveness
+especially if like most of us you're
+doing working with a test environment
+that is very simplified compared to what
+your program may be running in in the
+field so is there anything else we can
+do on top of that one thing that we were
+surprised to find in looking at these
+bugs which hadn't fixed is that many of
+them were found just through manual
+inspection like that Tomcat bug where
+the person just said hey I noticed this
+bad pattern you might want to fix it it
+was responsible for finding a surprising
+number of the sampled fixed defects that
+we found one tip we found in Bugzilla
+was searching for the synchronized
+keyword goes a long way anyway now that
+I've told you this super-secret secret
+to finding your concurrency bugs I'm
+certain you're all very excited to go
+back to your IDE and grep around for
+synchronized probably not because manual
+inspection is slow
+it's slow it's expensive actually if
+your developers are paid anything like
+market rates it's very expensive and
+there's no guarantee anyone will notice
+right away most of the fixed bugs that
+we had that we've saw in these code
+bases that have been found by inspection
+had been in the code for over three
+years before being noticed so given
+those downsides to manual inspection
+why not the Machine inspector code
+instead and this is basically what
+static analysis does static analysis is
+automatic code inspection just having a
+machine go look over your code see if we
+can find any bad patterns it knows about
+and tell you about them the open source
+static analysis find bugs finds many
+issues great piece of great piece of
+open source and a really great way to
+get started out finding some bugs but
+Coverity static analysis finds more real
+bugs with better explanations and a
+lower rate of false reports and also we
+integrate with fine bugs so you can have
+those as well if you want to get started
+using static analysis for free clarity's
+scan programmer provides our
+full-featured solution for open source
+programs you can go to scan covary com2
+set up there if we also have a limited
+edition of the analysis on Coverity x'
+code spotter or free to use software
+as-a-service analysis and we also have a
+course sale a commercial enterprise
+solution for proprietary software if you
+want to know more about Java concurrency
+and what to do and what not to do
+Java language specification is of course
+the great a great place to find out
+whether what you're trying to do really
+works the way you think it will Java
+concurrency in practice by goats at all
+is a excellent resource for finding out
+what to and what not to do
+this article Java theory and practice
+are all stateful web applications broken
+raises some great issues that you can
+run into with web applications that are
+trying to be concurrent and keep State
+and if you really want to be convinced
+that double check locking is broken go
+and check out this double check locking
+is broken declaration if you don't want
+to write down that whole URL it's one of
+the first things that pops up on Google
+when you search for double check locking
+is broken and they'll walk you through
+all the ways in which
+broken anyway that was the thought that
+was my I talked on um on on how not to
+do Java concurrency I hope you've
+learned something about what not to do
+and hopefully a few things about what to
+do instead and if you have any questions
+I'd like to open it up so feel free to
+shoot them out
+yes I'm sorry I am fairly certain I'm
+fairly certain it will be available for
+download I know that in seeing what
+presentations were like at this
+conference I looked at a bunch from 2013
+so I'm pretty certain it should be up
+there eventually I'm certain that we can
+get this posted at Coverity z-- co
+verities various blogs we do have a
+number of a number of blogs that talk
+about bad patterns in Java and C C++ and
+C sharp as well if you go to Co very
+calm I'm cert you'll be able to find
+them from there any other questions
+oh yes yes
+the arm so yeah so the question was does
+the question was if you do use
+higher-level mechanisms such as
+synchronized collection such as
+synchronized collections and/or other
+higher level patterns disco Verity find
+issues with that the answer is yes we do
+we have support for finding problems
+where you are non atomically using
+synchronized thread-safe collections or
+situations where or situations for
+instance where you are trying to work
+with the state of a java web application
+and you are using state that is thread
+shared incorrectly no problem anyone
+else
+all right well if there are any more
+questions which you would like to ask
+afterwards feel free to come on up and
+say hi but otherwise thank you very much
+for coming and see you around at the
+conference</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

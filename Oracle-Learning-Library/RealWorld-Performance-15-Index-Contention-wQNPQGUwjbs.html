@@ -1,0 +1,314 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Real-World Performance - 15 - Index Contention | Coder Coacher - Coaching Coders</title><meta content="Real-World Performance - 15 - Index Contention - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Learning-Library/">Oracle Learning Library</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Real-World Performance - 15 - Index Contention</b></h2><h5 class="post__date">2014-05-15</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/wQNPQGUwjbs" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">[intro music]
+[theme music]
+Today we are going to talk about index contention.
+And probably index contention is the most common form of contention that we see in any
+Oracle database.
+And the most common form of contention we see on indexes is
+usually a primary key index that is being populated.
+using sequence.
+And the reason being for this is that we are experiencing
+high transaction volumes. Each one of them creating a brand new record.
+And each one of them generating a sequence number.
+And as a result, because they are basically ascending values or keys,
+we basically, when we do the insert, 
+into the index to maintain the index structure,
+we have to keep walking down the right-hand side of the index tree
+and then everybody's going to want to
+maintain the most right-hand leaf block in the index.
+With that in mind, so everybody is
+focusing on one page of memory.
+And wanting to maintain that page and memory.
+And this is a classic form of contention.
+Now the reality of the situation is that only one person can modify
+that page of memory at a time.
+So that everybody else that wants to modify it needs to wait.
+And that's the contention.
+Now, we are talking about this
+in a very conversational way
+assuming things are working at human speeds.
+But you got, do have to bear in mind,
+that actually, we can actually
+change pages of memory
+thousands of times per second.
+But the reality of the situation is that
+we're very often wanting to do transaction rates at
+higher than just thousands per second.
+And so this is why things show up as contention.
+And, with that in mind, I'd like to show you some things associated with
+index contention. How to mitigate them.
+How common solutions, and sort of folklore solutions to the problem
+associated with index contention,
+may sound great in a meeting, but actually in reality
+will fall apart fairly quickly. And what we're going to do is we're
+going to take a very simple workload that we've been running in other
+Real World Performance demos, 
+And what we're going to do, slightly modify it,
+to initiate index contention. And then we are systematically
+going to work that contention out of the problem,
+but we are also going to scale up the system and make it bigger and we're going to make that system run
+not only on just one computer, but we are going to scale it
+across a rack cluster.
+So, in this workload you can see that we're running here
+is a very simple gaming transaction that we were running before.
+You can see the response time is steady. The transaction rate is steady.
+We're spending quite a little bit of time logging because it is a small transaction.
+but the rest of the time is on the CPU.
+And we've made the machine quite busy.
+Now what we'd like to do is we want to actually get more information from the application, so
+the application developers have created a brand new history table.
+to collect every card dealt in the game.
+And what we are going to is create a flattened structure
+of every card dealt and every decision made by every player in the game
+And we are going to put it into a big history table.
+Now that big history table is then going to be indexed on a surrogate key
+which we are going to make the primary key
+so we can effectively mark each row as unique.
+So very quickly, I'm going to put in
+from running no indexing
+and to put a B-Tree index on this additional bit of code. So we're doing
+an extra insert statement, but that insert statement
+is on a table with a primary key index using a sequence
+populated.
+Let's look at the impact on performance here.
+As you can see, it is quite dramatic.
+The response time has shot right up.
+The throughput has come right down.
+And you'll notice that the characteristics of the system have changed quite dramatically.
+From running at 60 percent utilization, we've dropped to 20 percent utilization
+and we are now experiencing a lot of Oracle database contention
+inside the database.
+We are seeing buffer busy waits, and TX index contention.
+So let's just sort of think about this. Although we have added code path to the transaction
+and we've gotten, in fact we've almost doubled the code path in the transaction,
+the CPU has got less because we can't run, because we are contending inside the database.
+As a result we are not running and we are not using the CPU,
+the transaction rate drops, and the response time increases.
+So at this point in time we've got ourselves in a spot of bother.
+If we had done this over a weekend, we'd suddenly find that our gaming site is running at a fraction
+of the transaction rate and we are probably starting to lose gaming people,
+who are wanting to play the game,
+because the response time is so bad. They'll take their business somewhere else.
+All because we basically extended the application to do one extra insert
+into a new table that had a primary key using a sequence.
+So, in terms of solutions for this, and you can go and research on the web and through manuals on this,
+there's a lot of solutions out there.
+And, what I'd like to do is go through some of the classic solutions that we see or is being suggested,
+and actually evaluate them, see how they work, and then let's critique them and see how good they work and how robust those solutions are.
+So, one of the first things we always go when we actually demonstrate
+the audience will always say, &quot;well why don't we just build a reverse key index on that primary key,
+because then you will have mitigated all the contention and spread all the maintenance the full width of the index.&quot;
+So let's do that.
+Let's build a reverse key index.
+On the structure.
+Let's see what happens.
+Well, you can see fairly quickly that the game is changing quite quickly.
+We've managed to get the transaction rate up 
+to almost half the level of where we are.
+So we are now running again back at CPU speeds, okay.
+So basically the transaction dropped between here and here, is associated with the additional code that we're running
+and we've managed to mitigate a large amount of the contention in the index
+associated with the work load.
+As a result, you can actually see that the CPU work load has come back up again, okay.
+So we're getting the CPU back up again, and the response time has improved, okay.
+So you can see at this point in time we've solved, we appear to have solved, our problem.
+One of contention...we can get the CPUs busy, the response time is better.
+But there is a problem with reverse key indexes.
+And the challenge associated with reverse key index is what happens when that index becomes bigger
+than your Oracle SGA buffer cache?
+Then, at that point, we are starting to incur I/O maintaining that index.
+So, I've already built one of these history tables pre-populated to a very large size.
+Let's have a look and see what actually happens when we have say
+run this application for a couple of weeks.
+And now the history table is getting quite big and we've got a reverse key index
+in place. Again, you'll notice that the performance is starting to degrade
+and in fact, it's degraded a lot more, marginally more, 
+than we had when we had buffer busy wait contention on the index.
+You'll notice that the AWR report or ASH reports are now showing
+the biggest wait event is based on read.
+You know, doing a physical I/O to re-read those index blocks
+back inside the applications into the buffer cache.
+It probably also fact that this index is now so massive it's displaced all the other blocks associated with
+other tables and index and the application or other applications running in the same
+database instance were probably degrading other applications as well.
+Because they are incurring more physical I/O. But again, as you can see,
+after a period of time, with our reverse key index, we've actually degraded the performance
+to worse than when we started off with just having in memory contention.
+We've actually got different forms of contention coming in.
+And in memory contention was actually cheaper than having an on-disk wait event.
+So, we've replaced one wait event for a slower wait event. And that was just because
+basically those blocks couldn't all fit inside memory, 
+and remember we can access structures in memory in microseconds,
+whereas now we are having to do physical I/O and referencing those blocks in disk
+it's going to take milliseconds. And the difference between microseconds and milliseconds...that's a thousand times faster.
+You can see quickly why the performance has now degraded to less than when we had in-memory contention.
+So I don't think we want to do that
+as our solution moving forward.
+It's one of those situations where the guy who made the smart move two weeks ago,
+is now being called back to to rethink their idea.
+We've showed that basically running a B-Tree with a sequence can cause in-memory contention.
+We've shown that a reverse key index can eventually cause us to do too much I/O
+which will slow the application down. So the next solution that is often suggested is
+to use one of, partition the index. Let's break up the index into lots of little bits by hash,
+such that instead of having one hot contention part, at the right-hand side of the index, how about we have
+lots of little warm spots rather than one hot spot? So, let's apply the partitioned
+the hashed partitioned index, to this problem. And, let's see if it can mitigate all this I/O
+and let's see if we can get the response time back, and the CPU back up again.
+And you'll notice that we've, to a certain extent we've achieved it by a hash partitioned index.
+So, within a single instance, we've now got to the situation where the hash partitioning has mitigated all
+the performance problems on the insert.
+Now, in the Real World Performance group we're always nervous
+about using partitioning
+as a means of solving problems associated with contention. 
+The reason for that is multiple, okay?
+One there is no guarantee that it will actually work and we'll show that moving forward.
+And the second one is by partitioning objects where they weren't partitioned before,
+we may introduce collateral damage.
+I'm sure people have partitioned up tables and then suddenly
+found that they can't get the same execution plans
+or something else has degraded
+on workloads not related to the insert.
+And so going in and actually partitioning an object to solve a contention problem 
+carries inherent risks and we call this just collateral damage.
+We may damage a lot of the performance integrity of other aspects of your application.
+Reporting, other queries, or even other transactions.
+So we are always nervous about recommending partitioning as a solution for contention.
+What we prefer to do is think about engineering a solution to engineer contention out
+in the application layer.
+We explained...we were reluctant...to partition the objects
+as a means of solving
+performance problems associated with contention.
+One, because we don't believe it works that well, although it appears to work quite 
+well single instance.
+And secondary the collateral damage that can be done.
+So let's think about that in terms of, let's take
+this current single instance system and take it up to two nodes.
+And by taking things up to two nodes, we're going to double up
+the number of connections to the database all doing the same
+gaming transaction. But, we've still got the hash partitioned index.
+But let's actually see what happens to the performance profile.
+and the throughput, as we double up the amount of equipment
+or the amount of hardware and let's see what the throughput is.
+Well the first thing to notice as we go to multiple instances,
+you can see that the CPU on both nodes,
+on what effectively the new node has come up, and it's the blue one. But actually the CPU load on the red system
+has actually dropped, okay.
+The thing to notice that the increment in performance of the throughput level
+was almost non existent, okay.
+Likewise, we see the response time increase, and now we have a whole new series
+of wait events inside the database
+all those GC buffer events, okay.
+So, by literally, even though we have a hash partitioned index structure
+and we've got, now we've moved to two nodes, 
+we look like we've got ourselves into a scaling solution.
+Now at this point,  we don't actually have a serialization problem,
+because we managed to divide the workload amongst all the hash partitions
+in the index.
+But what we have is a scalability problem.
+And the reason being for this is, I hinted at it earlier.
+Is the speed of access of blocks.
+If you can reference that index leaf block that you're wanting to modify
+And it is within your own buffer cache,
+You can modify it in microseconds.
+If you have to request to go to another instance and apply
+cache fusion to bring that instance
+across,
+that block will take a millisecond to come across
+the wire and then to be into your buffer cache
+that you can then modify.
+Now as you add nodes, the statistical chance of you finding 
+that block inside your buffer cache
+disappears.
+So with two nodes we have a fifty percent chance.
+You can see if we go to three nodes, we have a 33 percent chance. If we have four nodes, we have 25 percent chance.
+So as we add nodes it becomes harder and harder to
+get locality of data within your own buffer cache.
+And this locality becomes extremely and more important 
+because modification of a local buffer is a thousand times faster
+then the modification of a remote buffer.
+So you can see, even whilst we could have done hash partitioning
+which is a, very often, the traditional response,
+and will even get suggested by ADM reports
+when you see index contention.
+It doesn't solve the scalability problem.
+It solves the contention.
+But it doesn't solve the scaling.
+To get scaling such that you get performance pro rata with the amount of
+hardware that you use, we need to get some more cache
+affinity to ensure that the blocks are modified
+and kept within the instance that we are actually changing
+the block.
+So the final solution when making index maintenance scalable,
+not only within multiple CPUs within a single instance
+but also as we add instances in a rack cluster
+to make that insert statement scalable, is to ensure that
+basically we are able to get some cache affinity local to the instance.
+Now like all Real World solutions, we believe the solution is not associated with
+tuning and fiddling around with the storage and the space
+on the tables and playing around with parameters such as INITRANS
+and stuff like that.
+The best solution in all Real World Performance problems is to move the problem space up the stack
+more into the application.
+And for this problem associated with index contention,
+if we could control how we generated the surrogate key, and generated the 
+surrogate key in an intelligent manner,
+we could actually start to build in all the features into the key generation
+to ensure not only do we get good cache affinity to help rack scaling, 
+but also we could spread the keys around 
+such that we don't get contention within a single instance.
+So in terms of index contention, we actually have two challenges.
+We have inter-instance contention or scalability problems,
+and likewise we have intra---within an instance---contention and scalability problems.
+So what we have to do is start thinking about building a smart key.
+So a smart key will very often be going back to a line in the application code
+and actually figure out how we generate a series of bytes so that we know
+won't content. So one of the first things to think about doing is how about leading the 
+beginning of the key with the instance number.
+This will effectively redirect all inserts down to a side or to a portion of the index that is basically
+going to be where that index gets maintained.
+The cache where the index gets maintained.
+So if the leading bytes contain the instance ID which can be queried
+through SQL, we can start building some cache affinity associated with the insert.
+The second challenge is then when having located yourself within an instance
+we need to make sure that multiple instances...multiple processes within that single instance don't
+contend for the same piece of memory.
+So, if the middle bytes of your sequence or your intelligent key were say, something like a mod, 
+of the process ID, we would effectively
+be able to hash the maintenance of that index across multiple e-Memory blocks
+within an instance.
+And then a final set of bytes 
+would be your sequence number itself
+to ensure the reference and the integrity component 
+and making sure that the row is always going  to be generated unique.
+So what we would actually end up with is either an intelligent key
+or a composite key, of which the composite component
+all in one set of bytes, would consist of the leading bytes being the instance ID
+very often a MOD function of the process ID logged into the database.
+And then the final bytes to ensure uniqueness.
+So let me just show you the situation when we use a scalable key on a large
+index at this point in time.
+So, and see if we can actually make the scalability challenges associated 
+waking of the cluster disappear.
+And get the response time down, and get the CPU utilization up
+on both nodes. And as you can see, having gone and modified
+the code further up the stack and changed the key generation,
+we're back up into being able to get 2X the performance because we got twice
+the hardware. The response time is coming down.
+You can see that the CPU, CPU utilization
+on the machine has increased and now is
+steady state.
+And we're getting to a similar profile that we had when we ran
+earlier, when we were running contention free.
+i.e. we were running on the CPU and were spending time waiting for logging.
+This is a scalable solution and as well as a high performance solution
+that gives good response time.</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,1046 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>&quot;When the OS gets in the way&quot; by Mark Price | Coder Coacher - Coaching Coders</title><meta content="&quot;When the OS gets in the way&quot; by Mark Price - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Strange-Loop/">Strange Loop</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>&quot;When the OS gets in the way&quot; by Mark Price</b></h2><h5 class="post__date">2015-09-27</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/-6nrhSdu--s" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hello everyone my name's mark price I
+work for a company called L Mike's
+exchange we've built a low latency FX
+exchange platform this talk kind of came
+out of a lot of the work we've done in
+the last six months or so to tune the
+operating system to achieve as low
+latency and predictable latency as we
+could so I'm just going to take you
+through that their learnings that we got
+from that I should qualify first off
+this is the Linux operating system and
+the concepts will exist for Windows and
+OS X but the names will be different so
+if you run
+OS X in production this may not be that
+useful for you but there you go okay and
+first off a disclaimer it's not the
+operating systems fault then it gets in
+the way Linux is a really good
+general-purpose OS that does a lot of
+things but because it has so many target
+platforms phones embedded desktop laptop
+service it has to generalise low latency
+what we use it for is a very special use
+case so sometimes it's necessary to
+provide some hints the operating system
+for how you want it to act in order to
+get the results that you need so why
+should you care about this kind of thing
+it is quite niche so these techniques
+are useful in some scenarios so first
+off most applicable to my company are
+low latency applications where you need
+very fast and consistent response times
+and these are typically where your
+system end-to-end response times are
+under a millisecond that's the kind of
+area you want to be in when these these
+techniques really come into use also if
+you have very compute intensive
+workloads and you know that you're going
+to get benefit from just giving as much
+CPU resource as possible to your
+programs or if you have very long
+running jobs and you know that making
+sure that always-on CPU is going to
+shave a little bit of time off at the
+end so when the u.s. gets in the way
+they tends to manifest itself as system
+jitter so it is defined by the
+dictionary as a slight irregular
+movement variation or unsteadiness in an
+electrical signal or electronic device
+but more really
+ethically what you see is a variation in
+response time latency so if your
+customer is making requests to your
+system which do or should do the same
+amount of work from as far as they're
+concerned and they expect to see
+consistent response times which is you
+know fair enough and if I don't see them
+it's kind of a bad customer experience
+and so what you'll tend to see in most
+systems is a long tail in response time
+so the vast majority of requests can be
+serviced very quickly and in a
+consistent time but your worst case is
+often way out to the end and that's the
+kind of thing that we want to try and
+minimize with these techniques so how do
+you go about dealing with this first off
+the bad news is you have to take care of
+all the low-hanging fruit and this is
+generally going to be a software problem
+so if you're on a managed runtime like a
+JVM if you have garbage collection you
+need to deal with that somehow so a
+couple of different techniques you can
+either go DC free so you have to rewrite
+all your code use object pooling and
+that kind of thing or you can go down
+the commercial route and pay for a
+different runtime like thing which will
+just take care of that problem for you
+if you have any slow IO in your
+latency-sensitive path you need to
+either upgrade your hardware or apply
+caching or change your workflow so that
+you can do IO out-of-band essentially so
+that it's not going to cause you undue
+latency and once your response times
+when you've made these kind of changes
+are down under about the ten millisecond
+millisecond mark then you can start
+using these kind of techniques to see
+what improvements you can make and also
+you need to make sure your code is
+running it sounds obvious but as we'll
+see it may not always be the case and
+first off before we even start making
+any of these kind of changes
+measurements are really really important
+so we need to validate that any changes
+we're making are having the right effect
+and especially that changes you require
+in one place are the correct changes to
+make in another place ideally you need
+to have some entering tests which are
+going to mimic your whole
+request lifecycle through your system
+using realistic load so Lmax we record
+all our inbound production traffic with
+a network tap and then were able to
+replay that back into our performance
+environment at varying rates and
+multipliers of load so that we know that
+we're exercising the code and the
+hardware and the system in a realistic
+fashion so we haven't just kind of
+created this idealized view of what we
+think production load is so that's
+really important when we are making
+changes to systemic things it's really
+important to isolate your changes you
+all have to do one thing then run with
+that for probably the rest of the day
+see how that changes the measurements
+that you've made because if we start
+lumping in more than one change and
+there's a negative effect then you need
+to unwind that and do them one at a time
+any way to find out and bisect where the
+problems come from so if you just do one
+thing at a time then you never have to
+do that unwinding which is useful so
+before talking about exactly how we
+minimize system juicer it's going to do
+a slight refresher on what hardware
+looks like these days and so and just to
+define a few terms that we'll talk about
+so the chef's see is the physical piece
+of slab of metal that and you put into
+iraq in your data center and the chassis
+will have peripheral devices like
+network cards or disks typically you'll
+have multiple processor sockets on that
+chassis and each sake is treated as a
+Numa node and it will have a bank of
+local Ram which are connected by the
+memory interconnect so that the the
+total memory there is available to all
+the CPUs but there is kind of a cost for
+accessing memory on the non lieu
+non-local humanoid IO hence the name so
+the processor that's plugged into the
+socket will have a larger l3 cache that
+might be in the megabytes and the
+processor will have multiple physical
+cores each of those physical calls has
+an l1 and an l2 cache which are getting
+smaller as you go up the stack and
+running on the physical cause is
+construct called a hardware thread or
+hyper thread and that's the unit that
+the operating system can work with so
+when you open your system monitor GUI
+and you see that you've got four CPUs
+all churning away rendering web pages
+it's talking about hyper Thirds at that
+point and on pretty much almost all
+modern systems they will be sharing a
+physical core and the physical resources
+associated with that core namely the l1
+and l2 cache so hold that in your mind
+and will refer back to it a bit later
+our operating systems are multi tasking
+okay we will generally have more tasks
+than we have a number of hyper threads
+or units to do some processing so you
+know if you run PS or look at top or
+something like that there's always going
+to be more things in the list and there
+are CPUs on your box so the OS has to
+share out the hardware resources mainly
+the CPUs amongst any tasks that have
+become runnable and need to get CPU time
+so there's a question about how the OS
+should do this we probably would like in
+the perfect world it to be clever and
+fast but that would kind of imply a lot
+of knowledge on the operating systems
+behalf about how you actually want to
+run your application for it so fair is
+the what we end up with so the default
+and schedule are in Linux is the
+completely fair share jeweler so it's
+even in the name and this works by
+maintaining an order data structure of
+tasks per hyper thread and I quote queue
+because it's not really cute I think a
+ordered B+ tree or something and what
+happens is when the scheduler runs for a
+given CPU it will pick the task from the
+order structure with the lowest run time
+I mean that happens to be the head and
+it will put that task on to the CPU when
+it's runnable after that task comes off
+the CPU either because it's used up is
+in quantum or because some it's called
+schedule or something else has happened
+to take it off the scheduler will update
+the tasks run time and then it will
+place it back into the data structure
+and it will because of the orders from
+nature of the data structure find its
+right place
+given its runtime so far we can use
+programs like nice to set the priority
+of a thread which seems like a great
+idea if you want to kind of make sure
+your thread is always going ahead of
+other stuff but in CFS this really is
+just a hint to the scheduler that says
+I'd like you to execute this process for
+a bit longer when it gets on CPU I think
+in previous surgeries I actually had
+some effect on where it was ordered in
+the cube now it's just kind of a hint so
+it doesn't necessarily do what you would
+intuitively expect and tasks allowed
+bounced across all the hyper threads in
+the schedulers scheduling domains so if
+we have a situation where we have two
+tasks which become runnable in CPU zeros
+task queue then the scheduler when it
+wakes up it can schedule one and then
+see that we've got another runnable
+thread it can migrate it to a different
+CPUs queue so that in that way it kind
+of tries to keep everything ticking over
+nicely and spreading out processes to
+where there is resource right we're
+going to talk about an example
+application in order to kind of discuss
+an optimal use case for a reducing
+system shift it so what we have here is
+a data source which might be a network
+card or something similar and a thread
+which is reading from the data source
+and pushing messages onto a queue this
+is a shared memory queue which to other
+threads read from so as entries are
+added we have a logic thread which is
+trying to pull messages down as quickly
+as possible it does some stuff in memory
+and a journal of thread which in
+parallel is pulling messages off the
+queue and will write them to a journal
+and because we all like determinism and
+being able to replay things so this
+looks like a nice simple view of the
+world if we've got a 48 CPU box surely
+we're not going to see any system just
+so because all we care about three
+threads right so whenever I talk about
+these diagrams by the way these are
+threads okay so something that can
+become runnable on a CPU but this is
+idealism and as we all know idealism in
+reality our
+quite far apart from each other so
+what's really happening is your
+wonderful small component of a system is
+actually running within the language of
+runtime so in this case a JVM that will
+hold true for other runtimes
+and what we have within that runtime are
+other threads of execution so it might
+be garbage collection threads your
+application may have other threads you
+may have third-party libraries which
+have imported and started up threads so
+already the picture is a little bit more
+muddy too than our idealized view and it
+gets worse so running on the operating
+system this is responsible for you know
+effectively giving you an environment to
+execute your program in we have other
+threads which are either other user Len
+processes or housekeeping threads that
+the operating system will schedule from
+time to time so we can see that it's
+there's some pressure out there you're
+not always going to be able to execute
+the threads that you want because the
+operating system is trying to juggle
+everything for you so this through these
+kind of mechanisms just the jitter arise
+so if you want to talk about what's our
+optimal layout for minimizing latency
+what we want to do is try and optimize
+for locality so given our very simple
+application it's reading from some data
+source it's pushing messages into a
+shared memory cube and we have a couple
+of the threads reading from that cube so
+ideally if our data source is a network
+card we want to make sure that our
+processes are running on the same socket
+and Numa node as the network card
+connected by PCI so in this case we our
+producer thread on one of the CPUs on
+socket 0 the first one and now because
+we know it's going to be writing into a
+chunk of memory the cue we want to make
+sure that the other threads which are
+reading from that queue and hence chunk
+of memory are also in the same NEMA node
+because we don't want to pay the cost of
+going across the memory interconnect
+here and if we're lucky and our queue is
+small enough it will fit in l3 cache so
+we might not even have to go out to main
+memory to read from the queue which is
+the ideal case so given that we pack
+everything together one other thing
+it's worth considering is that these
+hyper threads are sharing the resources
+of the physical Court that means that if
+you're if your core is advertised a
+clock rate of 2.4 gigahertz saying you
+have two Hardware threads which are
+executing kind of concurrently their
+instructions will end up getting
+interleaved slightly so you'll get a
+lower clock rate than that is advertised
+you will also suffer cash pollution
+effects whereby you know your program
+running on hyper threads Eero can flash
+the cash that's used by a third one so
+what we do for the lowest latency is try
+and make sure that only one process was
+running per core and we'll see some ways
+of doing that in a few moments but
+really you're just trying to restrict as
+much as possible any kind of
+interference with your threads that you
+care about so on target deployment for
+our wonderful simple application looks
+something like this
+we're going to deploy our three threads
+that we care about for minimizing jitter
+to a hyper thread on a distinct core and
+we'll make it so that we're not running
+any other tasks on the sibling hyper
+thread sales come in pairs we're going
+to give the operating system a bunch of
+other CPUs to do all its housekeeping
+tasks on and the any of the kind of run
+times threads will give it a different
+set of CPU so everything is kind of
+nicely compartmentalised
+right how do I start simple first off
+start with the metal and the the BIOS
+settings you get on a server will not be
+configured for maximum performance
+probably most vendors kind of ship them
+with power saving features enabled
+because for a large data center usages
+where you kind of want to do compute on
+demand it's better for power costs and
+cooling costs if you throttled down you
+know various aspects of the system but
+that also has an increase effect on
+system latency and jitter so need to
+change the BIOS settings and I could
+spend the rest of the talk talking about
+that so I shall
+I'll crack on but this is what we want
+to do first because measuring these kind
+of effects in the software side is a bit
+harder so if you know you've got maximum
+performance enabled in your BIOS you'll
+be in a good place to start okay so
+having sorted out the metal and knowing
+roughly what kind of deployment we want
+to make for our application codes we
+need to discover what's available on the
+box because they're all going to differ
+in terms of their architecture LS top o
+is a very good tool for looking at your
+hardware it's part of a package called
+HW lock so if you're running Linux you
+can go and install that run LS top o on
+your laptop and it's an enlightening
+picture it displays for you the hyper
+threads the physical cores on your
+machine the Numa nodes and the piece
+area locality of any devices that you
+have plugged in and it looks something
+like this so this is a two socket system
+from one of our production servers the
+top socket has got four network cards
+and a scuzzy device in it and the bottom
+socket has got two network cards in it
+and we're gonna zoom in a little bit to
+see the cause because that's kind of
+what we're more interested in
+so zoom Ian Ellis opera is showing hyper
+threads so in the parlance of ALS top a
+that's a processing unit and this is the
+number that would show up on your system
+resource monitor or something like that
+or if you look in proxy PU info so that
+would be CPU 24 but we can see that it's
+actually sharing a physical core and
+that's that slightly darker gray square
+and then it will show you the caches and
+their associated sizes so each physical
+call here has an l1 cache of 64 K which
+is slippers split between instruction
+and data 256 K l2 cache there's a shared
+15 Meg cache for all the cores at l3 and
+so hopefully if our data structures fits
+in there will be very good for memory
+latency and it shows the new local ram
+up at the top which on this box is 32
+gig so that's like my other diagram but
+flipped upside down and because I did my
+diagram first
+right so we know what's available what
+we need to do now is reserve it and use
+it so techniques for doing that I
+thought CPUs we can use to isolate CPU
+resources this is a boot parameter
+supplied to the kernel so you can change
+your grub com4
+or whatever equivalent for your distro
+and so we're going to say to the kernel
+I'm going to isolate from you CPUs 0 to
+5 and 10 to 13 and then we can use the
+task set command to pin our application
+to a subset of those CPUs so I'll say
+because I'm running a JVM task set - C
+10 to 13 Java and this says for the
+executable that you're about to execute
+an any child for its spawn from it I
+want you to restrict the CPUs they run
+on to 10 to 13 and then we set the
+affinity of our hot application threads
+using the shared set affinity system
+called and it's just a standard sequel
+if you're in non-si context then you'll
+need to import some kind of library
+which can make the call for you there's
+a bunch of open source libraries that
+will do that from Java so that all
+sounds terrific easy so given our
+example deployment we are using shed set
+affinity to set our important
+application threads the OS will end up
+running on everything that's not
+specified by ISO CPUs I probably pick
+the wrong conference to come up with my
+own destroyed set notation that they go
+and task set is used to limit the JVM
+housekeeping threads and anything else
+that's spawned to these CPUs over here
+so we seem to have achieved our goal
+which is good but there's a problem and
+that is that we have taken these CPUs at
+the end turned to 13 away from the
+scheduler who has this excellent
+function of load balancing threads so
+what happens is the when we use task set
+and we execute the Java command that
+executable is executed on CPU 10 and
+then any child threads which are spawned
+from them also execute on CPU
+and there's no schedule er to load
+balance those across the remaining four
+CPUs so you end up with everything
+running on one CPU which is fairly
+disastrous so it was a good attempt it
+doesn't work so we'll need to find an
+alternative so and there are many
+solutions I'm sure the one we ended up
+pumping for was CPU sets it gave us the
+best results so this is just one way of
+doing this CPU sets is a program based
+on C groups which is a Linux construct
+for kind of carving up resources and it
+allows us to create hierarchical sets of
+reserved resources we can reserve CPU
+memory a/c groups can go further into
+other devices but leave that for another
+day and it has some user lam tools which
+a nice C set is the main operator it
+comes from the Susi distro but you can
+get it built for other distributions and
+it will allow us to programmatically do
+what we're trying to do before and with
+ice or CPU so there's a lot of text here
+but the C set set command operates on
+sets so this says create a set called
+system with CPU 6 to 9 and then we use
+the proc move function to move
+everything from the root set which is
+kind of everything to the system set and
+there's a few extra flags that you want
+to add to that if you want to try this
+out
+- kay moves and bound kernel threads so
+there are other threads spawned per CPU
+by the kernel which will occasionally do
+some work they don't actually have to
+run there so anything that can be moved
+this will shift them - - threads moves
+child threads because there's a race
+condition in that while a process is
+being moved it might spoil a child
+thread which would end up on the wrong
+CPU set and force does force there's no
+documentation of what it does but it
+doesn't do any harm so switch that one
+I don't think it doesn't harm more thing
+okay so schematically we have the root
+CPU set which has CPUs 0 to 13 on this
+mythical piece of hardware which doesn't
+exist anywhere because no one would
+choose those numbers and we've created a
+system CPU set with CPUs 6 to 9 and
+shifted all the processes there so
+that's kind of doing the same thing as I
+saw CPUs did for us okay after isolating
+or getting rid of the OS resources we
+now want to run our application in the
+same way we did before we're gonna use C
+sets again to construct a CPU set called
+app and the next thing to do is use the
+executive command and we'll say I want
+to execute in the app CPU set this
+command and then we're using tasks again
+to restrict the sort of parent
+application to CPUs 10 to 13 and again
+using shared set affinity to pin the hot
+threads to CPUs 1 3 &amp;amp; 5 so we've gone
+from having a root CPU set which
+contained everything to the system 1
+we've shifted stuff there and we've
+created an app CPU set where we're going
+to run our program and that looks like
+this so we're using shed set affinity in
+the app CPU set because we're now in
+control of what's being scheduled in app
+we know that nothing else is going to be
+put on the sibling hyper cause hyper
+thread Sri all the OS stuff runs in
+flash system and using tasks set to
+restrict and the runtime and it's child
+threads everything's going to run on
+those CPUs there now the nice thing
+about this is because CPU sets is
+effectively just creating a new
+scheduling domain for the scheduler to
+work within we now get proper load
+balancing across the CPUs at the end
+there so the whole VM on one CPU problem
+has gone away which is good
+no more Jessa
+so this is all this kind of makes
+intuitive sense I guess like you know
+you're you're taking your threads that
+you care about and you're giving them as
+much resource as possible but being good
+scientists we want to kind of have some
+kind of experiment confirm our findings
+and so if if we'd been doing our
+measurements end-to-end we I expect that
+you would see a fair bit of improvement
+after doing this kind of work for
+application because you know there's
+going to be a lot less scheduling
+pressure on them now but we only look a
+little bit deeper just to make sure
+there's nothing else going on so at this
+point we can turn to one of the Linux
+traces called Perth events
+it's a sampling tracer in the Linux
+kernel so it just kind of samples events
+for you when you tell it to it can use
+the static trace points which are
+compiled into the kernel source if you
+build with config debug it also has the
+possibility of inserting dynamic trace
+points into libraries which is pretty
+cool it's very low overhead because if
+it's something nature so it's it's quite
+good for looking at a system under load
+and knowing that you're very unlikely to
+perturb the system and cause some real
+effects just by trying to inspect it
+it's not Heisenberg it's good starting
+point for Deeping digging deeper so
+because it's a sampler you don't get
+everything but over time you can build
+up a picture of what's going on and it
+will tend to give you a hint of where
+you want to go and look next once it's
+installed perfo lists will show all the
+available trace points also does
+hardware counters and hardware events
+that I'm not going to cover here and
+there's lots of different classes of
+event groups so this stuff for network
+stuff with file systems or the scheduler
+and we're going to be looking at regular
+events because we know the scheduler is
+responsible for moving tasks on and off
+CPU so we can use that to make sure that
+our assumptions hold true so we can ask
+a CPU what's happening and the way we're
+going to do that is by running this
+command and this says to perf I would
+like you to sample all the tasks which
+events emitted by the scheduler on CPU
+three so if we remember from our diagram
+I think that's the one that has the
+logic thread on it so we're hoping that
+there shouldn't be any tasks of
+scratching
+that's bad and introduces jitter once
+you've captured some data perf report is
+will take that binary file and render it
+into human readable format and perf
+reports really good if you've got
+multiple different event types you can
+use it to kind of drill through and
+it'll tell you percentages of what
+counts of events and things like that if
+you just got a single event and you just
+want to see the stream perf script
+basically just dumps the event trace for
+you which is best for this case so this
+is the output from trying to record
+share sort of shed switch events on that
+CPU while this application was running
+although it can immediately see is that
+we've got two processors so there is
+task switching going on so just looking
+at what's contained in that event first
+off it tells us the program that was
+executing when the scheduler emitted
+this event I've got the pig this is the
+timestamp to microsecond precision which
+and I think it's uptime in seconds since
+the debug file system was mounted so you
+can work backwards and roughly convert
+it to wall time but it's a bit never
+quite exact and then this is the event
+so we were only recording shed switch
+events so this is all we're going to see
+and then each event kind of has a printf
+format associated with it so they all
+have different and parameters when they
+print out so for shared switch events
+what we see is that the the process that
+was moved off the CPU was this pig
+running with that priority and it's
+state was runnable so it wasn't ready to
+yield the processor it wanted to
+continue consuming CPU time but it was
+kicked off in favour of K worker program
+which was the thing that was then
+scheduled on and we can see from the
+timestamp so and so that was that was
+our Java process being kicked off and
+then a few microseconds later the K
+worker thread moves off again and Java
+is put back onto the CPU and the Delta
+there is about five microseconds so not
+a large amount of time but you know our
+process was taken off the cpu at state
+had to be saved something else was moved
+on which could invalidate caches and
+then our Java process got back on to
+continue its work so it's going to have
+some kind of effect on how how quickly
+we can process messages and and this bit
+here is telling us that the K worker
+thread was in the sleep state when it
+came off so what happened by the looks
+of it it was woken up and scheduled its
+fans that have no work to do and
+immediately put itself to sleep and that
+sort of cycle took five microseconds so
+not a lot in this case so now we've got
+some evidence that our world is not the
+happy place we thought it was and we're
+still got contention for CPU resources
+so one approach we could take is to try
+and find out what is this thing doing
+why is it being put onto the CPU to do
+that because it's good to introduce
+these things we could use F trace which
+is another limits kernel tracer this is
+the function tracer it uses the same
+static and dynamic trace points as
+performance it has a much higher it has
+a higher overhead because it records
+everything into percy pu ring buffers so
+it kind of puts that and responsibility
+onto you or executing program but it
+captures everything so if you are more
+interested once you've built up a kind
+of a broad picture using perf and you
+want to actually focus on something very
+specific F traces is the point where you
+can start recording everything to see
+what's going on and it can provide
+function graphs of kernel function calls
+which is something that's very cool if
+you like that kind of thing
+there's a thing you'd actually want to
+install the trace command otherwise it's
+just echoing values into file systems in
+the debug file system which is well you
+can crash box is quite a lot doing that
+whereas this at least makes an attempt
+to and stop you from shooting yourself
+in the foot right so we could use this
+function tracer to have a look at what
+that K worker thread is doing okay and
+to do that we'd use trace of command
+record and this says I would like you to
+choice trace all kernel functions that
+are being called by the process
+specified by pit now we know what okay
+worker threads pitties so we can run
+this leave it running for
+you know how long we need to and then
+control see it and it will write some
+data to a binary file locally whereupon
+we can use trace command report which
+will display the capture trace data in
+something remotely like human readable
+format and that looks like this so what
+we can see is that the K worker thread
+was executing on CPU 3 which is what we
+expect we have the same microsecond
+precision timestamps and it will show us
+essentially the method calls in the
+kernel source code which are executed so
+these function names up here you can go
+and have a look in the kernel source
+code and they exist and F trace the
+function graph plug-in will tell you how
+long a sort of a method call of depth
+one took so you can see our x there in
+their sort of hundreds of nanoseconds or
+tens of nanoseconds and the other really
+nice feature is that when it pops out of
+a block of code it will report to you
+the cumulative time that's spent in a
+block of code so this is interesting we
+can see that the process one work
+function which contained a function
+called cache Reap and i've elided a load
+of lines there took 86 microseconds so
+before we saw that our process was only
+switched out for five microseconds here
+it was 86 which is somewhat more
+significant no that's slightly higher
+than it would be if we hadn't been
+tracing because you're pushing some
+overhead onto the executing process
+there in this case the cache root
+function we can't actually defer it if
+this was worked but it is necessary to
+be done so we'd have to find other ways
+around this problem so that's a very
+brief Whistlestop tour of how to use
+traces to look for system disah so when
+trying to reduce disser in the limit
+service there's a few good things to
+look out for and one is the cache read
+function which was just seen that's a
+property of the slab allocator which has
+been replaced in more recent kernels
+with the slub allocator which doesn't
+have to execute these recurrent jobs per
+CPU when we were doing our in to end
+tests and we made a change to the sub
+allocator we saw that I mean latency
+actually crept up a little bit
+so it wasn't intuitive but we found that
+the slave labor kata was fast enough for
+our use case that it was better to have
+this periodic interruption which happens
+every two seconds or so so there's
+another good reason for having your
+end-to-end test though and be able to
+compare these kind of things because
+intuitively it should be better if our
+threads are not being kicked off the CPU
+but for whatever reasons that was a bit
+faster the VM star update function will
+be executed on every CPU every second
+this is something the kernel does to
+generate stats so you load averages and
+things like that other work queue events
+the the K worker thread is there's one
+of them per CPU they they're bound
+kernel threads you can't move them and
+there's sort of a general dumping ground
+for work that needs to be done on the
+kernels behalf so now that we kind of
+know we're looking at work queues we
+could use the perf events starting with
+work queue and that would allow us to
+see any other kind of working events
+that are going on there so we've kind of
+seen that there was a thread which is
+being executed we found out what its
+function is and what it's doing and then
+found a class of events which we can
+trace to see okay and I now want to see
+all the kind of work that's being queued
+and then we can try and research if
+there's a way to minimize the cost of
+those interrupts whenever a hardware
+device fires an interrupt that's going
+to be surfaced on one of the CPUs in
+your system and be chosen by the driver
+and probably and you you can't stop
+there interrupting your process so this
+is something that we also want to stop
+it's possible to set the affinity of the
+our queues in the proc file system so
+you can at least you have to be a bit
+careful about where you put them but you
+can at least try and stop them from
+firing on the CPUs where you really care
+about latency timer ticks are they're
+kind of an interrupt as well you can't
+move their affinity they're going to
+happen and there is a config setting
+when you build your kernel that says how
+often you want each CPU to be
+interrupted on our servant machines it's
+a thousand times a second on my laptop I
+think it's every four milliseconds and
+but
+this is seems a problem for a long time
+so there's some work from the real-time
+patch set merged into the mainline
+kernel a while ago that does something
+called tick list mode where if the shed
+you'll notice is that there's only a
+single runnable thread on your CPU and
+there's nothing else in the task queue
+and it will just turn off ticks for that
+CPU for a given amount of time and using
+that and what we see is that you can
+then run for several seconds without any
+kind of interruption on your CPU
+otherwise you'll be getting your process
+will be kicked off by the hardware
+interrupt a thousand times a second
+which isn't ideal CPU speed the our
+laptops and our servers again they're
+kind of built for trying to minimize
+power draw and cooling costs so the
+default settings for these kind of
+things will be to scale down CPU speed
+to try and reduce power draw there's
+file systems on modern kernels where you
+can go and change these kind of things
+to basically turn them up to 11 so that
+they're always stressing the fan so
+there's just a few things that you're
+going to come up against mmm so I've
+pushed a load of information and I'm
+going to talk about some numbers now
+because so you could all do with a break
+so we're going to use inter thread
+latency as a proxy for system jitter so
+we're gonna and this is what the example
+application that I talked about actually
+does it essentially is passing a message
+from one thread to another thread which
+has been he's busy spinning trying to
+wait to receive that message and if we
+look at the time taking between the
+producer and the consumer through that
+queue that will give us a rough idea of
+the jitter signal within our system so
+if we run it and we record those times
+over several seconds we can then kind of
+build up a distribution of what kind of
+jitter we're getting in our system and
+then we can compare the untuned and the
+tune system and see are these techniques
+any good do they actually do anything
+mmm so the numbers these are nanosecond
+values for inter thread latency the
+untuned system is actually not bad on
+this box but you can see that the the
+tune values for the mean
+is about double and then we just kind of
+list them for increasing percentiles but
+pretty much every case it's double for
+the untuned system in the time taken to
+get between those two threads and the
+max here is the same because there was
+some event on that system that happened
+to take that hit both those runs and I
+saw what it was but with the chain
+system it should have been a bit lower
+so a picture just to show you how that
+looks and what I don't report is
+anything past the four nines on those
+those number charts so you can see here
+that the red line is the tuned
+application the Green Line is the
+untuned application so it's still into
+thread latency
+we've got nanoseconds on the y axis and
+then it's log scale for each of the
+percentiles going out so you can see
+they tend to diverge quite rapidly after
+about the four nines if you look about
+in a log scale you can see that no
+matter where you take the measurement
+you just about you're always doing
+better in the teen system so you're
+always going to get less jitter wherever
+you are so this these numbers are not
+terribly impressive you know we're still
+talking you know in the in the tens
+twenties or hundreds of microseconds but
+these tests were run on a 64 CPU box
+that had had all the right by all
+settings put on it and was effectively
+idle so it was it was running a you know
+stop clinics where it wasn't really
+doing much so there was no scheduling
+pressure but in the real world that's
+not going to be the case so these kind
+of techniques are really useful when you
+have especially if you have to deal with
+bursty workloads so you can imagine
+you've got part of your application
+which you want to run really fast but
+you also have to service bursts of
+traffic or maybe lots of inbound network
+connections and your systems behavior
+might be to spin up a load of threads to
+deal with those inbound connections and
+then suddenly you've got contention for
+your CPU resource and scheduling
+pressure which is not evident in the
+numbers are shown so far so if we modify
+the application so that it spins up a
+thread per CPU that wakes up every I
+don't know 10 or 13 milliseconds I think
+and does a busy spin for a little while
+we're effectively introducing a real
+workload where we will get shuddering
+pressure and there this method starts to
+come in handy a bit more so this is a
+loaded system where we're just
+effectively every 30
+also trying to push our important
+threads off the CPU occasionally now the
+unchain system our max latency between
+two threads goes up to over 800
+microseconds and the four lines is a lot
+higher as well whereas the chain system
+is staying pretty much straight down the
+line really good latency and this is
+because we've all our tunings have
+effectively reserved the CPU resource
+that we want and we know that we're not
+going to get any spurious shedding
+pressure that's going to kick us off the
+CPU and a bit more instructive there and
+so we can see the red line is the tuned
+system untuned after the three nines
+just goes through the roof at that point
+your users are not having a good day so
+although on a very quiet system it
+doesn't look so impressive if you do
+this kind of thing when you've actually
+got some real load you'll you'll see a
+much bigger difference there right
+so in summary select threads that need
+access to CPU and if your application
+has important work that needs to be done
+and done in a low latency manner
+identify what those processes are take
+some CPUs from the OS hopefully you've
+got enough CPUs for the threads that you
+need to be low latency if you haven't by
+a bigger box or shard pin the important
+threads to those isolated CPUs so that
+you know you're not going to get any
+contention and don't forget about
+interrupts which can cause you jitter
+that we load small things I've covered
+just a few but it's a it's like an
+endless learning process and always
+always always test your assumptions so
+probably the most important slides are
+about making sure you can measure it
+when you're making changes and the tools
+you can use to check that your
+assumptions are actually valid and that
+there's not something else happening on
+the system that you don't know about
+right and there's we blog about this
+kind of stuff for Lmax so if you're
+interested in low latency and high
+performance stuff and there'll be some
+interesting blogs you might like to read
+and there's a github repo which has the
+example application and a walkthrough of
+these kind of techniques so you can try
+it out and see if it you can get some
+interesting numbers or if it works for
+you and if you want to talk come and
+grab me or give me a line on twitter
+thank you very much</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

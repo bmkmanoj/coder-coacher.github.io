@@ -1,0 +1,1998 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Teresa Johnson “ThinLTO: Scalable and Incremental Link-Time Optimization” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Teresa Johnson “ThinLTO: Scalable and Incremental Link-Time Optimization” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Teresa Johnson “ThinLTO: Scalable and Incremental Link-Time Optimization”</b></h2><h5 class="post__date">2017-10-15</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/p9nH2vZ2mNo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">Hi, I'm Teresa Johnson.
+I work at Google on the C++
+Compiler Optimization Team.
+And the work I'll be talking about today
+has been implemented in the LLVM compiler.
+And implementing that was a collaboration
+with some of the people
+from LLVM compiler,
+namely Mehdi Amini who was at Apple
+and recently moved to Tesla,
+as well as David Li
+who was also at Google.
+And I'll be talking about ThinLTO.
+And this is a new framework for scalable
+and incremental link-time optimization.
+And before I get into what ThinLTO is,
+I'm gonna take a step
+back and describe actually
+what link-time optimization is,
+'cause not everyone may
+be familiar with it,
+and talk about why you
+might want to use LTO,
+but then what some of the issues were
+that caused us to have
+to design a new approach.
+I'm hoping by the end of the talk
+that you will feel that
+ThinLTO is something
+that you can enable in your,
+hopefully in your day-to-day development.
+Okay so looking at just a
+traditional compilation,
+normally you have a bunch of processes
+that each parse of C++
+code translation unit
+and turn it into IR
+which is the compiler's
+internal representation
+of that source code.
+And then feed it through
+a bunch of optimizations
+that operate on the IR and then finally
+generate native code into .o files.
+And then after all those are done,
+you go ahead and link all
+this native object code.
+The compiles here are
+completely independent,
+and so you can completely
+paralyze these processes.
+You can either make-j
+with a high parallelism
+factor or if you have
+a distributed build system
+like we do at Google,
+you can farm them all off to
+different remote build nodes.
+And so you can speed that up
+quite a bit with parallelism.
+The limitation of course is that
+each compilation doesn't
+have any visibility
+into what is defined in
+other translation units.
+And so that kind of limits
+some of the optimizations.
+Link-time optimization was designed
+to deal with that limitation.
+So for link-time optimization in Klein
+when you say dash FLTO what happens
+is that the compile stuff,
+it still does the parse thing and
+does some optimizations on IR,
+but you no longer do code generation.
+And so what is emitted
+into the object files
+is actually the compiler's
+internal representation
+and it's serialized out in
+some kind of binary format.
+For LVM this is called bitcode.
+And now when you pass off all
+these .o files to the linker,
+the linker needs to have
+some way of invoking LVM.
+And so if you use the gold linker,
+there's an LVM gold plugin.
+If you're using LLD which is
+the LVM project's own linker,
+it includes LVM.
+So what happens is these IR object files
+get passed off to LVM and what LVM does
+is it merges all of the IR into this
+large monolithic unit
+that we call a module.
+And just a quick note
+on nomenclature here.
+I mention modules,
+unfortunately this is
+a little bit confusing.
+It's not C++ modules.
+In the compiler we tend to
+refer to translation units
+as modules in their
+internal representation,
+just to be extra confusing.
+Okay so now we have this
+large merged IR unit
+that has all the IR for
+the entire application,
+and we can actually run
+that through the optimizer.
+Perform inlining across it,
+finally do code generation
+and generate this
+large native object that's
+passed off to the linker,
+which then generates
+your application binary.
+And this happens completely
+transparently to the user.
+It's all under the covers, essentially.
+So you do dash FLTO, you
+get some .o files out,
+you pass them off to the linker.
+You get an application binary back.
+And we call this a
+monolithic LTO implementation
+because you have this large
+monolithic unit of IR.
+So why do this?
+Well as you might have guessed,
+the number one reason is for performance.
+When you merge all of
+these IR units into one,
+you now can perform
+cross-module optimization.
+So things that were originally
+defined in different translation units,
+now you have full visibility.
+And the largest benefit
+comes from inlining.
+So inlining calls functions that
+were defined in one module
+and one translation unit
+into call sights that were
+originally in another one.
+Another benefit can be binary size.
+And this is one of the advantages of
+doing this as a link-time optimization,
+because the linker is
+invoking the compiler,
+and it passes in some linker information.
+And so the linker will tell the compiler
+what symbols need to
+be externally visible.
+What are exported.
+And anything that's not
+exported from the unit
+that's being compiled can be internalized.
+And once we've internalized it,
+now we're basically telling the compiler
+that you see all references
+to those symbols.
+And you can do some more aggressive things
+like dead strip away things
+that aren't actually referenced,
+or auto-hide symbols.
+And another thing you can do is,
+and here's some speed up
+results for benchmarks with LTO.
+And the biggest performance improvement
+actually comes from
+single source benchmarks.
+So they're not getting
+cross-module optimization,
+but what they are getting is again,
+linker supplied information
+that tells the compiler
+that you can internalize
+symbols that aren't exported,
+and now you can do much more
+aggressive analysis and optimization.
+You can do better alias analysis,
+you can do constant pull,
+you can do a whole bunch of things
+that you couldn't do
+without that information.
+All right so an example
+with two source files.
+And the important thing
+here to note is that
+one of them has a static
+file static variable I.
+That's initialized as zero,
+there's a set of it to minus
+one in one of the functions,
+and then an if condition
+that checks the value.
+And when we compile
+this through numeral O2,
+we are guaranteed that we're seeing
+all possible references to the
+I because it's file static.
+But we don't know whether
+foo2 is called or not.
+So when perform LTO on
+those and we merge them,
+and again when we merge them it's really
+we're merging the compiler's IR,
+but I'm showing that here with source code
+just because it's easier to look at.
+So pretend this is the
+compiler's IR that's all merged.
+The linker tells the compiler that main
+is the only exported symbol.
+So everything else can be internalized,
+and that's represented here by
+turning everything else into file static.
+And then what the compiler
+does is reachability analysis.
+It starts at the exported
+symbol main and then
+follows through the calls
+to see what is reached,
+and it finds out that lo and behold,
+foo2 is never actually called.
+So we can use that to
+dead strip away foo2,
+and with it the right of minus one into I.
+And now that I is only zero,
+we can constant fold that test away,
+which removes a call and we get rid of it,
+that's then the last
+call to that function,
+we remove it and that
+causes some other clean up.
+And eventually we can
+perform some inlining
+and constant propagation into main,
+and main just looks like this.
+So I mean this is somewhat
+contrived for this example,
+but it's a good idea of
+what benefits you get
+from the combination of
+cross-module optimization
+and the linker supplied information.
+So that's great.
+But LTO has been around for a while now,
+and not really a lot of people use it,
+particularly in day-to-day development.
+So why is that?
+Well the first thing is
+now that we've taken those
+optimization pipelines
+which were fully parallel
+and we are running the entire
+combined application's IR
+in serial through the
+optimization pipeline.
+And so we've removed a lot
+of parallelism and it's slow.
+So I'm showing here some numbers for
+an LTO compilation of clang,
+the clang binary itself,
+compared to a non-LTO build,
+and it's around four times slower.
+And even worse for incremental builds.
+If you fix a typo in one source file,
+for a normal O2 you would
+just recompile that one file,
+relink, you're done,
+it takes a few seconds.
+In LTO you recompile the two IR,
+but then you have to perform the whole
+merged IR optimization
+part of your compile again,
+and that's really really slow.
+It also requires a lot of memory.
+Because you're keeping the entire
+programs IR in memory at once,
+this is expensive.
+And you can do some work to try to
+you know prune and make your
+internal representation more efficient,
+so that was done for LVM.
+A few releases ago doing an
+LTO compilation for Clang
+took around 43 gigs and
+that was improved over time,
+we got it down to 11 gigs.
+But you can see that the rate of
+improvement has kind of fallen off,
+because after you deal with
+all the low-hanging fruit,
+you're still left with the fact that
+you have the entire program's
+IR in memory at once.
+And Clang is actually
+not really that large.
+If you look at the chromium binary,
+particularly if you turn on debugging,
+that blows up the size
+of the IR even more,
+and we couldn't compile it after,
+we killed it off after three
+hours and 50 gigs of memory.
+Okay so what we really want
+is something that is parallel,
+incremental and memory lean.
+And particularly in order to enable
+LTO for day-to-day development,
+you really need to have a solution
+that's designed around
+these three features.
+Okay so ThinLTO--
+Oops, sorry.
+ThinLTO was something that we designed
+a few years ago at Google.
+We have, and I'll show an example later,
+but we have some really huge applications
+that we want to optimize really well.
+They're very performance sensitive,
+and they're much larger
+than even chromium.
+So regular LTO is simply not feasible.
+And we had a prior approach called LIPO
+or Lightweight
+Inter-Procedural Optimization
+that we had developed and we
+used to use the GCC compiler,
+so this was on a branch
+of the GCC compiler.
+And that gave us some scalable
+cross-module optimization,
+but it had some limitations.
+Namely, well there were a couple.
+One was that it was built
+on top of profiling.
+And so our key performance customers
+do use profile feedback,
+because it does give
+them a performance gain.
+So this wasn't a huge problem,
+but it really limited how
+widely would could deploy LIPO.
+And it also introduced some
+brittleness to the whole process.
+Additionally we were combining
+modules at parse time,
+and this additionally
+had some limitations,
+and it also kind of
+limited the scalability,
+'cause we were combining entire
+translation units at parse time.
+So we went back to the drawing board
+and tried to figure
+out how we could design
+a different approach that would
+address the issues we had with LIPO
+and not hit the limitations of LTO,
+and that's where ThinLTO came.
+And we ended up presenting this
+to the LVM community a couple years ago
+and Medhi from Apple
+got really interested,
+and we had this really great collaboration
+to implement this in LVM.
+So for ThinLTO what we want
+ideally for parallelism
+is not only to have
+fully-parallel compile steps,
+but we also want those backend
+compilations to remain parallel.
+In order to have effective
+incremental builds,
+we need something smaller than the
+entire application in IR
+to put in a build cache.
+So we'd ideally like the backends
+to operate still on a module at a time.
+And then in order to
+keep this memory lean,
+one of the insights that we had is that
+each module only really needs to see
+a small part of the
+rest of the application.
+You really don't need to inline
+from across the entire application,
+you only really need to
+inline a few functions
+here and there to get most of the benefit.
+So we really only want
+to perform profitable
+cross-module optimizations
+into each other module.
+So this looks great,
+but how do you actually
+coordinate all of this activity?
+And as I'll show in a few
+slides in some more detail,
+what we do is introduce a thin
+serial synchronization point
+between the front end part of the compile
+and the backend compiles.
+All right so let's talk now
+about how actually this works.
+So for ThinLTO when you
+do the compile step,
+like regular LTO you're
+generating .o files that have IR.
+So same, you parse a file,
+you do initial optimizations,
+you generate IR.
+But what we do for ThinLTO is we
+additionally generate on the side
+a small summary of each module.
+So the summary describes
+all the global variables
+and all the functions
+defined in that module.
+It also includes metadata
+about the set of functions
+like the number of instructions,
+and then includes information about
+all the references made from each module
+to other global variables
+and other functions.
+And then as I'll talk about
+later for incremental builds,
+we include a hash of the modules IR.
+So for example if we have a
+module with this red summary,
+let's say it includes a
+function, it defines a function.
+And so we record that
+there's a function foo,
+we record the number of instructions
+and some other information,
+and we also record the fact
+that it calls a function bar,
+and we don't know where bar
+is defined at this point.
+But it turns out bar is defined in
+the module with the blue summary.
+And so that module correspondingly
+has a summary with an entry
+for bar in it's metadata.
+All right so now when we pass these off
+to the linker and it
+hands this off to LVM,
+instead of parsing all of the
+IR and merging all of the IR,
+we simply load these summaries
+and just aggregate them.
+And this builds basically a
+huge index of the application
+and we call this a combined index.
+And now once we have basically merged
+all of these individual summaries,
+we now get a full call and reference graph
+for the entire application.
+So now we know that foo calls bar
+and bar is defined in bar.o.
+And we're not parsing
+any IR in this stage.
+So now that we have this reference graph,
+we can actually perform
+inter-procedural optimization
+on the reference graph and the call graph
+and then do some analysis and then
+record those results for each module.
+So we might decide for example
+bar is a small function,
+it's likely to be inlined.
+So we mark that we'd like
+to import that into foo.o,
+so that it's available for inlining.
+So we record that and I'll talk about
+some other optimizations
+we do that we record later.
+And this is a serial phase,
+but it's not operating on IR,
+so it's still really
+really fast for clang.
+Thin Linking takes a couple of seconds.
+So now these analysis results are passed
+to the ThinLTO backends.
+And what we do is launch a separate thread
+for each module to be compiled
+through the ThinLTO backend.
+And each thread is passed it's
+analysis results for that module.
+So for example for foo.o,
+we would see that we want
+to import bar from bar.o.
+So we go ahead and load bar.o,
+and just parse out the functions
+that we want to import,
+and only import those
+particular functions.
+And then they're marked specially
+so that once we get through inlining
+we go ahead and drop them,
+because we know we have a
+definition somewhere else.
+And this happens in parallel
+for every other module,
+which is fired off in a different thread.
+Potentially in parallel,
+depends on how many threads
+you have in your thread pool.
+And they're completely independent.
+And then each of these
+parallel backend pieces
+generates a native object
+that's handed back to the linker
+which then goes ahead and links them.
+And like regular LTO this is
+all transparent to the user,
+it's all done behind the scenes.
+So for distributed builds,
+we have a distributed
+build system in Google.
+We don't want to have this
+running on a single machine,
+we don't want to use different
+threads for the backend,
+so now we have to split things
+apart into different processes.
+So for distributed builds there's a mode
+in which you can have a
+separate Thin Link process,
+and then each of these ThinLTO backends
+becomes a separate process that you can
+now send off individually to
+different remote build nodes.
+And in order to make that work what we do
+is serialize out analysis
+results for each module.
+And additionally,
+and I'll show how this works a
+little bit later with our build system,
+we also produce a small
+text listing for each module
+saying what other IR modules
+it's going to be importing from.
+And this is important so the build machine
+knows what other IR object files
+to package up and send
+off to the build machine.
+So now you can fire off these backend jobs
+and send off the analysis results,
+all of the IR object files that it needs,
+and now the inter-procedural analysis
+can go ahead and proceed in parallel
+in a completely distributed fashion.
+And each of these jobs generates a .o file
+with native code and native object,
+and that is fed to another job which does
+the actual final native link.
+All right so now we have a solution
+that is faster and more memory lean,
+but we also want good incremental builds.
+And I mentioned earlier that
+the summaries each include
+a hash of the LVM or the IR module.
+What we can do with that is when we
+generate the analysis
+results for each module,
+we basically include
+the hash of that module
+as well as the hash of any
+module that it imports from.
+So now each of these analysis results
+encapsulates the hashes of
+any module that affects it
+and all of the analysis
+results that affect it,
+and encapsulates essentially
+all the information you need
+to make an incremental build decision
+about that particular LTO backend.
+And what we can do with that is
+you hash the input to the LTO backend,
+create a cache with it
+and if there's a match,
+then the cached native object is returned
+and you never end up having to
+launch this LTO backend job.
+Okay so for Google we have
+a build system called Bazel.
+It's been open sourced.
+And the way Bazel works,
+in our build system all dependencies
+have to be fully specified.
+So when you launch a Bazel build,
+the first thing it does is to
+walk through it's dependency
+graph and it builds
+something called an action
+graph for the build.
+So the action graph for
+a ThinLTO compilation
+will look something like this.
+So the brown boxes are all actions.
+And they're connected by
+connecting the outputs of each
+to the inputs to other actions.
+So you have for a ThinLTO build
+you'd have some C++ compiled actions
+that generate these IR object files,
+and LTO indexing job is
+our name for the Thin Link.
+And then LTO backend jobs,
+which is the name we have in
+Bazel for the ThinLTO backends.
+And then finally a native C++ link.
+So what we do then, once this is built,
+then Bazel goes ahead and
+walks through the action graph
+and sends off each action to,
+when it's inputs are ready,
+to a potentially different
+remote build machine.
+But you'll notice here that I have some
+dashed lines in the middle
+connecting essentially
+all of the IR object files to
+every single LTO backend action.
+And the reason is that because we're
+building this action graph before
+we've actually done any compilation,
+we have no idea what IR object files
+each LTO backend wants to import from.
+So at least initially we have to kind of
+conservatively connect
+all of them together.
+And then what we do is there's a mechanism
+so that once the LTO
+indexing job is complete
+and we have those import files,
+we go ahead and use those to prune
+any unnecessary edges there
+connecting inputs to the LTO backend.
+So we would go ahead and prune away
+and let's say only the middle
+LTO backend job is importing,
+so everything else has it's
+other input edges pruned.
+And this is really important because again
+for these really large applications
+we don't want to package off
+every single IR object file
+and send it to every
+single LTO backend node.
+It just would overwhelm the machines.
+Another thing that's important about Bazel
+is the build system was already caching
+with a content-based caching scheme.
+So essentially you check the cache with
+the hash of the inputs for each action,
+and this matches up perfectly with
+the way that we can do
+incremental builds with LTO.
+We're hashing the input to the LTO backend
+which is the analysis results.
+So that just kind of falls out.
+So now talking about some different
+optimizations that we can do within LTO.
+I mentioned this earlier,
+but just to formalize it,
+when you do a whole program
+optimization in ThinLTO mode,
+you divide it into two parts.
+So for the first part,
+it operates only on the summaries
+and on that combined
+index that we generate,
+the Thin Link.
+It doesn't look at IR at all.
+So you have to have all the
+information you need in the summaries,
+and then the results are
+recorded in the index.
+And then the second part
+actually applies that to the IR,
+and that's done in the ThinLTO backends.
+And you have to apply those in
+completely independent
+fashion for each LTO backend.
+And so the example I had
+given earlier was importing.
+So for importing when
+we're at the Thin Link,
+we go ahead and walk that call graph.
+We look at the number of instructions,
+we have heuristics to guess
+what is likely to be inlined,
+and we mark things for import.
+And when you get to the backend,
+it looks at the import list and it
+actually goes ahead and loads
+and links in the important functions.
+There's some other examples
+that I'll talk about.
+Some are for performance and some are
+actually for compile time.
+So the first example that I'm gonna
+talk about is actually for compile time.
+And this what we call
+weak linkage resolution.
+And so in this case I
+have two source files,
+and they're both calling
+vector per-spec on an integer,
+which is a templated function.
+And template functions have
+what we call vague linkage.
+Essentially they don't
+live in any one place,
+and so you have to instantiate
+the template function
+in any translation unit that calls it.
+And there's a special case when
+you explicitly specialize it.
+But assuming that you haven't done that,
+you generally have to instantiate
+that template function
+in every single source file that calls it.
+And I'm showing just a snippet
+of the LLVM RI for that,
+for vector per-spec on an int.
+But it's not small,
+so you have to synthesize this in
+every file that invokes
+vector per-spec on an int,
+and there's a lot of redundancy.
+These functions are marked
+with a special linkage type
+that basically tells the linker that
+it's okay that there's multiple copies,
+that it doesn't violate
+the one definition rule,
+and the linker just picks
+one and throws away the rest.
+So with regular O2 you end up like I said
+with a bunch of redundant compilation.
+You have copies in every
+place that calls this,
+and you have to compile it and potentially
+co-generate it in all those places,
+and the linker picks one.
+With monolithic LTO this
+is handled really well.
+When you merge all the IR,
+you essentially end up merging them all
+or picking one at that point,
+and you naturally then only optimize
+and co-generate one copy.
+Within LTO what we have to
+do is at the Thin Link time,
+we see that there's summaries from
+multiple modules for the same function,
+and we go ahead and use the
+information from the linker
+which tells us which copy
+the linker was gonna pick.
+That's called the prevailing copy.
+And we mark that one to be kept,
+and we mark all the other copies
+so that they'll be dropped after inlining.
+And that's important because
+we want it to be available
+in the LTO backends for inlining,
+but once we're done with inlining,
+we know now that we have
+a copy somewhere else.
+And we can just go ahead and
+throw away the other copies.
+And this is pretty big.
+For clang for example this one technique
+results in co-generating
+25% less functions.
+Another example of a
+whole program optimization
+that we do within LTO
+is dead global pruning.
+So if we have these two
+source file snippets,
+we have a global variable option.
+And then a getter and a setter.
+At the Thin Link time we would have
+summaries for each of
+these and we would have
+a reference graph that
+looks kind of like this.
+So we have reference
+edges from both the getter
+and the setter to the global variable.
+Now if the linker tells us that
+only getGlobalOption is
+externally referenced,
+then what we do is we mark all those
+externally referenced functions as roots
+for some live variable analysis.
+We compute reachability and
+then we can prune anything
+like setOption which we
+discover is never needed.
+We can prune it from the graph.
+And this has a couple of advantages.
+For one you can do better optimization.
+Now option for example is not referenced
+from any other module so we
+can go ahead and internalize it
+and that means the compiler can
+then go ahead and constant fold it,
+because it's guaranteed that there's
+no other rights from
+anywhere else to option.
+From a compile time standpoint,
+once we have marked a
+bunch of functions as dead,
+if they have calls we don't bother
+trying to compute imports for them.
+There's no point because we know that
+we're gonna go ahead and
+drop those functions.
+And they're marked so that essentially
+once you get into the LTO backend,
+they're marked as dead and so
+you drop them at that point.
+Alright so on another
+subject, so profile feedback.
+I mentioned earlier that a
+lot of our peak customers
+use profile feedback to
+get good performance.
+Basically with profile
+feedback what happens
+is you've either instrumented your binary
+or you use hardware sampling
+to collect information
+about what code is executed at runtime,
+and then you feed that
+back to the compiler
+so that it can make smarter
+decisions about how to optimize.
+Okay so for ThinLTO we don't want to be,
+we don't want to require
+profile information,
+but we do want to be complimentary.
+We would like to do even
+better than LTO optimization
+when you have profile data available.
+Okay so first just talking through
+what you do with profile data
+even in the absent of ThinLTO.
+So if we have this code and it has
+calls to functions hot and cold.
+And let's say hot is quite
+a bit larger than cold.
+If you don't have any profile data,
+the inliner tends to use heuristics like
+I'd like to inline small functions.
+So it probably would go ahead and
+inline cold and maybe not hot.
+And obviously the
+compiler doesn't know this
+because it doesn't have profile data,
+but this really isn't gonna
+give you the best performance.
+And so when you do profile feedback,
+we are able to annotate
+calls with their hotness
+and the inliner takes this into account.
+So it's gonna much more aggressively
+go ahead and inline hot calls
+and not inline cold calls.
+And we really want to aggressively
+optimize the hot paths,
+and that's why we do this.
+Okay so now if you split these
+into two different files,
+within LTO we need to
+import those functions
+before we can even make
+them available for inlining.
+So without profile data the
+call graph looks like this.
+So we have foo and it
+calls both hot and cold,
+and we've recorded the number of
+instructions in this functions.
+So let's say hot is three
+times larger than cold.
+So without any profile data,
+the importing heuristics here kind of
+mirror the inliner heuristics.
+So we're likely to think well okay
+we'll probably inline small functions.
+So we'll probably go
+ahead and import cold,
+and potentially inline it.
+And again that's not gonna give
+us the best performance win.
+So when we have profile data,
+the calls again in the IR
+are annotated with hotness,
+and we can record that in the summary,
+and then that gets propagated
+to the Thin Link call graph
+and now we have edges in the call graph
+that are annotated with hotness,
+and we essentially again
+mirror the inlining heuristics
+and import calls more aggressively
+when they are hot and
+less when they're cold.
+Oops, what happened here?
+The other aspect of this,
+so that's a performance win,
+but there's also a compile
+time impact from profile data.
+It turns out for some of
+our larger applications,
+98% of them are cold.
+So maybe they're either
+not executed at all
+or they're only executed at startup time,
+which we don't tend to profile
+because it's not performance critical.
+But they're completely cold and there's
+no point to importing or inlining them.
+So by not importing
+them when they're cold,
+we can get a better
+compile time improvement.
+Another type of profile based optimization
+is indirect call promotion.
+So when you have an indirect call,
+like in this case we an indirect call bar.
+Without profile data we have
+no idea where this might point.
+Let's assume we're not able to statically
+analyze the targets
+that bar is assigned to.
+But with profile data a lot
+of compilers like LVM, GCC,
+will actually when you
+do profile collection,
+it will profile the hot
+targets in direct calls.
+And so when you feed that
+back we might see that bar
+tends to always call bar_impl.
+And what the compiler does with this is it
+inserts a guarded direct
+call to that hot target.
+This not only gets rid of the
+indirect call when you take that path,
+but you also can now inline
+bar_impl into the direct call.
+So that works but that unfortunately
+only works when the target
+is in the same module.
+So if this is split into two paths,
+we need ThinLTO to help us get
+the indirect call promotion.
+Okay so without profile
+data in our Thin Link
+we have two disconnected nodes,
+foo and bar_impl and we don't
+know that foo calls bar_impl.
+But with profile data in
+the IR what we can do is
+add that information to the summary.
+So we essentially see
+that there's a hot target
+here for this indirect call,
+so we kind of record that
+as a speculative direct
+call in the summary,
+and now in the Thin Link call graph,
+we have an edge between those,
+and we can imply go
+ahead and import bar_impl
+as if it was directly called.
+And once you've imported it,
+now the backend can go ahead and
+actually do the indirect call promotion.
+So now I'm gonna switch
+gears and talk about
+how well ThinLTO performs.
+And the first set of numbers
+that I'm gonna talk about
+and a lot of the numbers I'm
+gonna talk about actually
+are build time performance,
+and later we'll get into actually like
+how does the actual
+generated code perform?
+But starting out with
+build time comparisons,
+and here I'm gonna compare
+mostly with GCC's LTO.
+And the reason is is that
+GCC has a really well-tuned
+and really sophisticated
+LTO implementation.
+That implementation has two parts.
+It has a serial part called
+WPA or whole program analysis.
+And that makes all of the decisions.
+The inter-procedural analysis decisions,
+it makes all the inlining decisions.
+And then at the end
+based on those decisions,
+it rewrites out partitioned IR.
+And each partition is then compiled by
+a different parallel backend
+process call an LTRANS process.
+And that actually applies
+the inlining decisions,
+and then does the rest of the
+optimization and code generation.
+So this is kind of nice because we can
+compare the serial phases of the
+two approaches and the parallel phases.
+And we looked at how these are
+performed for a few applications.
+The first was clang,
+the second was the chromium
+open source browser,
+and the third was an internal application
+running in Google's
+datacenter called Ad Delivery.
+And I'm showing some statistics
+for these different applications.
+But really the important
+thing to focus on,
+and this is what determines how complex
+that inter-procedural analysis is,
+is how large and dense the
+reference and the call graph are.
+So if you look at for example ad delivery,
+the number of nodes,
+which is the number of
+functions in the program
+and the number of global
+variables in the functions, sorry,
+global variables in the application
+is more than 10 times larger than Clang.
+And the number of edges
+or the number of calls and references
+between those is more than
+15 times size of Clang
+so that's really large.
+And so now first looking
+at just the serial steps.
+So let's compare the Thin Link
+to GCC's whole program analysis.
+And starting out with the peak memory.
+Okay so for GCC, there's
+two sets of numbers.
+The reason is that GCC is operating,
+the whole program analysis
+is operating on IR.
+So whether or not you have debug info
+has an impact when you're operating on IR.
+For ThinLTO, there's no
+debug info in the summary
+so the Thin Link is not affected by
+whether you're compiling
+the debugging on or off.
+So there's one set of number for ThinLTO.
+And as you can see ThinLTO
+gets a bit bigger for
+the larger applications
+but it's quite restrained
+in how much it grows.
+With GCC, it grows quite significantly
+and particularly for ad delivery,
+even without debug info
+we couldn't compile it
+and we ended up killing it off
+after more than three hours
+and around 25 gigs of memory.
+And so the time results
+look kind of similar.
+ThinLTO gets a little bit
+slower for ad delivery,
+but it's still under
+two minutes and for GCC
+because it's operating on IR,
+it simply takes a lot more time.
+Oh and just as a note,
+as expected, LVM's LTO
+which is monolithic also
+cannot compile ad delivery.
+Okay so now looking at Chromium.
+Chromium is the largest
+of the three applications
+that all of these LTO techniques
+could actually successfully
+compile without debug info
+and now we're gonna look at
+both the serial phase
+and the parallel phase.
+So monolithic LTO is
+LVM's LTO implementation,
+it's fully serial so there's
+one set of numbers here
+and as expected, it's kind of slow,
+takes around 28 minutes to build Chromium.
+ThinLTO, I'm gonna show numbers
+for increasing numbers
+of backend parallelism
+and so the Thin Link of course
+is not affected by this,
+it remains the same and as expected
+the parallel time goes down
+as you increase the number of threads
+that you can run in parallel.
+For GCC, when you increase
+the number of threads
+you're essentially, you're increasing
+the number of partitions that
+you're dividing the IR into.
+And so GCC is actually
+doing a pretty good job,
+it's much faster than LVM's LTO.
+And the time does decrease
+as you increase the number of partitions
+but as you increase the
+number of partitions
+you increase the amount
+of cloning you need to do
+as you're rewriting out
+those partitioned IR.
+And this comes at increasing
+cost in peak memory.
+So if you look at the peak memory for GCC
+it goes up quite a bit
+as you increase the number of partitions.
+ThinLTO is not affected very much
+as you increase the number of threads
+and the reason is that
+the unit of compilation does not change.
+You are still just compiling
+a module through the backend.
+Okay so ad delivery could
+only be compiled within LTO
+so what we did for that instead is
+we looked at our distributed build system
+and we looked at how it
+scaled compared to just O2
+and so we kind of ran some numbers
+constraining the number
+of remote nodes available
+for distributing the backend compilation
+and compared this and you can see that
+ThinLTO is a little bit slower than O2,
+it does have a serial
+synchronization step in the middle
+but it actually scales pretty
+close to O2 which was great,
+was what we were hoping for.
+Alright now moving onto incremental builds
+and how that performs.
+So these numbers are building
+the Clang binary itself.
+So when you're doing a clean build,
+monolithic LTO takes a while
+and ThinLTO and non LTO are faster,
+ThinLTO's a little bit
+slower than non LTO,
+again because you have that
+serial synchronization step in the middle.
+Now if you touch a widely used header,
+so this affects a number of
+source files, and you rebuild,
+you have to redo a bunch of compile steps
+and so it doesn't look
+all that much faster
+in any of the cases than a clean build
+but really the key is
+when you just make a change
+to an implementation file.
+So one .cc file.
+Monolithic LTO has only
+just the one compile step
+and then has to redo
+the entire merged
+monolithic LTO optimization.
+For non LTO, for O2,
+you only have to do one
+compile and just relink.
+So that's very fast.
+For ThinLTO, we redo the one
+compile, we redo the Thin Link,
+we have to look up in the
+cache for all the backends
+and probably redo one ThinLTO backend
+and that happens in 16 seconds.
+So the Thin Link like
+I said is super fast,
+it's not operating on IR so
+that can happen really quickly.
+Just a little bit more detail on
+how ThinLTO scales with
+increasing threads.
+And I showed some numbers
+earlier for Chromium
+but this is gonna have a
+little bit more detail.
+So first, this is now
+building the Clang binary.
+First let's look at when
+there's no debug info
+when we build Clang with no debug.
+Monolithic LTO is a bit
+large, it's around five gigs.
+If you build ThinLTO with one thread,
+which obviously is gonna kind of serialize
+all the ThinLTO backends
+but it's useful for seeing
+what the minimum peak memory is
+that costs around 20 times less
+memory than monolithic LTO.
+As you increase the number of threads
+in your thread pool for the LTO backends,
+the peak memory increases a bit
+but like we saw for Chromium,
+it doesn't increase all that
+much and it scales pretty well.
+Okay now looking at building
+Clang with debug info
+and debug info really
+greatly bloats out the IR
+so for monolithic LTO
+this is quite expensive,
+it gets pretty big.
+If you build ThinLTO
+with one thread, however,
+you only have one module's
+worth of debug info
+and it's quite a bit smaller,
+42 times less memory.
+Now as you increase the number of threads,
+when you import functions
+you have to import a bunch of debug info
+and unfortunately a lot
+of types are connected
+so you end up having to,
+the debug info you end up
+importing a fair amount
+and so it doesn't scale quite
+as well as without debug info.
+You'll see that the peak
+memory increases a bit more.
+But it's still significantly smaller
+than doing a monolithic
+LTO build with debug info.
+Okay so now let's switch
+to runtime performance.
+So this is the performance of the binaries
+that are generated by
+LTO or by compilation.
+And so this is looking at all
+of the C and C++ applications
+in the benchmarks in the
+spec 2006 benchmark suite
+and all of the numbers that I've run here
+are with profile feedback
+so the baseline is
+gonna be just normal O2,
+but with profile feedback.
+And then I'll have numbers
+for monolithic LTO,
+this is LVM's monolithic
+LTO with profile data
+and the blue bar is gonna be ThinLTO.
+And so first looking at monolithic LTO.
+A lot of the spec benchmarks are not large
+so they don't all benefit
+that greatly from a LTO
+but there's a range and
+there's some that benefit
+like Pavre and OmniPP and Zaylink BMK
+which benefit quite a lot from LTO.
+So now if you look at
+ThinLTO which is remember
+quite a bit more scalable
+but doesn't have as rich of information
+to perform in a prestigional analysis on,
+it turns out it actually
+does almost as well.
+There's a few cases where
+it's not doing as well
+and that's where we know we have
+a few limitations right now,
+we don't do as aggressive
+whole program analysis
+for global variables
+and so that's one of the
+things that we're improving.
+So we're missing that
+and that's causing ThinLTO
+to be a little bit slower
+and but if you look at the geometric mean,
+it's actually extremely close.
+Current status for ThinLTO it's,
+we have support in three
+different linkers, so gold, ld64,
+and then the more recent
+addition is LLD which is,
+this is Clang LVM's own linker.
+And if you look at the, just
+the Clang documentation,
+it has a bunch of
+information about, excuse me,
+about where it's supported
+and also how to configure
+ThinLTO, how to turn on caching,
+and control the number of
+backend threads, et cetera.
+Okay so the next thing I
+wanted to talk about is
+whether there's any implications
+for C++ development.
+Besides hopefully enabling
+you to use ThinLTO,
+does this affect the code that you write?
+And so there's one example that
+I wanted to go through here
+where I think there is an effect.
+So if you look at this
+case, we have a function F
+that's defined in foo.cc,
+it's called in a couple
+of different source files.
+Now the current conventional
+wisdom says that
+if this is a small function,
+you might wanna instead
+define that function
+in a header file, giving
+it the inline keyword,
+and just an interesting
+note about the keyword
+and I saw this mentioned
+at a talk yesterday,
+it's a bit of a misnomer,
+it doesn't actually tell
+the compiler to inline it,
+what it really does is give
+it a special linkage type
+so that the linker won't complain about
+multiple definitions.
+And so when you get to the
+link step it will simply,
+it notes that they're all
+equivalent, and it will pick one.
+But anyway it's called the inline keyword
+and you put it one the function
+when you move it into the header
+and now what happens is
+after parsing you end up,
+after pre processing
+you end up with a copy
+in every single call site and now you can,
+the compiler can inline it
+when it decides that it's
+profitable and if it's small,
+the compiler is likely to inline it.
+The disadvantage of this is
+that any translation unit
+that includes that header now
+has to compile a copy of F
+whether or not it includes a call to F
+and now the compiler is smart enough
+that it will eventually see
+that there's no calls to F
+and it has a linkage type
+that means essentially gives
+it vague linkage meaning,
+it doesn't have to keep that
+copy if there's no calls to it
+so it'll go ahead and drop it eventually
+but you're still paying some cost
+for actually going ahead
+and translating that to IR
+and doing some optimization
+and if there's any calls left
+to it it has to keep a copy.
+So with ThinLTO actually
+you can go back to leaving
+it in your source file.
+And what happens is then
+we compile one copy to IR,
+we code gen one copy, and
+wherever we think we need it,
+you can simply import it, and those,
+like I mentioned before, those
+imported copies are marked
+so that they're dropped
+immediately after inlining.
+So we can import that where it's needed,
+potentially inline it,
+drop it, and it ends up,
+it should end up being
+much more efficient.
+There's a couple caveats to this,
+oops, that's showing it inlined.
+So a couple caveats.
+One, actually I'm gonna
+go out of order here is
+if you have the inline keyword in it,
+it has to be in the header,
+so if you put it back in the source file
+just remove the inline keyword.
+The bigger exception to
+this is template functions
+I know I talked about
+this a little bit earlier
+when we were going through the example
+with vector push back on a int,
+it has vague linkage
+and so it has to be instantiated
+anywhere that there's a call site
+unless you explicitly specialize it,
+but if you don't do that
+you do need to leave the
+template function in a header
+otherwise you get undefined references
+at link time potentially.
+Alright some future work.
+So when we were talking
+about the runtime results,
+I mentioned that there's a few places
+where we're missing global
+variable optimizations
+and so we're doing some work right now
+to extend the optimizations.
+The information in the
+summaries, basically,
+for global variables, and extend
+the types of optimizations
+that we can do during that
+interprocedural analysis.
+So the first example
+actually applies to functions
+propagating function properties
+but the second one is a
+little bit more geared towards
+this global variable issue
+so some mod-ref information,
+constant ranges, and
+allowing us to do more
+interprocedural constant propagation
+across different modules.
+Another thing we wanna do is
+where there are single
+call sites to functions
+we'd like to just move that function over
+rather than import a copy
+and the advantage here is that
+if you only have one copy
+you can internalize it and this again
+like I mentioned earlier,
+internalization typically leads to
+more efficient code generation
+and better optimization.
+And then the other thing
+that we need to do,
+and this is also an
+implication for C++ developers,
+is that right now ThinLTO
+is not very well integrated with make.
+So if you say make-j and
+give it a parallelism factor,
+it's gonna fire off a bunch of jobs
+and if you're compiling a
+bunch of application targets,
+it will launch a bunch of links,
+LTO links in parallel not realizing
+that ThinLTO is gonna spin off
+a whole bunch of threads in parallel.
+So if you're not careful,
+if you give make-j a
+high parallelism factor,
+you're building a bunch of application,
+linking a bunch of
+applications at the same time
+on your machine and they each fire off
+a whole bunch of ThinLTO threads,
+you can overwhelm your machine.
+So you have to be a little
+bit careful right now.
+But one thing we'd like to do is
+actually allow make-j
+to control the ThinLTO
+backend parallelism.
+So that you don't run into trouble there.
+And so what I hope that you've
+gotten out of this talk is
+that you've seen that ThinLTO
+scales like a regular non LTO build,
+but at the same time gets you the same
+or very similar performance benefits
+to a full monolithic build,
+a monolithic LTO build.
+And incremental builds
+which are so critical
+for day to day development
+are actually very effective with an LTO
+and so I'm hopeful that we're on the path
+to enabling LTO via ThinLTO by
+default in production builds
+and as well in your day to day builds.
+And that's all I had so.
+(audience applauds)
+Any questions?
+Yeah.
+- [Man] I wanted to ask about
+the profile guided optimization, I work on
+a really large cat applications
+that customers buy.
+I don't know exactly
+what they're gonna do
+with that application,
+with your benchmarks you run it through
+and you get a certain
+profile characteristic.
+I could characterize one workflow,
+could it actually do
+some harm if I use that,
+have you ever seen that?
+I've never tried it.
+Yeah I mean certainly you
+want your profile data
+to be as reflective of
+how people are gonna use
+your application as possible
+so it's hard especially if you're, I mean,
+at Google we can kind of cheat
+because all my users are internal
+so I can kind of piggy back off
+their load testing framework
+and collect profiles there
+but it's a little bit harder,
+now one approach that we do have for,
+and we use this internally
+in Google as well
+but we've also used it for
+collecting customer profiles,
+is hardware PMU based profiles.
+There's a technique called auto FDO
+and basically the
+profiles can be collected
+with hardware profiles
+and if you can get those
+from customer like runs
+then you could synthesize
+profiles out of those.
+So I guess I don't have
+great answer but that's--
+- [Man] But if I use a
+run from one customer
+a different customer
+could use my application
+because there's a lot
+of functionality here,
+could use it in a very different way
+and it could actually hurt them.
+It could.
+So yeah I mean I guess the
+best advice I'd have is
+to try and get as many customer
+sample inputs as possible
+to guide that or yeah it's hard
+I mean you need representative input.
+- [Man] Do you guys do
+it on stuff that we run?
+On stuff that you run?
+So well the applications that I run
+are running in Google datacenters
+so you're not really
+running them directly.
+- [Man] Yeah.
+Yeah.
+- [Man] Okay thank you.
+So yeah.
+- [Man] Hi there I was just wondering
+in the absence of profile
+guided optimization,
+is there any provision for using,
+I'm thinking for the
+things like virtual calls,
+GCC has a quite good speculative
+devirtualization set up
+and I noticed that
+there was no information
+was being captured about
+types in the thin layer.
+Yes. And we are working on that
+and that actually has started,
+so someone in Google has been working on
+augmenting the summaries
+with type information for two reasons,
+one is whole program devirtualization,
+so that's in the works and it's,
+so he works on Chrome and
+so that is in the works
+and having that optimization
+we know is important
+and the other thing that
+they're doing that for is CFI
+which is control fo integrity
+so there's a lot of
+concerns around security
+and that's one of the key
+security optimizations
+and so that was implemented,
+those were implemented
+with full LTO and he has
+ported them to ThinLTO
+and so I didn't talk about them here,
+that used to be in my future work section
+but it's like mostly there so yeah
+so that's definitely something
+that we have partially already
+upstreamed for the most part
+and I don't know that it,
+it's not on by default
+and I need to check on the
+status but it's coming, yeah.
+- [Man] Thank you.
+- [Audience Member] Hello, so even though
+the static initialization model fiasco
+does not affect Google--
+Say that again, sorry.
+- [Audience Member] Even though
+the static initialization model fiasco
+does not affect Google
+because using a static
+that are non global non
+planal data is banned.
+Have you considered using
+the global reference graph
+as a means to solve
+legal order of initialization for globals?
+Oh oh okay I see what you're,
+so the question's about
+global initialization order.
+I haven't thought about that before.
+So in terms of using the graph
+to decide what actually from
+different modules could be,
+how, what order they
+should be initialized?
+That's a good, yeah, I had
+not thought about that.
+- [Audience Member] It doesn't
+have much value for Google
+because it's not legal
+use of the ram modes
+but it would be very
+useful for other uses.
+Yeah definitely, no that's interesting,
+I hadn't thought about it
+but i think that there's
+a lot of opportunity
+for putting things on the
+summary and then using that.
+You essentially have a picture
+of the whole application
+and so as long as you have
+whatever you need in the summary
+and you can operate on this full graph
+and then record the results
+for use in the backend
+then yeah I think that there's a lot of,
+because there you have the whole picture
+and you could potentially
+come up with an
+initialization order and...
+- [Audience member] Find out
+where there is none that is possible.
+Yeah. Yeah.
+- [Audience Member] Thank you.
+Thanks.
+- [Man] Great talk, very
+clear, that's awesome.
+One thing I saw though
+is one of your examples
+actually got worse in performance
+where nearly everything got better.
+Why was that?
+Was this the, are you talking about spec?
+- [Man] Yeah this was spec so...
+Let me go back.
+- [Man] It was like hammer or something.
+Hummer yeah. That's a good
+question, woops, where's--
+- [Man] Yeah one forward I think
+yeah you gotta go through
+a bunch of stuff again.
+Yeah, let me see if I can do this quickly.
+- [Man] Yeah, click, click, click.
+Woops, there, come on.
+- [Man] Go, go, go.
+I don't wanna do too fast and overshoot.
+Okay here we go.
+- [Man] Oh there yeah.
+Okay so Hummer, let me look
+here so I can see better.
+So Hummer actually yeah
+I'm trying to remember
+what happened in Hummer.
+We looked at it and I don't
+recall why it degrades so much
+with LTO the good news
+is we degrade with an LTO
+(laughter)
+That was a win.
+- [Man] Well yeah that's what I mean
+I saw for both of them I was just like
+that just made no sense to me
+it seems like a very odd thing
+especially because you have
+profiling guided information.
+So you even know what the test did.
+Yeah, I'm trying to remember
+what happened with Hummer.
+(audience member speaking off microphone)
+It's I mean you can always
+shoot yourself in the
+foot by doing things,
+it's possible like we inlined too much
+and the register allocation blew up
+or something like that with LTO.
+So yeah.
+- [Kastia] Mary is
+extremely cache sensitive
+so any movement there
+can give you plus or
+minus 10%, it's noise.
+Yeah okay thank you Kastia.
+- [Man] Thank you very much, it was great.
+Thanks.
+- [Audience Member] Question about
+comparing monolithic and ThinLTO.
+Is it a strict superset,
+the optimizations done in
+monolithic as compared to Thin
+or are there any things that
+are only not in ThinLTO?
+Right now pretty much it's
+monolithic L2 is a superset.
+It would be hard for a ThinLTO I think
+to do something more aggressive than LTO
+just because it naturally
+has less visibility
+so I think it's really more about
+getting as much of
+monolithic LTO as possible
+for much less cost.
+- [Audience Member] I sorta
+had the impression that like
+ThinLTO was the hot new thing
+and maybe people are just
+implementing over there
+and not bothering to
+port stuff into you know.
+Oh, oh, oh, thank you for mentioning that
+because now I just actually
+did remember something.
+(laughter)
+So there is one thing
+and it's not so much an
+optimization that ThinLTO enables
+but the fact that ThinLTO
+parallelizes the backends,
+we have been able to enable
+a much more aggressive
+optimization pipeline
+in the ThinLTO backends.
+Monolithic LTO the optimization pipeline
+that happens in order to keep
+things in reasonable time
+for some of the applications
+that get built with LTO today,
+that pipeline is shortened up a bit.
+So ThinLTO does enable just more overhead,
+I mean sorry, more time
+budget essentially.
+- [Audience Member] More
+backend phases are turned on?
+Exactly, yes.
+- [Audience Member] That's good to know.
+So we get more budget,
+that's really where you get the better.
+- [Man] Hi, great talk.
+Thank you.
+- [Man] Question I'm an
+institution with a codebase
+with a lot of generated code
+and a lot of global variables
+and I'm curious if I switch
+to monolithic LTO to ThinLTO,
+what's are the issues
+with the global variables
+but maybe I could fix to avoid issues
+so I'm just curious if...
+Sorry, sorry, so if...
+- [Man] By more details about
+what the global is not in
+detail in ThinLTO or...
+Okay so global variables,
+so I wonder if it's in my backup slides.
+So there was that example I
+showed at the beginning of talk
+to just show what LTO
+does, how it cleaned up,
+there was that global
+variable eye and we wrote,
+we were able to like completely
+clean up one of the writes.
+So if you look at that with ThinLTO,
+and I wonder if I have the,
+it's gonna take me a while
+I have a ton of back up stuff here but...
+Shoot, is this it?
+No, no, unfortunately I
+don't know if I have it
+but essentially we can't quite
+clean it up that well with,
+I don't have it here.
+We can't clean it up
+that well with ThinLTO
+because you end up still
+having the variable
+either we don't know
+the fact that it only,
+it has essentially...
+Minus one value was never written
+and so that's one place where we'd like to
+record some information in
+some mod-ref information
+in the reference graph and
+maybe some constant ranges,
+the fact that it's
+constant, you can basically,
+the problem is that in that
+example the, let me think,
+I'm trying to reconstruct
+it but essentially
+if you have some information about
+the values that those variables take on
+especially if they only take
+on a few constant values
+you can do a bunch more clean up
+and so that's one of
+the places that we know
+we have to do a little bit more work.
+- [Man] Thank you.
+- [Audience Member] Only
+a very short question,
+I'm curious, which GCC version
+you killed, which was it?
+Oh which GCC version did we use here?
+I think it was...
+I'm trying to remember what was,
+at the time that we did
+the results last year
+I think it was probably, were we on 5.0?
+I forget, it was a fairly recent version.
+Now internally in Google
+we use a little bit,
+we have a branch off of GCC
+so that lags a little bit
+that's 4.9 I think but yeah.
+- [Audience Member] Okay
+and the second question is
+is it always a always available
+in arm architectures as well?
+What was the last part?
+- [Audience Member] On arm architectures.
+On arm architectures.
+- [Audience Member] Yes,
+does it work as well?
+ThinLTO?
+- [Audience Member] Yeah.
+It should, I mean there shouldn't be
+any architectural constraints
+I mean obviously it depends on like
+what linkers you have available.
+- [Audience Member] Because
+you're passing the instructions
+into the object file
+so you have to know about
+their internal instruction set.
+Well that's all up to LVM so
+the code generation is just
+whatever LVM stock code generation is
+so it supports arm and
+so it should generate,
+when you get to the ThinLTO backends
+and you perform code
+generation at the end,
+it should be able to generate anything
+that LVM itself can generate.
+- [Audience Member] So I can't
+use a ThinLTO for example
+with GCC compiled object files?
+When I compile my CPP files with the GCC
+I have object files and I cannot
+use your ThinLTO for that?
+You're right, yes so if
+you're using GCC to generate.
+So remember the .o files
+when you do LTO either
+regular or ThinLTO the
+data files actually have
+the compiler's internal
+representation in them,
+not native code.
+So it's not parsing, in the LTO backend
+we're not parsing native code,
+we're parsing the internal
+representation of the compiler.
+That's different for GCC and LVM.
+So GCC's LTO also does stream out
+into its .o files like GCC's IR
+and they're not compatible
+with LVM so you can't mix,
+the first part of your
+compile can't be GCC
+and then mix it with LVM's LTO,
+it would have to be Clang
+all the way through.
+- [Audience Member] So then
+you have to use LVM compiler
+as well not the GCC so I use
+a whole package for that.
+Yes so if you want to
+do ThinLTO you have to,
+yeah right because those .o files
+which are the compiler's
+internal representation
+are not compatible between the two
+so you'd have to use Clang, yeah.
+- [Audience Member] Okay thanks.
+Uh-huh.
+- [Man] Hey fantastic
+talk, really enjoyed it.
+Question so we do use DisCC and CC cache
+to speed up build system
+so how will this work with our set up?
+What was the first thing you use?
+DisCC.
+Oh DisCC.
+I don't know if I can answer
+that question very well.
+'Cause I'm not an expert
+on that unfortunately.
+So for, I do know for ThinLTO
+the caching that we enable is,
+so it has sort of its own
+ThinLTO cache essentially
+that you set up and unfortunately
+I've not given you a good answer
+'cause I just don't know
+enough about DisCC and we have,
+like I said, we have a
+different build system
+inside Google and I'm more
+familiar with that so yeah sorry.
+Anything else?
+Okay thank you.
+(audience applauds)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

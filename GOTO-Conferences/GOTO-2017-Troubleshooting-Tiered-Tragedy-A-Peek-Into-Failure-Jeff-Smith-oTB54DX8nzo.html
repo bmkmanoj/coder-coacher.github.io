@@ -1,0 +1,1081 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>GOTO 2017 • Troubleshooting Tiered Tragedy: A Peek Into Failure • Jeff Smith | Coder Coacher - Coaching Coders</title><meta content="GOTO 2017 • Troubleshooting Tiered Tragedy: A Peek Into Failure • Jeff Smith - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/GOTO-Conferences/">GOTO Conferences</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>GOTO 2017 • Troubleshooting Tiered Tragedy: A Peek Into Failure • Jeff Smith</b></h2><h5 class="post__date">2017-05-19</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/oTB54DX8nzo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">good afternoon everybody thanks for
+having me
+my talk today is a walkthrough of the
+production incident that occurred and
+some of the things that we learned from
+that production incident both around
+like managing complex systems managing
+micro service based systems and
+distributed systems just a quick show of
+hands I'm sorry
+probably talks have already done this
+how many of us identify more on the
+developers side of the spectrum okay wow
+that's different than Ebisu operations
+side of the spectrum all right how many
+people are managing our in a micro
+services environment okay cool so I'm
+sorry if I trigger anyone you know there
+might be some weeping like Brigitte said
+but don't worry we'll get through it
+together
+these are inspired by true events this
+is not fan fiction unfortunately we've
+changed the names and the locations to
+protect the innocent but know that this
+is not an academic exercise this is
+something that actually occurred so a
+lot of things that were going to be
+talking about are going to be
+uncharacteristically real in terms of
+what you guys are accustomed to seeing
+in your environments so what are we
+going to talk about first I'll give you
+a brief introduction about myself where
+I come from what my background is like
+walk through the anatomy of a system
+walk through an actual incident we'll go
+through all of the alerts the things
+that we learned about those alerts and
+decisions that we made and then
+ultimately what we learn from our post
+mortem process after the alert and after
+the incident and get an idea of just how
+bad things actually were so quick
+introduction my name is Jeff Smith and
+the manager of production operations at
+Centro I've been there for about six
+months Centro is a media ad services
+company we're also working on a software
+as a service solution for media ad
+buyers so you're in that space and you
+want to talk you know find me after the
+after the chat you find me on Twitter
+dark and dirty Jeff Smith at central net
+I love talking about system
+and systems thinking so if that's
+something that you're interested in
+please feel free to grab me I also have
+a blog that I never update at all thanks
+dark comm feel free to check that out a
+bunch of stuff from yesteryear so first
+I wanted to talk about the anatomy of a
+system right and what are we talking
+about when we use this term system we
+tend to think of things like the web
+server the database the Redis queue all
+of these components and elements of a
+system and those are all perfectly valid
+those are parts of the system but the
+things that we tend to forget about and
+not really talk about a focus on are the
+inputs to the system right because we
+have to have data coming in requests
+coming in outputs to the system maybe
+that feeds another system and kicks off
+a bunch of work the feedback loop in
+that system how are we providing
+information about the state of the
+system inside it and most importantly
+and this is you know near and dear to my
+heart the operators of that system
+because there are people behind this
+that are actually managing these systems
+and they need to understand what's going
+on in the system how they can what
+levers they have to sort of correct the
+system when it gets into a bad state and
+oftentimes when we're building these
+things the operators the last piece of
+the puzzle that we forget about but it's
+super crucial because when trouble
+strikes the operator is there going to
+be the person that's modifying the
+system in order to get it or correct it
+into a more desired state so let's go
+with the sort of clinical definition
+what is the system a set of connective
+things or parts forming a complex whole
+right that's a pretty straightforward
+example but I think the thing that gets
+interesting is that systems are also
+comprised of other systems right so a
+subsystem is a set of elements which is
+a system in itself and a component of a
+larger system it's Turtles all the way
+down right like the more you start to
+peel apart the onion the more you
+realize just how complex these things
+are so we'll start with a high level
+system diagram right so when you look at
+this it probably doesn't look too
+different than what you're running in
+your environment right we got a users
+coming in from the internet they're
+hitting an elastic load balancer that
+balances across and web servers we might
+have ElastiCache in there
+we're reading from a master database or
+writing to a master database reading
+from a slave database publishing some
+message cues some messages on a cue
+we've got worker nodes processing that
+cue pretty familiar right it's like well
+if we're being honest this is probably
+the ideal system in a real system you
+probably got like MongoDB somewhere over
+there some failed nodejs experiment that
+no one really knows if you can actually
+unplug you know so we're going to live
+in this utopia for a second say like
+yeah this is what a normal system would
+look like so systems also have failure
+modes in a failure mode is basically the
+particular way in which a system
+degrades or ultimately fails to perform
+as intended and the interesting about
+failure modes is the number of failure
+modes tends to grow as the system has
+more components becomes more complex so
+for example let's take our same happy
+system right and then suddenly we say
+the worker nodes die that's going to
+create a particular failure scenario
+that is different than if another
+component failed right
+in this particular scenario it might be
+something as simple as email processing
+isn't happening or it could be something
+catastrophic where work isn't flowing
+through the system if the read database
+fails that's a different failure
+scenario each subsystem that fails can
+produce an entirely different type of
+failure and then if we have both of them
+fail well that's yet another failure
+mode the thing to take away from this is
+it becomes incredibly difficult to
+predict how a system is going to fail as
+it grows and becomes more complex so you
+might be intestine think you have all of
+these scenarios figured out then you get
+the production and you're like huh we
+didn't see that in testing that's weird
+right
+how does anyone encounter that no you're
+all geniuses yeah that's what I thought
+it's what I thought don't let lunch get
+in the way here like put your hands up
+you know you're part of this then to
+make it even more complicated each one
+of these systems is a subsystem like we
+talked about right so while we've got
+this nice little cute high-level node
+that we can show to management and say
+these are web servers in reality we know
+that underneath
+is another layer of complexity that we
+barely understand right so when you're
+thinking about that you have to think
+about how you view the system and at
+what level of the system you're actually
+viewing it you need to be able to zoom
+in and out at different levels so now
+we'll do a quick walk through of failure
+how many how many have been involved in
+a major production incident show of
+hands how many people have been
+absolutely thrilled and happy with how
+those incidents actually play out I want
+to talk to you after that's awesome
+that's cool yeah typically when I do it
+it's uh kind of like a system it's a bit
+of a show different variety every
+time right something else breakdown so
+there's always a chance to learn and
+sort of like evaluate what it is that
+you did right what it is you did wrong
+what it is that you're never going to do
+again so we're going to look at this
+particular situation so this is our
+troubled system again the names have
+been changed to protect the innocent
+I'll walk you through real quickly how
+this was um operate so we've got users
+that are coming in and they're making an
+execution request right we've got a set
+of nodes at the AWS layer at the top of
+the AWS layer that are going to take
+those requests publish them on a message
+queue for processing so this is going to
+look like a real system because you're
+going to be like why are you doing this
+then we have another set of nodes that
+reads those messages and what you think
+processed them right no it's going to
+ask another system to process those
+messages for us in a remote data center
+our actual legacy data center once those
+requests are made in the legacy data
+center they are put on yet another
+message bus in which the actual work
+gets done so it functions a little bit
+like government where there's a lot of
+handoffs and not a lot of getting
+done but eventually it makes its way
+down to a worker and we actually do some
+magical things so the first sign of
+alert the first sign of trouble that we
+got during this incident was that
+execution requests are taking longer
+than a predefined threshold
+so that alert was helpful on a few
+levels and not helpful on a few others
+right the first pro is that yay we know
+the business impact because we're we all
+care about the business impact right
+right come on guys yeah business impact
+is fine load average doesn't mean
+if people aren't getting their orders
+processed so we understand the business
+impact right away but the problem is we
+don't really know where the problem is
+we know that the message processes are
+moving slowly but at what layer of the
+system at what portion so it's great for
+your boss come is like what's going on
+stuff is broke dong ho all right well
+what's broke well
+messages aren't getting processed it's
+not really helpful so then the next
+alert we got was this cue alert telling
+us that the Q &amp;amp; A WS was backed up there
+were a lot of messages above some other
+predetermined generic threshold so now
+we're thinking to ourselves oh we can't
+process work fast enough we need more
+workers part of that is because our
+alerts like context and we'll get into
+that a little bit later but you know
+when you've got an alert saying the
+message Q is high is it because volume
+is increased is because you're
+processing slower than you typically are
+what are the age of the messages there's
+all these questions that you have that
+you know when you were in staging seemed
+find and perfectly reasonable he'll see
+the key was empty that's good she was
+high that's bad that's enough
+information right nope the next alert we
+got was a connection alert on the
+messaging service in the data center
+so now as we're about to scale out the
+worker nodes this alert fires and we go
+oh the first question is like who wrote
+that alert right like that's that's
+pretty cool I even know we had that
+thing that's that's that's good
+information so we have two states out of
+the box and we're like all right well
+what's going on why is this happening so
+when we looked at the box we noticed
+that there were a lot of connections in
+this closed wait state on
+message server how many people remember
+their TCP flow control there yeah see
+and here's a moment we did right so
+we're like close wait that's when it's
+waiting for no no that's not what it's
+waiting that's when it's trying to do
+the other thing that so all right just
+go to Wikipedia let's verify this get it
+all out on the table right so if you're
+like me maybe you're thinking like well
+maybe I could use a refresher so
+basically the client has initiated the
+close and said yeah we're done we're
+good and the server gets that and says
+all right I'm going to call closed on my
+socket that'll send out the fin packet
+the ad packet life is good right so when
+we see all these connections in a fail
+in a closed wait state we're going from
+why isn't the server closing these
+connections seems odd so as we started
+looking at it we're noticing the close
+weeks are rising and rising and rising
+memory usage is rising rising and rising
+it's getting to the point where we're
+starting to freak out we're like whom
+this thing is either going to go down
+because we do it or because these
+connections doing it so what are we
+going to do let's hop for shutting it
+down ourselves
+right because I mean how bad could that
+possibly be let's see what happens right
+look good thing all right so I'll shut
+it down yeah that happened
+so these herds of connections come in
+after we get the service back up right
+and it just murders the messaging server
+all right so we're like all right
+messaging servers i oat nope sorry
+that's it's not a so I'm going to do
+that one more time guys so just going to
+restart all right we're back nope nope
+we're still down like okay now
+everything's broken what did we do so
+then of course what are you doing that
+scenario right you say all right well
+let's shut down everything that's
+connecting to it right meanwhile your
+boss is like really really so now we're
+going to shut down everything like you
+or we wait till midnight
+look when demand dies down I don't know
+you picked so we shut down all of the
+consumers and producers we bring up the
+messaging server then we slowly ramp up
+the consumers and producers of course
+your boss is like well how much more
+time like
+I don't I don't look at five five five
+what yes five we'll just back off for a
+second so after an undetermined
+undisclosed amount of time we've got the
+system back up yay
+so then what's the first thing you think
+to yourself because guess what the
+problem is still here now we're just up
+and we're like sweep now we've got
+another thirty minutes before it crashes
+on its own so what's the first thing you
+do in that scenario you're
+troubleshooting anybody anybody what
+changed right some obscene stat like
+eighty percent of changes are caused by
+human actual like an actual change that
+a human did so especially if you're in
+operations the first thing you're like
+well my system hasn't changed models so
+it's got to be code but that's the first
+thing we reach for what changed and this
+is where being able to track your
+changes comes in huge right and I'm not
+talking about change control boards I'm
+not saying that you need some bureaucrat
+in a suit who can knows nothing about
+JavaScript approving and denying changes
+but what I am talking about is as you
+empower people to deploy their own code
+or you know have a particularly pup
+deploy code you need some sort of audit
+log to be able to track back and say who
+did what when because at this point
+right now we're just screaming at each
+other in the room what what change I
+don't know stop yelling at me we luckily
+did find a series of changes that went
+out that day some of them weren't really
+suspicious logging aggregation fire rule
+changes logo redesigned change message
+to keep processes wait what all right
+that sort of jumped out at us and we're
+like oh interesting with that change
+today so let's dive into that one so the
+change was fairly innocuous increase the
+number of worker threads from ten to
+twenty some other sort of unrelated
+agents but then we looked and we're like
+you know I don't I don't Java a lot but
+this looks like it's going to create a
+TCP connection for every message it
+processes seems bad so we call it the
+developer like hey dev we're looking to
+like oh god yeah that's a totally
+okay sweet so then what do you do don't
+be shy that's right you roll it back why
+because we're paranoid right rolling
+back what change is always a good idea
+why is it always a good idea because
+when you have a change and there's a
+problem with the system you have to
+think about your confirmation bias
+that's always going on in the back your
+head right you've always got this noodle
+in the back of your head that's going to
+make it very difficult for you to let go
+of that idea in the back of mind you're
+thinking like yeah I mean I guess we
+could add more capacity but you know
+that change rate seemed really
+suspicious right and you end up cutting
+yourself off to other possible avenues
+of explanation so it's almost worth it
+just to be able to remove that from the
+table and you can say all right Bob shut
+up we rolled back it's still broken what
+next
+right as opposed to constantly
+relitigated that piece so rolling back
+to change is always a good idea except
+when it's not cuz it's so complicated
+right it's so complicated you get into
+these micro service worlds and right you
+know like okay let it out there right
+well your changes are supposed to be
+backwards compatible and you're never
+supposed to change your interface
+because it's the standards that we're
+all but yeah okay I get it right but uh
+ happens right how many people have
+like a breaking change to their API
+interface oh you're all too proud all
+right well let me know where you work
+when you're done because I want to work
+with you guys so we have a scenario
+where we've got a worker process
+expecting version 1.5 of an endpoint or
+an interface and then we roll it back to
+version 1.0 what does that do I don't
+know
+right I have no idea right seems like it
+should work so now what are you doing
+you're wasting time trying to find devs
+done to get an understanding like so if
+I roll this back and like wait wait why
+are we rolling it back just catch up
+we're rolling back what's going to
+happen
+I don't know now if you're lucky you're
+in a scenario where the code has been
+designed in such a way that only part of
+it break
+right there's some added functionality
+that Dunn doesn't get processed right at
+your best case scenario your worst case
+scenario is Ragnarok so you know you
+kind of have to just roll with it and
+hope for the best
+the other problem that you run into
+though is guess what never got tested
+yeah you're not rolling back to a known
+state you're an old earring like an
+entirely new uncharted territory you're
+in a world that has just never been
+dreamed up and I don't know why right no
+I never thought about it like well what
+if we only roll back half of it they're
+like what that really happened now we're
+probably good right so your whole point
+of doing this was to roll back to a
+known good state
+well now you're actually rolling back to
+a state that has never been tested have
+never been figured out and now you're
+just you know kind of like what are
+we going to do so we rolled back we
+restarted the messaging server lo and
+behold everything worked we're like okay
+sweet that was good
+it's fixed but is it is it really
+because the problem is when we when we
+think about resolving these production
+incidents you know I blame ITIL right
+because in your mind you're like it's
+incident management it's about restoring
+services everything else comes after
+that so a lot of times you're like well
+servers up suite done right but we don't
+have a compelling story as to why this
+happened we don't really know like what
+was it that created this particularly
+area it's easy to say like oh yeah you
+know the TCP socket thing changed right
+and that's why everything failed but we
+still don't have an actual explanation
+so being the morbidly curious person I
+am we decided to have a pretty strong
+retro on this and there were a few
+things that we missed during the outage
+let me know if any of these sound
+familiar
+or unless most of your Deb's and you
+were sleeping when this went down the
+message server ran out of memory we
+missed that we missed it because we had
+a deluge of alerts right like so
+everyone knows that's the area where
+like all the databases down so now
+everything is alerting right it was one
+of those scenarios the message queue was
+important enough where we were firing
+off alerts for a bunch of stuff and then
+you're like shut up
+silence but then you silenced the alert
+that matters which is really really
+problematic the other thing we missed
+was that there were bad connection
+attempts for the close wait state that
+was happening after the rollback so we
+rolled back we waited for a little bit
+we patted ourselves you know we did the
+chest bump like yeah we did it
+now just restart the message server
+we're gone we're going home but we
+missed the fact that after we rolled
+back the system was still creating these
+closed weeks so that means like the
+rollback wasn't actually the fix and
+then the third thing is the message
+queue service had a series of thread
+errors how many of you guys have normal
+errors oh come on really
+nobody has normal errors in their log
+you guys are going to hell you know that
+maybe just working at the wrong places I
+don't know but yeah there was a series
+of normal errors and they sort of got
+lost in the logs and we missed it I told
+you this was going to be a real talk so
+I'm calling y'all out sorry this thing
+was when your message clicker thing
+comes with a repair kit bad sign so I'll
+just make sure my spaces over here so
+the message that everything was
+interesting right so so one thing that I
+think a lot of people especially when
+they're new to open source miss out on
+is the fact that it's open source so if
+there's an exception chances are there
+is a literal string in the codebase with
+that exception message it's amazing how
+many people like miss out on that when
+they kind of troubleshoot something so
+sure enough we say that let's prep for
+this thing in the law oh look at that
+this is telling us what this thread was
+actually doing so what actually end up
+happening was there was a thread that
+was responsible for something that died
+and because of the out of memory
+condition the thread couldn't be
+restarted so that helped us sort of
+narrow down I'm like okay
+that could be what's causing it let's
+look and see what this thing does
+probably nothing important except for
+that hole closing socket being
+asynchronous
+so as we navigated through the code
+basically what happened was whenever a
+socket gets closed the process that
+handles that doesn't actually close the
+socket immediately it marks it dirty and
+then puts it on a queue and then there's
+an asynchronous process that comes
+through and closes those sockets later
+that thread dies guess what you get a
+bunch of clothes wait so are like oh
+this is brilliant how would you design
+an alert for that right like up with
+forethought right like I mean after the
+building's burning down you're like man
+we really should have put smoke
+detectors in that shower but but like
+during the incident or even before you
+wouldn't even think about like yeah I
+don't know some detectives in the
+showers and we were like overkill I'll
+just see how it goes right
+yeah so then we started piecing together
+the story and we were like oh maybe it
+was related to the number of connections
+right because we had the out of memory
+thing right so we noticed that as
+clothes leads we're going up memory
+usage was going up so it kind of makes
+sense right like oh maybe the number of
+connections is a problem so we start
+asking ourselves how many connections
+can we support again this is like you
+know brilliant insight after the fact
+you should probably think about this
+before you go opening your server up to
+have tons of connections to it because
+this is the capacity planning 101 so
+we're looking and we're saying okay I
+don't see this anywhere in config
+management being set looks like we're
+not setting it oh all right well system
+half that's a default right of course it
+does every system has a default and it's
+probably a sensible default yeah yeah it
+was a sensible default real sensible
+because I mean come on right if your
+server can't handle like 2.8 billion
+connections or whatever you're probably
+doing it wrong ah like I literally
+screamed when I saw this but no oh but
+it's my fault right because I should
+have been sending this so what did we
+learn during this whole big thing we
+learned a few things we learned
+something about how root causes aren't
+always a thing right when your boss says
+well what caused this thing when you
+list out five things he's like no what
+was the thing that caused I don't know
+particle acceleration I have no idea
+like what caused all of this stuff to
+happen all at once right it's faith it's
+kids me I don't know so was it the
+message queue changes was it the worker
+threads that said oh we're going to go
+from ten to twenty and then screw up how
+we handle TCP possible right but that
+doesn't mean that some other event
+couldn't have created a large number of
+connections that we weren't protected
+against right maybe some auto-scaling
+thing on the number of workers with his
+low memory message the low memory on the
+message server it's possible right but
+would we been having memory pressure if
+it weren't for that erroneous system
+beforehand probably not or at least not
+so rapidly that is one thing we were
+monitoring and tracking so we had an
+idea of like what our Headroom was like
+what did the lack of Mac's connection
+settings possibly it's never been a
+problem before not really a good excuse
+when your boss is yelling at you but I
+think the thing that we learned is like
+even when you are talking about systems
+under your purview under your control
+you have to defend it against bad actors
+even if those bad actors sit three cubes
+away from you all right you you have to
+defend yourself no one would put any
+shouldn't say that most people wouldn't
+put a public API out without some sort
+of rate limiting right you have to do
+something similar inside you have to
+make sure that you're defending these
+systems against all bad actors in all
+bad scenarios we really didn't learn a
+fourth thing I just had a hard time
+modifying the template
+I just just being on it I'm really bad
+at the paint Photoshop and PowerPoint
+and I was like on it's a great template
+but I thought really hard to try to
+figure a fourth bullet engine really
+quick everything we learned metrics need
+context right so we were talking about
+systems and operating in systems at
+different levels right so sometimes
+people have like the one giant dashboard
+that lists everything and sometimes
+that's good but sometimes that's
+overwhelming right you're like all right
+something spoke Jesus
+there's just grass everywhere right and
+when you're in a scenario where you
+don't really understand what the problem
+is you'll latch on to anything right you
+like see see how that was like normal
+and then it went up like that and yeah
+this is the problem for sure and you're
+like what do you you could in like like
+ping latency or something right like
+what what made you think that crashed
+the database sir I don't know but this
+graph looks really suspicious so you
+kind of have to get have to give your
+your graphs context right so one of the
+things that we looked at doing was
+having some very high-level KPI score
+system that we could very quickly look
+at and rule in or out if the system was
+in a decent state right it wasn't a
+pinpoint specific but you know if you're
+in an airplane right like I don't know
+let's say I'm a pilot have a heart
+attack or something you got to take over
+the cockpit where did that come from
+you have you jump into the cockpit right
+and you're looking at a bunch of dials
+right and you know that all of them have
+different detail levels right but the
+minute you see one that's like that all
+right going towards the red you're like
+we should look into this right if we're
+going to lay in this thing similar thing
+doesn't mean you don't have more
+detailed graphs anywhere but something
+for quick breeze through
+the other thing is clarifying points of
+data so like we had a large number of
+messages in the message queue at first
+how's that correlate though to order
+volume is the order volume just hi how
+old are the messages what's the average
+length or average age of the message
+anything that can let you know like is
+this the byproduct of something else
+happening in the system or is it the
+actual problem and it can help you
+quickly sort of narrow down on those
+things logs logs logs logs logs
+centralized logging your table stakes
+right does anyone not have centralized
+logging in their environment I see I
+asked for negative because you guys
+aren't raising your hands anyways who
+has centralized logging in their
+environment
+okay good yeah table stakes right
+because without this in the distributed
+environment with multiple servers you're
+losing time ssshe into every server and
+looking and then if there's anyone
+watching they're looking at you like how
+you come in like oh I gotta get the logs
+right you don't want to be that you know
+one be that person also being able to
+separate the signal from the noise right
+so we were talking about kind of
+exceptions that were happening
+throughout the event right just being
+able to elevate certain errors out of
+that mess is very helpful so one quick
+simple dirty thing we did was give me a
+count of errors based on the class
+that's throwing them right so then you
+quickly see oh there's 389 dealing with
+this class well then you look at it and
+you realize like you know I don't know
+it's some normal error that you always
+see so you can say oh okay I can
+eliminate this from my train of thought
+this guy knows I'm talking about he's
+like yeah so I mean your mother is going
+to bury on that but like find out ways
+that you can quickly elevate the signal
+from the noise in the logs because once
+the problem happens the logs are just
+spilling they're disputing and you're
+you're quickly you know like that like
+that cavalcade of dashboard metrics
+you're just going to grab on to anything
+and waste a lot of time it's easy to
+lose alerts when there's a ton of
+activity going on and the thing that we
+we sort of look at it was like imagine
+you're a firefighter and you're fighting
+a fire it's important to know that
+another fire has sprung up in the garage
+next door right because that changes the
+landscape of the problem that you're
+fighting it's the same thing with alerts
+you may have a lot of alerts that are
+firing for the same problem but a new
+alert might fire that is pertinent to
+the problem that you're solving in our
+case it was a low memory error if we had
+seen that that might have changed a
+trajectory of troubleshooting but
+because it got lost in the logs lost in
+the lost in the noise we completely
+missed it
+constipating - like that was something
+that just popped up because like you
+silence the alerts and there's probably
+a hint for how long this went on you
+silenced the alert and alert silence
+clears and it comes back and it pages
+again or something else pages again so
+make sure that you've got ways to sort
+of deal with and manage that some some
+companies are leaning towards like
+identifying a scribe but sort of like
+handles all of that stuff and it's
+taking notes you know maybe you just
+turn off all alerting for everyone
+except for the scribe but I think the
+key thing is even though it's like oh
+yeah that's pretty easy to do you'd be
+amazed how actually complicated is
+unless you've set up a system to do that
+quickly beforehand right because now
+you're like oh man I got to remove this
+group in this group I forgot that group
+but this group needs to so if you plan
+it ahead of time you can very easily
+just go in and say Boop we're in danger
+mode and only Bob is getting the alerts
+because Bob drew the short straw
+services like big panda help to solve
+this but something that we learned you I
+thought there was like some like DevOps
+sprinkle stuff that I was just going to
+be able to put on big pendants and stuff
+was going to magically appear and
+everything was going to be fixed it
+turns out they actually need you to
+define those alerts because they don't
+have insight into your systems and how
+things are structured who knew so that
+was a fun three months and you know you
+don't dedicate time to it but like big
+panda is a great solution that kind of
+solves that problem and there's others
+like it but know that you have to put
+work into it
+so don't think you're going to you know
+I don't know set up a two-week trial and
+just have everything figured out
+so what do we talk about talked about
+the anatomy of system how complexity
+increases as the system grows we walk
+through our own very personal poop show
+it was exciting most failures are caused
+by change by human change so always
+think about what change and have access
+to what change very quickly in your
+environment root cause analysis is
+difficult sometimes there are a number
+of things that are happening at once
+that put the system into a predetermined
+that then put it into a state that
+allows that error condition to happen so
+sometimes it's not just one thing
+sometimes it's a collection of things
+and you always have to keep that in mind
+to be cognizant of it things we learn
+give your alerts context aggregated
+logins table stakes you absolutely have
+to have it and manage your alerts so you
+don't miss out on state changes during
+the outage that's my talk what the hell
+is that all right remember to rate your
+session I forgot I added that late
+that's it
+all right and I think Jeff said that he
+would be willing to take a couple of
+questions yeah I have a couple of
+questions and now I'm not using the app
+so if you have a question put your hand
+up and ask if you old-fashioned way I
+can't see one back there can we see the
+back so huge bright bulb shining at me
+so damn hot
+so you advocate for rolling back with a
+really good continuous delivery pipeline
+if you've figured out what's wrong
+what's wrong with rolling forward if you
+figured out what's wrong absolutely
+nothing but then you're sort of in a
+different incident management state
+right because now you're talking about
+you're actually deploying the fix which
+is cake so if you can figure that out
+roll forward by all means do that but we
+were kind of like ah people are like
+when a lot of jazz hands
+I actually I have a question myself
+while are waiting two other people want
+to ask them
+it looks like you had a fair amount of
+detail you know your disposal to put
+this stuff together can you talk a
+little bit about what the post-mortem
+for this kind of incident looked like
+sure yeah so the post-mortem was so for
+this particular incident because of the
+impact it was a little more detailed
+than we might normally go into so it
+started with the war room right and we
+did it as quickly as early as possible
+right after the meeting it was sort of a
+late night so I think we started the
+very first thing in the morning and the
+first thing we did was walk through the
+timeline right like what did we know
+what do we know and when do we know it
+happened and then we basically drew some
+circles around things that had question
+marks around it right so we had
+identified like the steps that we took
+and the alerts that we got fairly easily
+but then the questions really build into
+our but why did this happen and how can
+we get more information so it was really
+around that connection failed process
+that we said all right let's blow this
+up so one of the things that we do is we
+say what are all of the different
+systems that are communicating can we
+blow those pieces up and then validate
+that each of those pieces was operating
+correctly or efficiently you know so we
+were using data dog so there was a lot
+of good men
+it's out there if you knew to look for
+them even metrics that we work
+dashboarding but we're being collected
+so there are a number of times where we
+said oh well we've got this metric for
+the HTTP connection pool let's take a
+look at that so it's really about taking
+up taking the system breaking it into
+its elements and then drilling into each
+of those elements until we came up with
+a story and then once we came up with a
+story it was a matter of saying alright
+is this plausible how can we try to
+prove it and it's real hard sometimes to
+recreate situations in a production
+environment that are in a test
+environment but if you can put together
+a compelling story you can probably put
+together a set of test criteria so if it
+happens again you can prove that that
+was the case or not and in this case it
+was simple as did this thread die
+does it still exist and are we still
+generating close waits days nice awesome
+ok another question here with respect to
+the timeline in the post-mortem do you
+guys or do you find that you just base
+things off log times or do you go to
+chat logs emails to try and also
+delineate the Delta between an event
+occurring and when the team knows about
+it and communicates it's actually a
+combination of the two you know we are
+described always is dictating when
+someone reported a thing and then later
+will backfill that with the alerting so
+in in a couple of scenarios not this
+particular incident but we've had
+scenarios where it's like customer
+service reported X our first alert
+didn't fire until 15 minutes later what
+was it that customer X saw and how can
+we make an alert around that and that's
+just you know part of the process of
+iterating and always getting better but
+you definitely need to tie those two
+things together because it's very easy
+to think that you're alerting is in
+place but you don't realize that someone
+was encountering a problem before it and
+the other thing too is to not always
+accept your known understanding of what
+a thing happened you might want to
+solicit more information from people or
+other users in the system to say hey
+were you experiencing this problem yeah
+I had this weird intermittent thing but
+I would just log out and log back in and
+it went away it was like oh that could
+be the seeds of this thing that's
+starting to manifest not in this
+particular case but we've definitely had
+that in other cases where once we widen
+the web so to speak
+people are like oh yeah I was having
+problems I was working from home and I
+noticed this but I just assumed it was
+VPN because VPN sucks um because you we
+have one more question right here too
+but I'm wondering if you can elaborate a
+tiny bit more I mentioned the scribe
+role and I don't know if everybody runs
+their incidents like that so if you
+mention what what you clarify what you
+meant there sure so what an incident is
+occurring and this is you know pretty
+much ripped right out of the Google SAE
+handbook when an incident is occurring
+we try to assign particular roles to
+people right so there's the incident
+commander who's responsible for sort of
+shepherding the entire incident process
+there's another role the incident scribe
+and the scribe is sort of responsible
+for making sure they are documenting
+everything that sort of occurred when
+does the alert fire when did we escalate
+to so-and-so when did we decide to pull
+the big red switch and shut the site
+down describe sort of documenting all of
+that then you've got this another role
+for resource wrangling so that if the
+incident commander decides that we need
+to bring on at them we don't have to you
+know figure out who's going to do that
+the internet resource manager says hey
+we needed dev and they say okay I'm
+going to run and grab the dev and then
+you've got the people that are actually
+troubleshooting the issue under the
+direction of the incident commander
+thanks for the presentation um I have to
+give what did you do to prevent is to
+happen in the future put in Mac's
+connection settings ah
+low-hanging fruit yeah so we put in a
+Mac connection setting we already had
+that connection alert and we never
+really did figure out where that came
+from because it was sort of interesting
+that you know no one on the team had
+remembered actually putting that in but
+we leveraged that a little bit and then
+because we were using aggregated logging
+we were using Splunk we could send an
+alert on particular threads dying we
+didn't we didn't have a good way at the
+time although I can pick up tools to do
+it now we didn't have a good way at the
+time to check and see because if the
+thread dies it gets restarted right it's
+only this oom condition that made it
+difficult for it start so we did alert
+on this thread dying
+particularly which was actually a rare
+scenario we were just lucky enough to
+have it happen twice but we do have an
+alert for that threat exception so it's
+more detection with a little with a
+little ounce of prevention all right
+thank you so much Jeff and if you want
+to hear more from Jeff I forgot to
+mention this this morning but all the
+speakers from the track today
+for the most part with one exception are
+doing the podcast tomorrow so you'll be
+chatting more about you know incident
+response while dealing with all the
+sadness will process or sadness together
+but when it's over you get the high-five
+right and you're like yeah we did it
+so yeah so thank you so much and once
+again give it up for Jeff</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

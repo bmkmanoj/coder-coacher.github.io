@@ -1,0 +1,412 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>GTAC 2014: Scalable Continuous Integration - Using Open Source | Coder Coacher - Coaching Coders</title><meta content="GTAC 2014: Scalable Continuous Integration - Using Open Source - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/GoogleTechTalks/">GoogleTechTalks</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>GTAC 2014: Scalable Continuous Integration - Using Open Source</b></h2><h5 class="post__date">2014-11-14</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/eax-t5LBJiY" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">&amp;gt;&amp;gt;Vishal Arora: I have a tendency to speak
+fast and loud, so my apologies to those of
+you trying to take a nap in advance.
+My name is Vishal, and I joined Dropbox four
+months ago to work on our developer tools.
+And today specifically I'd like to talk about
+the few weeks that we spent implementing what
+I think is a scalable CI system.
+But first, a little bit of context about Dropbox.
+We have a legacy app, and actually it's a
+testament to the developers that originally
+wrote the app that the code has stuck around
+for so long.
+But that also means it's a very tightly knit
+code base and it's a monolithic code base.
+Thankfully, we have a lot of tests for it
+and we like running these tests.
+We run them all the time.
+In fact, not only do we run them after every
+commit, but we run them during code reviews.
+And, in fact, we run them the first time you
+fire off a code review, and then we run them
+again every time you make an edit.
+Basically, on every snapshot.
+So we run them very, very frequently.
+And we have a lot of different types of tests.
+We've got unit tests, we've got integration
+tests, we've got Selenium tests.
+And as you can imagine, some of these are
+very slow and they take a long time to run.
+In fact, if you tried to run all of our tests
+one after the other, serially, it would take
+several days to get through all of them.
+That makes for a difficult time when you're
+trying to commit to the repository.
+Obviously, nobody wants to wait hours or days
+to be able to submit a CL.
+And that means that you have a lot of fun
+times trying to figure out why a test broke
+in your continuous integration system.
+And so we were having a lot of fun.
+We said that we need to have less fun.
+But there are a lot of aspects of this that
+we wanted to keep.
+So for instance, we really liked that we had
+tight integration with our developer workflows
+and with our code review tools.
+And in fact, we wanted to add more data into
+the code review process.
+So, for instance, Andrei talked earlier about
+showing coverage data, branch coverage, getting
+those signals into the code review tools and
+the code review process.
+So that was great.
+And we also wanted to run our tests very frequently.
+In fact, we want our test to not only run
+within our CI system or code review process,
+but we also want it to run during development
+such that developers are continuously running
+tests as they write code.
+But that means we need tests that are fast.
+And when I say fast, I mean tests that run
+on the order of minutes, like five minutes
+or less than ten minutes.
+And we figured the way to get to that is by
+scaling.
+And when I say scale, I specifically mean
+massive parallelism.
+That's what I'm going to call sharded tests.
+But you don't want to spend a ton of money,
+like millions and millions of dollars in running
+these tests, and so you want to be smart about
+how you use your resources to run these tests,
+and that's what I'm calling controlling your
+workloads.
+I'm going to spend most of the time today
+talking about the first part of this, which
+is sharded tests, which is where we've done
+the bulk of our work.
+All right.
+So how do you get to massive parallelism?
+Obviously you can't get parallelism on a single
+machine so the first thing that you need is
+a distributed system.
+And this is what a standard distributed CI
+system looks like.
+You have some servers on the far top right
+-- my right, I guess your left, that take
+in requests either through a Web UI or some
+sort of a command line, and they stick these
+requests into a database.
+Then you have some workers that pull each
+request out of the database and run it in
+an isolated environment.
+And that's great because now you can kick
+off tests for each request that you get and
+you can scale the number of servers based
+on the incoming requests.
+You can scale your database, and you can scale
+across your data centers.
+But that does not mean that each test request
+will be fast.
+If you want fast tests, then you need to make
+a slight tweak to this model and you need
+to introduce sharding.
+The basic concept of sharding is that whenever
+you get a request, you break it up into little
+batches or little bits, and each one of those
+bits is a shard, and you run each one of those
+shards in parallel.
+So now not only are you running every one
+of those requests you get in parallel but
+you are potentially running each test within
+a request in parallel.
+And that way you can dramatically reduce the
+amount of time it takes to run a test.
+But you need to be smart in how you do your
+sharding.
+If you just evenly break up the tests across
+a fixed number of machines, then you might
+end up with a really long running shard.
+And then you don't -- if you have a long pole
+like that -- then you don't see any benefits
+from actually doing sharding because your
+developer is still waiting for that long pole
+to finish.
+And so we figured, all right, we need to be
+smart about how we do sharding, and we need
+to try to get as even a distribution of tests
+as we can based off runtime.
+And we figured the best way to do that is
+use historical test runtime data.
+All right.
+Fantastic.
+So we have a bunch of requirements and we
+need to implement this system and we needed
+to implement it yesterday because we're already
+burning a lot of developer time.
+So what do we do?
+Well, we looked at what's out there in open
+source.
+And one of the most popular systems out there
+is Jenkins.
+And Jenkins is great because it's distributed.
+And so we said all right, we built our CI
+system around Jenkins, and we started throwing
+lots of lots of shards at it and then it fell
+over.
+And the reason it fell over is because Jenkins
+is designed to be serial.
+It's not designed to handle significantly
+sharding or batching and caching.
+So we said all right, what else is out there?
+Well, there's Travis CI, and there's TeamCity
+and a bunch of other tools out there that
+do CI, but they didn't fit our model.
+We wanted to be able to run our tests very
+tightly integrated with our developer workflows
+and we wanted to run tests even outside of
+CI.
+And the more that we looked at different tools
+out there, the more we realized that a lot
+of these tools were built for a different
+paradigm, not necessarily the web paradigm,
+but they were kind of retrofitted for the
+web paradigm.
+So we said all right.
+You know what?
+Open source CI is great for isolated systems
+and isolated repositories, but in our web
+world, we need a new stack.
+And we figure that web stacks are predictable,
+there are a lot of resources out there for
+them, everybody understands them, so why don't
+we use a web stack to build our CI for our
+Web paradigm and our Web app.
+So that's what we did and we called it Changes.
+And this is what it looks like.
+It looks very similar to the stack that I
+spoke about earlier.
+And what Changes does is that it uses a bunch
+of open source technologies, like Apache Mesos
+and LXC, and orchestrates all of them together
+to give you a distributed, scalable CI system.
+The way that it works is that anytime the
+Changes server gets a request, it looks at
+the historical runtime for the tests within
+that request and it automatically figures
+out how to shard those tests to achieve the
+shortest total runtime.
+And it sticks each one of those shards into
+the database as a task, and then there's a
+Changes extension for Mesos that tells Mesos
+that there's this task that's waiting to run.
+And I'll talk a little bit more about Mesos
+and LXC as well later but we basically run
+this entire system within EC2.
+That gives us elastic capacity so that we
+can quickly scale not only the number of workers
+that we need to handle all the requests that
+we're throwing at it but also run a lot of
+different shards within the threads -- or
+within the test suites.
+Okay.
+And LXC, which stands for Linux containers,
+it gives us test isolation so that two shards
+that are running on a machine don't interfere
+with each other, and we can do that without
+sacrificing performance because we're running
+in Linux and EC2 is all Linux based.
+And then Mesos is this really cool framework
+that kind of abstracts away all the hardware,
+the physical hardware, for you.
+So we just tell Mesos that we have a bunch
+of different machines in EC2 and this is the
+specification of all these machines.
+And on the other hand, we tell it that, all
+right, we want to run all of these shards,
+and Mesos figures out how to efficiently allocate
+these things and it monitors tasks to make
+sure they're done, and whenever they're completed
+it picks up the next pending task to execute.
+And like I said, Changes is the system that
+orchestrates all of these parts together to
+give you CI at scale.
+Okay.
+So we have a system that will let us run a
+lot of tests, that will handle a lot of load,
+but we want it to be fast without spending
+a ton of money.
+And this is where the part -- the second part
+of the talk comes in, which is controlling
+the amount of workloads that you throw at
+it.
+Now, at this point in time, a lot of this
+is just ideas that we have for building features
+into Changes, and it's under a lot of active
+discussion.
+And starting in no particular order, one of
+the things that we're thinking about is this
+idea of having composable projects.
+So changes already has this concept of a project
+where you associate a bunch of tests with
+some settings and some notification preferences.
+But what if each one of these tests -- or
+what if each one of these projects was a module
+of its own?
+Then you can start doing things like saying,
+all right, for my team, I'm going to have
+two projects.
+I'm going to have a project that has unit
+tests and a project that has integration tests.
+And if I tie these two together into a pipeline,
+stagger them in some way, then I don't have
+to run my integration test until all of my
+unit tests pass.
+And then that way I can get more specific
+notifications about what failed rather than
+a test failed or a bunch of tests failed.
+Or, for instance, if you wanted to do a release,
+then you could build a release pipeline composed
+of multiple different projects saying that,
+all right, I have one library out here that
+I care about and this library has some tests,
+and then I have a bunch of code over there
+that I care about that has some tests.
+Then you can put each one of those in a different
+project, and you can define a release pipeline
+that says only be ready for release when both
+of these projects is ready to go.
+Of course, you only want to run the tests
+that are affected.
+You don't want to run all the tests, especially
+those that aren't related to the code that
+you touch and you want to cache aggressively
+whenever you can.
+The last thing that I wanted to touch upon
+is being able to structure your repositories.
+So like I mentioned earlier, at Dropbox we
+have a monolithic code base, but this monolithic
+code base is actually spread out over multiple
+different repositories.
+And I think -- well, there's a lot of debate
+and there's a lot of religion around how repositories
+should be structured.
+But if we structure them the right way then
+we can leverage that in controlling our workloads.
+So, finally, I wanted to mention that there
+are a lot of tools out there for doing continuous
+integration.
+It's hard to get them to work at scale.
+But it is possible if you use the Web paradigm.
+And we did it using Changes.
+And all of our work is open sourced, and it's
+available at GitHub.com/dropbox/changes.
+So feel free to take a look at it.
+And feel free to put together your own scalable
+CI using the pieces that we did for your own
+-- for your own use cases.
+All right.
+Any questions?
+&amp;gt;&amp;gt;&amp;gt; Does this impact how you design your automated
+tests?
+&amp;gt;&amp;gt;Vishal Arora: Does this impact how we design
+our automated tests?
+So our philosophy was to essentially support
+all of the existing tests that we had.
+And for the most part, we wanted to do it
+without having to change the test.
+Now, the -- you do have implications.
+If you're going to run multiple tests in parallel,
+then there are some implications.
+And I think that Ankit did a really great
+job earlier today talking about some of those
+concepts.
+So, for instance, having hermetic servers
+or controlling the lifetime of the data that
+your tests manage, those are really, really
+important concepts.
+So, for instance, we had some cases in which
+we had one test that did a lot of setup, and
+then all of the tests that came after it kind
+of assumed that the setup existed or this
+-- whether it was a server that was running
+or whether it was data, was already there
+within the database.
+And if you're going to try to run tests in
+parallel that just doesn't work.
+Each test has to do its own -- has to contain
+the lifetime of the servers that it manages,
+the lifetime of the data that it cares about,
+and it has to create that data.
+So there were some changes that we needed
+to make to some of our tests to get it to
+work in this world.
+But for the most part, our philosophy was,
+let's try to make it possible to run our tests
+as is.
+&amp;gt;&amp;gt;&amp;gt; How do you manage the different branches
+that -- does all your different branch codes
+run on the continuous integration environments?
+&amp;gt;&amp;gt;Vishal Arora: Oh, yeah.
+That's a great question.
+This was one of the other things that we did
+not find very good support for in open source.
+So with changes, Changes recognizes multiple
+branches.
+So it will take a look at your repository.
+And now we're going to into some of the specifics.
+So, specifically, GIT repositories or mercurial
+repositories, and will recognize that it has
+separate branches, and you set up a -- it
+automatically sets up a different CI for each
+one of the branches.
+And you can manage notifications based off
+of branches if you needed to.
+But by default, out of the box, what you're
+going to get is, it's going to monitor the
+master branch or the default branch, depending
+on which -- which VCS you're using.
+And it will look only at the commits to that
+branch, and it will give you data for that
+branch.
+But it's just a configuration setting if you
+wanted to support all branches or a particular
+subset of branches.
+But, yeah, we have support for branches built
+into Changes.
+&amp;gt;&amp;gt;&amp;gt; And one more question.
+The nodes on which you are running the test,
+suppose you want to replicate the nodes.
+You have some scripts which can just create
+a Node, so you -- you're using EC2.
+So are you using the templates and the (indiscernible)
+recipes with just copies and creates the new
+nodes?
+&amp;gt;&amp;gt;Vishal Arora: That's a good question as
+well.
+So we don't -- from EC2, all we get is just
+bare metal, just -- like, literally, just
+hardware.
+And we hand that off to Mesos; right?
+The setup or the environment that's specific
+to a test, all of that is encoded within the
+LXC container.
+And so between the two of those, the LXC container,
+you can give us an LXC container if you have
+some custom setup, and we will install -- you
+know, we will replicate that same setup, using
+-- we will take snapshots of the container.
+So we will replicate the data across multiple
+nodes when we want to run your test.
+And so the easiest way to do that is to just
+give us a snapshot of an LXC container, and
+then we'll replicate that for you.
+But we don't actually use EC2 to do the replication
+for us.
+&amp;gt;&amp;gt;&amp;gt; Okay.
+Thank you.
+[ Applause ]
+&amp;gt;&amp;gt;Sonal Shah: Thank you very much, Vishal.</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

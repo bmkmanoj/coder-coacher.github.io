@@ -1,0 +1,1408 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2016: Bob Steagall “Lightweight Object Persistence With Relocatable Heaps in Modern C++&quot; | Coder Coacher - Coaching Coders</title><meta content="CppCon 2016: Bob Steagall “Lightweight Object Persistence With Relocatable Heaps in Modern C++&quot; - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2016: Bob Steagall “Lightweight Object Persistence With Relocatable Heaps in Modern C++&quot;</b></h2><h5 class="post__date">2016-10-01</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/FPUBjPYBsGI" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">good morning everyone and thank you for
+coming to my talk my name is Bob Stegall
+and they tell me I'm a software
+architect with Finch computing I began
+using C++ in 1992 when I was a young
+research assistant working for the
+department's of physics and radiology at
+university hospitals in Cleveland and I
+can tell you from personal experience
+that the evolution of the language in
+its libraries since then especially over
+the last seven or eight years is truly
+astounding with the rapid uptake of C++
+11 and now 14 it's hard to imagine that
+there ever was a time before our value
+references and lambdas and very attic
+templates and soon concepts and things
+like this as you can see this talk was
+initially entitled lightweight object
+persistence with modern C++ however as
+always happens when I complete something
+for a deadline after the deadline passes
+i begin to obsess over the many ways
+that could have been made better so in
+the interest of improved precision for
+today I've amended the title to be
+lightweight object persistence with
+relocatable heaps in modern C++ I'm not
+sure that it's much of an improvement
+but at least my good intentions are
+captured in the video record now before
+we dig into the content I have a request
+in a couple of notes first there's a
+fair bit of material to get through and
+so I ask that you please hold your
+questions until the end each slide is
+numbered in the lower right hand corner
+so if you have a question please take
+note of that slides number and we'll go
+back to it next like our esteemed 43rd
+president I may make up some words along
+the way hopefully their meaning will be
+clear from the context also i'm going to
+use the word concepts throughout this
+talk and when I do I mean concepts with
+the lowercase C not the new language
+facility I'd like to begin describing
+what this talk is about I submitted the
+abstract for the talk because I wanted
+to share some results of some work that
+I've been doing off and on for the last
+few years so first I'd like to describe
+a way of thinking about allocator design
+that may be helpful when you design your
+allocators I decompose the problem into
+a small number of concepts which could
+be implemented as policy types
+make designing high-performance
+allocators a little easier or at least
+they did for me and for my money this
+decomposition or mental framework if you
+will is the most important thing to take
+away from the talk secondly I'd like to
+outline one solution to the problem of
+object persistence a solution that may
+be useful in certain cases now there's
+no sexy metaprogramming or slick
+concurrency techniques instead just a
+straightforward way of implementing one
+small form of object persistence for
+another solution along the same lines as
+mine and one that is very mature I
+recommend that you look at boost inner
+process now although we're going to
+construct a standard conforming
+allocator along the way this talk is not
+a tutorial on allocators there are
+plenty of books and articles and online
+references that describe the details of
+allocators and how to build them this is
+also not a proposal for how to improve
+the standard allocator facilities there
+have been countless electrons sacrificed
+on this altar over the last few years
+Andre Alexander SQ has been very vocal
+in this area and gave a great talk on
+the topic last year at this very
+conference and I recommend you check it
+out on youtube he's given similar talks
+in the past and parenthetically the only
+quibble I have with Andres point of view
+is that I think he doesn't go quite far
+enough I hope to move that ball a little
+bit further down the field today finally
+this talk will not provide a complete
+off-the-shelf framework for object
+persistence writing allocators and
+implementing object persistence is
+difficult and challenging work and I do
+not have the one true library that will
+solve all of your persistence problems
+you're going to need to figure out the
+best way to do that for yourself so the
+first half of the talk will be a
+discussion of some concepts then I'll
+show some code and finally I'll
+hopefully provide a demo that may or may
+not work so let's provide or let's begin
+in the context of a particular problem
+in my case at my current and previous
+employers critical business operations
+depend on proprietary in-memory
+databases that are written in C++
+although these databases are very
+different in the design and the content
+they hold both databases shared store
+lots of complex data
+with non-trivial relationships among the
+data so if I step back and generalize
+the problem I have a set of types these
+types have container data members the
+elements of those containers may
+themselves also have container container
+data members so I could have a nested
+hierarchy of containment I have a large
+number of these objects in memory
+usually more than 10 gigabytes and quite
+often substantially more than 10
+gigabytes the objects of these types
+typically have time consuming
+construction or copy or traversal
+operations and so naturally I want to be
+able to take this data and save it to
+persistent storage so i can recall it
+later and use it or transmitted across
+the wire so somebody else can use it of
+course the question is how to accomplish
+these feats well it goes without saying
+that we can turn to serialization
+wikipedia has a nice definition the
+process of translating data structures
+or objects stayed into a format that can
+be stored in a file or temporary buffer
+or transmitted across a network
+connection and reconstructed later in
+the same or other computer environment
+in many cases this is a two-step process
+as we all know step one we iterate over
+and serialize the source objects into
+some intermediate format for example
+JSON which all the kids love these days
+or yamo or XML or protocol buffers or a
+proprietary format etc etc now this
+iteration could be recursive it could be
+level order it could be something else
+but whatever it is it has to be
+pre-arranged with or discoverable by the
+entity on the destination side that's
+doing the D serialization now of course
+the obvious purpose of serialization is
+to save important objects state step two
+is to deserialize the intermediate
+format into destination objects and here
+the obvious purpose is to recover
+important objects state if we've done
+this properly the result will be that on
+the destination side each destination
+object will be semantically identical
+to its corresponding source object I'm
+not going to define semantically
+identical but i think we all pretty have
+a pretty good idea what that means now
+when we talk about serialization in this
+context this is what I think of as
+traversal based serialization traversal
+because sequences of objects and object
+contain containment hierarchies must be
+traversed in order to perform the
+serialization of each object so let's
+talk briefly in very general terms about
+the intermediate format because I think
+there are some useful ideas here first
+whether implicitly or explicitly the
+intermediate format describes a schema
+and here I'm using the word schema in a
+very loose sense to mean the
+relationship between an object and other
+objects for purposes of serialization I
+think of two kinds of relationships
+containment and reference and usually
+it's the representation of a reference
+relationship that poses the tough
+problems secondly the intermediate
+format provides or can provide several
+forms of Independence of three varieties
+the first is architectural independence
+in here I think of independence from
+issues of things like byte ordering
+class member layout or address space
+layout and here think of serializing
+objects that exist on an intel-based
+architecture and deserializing them on a
+Power Architecture or SPARC architecture
+the second form of Independence that I
+think of is what I call representational
+independence for example I might have a
+list of vector of char on the source
+side which when deserialized on the
+destination side becomes a list of
+string one could argue that those
+objects are similar enough that that
+we've done the persistence correctly
+this is an example of something I think
+of as being intra language
+representational independence and on the
+other side of that corn coin I might
+have a list of string in Java which
+after wandering through the desert of
+JSON becomes a list of string and C++
+and here I think of this as being
+interlanguage representational
+independence the final concept is that
+of positional independence
+and what I mean by this is that the
+intermediate format can provide
+independence such that when a
+destination object is D serialized in a
+destination process it's important state
+is preserved even if the destination
+object exists at a different address in
+the destination process and this is
+actually sort of the key concept here
+behind the rest of the talk we all know
+from experience that there are costs and
+risks associated with this approach we
+don't yet have standardized mechanisms
+for compile time or runtime reflection
+in C++ so at the end of the day code has
+to be written or generated or both and
+the code has to traverse the source
+objects on the source side and render
+them into some intermediate format and
+on the destination side the code has to
+parse the intermediate format and
+reconstruct the destination objects I
+think most of us know that code like
+this can rapidly become complex and
+fragile there's an engineering costs
+associated with these activities and it
+can be non-trivial in real-world systems
+there's a temporal cost associated with
+traversal based serialization by its
+very definition serialization is linear
+and therefore in general the entire
+stream must be read sequentially which
+typically precludes any sort of parallel
+ISM this can be an expensive proposition
+if your object construction is time
+consuming on the destination side
+likewise there's a spatial cost many
+common intermediate formats are verbose
+XML for example is the poster child of
+excessively verbose data interchange
+formats there are risks associated with
+traversal based serialization our
+intermediate format may allow private
+implement eight implementation details
+to be exposed details that we would like
+to keep private so the risk from this is
+that on the destination side
+encapsulation might be violated when
+destination objects are reconstructed
+and this may in turn break class
+invariance or violate constraints that
+we expect to hold between objects on the
+destination
+side so to sum up everything there is to
+know about traversal based serialization
+in one slide it's as close as we can
+come to a universal technique for
+implementing object persistence if
+you're willing to put in the effort you
+can find a way to make it work for you
+on the other hand it can be expensive to
+implement and maintain and you generally
+have to be very careful to keep your
+code from becoming overly complex or
+stale or fragile so given these
+circumstances is there a way for me to
+avoid all the hard work involved with
+traversal based serialization in other
+words can I pull a Kobayashi Maru and
+change the parameters the problem to
+make my life easier well let's change
+the problem statement suppose that I
+don't need architectural or
+representational independence suppose
+that my source and destination platforms
+are the same or very close suppose that
+I'm positive the class layouts and
+corresponding source and destination
+objects are going to be exactly the same
+and suppose I'm willing to use the same
+object code on either side or code
+that's very close if I make these
+assumptions can I now implement a form
+of object persistence that does not
+require any sort of / type serialization
+or D serialization code that allows me
+to persist standard containers and
+strings and be able to use standard
+algorithms on the on the destination
+objects after D serialization and that
+uses fast binary i/o like write and read
+or send and receive clearly we can do
+some of these things now I can save an
+array of p 0 DS to disk or send it over
+the wire and if I'm careful about what I
+put in it and how I interpret it
+everything will work just fine but I
+want to work at a slightly higher level
+than plain old data structures so here's
+an idea how about a relocatable heap I
+usually think of the heap as being a
+magic black box I ask it for some memory
+and if the planets are aligned and the
+gods are willing a small window into
+that box opens revealing a chunk of
+memory that I can use for a while when
+i'm done with that memory i hand it back
+to the box and the window closes well
+would it be cool if i could pick up that
+black box and save it to disk so i can
+restore it later or
+share it with another process or send it
+across the wire to somebody else in
+other words wouldn't be cool if I could
+relocate the heap so by Fiat I'm going
+to declare that a heap is relocatable if
+it can be serialized and deserialized
+with simple binary i/o and after D
+serialization at a different address in
+the destination process on the
+destination machine the heap itself
+continues to function correctly and the
+heaps contents continue to function
+correctly in other words after
+relocation all class and variants are
+preserved for the heap and all the
+destination objects it contains and all
+the destination objects are semantically
+identical to their corresponding source
+objects as experienced C++ programmers
+we all know intuitively that for a silly
+scheme like this to work there must be
+some restrictions on the types that can
+be used by and stored within such a
+relocatable heap and there are every
+object and a relocatable heat must be of
+a relocatable type and by in the heap I
+mean the objects used to implement the
+heap itself as well as the heaps
+contents so this begs the question of
+what is a relocatable type and again by
+Fiat I will declare that a type is
+relocatable if it can be serialized by
+writing raw bytes for example by being
+the source argument of a right or M copy
+operation and it is d serializable by
+reading raw bytes for example being the
+target arguments in a read or mem copy
+operation and a destination object of
+that type is semantically identical to
+its corresponding source object
+regardless of the destination objects
+address in the destination process so
+what kind of types are relocatable well
+it's pretty straightforward integer
+types and floating-point types also
+p.o.d types which when unwrapped
+ultimately contain only integer and
+floating-point types everything else is
+not relocatable well let's look at a few
+cases ordinary pointers to data are not
+relocatable
+the data to which they refer to that to
+which they refer on the destination in
+the destination process may exist at a
+different address than in the source
+process pointers to member functions
+static member functions and free
+functions are not relocatable because
+the object code to which they refer is
+very likely going to exist at a
+different address in the destination
+process likewise with types that have
+virtual functions this is because
+they're V tables will very likely exist
+at a different address in the
+destination process and finally types or
+values of types that express some sort
+of process dependence are not
+relocatable and here on thinking of
+things like file descriptors or windows
+handles of course by definition process
+to pin dependent handle types are
+meaningless outside their own process
+now these might seem like pretty severe
+restrictions and they are but if you
+think about them they sort of specify
+the kind of data that one might keep in
+a record residing in a table in an
+in-memory database in other words the
+kind of stuff that I do day today so
+let's sketch out a design for this first
+of all a real okay table heap would need
+to provide methods to initialize and
+serialize and deserialize the heap it
+also need to provide methods to store
+and access something I call a master
+object which would reside in the heap
+and here a master object is a special
+object that the heap itself is aware of
+its role is to act as a gateway to the
+actual contents of interest stored in
+the heat on the source side our client
+code would have to ensure that the
+relocatable type requirements are
+observed by all the Heat's contents and
+of course we would need to allocate
+everything that we want to be persistent
+from the heat and at some point we need
+to serialize the heap on the destination
+side our client code would need to do
+the congress it would need to
+deserialize the heap and obtain content
+obtain access to the heaps contents
+through the master object so when I
+think about this problem I see six not
+quite orthogonal concepts that I that I
+grew up into two
+broad categories as i mentioned earlier
+i call them concepts but it's perfectly
+reasonable to think of them as being
+policy types the first broad category i
+call structural management and here the
+four associated concepts are the
+addressing model the storage model the
+pointer interface and the allocation
+strategy the second broad category i
+call concurrency management and the two
+associated concepts are thread safety
+and transaction safety we're going to go
+into a little detail about regarding
+these concepts in the next few slides so
+let's start with the addressing model
+the first structural concept the
+addressing model is a type that
+implements primitive addressing
+operations its purpose is to provide
+access to raw memory segments and I'll
+define what a segment is in a couple of
+minutes in a way it's analogous to avoid
+star it must also be convertible to
+avoid star the conversion is important
+because when we want to cast an
+addressing model object to a non-void
+pointer we first have to usually we
+first have to turn it into a void star
+internally the addressing model defines
+the bits or the pattern of bits that are
+used to represent an address it defines
+how an address is computed from that
+pattern of bits and this implies how the
+addressing model expects memory to be
+arranged now from this description we
+can see that the simplest example of a
+storage model is in fact a void pointer
+there are really sort of two possible
+representations right the first is as an
+ordinary void pointer I also call them
+natural pointers the other is a
+synthetic void pointer or some other
+user-defined type these kinds of
+pointers are also known as fancy
+pointers the standard refers to them as
+pointer like types next up is the
+storage model and this is a policy type
+whose job is to manage segments it
+interacts with an external source of
+memory to borrow segments from the
+operating system and return them to the
+operating system at some point in time
+it provides an interface to segments in
+terms of the addressing model to the
+allocation to the allocation strategy
+and it forms the lowest level allocation
+in the stack so what's a segment I call
+a segment a region of memory that's been
+provided to the storage model by some
+primitive external source and here I've
+listed some of those sources both for
+Windows and for unix-like operating
+systems both sources that provide memory
+to the private address space and sources
+that can provide shared memory now I use
+the term segment because other
+allocators call them blocks or super
+blocks and I prefer to use terms without
+the word block in them just to avoid
+confusion the next structural concept is
+the pointer interface and this is a
+policy type that wraps the addressing
+model so that it can emulate a pointer
+to data it's analogous to a t-star for
+example it provides enough pointer
+syntax to get the job done whatever the
+job maybe it's convertible in the right
+direction to ordinary pointers and it's
+convertible in the right direction to
+other pointer interface types by in the
+right direction I mean things like
+adding CV qualifiers going from casting
+from derive to base or casting from T
+star to void star now there are again
+two possible representations a natural
+or ordinary pointer T star or a
+synthetic pointer and you may be
+wondering well what's the difference
+between a synthetic pointer and a random
+access iterator because they're actually
+very close and the difference is
+conversion operations I want to be able
+to take my pointer interface and apply
+ordinary casting operations to get
+ordinary pointers so that I don't have
+to go through convoluted syntax like I
+would with a random access iterator to
+get an actual address to something and
+just as with the addressing model the
+simplest example of a pointer interface
+to objects of type T is a t-star
+next up is the allocation strategy and
+this is what we normally think of as an
+alligator it's a policy type that
+manages the process of allocating memory
+for segments it requests segment
+allocation and de-allocation from the
+storage model and recall that the
+storage model is a proxy for the
+operating system it interacts with
+segments in terms of the addressing
+model it divides those segments into
+chunks for use by the client and it
+provides those chunks to the client in
+terms of the pointer interface and also
+by the way a chunk is a smaller region
+of memory that's carved out of the
+segment to be used by an alligator's
+client the final two concepts under
+concurrency management are thread safety
+and transaction safety of course thread
+safety means ensuring that your program
+operates correctly in the presence of
+multiple threads or processes in other
+words no data races and I think of
+transaction safety as meaning allocating
+and D allocating chunks in such a way
+that your allocator could be used by
+something that needs acid semantics like
+a database this means providing
+operations like commit and rollback for
+your allocate and deallocate functions
+now when I think about a relocatable
+heats implementation the structural
+concepts sort of build upon each other
+in a linear fashion however the
+concurrency concepts might be involved
+or intermingled with any or all of the
+structural concepts and I'm not going to
+say anything more about thread safety or
+transaction safety other than to mention
+that thinking about them is a very
+important consideration in the design of
+your allocator and you've got your work
+cut out for you so how would we
+characterize stood allocator by this
+mental framework it's pretty
+straightforward the addressing model is
+void star the storage model is
+implemented behind the scenes by global
+operator new using the operating
+system's memory management primitives
+the pointer interface is T star and the
+allocation strategy is also implemented
+behind the scenes by global operator new
+using whatever allocation algorithms the
+library writers have chosen likewise
+thread safety is implemented by global
+operator new
+it is whatever your implementation says
+it is finally as far as transaction
+safety goes there is none and you know
+these are all exactly what you would
+expect it's worth noting that from the
+perspective of this talk the major
+differences among common allocators is
+in the way they implement the storage
+model allocation strategy and thread
+safety concepts in order to improve
+performance or at least in the way that
+they desire to improve performance so
+recall that I want my relocatable heap
+to hold standard container and standard
+string objects and I want to be able to
+operate on those objects with standard
+algorithms the C++ 98 and 03 standards
+did not allow me to do this here's a
+load of verbiage from the 03 standard
+the highlighted text in the first
+section shows how containers were free
+to assume that the pointer and const
+pointer type defs nested in stood
+allocator our t star and consti star as
+far as i know until two or three or four
+years ago all of the implementations did
+this which effectively prevented
+standard containers from being used with
+allocators that allocate memory in terms
+of synthetic pointers the second
+paragraph is an attempt by the committee
+to encourage library implementers to
+support more sophisticated allocators
+but I don't think any of them really did
+here's a little diagram which sort of
+represents the old standards view of a
+container and it's allocator containers
+would obtain their allocation services
+and part of their view of memory from
+the allocator template argument and part
+of that view of memory includes things
+like the reference or const reference
+type deaths as well as the size type and
+difference type type dose but containers
+were totally free to assume and most of
+them did that a pointer was a t-star and
+a constant was a constant e star
+fortunately for us this changed in C++
+11 c++ c plus plus 11 beyond those
+offensive paragraphs from section 20
+were deleted and scattered throughout
+the library portion of the standard many
+new requirements were
+to support the idea of allocator aware
+containers I've listed five of these
+requirements here the five key
+requirements which I believe when taken
+together indicate the containers must
+support allocators that employs
+synthetic pointers I've listed some of
+the section numbers on the right and
+these section numbers are from the 14
+standard some of the numbers are
+slightly different in the 11th standard
+and some of them are different in the 17
+draft standard so here's a picture of
+the new way the new order working from
+the bottom up containers must now obtain
+all information about memory from the
+allocator traits template in turn the
+allocator traits template obtains
+information about memory allocation
+services from the allocator and also
+from the pointer traits template the
+pointer traits template has a very
+specialized job it obtains information
+about the representation of pointers
+from the allocator so given the services
+provided by the allocator and the
+representation of a pointer provided by
+pointer traits allocator traits collates
+this information and provides it to the
+allocator aware container so that the
+allocator aware container can go upon
+its merry way and and do important stuff
+okay so let's look at some example code
+here is one possible memory layout for a
+relocatable heap we have a set of n
+segments all of which are pointed to by
+what i call a backbone a backbone array
+of pointers constructing the address of
+something that lives in one of these
+segments is very much along the lines of
+doing a two dimensional array look up it
+is exactly along the lines of a
+two-dimensional array from the old
+numerical recipes and see if anybody use
+that early in their career and by the
+way the type of the backbone is an array
+of pointers to well unsigned 8-bit
+integers but bytes so one way of
+implementing this arrangement is in the
+processes own ad
+space perhaps by calling global new or
+some other primitive memory allocation
+service service to allocate the backbone
+and the segments and here I've got a
+variable called BP which is the backbone
+pointer that points to the backbone in
+the case of a heap that's based on
+shared memory there could also be an
+administrative segment that contains
+things like the shared memory segment
+IDs in system 5 shared memory or segment
+names if you're using POSIX shared
+memory now here I've tried to make the
+distinction between memory that's shared
+and memory that's private even though
+shared memory gets mapped into the
+processes private address space the
+backbone exists in private address space
+and a call to show Matt or M map Maps
+the shared segments into the processes
+private space the backbone needs to be
+in the process is private address space
+because the mapped addresses for the
+shared segments can be different in
+every process that would want to use
+these segments okay so let's look at
+some code and I'm going to walk through
+some types looking at basically some
+class definitions and one or two
+function definitions and then moving on
+to a short demo which hopefully will
+work so let's look at an example of the
+lowest level the addressing model type
+now i will say before starting that
+there are many ways that one could
+implement these concepts and make the
+system work I've chose to implement the
+for structural concepts as four distinct
+types if you decide to use this
+methodology you could do it differently
+and there's nothing wrong with that in
+this case my addressing model type is a
+class template and it's parameterised on
+the type of the storage manager that
+will use it I could have a private
+address storage manager I could have a
+shared memory storage manager I could
+have a stack-based array storage manager
+and I would like to be able to use the
+same addressing model with all of those
+things so I made it a template now we're
+looking at the prologue part of the
+class with important nested taipei laces
+and the canonical member functions and
+really all we need to know what
+point is sighs type and difference type
+and all of the canonical member
+functions are all defaulted and here
+I've also made them no except to make
+them to optimize performance the only
+ones that are not defaulted are the ones
+which take a parameter of null pointer
+type here's the middle of that class
+I've got some functions address offset
+in segments which provide information
+about memory and here the key function
+the most interesting interesting one I
+call address there are some helper
+functions which are used to perform
+comparison and here there's a helper
+function to test for quality and helper
+functions to test for less than and or
+greater than operations but I've not
+shown them here for brevity there's also
+some operations to allow assignment from
+a void pointer and also to increment or
+decrement what the addressing model
+refers to and this is a little bit of a
+fudge because in this case the increment
+the addressing model is not truly acting
+like a void pointer because I'm allowing
+it to be incremented and decremented
+it's actually acting a little more like
+a char star but this little cheat makes
+things easier to implement downstream at
+the bottom of the type in the private
+section I've decided to make the store
+the storage model a friend and the
+reason will become clear and I also have
+and actually it's because it needs to
+call the constructor that you see on the
+next line which is to construct an
+instance given a segment ID and an
+offset into a segment and the next part
+I've defined a bit mask and I've defined
+a structure I call adder bits which is a
+64-bit structure and I've duplicated it
+here to show the very bottom of the
+class so the actual bits are stored in
+an anonymous union of a 64-bit integer
+and an adder bit structure and the idea
+here is that the upper 16 bits which are
+called em segments will represent the
+segment ID and the lower 48 bits will
+represent the offset into a segment
+which means I'm going to have to do
+a little bit of bit twiddling to compute
+an address and this is good old segment
+offset addressing if any of you are old
+enough to remember this so our example
+storage model is actually a very
+straightforward class there are no
+templates here it provides important
+infra interface information downstream
+to the allocation adage a strategy type
+which I will also call a heap now two
+items of particular interest here are
+the type alias which describes the
+addressing model so there's a little bit
+of CRT p here although not really and a
+static member function that returns an
+addressing model object given a segment
+ID and an offset in the bottom part of
+the storage model well they see in
+public portion there are some other
+helper functions but the interesting
+stuff is in the private section here
+I've also I've implemented a reciprocal
+friendship relationship with the
+addressing model and i've defined some
+arrays of data which are segment the
+first one which is highlighted in black
+is the backbone it's that array of byte
+pointers which will point to the
+segment's the next is an array of
+addressing model types which are the
+actual pointers that will be used
+publicly and there's an array of size
+types which tell me how long each
+segment is and there's this funny thing
+called the shadow backbone and the
+purpose of this I will reveal later and
+hopefully it will work correctly in the
+demo so how are the addressing model and
+the storage model tied together so at
+the top of this the code in blue
+represents some snippets from the
+addressing model and the storage model
+the first part above the ellipsis is
+from the addressing model and below the
+ellipsis is from the storage model and
+I've provided this here so you can
+understand how the addressing model
+computes an address and this is the
+function in black at the bottom and I've
+actually bolted the computation as you
+can see it's a pretty simple operation
+the first thing that occurs well
+assuming I will say it's the first thing
+that occurs but of course it could be
+evaluated in any order we dereference
+the segment backbone using the segment
+ID to get a pointer to a segment we then
+apply the mask to the offset we apply
+the mask to the amader bits to obtain
+the offset and finally we add the two
+together to compute a byte address or
+char star address and that gets returned
+to the caller as a void star pretty
+straightforward ok the third important
+type and probably the most complex type
+at least in terms of interface is the
+pointer interface type and most of that
+complexity in the interface comes from a
+desire to mimic ordinary pointers we
+cannot do a perfect job of that but we
+can get reasonably close close enough to
+implement containers and I've sort of
+provided an outline here of the various
+sections that will touch on canonical
+member functions other constructors
+other assignment operators conversion
+operators dereferencing and pointer
+arithmetic helpers to support library
+requirements helpers to support
+comparison operators and finally our
+data member but in order to get there
+and to help us provide desirable
+conversions in the right direction we're
+going to turn to some custom traits
+types to do svn a and s fina is a
+technique that allows us to remove a
+member function from overload resolution
+so that we can control the set of
+possible overloads that participate in
+that process so the first template here
+is called implicitly convertible and we
+use it to an eight I use it to enable
+member functions when an implicit
+conversion from from star to to star
+makes sense and these are the
+conversions I mentioned earlier adding
+cv qualifiers going from derived to base
+or from anything to void and it just
+relies on stood enable if and stood is
+convertible the second is the logical
+converse of the first and I call it
+explicit conversion with
+choir the name isn't when used in the
+code the name is intended to convey that
+the member function associated with this
+SVA must be used with an explicit
+conversion operator and finally the
+third trait I call implicitly comparable
+and its job is to help with the help and
+performing conversions between synthetic
+pointer types and ordinary pointer types
+we want to make sure that we're
+performing a comparison that makes sense
+like comparing a basestar to a derived
+star or or anything that adds cv
+qualifiers we don't want to do things
+like compare a double star to a char
+star okay at the top of the template is
+the prologue there's a reminder and some
+nested type aliases for consumption by
+standard pointer traits I've also thrown
+in a random access iterator tag so that
+the synthetic pointer can be used as a
+random access iterator with the standard
+algorithms there are no surprises in the
+canonical member functions everything is
+defaulted and I've sort of cheated a
+little bit and made them know except
+even though strictly they shouldn't be
+next are some custom constructors the
+first to a group together they're allow
+implicit conversion from an addressing
+model object and also from a null
+pointer the second to conversion on the
+second to permit implicit conversion
+from compatible ordinary and setting and
+synthetic pointer types so if a you star
+can be implicitly converted to a t-star
+then these two constructors will
+participate in overload resolution
+otherwise as stignes kicks them out and
+it's as if they doesn't they don't exist
+and as an aside I'm was pleased to see
+that this technique which I'm using is
+identical to the technique that Stefan
+lowville Wade described as Spain a
+technique number five in his talk
+Tuesday so I must be doing something
+partially right similarly with
+assignment I want to allow assignment
+from a null pointer and compatible
+assignment from an
+ordinary or synthetic pointer again
+compatible being adding CV qualifiers
+derive to base or anything to avoid as
+with the Constructors on the previous
+slide if a used star can be implicitly
+converted to a t-star than these two
+assignment operators the second to
+assignment operators will participate in
+overload resolution otherwise they're
+right out the conversion operators I
+find to be interesting the first
+provides an explicit conversion to bhool
+which is usually explicit except when it
+exists in a context where so-called
+contextual conversion can occur and the
+way to think about this is the
+conversion to bool will be implicit if
+it occurs inside of an if statement or a
+while statement or a for statement the
+second conversion operator provides for
+an implicit conversion to a compatible
+ordinary pointer type the corresponding
+implicit conversion to a compatible
+synthetic pointer type is handled by the
+conversions constructor that was a
+couple slides back the third and fourth
+conversion operators provide for
+explicit conversion in the other
+direction and here I'm thinking of
+things like removing CV qualifiers or
+casting from baked from base to derived
+or casting from void to something else
+so when taken together the upshot is
+that if a conversion can be done
+implicitly between a you star and a
+t-star then one set of member functions
+will participate in overload resolution
+and allow that to occur implicitly
+otherwise a different set of member
+functions participate in overload
+resolution an explicit conversion
+explicit cast is required of course the
+synthetic pointer needs to support
+dereferencing indexing and pointer
+arithmetic operations and if if this
+looks familiar it should it's identical
+to the interface that a random access
+iterator must provide at the top is the
+pointer to member function which is
+provided to be used by standard pointer
+traits and what this does is it takes an
+efference to some element
+returns a synthetic point now just like
+with the example addressing model we saw
+a few slides back there are some helper
+functions here which I've defined to be
+used by the binary comparison operators
+which I'm not going to show because
+they're fairly straightforward and in
+these helper functions equals less than
+and greater than is where the implicitly
+comparable type trade is is used to
+ensure that we're only going to perform
+comparisons that make sense and finally
+the private section of the class is
+quite simple this is where an interest
+an instance of the addressing model is
+stored now there's a friendship relation
+a friendship declaration to all of its
+cousins it grants friendship to any
+other synthetic pointer template
+although its purpose is to permit the
+conversion to permit one of the
+conversion constructors we saw earlier
+which is converting which means
+converting synthetic pointer of t comma
+am to synthetic pointer of you comma am
+assuming that conversion makes sense so
+here's the allocation strategy another
+very simple class but here it's a class
+template and here i call it segmented
+test heat it provides some type aliases
+which will be consumed by an alligator
+rapper we'll see in the next slide it
+provides pointer rebinding so that given
+any type t it can provide a point of
+synthetic pointer for that type t using
+the addressing model and it has very
+simple service functions much like an
+alligator max size allocate deallocate
+and the mysterious swap buffers member
+function now note that allocate returns
+a void pointer and note just above that
+void pointer here is a synthetic void a
+synthetic pointer representing a void
+pointer but using our addressing model
+template argument and here's an
+allocator wrapper a simple class
+template that's parameterised by an
+element type and by an allocation
+strategy type the thing we just saw its
+interface is compatible with stood
+allocator traits the top is all very
+standard stuff you'll see this in
+just about every standard conforming
+allocator the basic type aliases that
+define what memory is and also there's
+the rebind ER which is then part of
+stood allocator I think since C++ 98 and
+this allows conversion from one
+allocator type to another by simply
+changing the element type the bottom
+half here is also pretty straightforward
+the allocate and deallocate member
+functions simply wrap the corresponding
+member functions in the allocation
+strategy and they return or take
+synthetic pointers to do their work the
+final two member functions construct and
+destroy these are part of the standard
+allocator interface now and what they do
+is they perform in place construction of
+an object given some arguments and given
+a chunk of memory and also perform in
+place destruction given a pointer to an
+object of that type and for purposes of
+exposition I've decided to include an
+instance of my out of my allocation
+strategy type which I'm calling em heap
+all right so let's look at an example
+what would this look like in practice so
+I've tried to put together a fairly
+simple test function hopefully it will
+all make sense I'll begin by including
+some standard headers I'm then going to
+include some headers which define the
+types that you just saw and I'm going to
+slightly break a rule here and I'm going
+to import everything from namespace
+stood and i'm going to start defining
+some type aliases to make things easier
+the first I'm going to do is I'm going
+to make a typedef of our storage model
+because these names can get very long so
+what I'm doing is I'm calling my test
+heap the the instance of our segmented
+test heap template which is parametrized
+in terms of our segmented private
+storage law
+I'm going to define our test I'm going
+to bind the heap argument of our
+allocator type and only allow the
+element type to vary with this
+parameterised alias likewise I'm going
+to define a test string by binding the
+character traits and the allocator type
+but allowing the character to the sorry
+the allocator type but allowing the
+character type of the string to vary I'm
+going to define a test list and I'm
+going to bind the allocator type and but
+allow the element type to vary and
+finally I'm going to define a test map
+this map will associate a string with a
+list of strings and here I'm going to
+bind the comparator and the allocator
+but allow the key and value types too
+very so here's an actual function the
+highlighted code shows the actual type
+that I'm going to allocate and I call it
+demo map so demo map is a test map which
+is instantiated using a test string of
+char as the key type and a test list of
+tests string of char as the value type
+and this is where I'm going to allocate
+it now the allocate function here is a
+simple helper function which is
+off-screen and i'm not going to show it
+here but what it does is it allocates an
+object of type demo map using the test
+heap allocation strategy i'm also going
+to allocate a work buffer for Mikey
+strings here i'm just going to implement
+a test string and i'm going to use that
+as a buffer likewise i'm going to
+allocate a string to be used as a work
+buffer for my value strings that will go
+in the list and the top of the code here
+is a very simple nested loop that will
+populate the map i'm going to create 10
+elements i'm going to with different
+strings for each element and for each
+element there will be a key there will
+be a value that's a list and i'm going
+to put five elements in the list five
+strings each of which will have a
+different value
+and here's the particular line of code
+that does that shouldn't be any
+surprises here the only slight wrinkle
+is instead of using references I'm
+dereferencing these synthetic pointers
+for each of the each of those operations
+next I'm going to have a loop that
+prints the contents of the map then I'm
+going to call this magic function swap
+buffers and what swap buffers does this
+will now be revealed is it's going to
+take the data stored in the primary
+segments in the backbone it's going to M
+copy them into the corresponding shadow
+segment and then it's going to swap the
+segment's in effect I am relocating my
+heap finally I'm going to print the
+contents again so recall this is the
+picture of our memory layout and this
+shows our primary backbone in primary
+segments and our shadow backbone and
+shadow segments and as I said swap
+buffers will M copy data from the
+primary segments to the shadow segments
+it will then swap the pointers in the in
+the backbone arrays and we will
+effectively relocate the data okay and
+so now with your indulgence I'm going to
+try and do a demo here give me a moment
+okay here i am in a sent a 7.2 virtual
+machine and I've actually queued up gdb
+with this program and I've got some
+breakpoint set and I am redirecting
+output to to see out to the terminal
+that you see on the right and hopefully
+this will be readable so I'm going to
+start the program so here I am at the
+top of that function so I'm going to
+allocate the map I'm going to allocate
+the string and I'm going to step into my
+loop that does the population and I'm
+going to do this a few times because
+it's amusing okay so I've just done the
+first element and I'm going to continue
+to the next breakpoint and you can see
+on the right is the output from that
+operation so for example for the tenth
+element the key string was this is test
+key string 9 and the elements put into
+that list were the well the strings 90
+that end with 90 1 90 to 93 9 04 @ 9 05
+right so I've been able to allocate
+memory I've been able to use a standard
+string a standard list in a standard map
+which are which exists inside this
+relocatable data buffer now I'm in the
+swap buffers member function which is
+part of my storage model and I'm just
+going to step through a couple
+iterations but you can see here is where
+I'm taking data from the primary segment
+and I'm copying it binary doing a binary
+copy into the shadow segment and then
+I'm swapping the pointers between the
+two backbones and this will go a few
+times and on the right you can see that
+I've printed out the same data after the
+swapping
+I've printed out exactly the same data
+so what I've done in effect is I've
+taken a heap I've made a binary copy and
+relocated it to a different address
+inside the same process and I've been
+able to preserve the class invariance
+and make things like strings lists and
+maps work so if I can do this I can also
+serialize the heap by copying those
+bites the bytes for each segment to a
+file and at some point in the future
+duplicating the layout of memory with
+the backbone in the segments and loading
+those bites back into the segment's
+effectively providing a relocatable heap
+all right so that's it for the demo
+okay good all right so concluding
+comments possible applications well in
+my case I'm sort of these are the three
+things that I'm interested in of course
+I don't have much imagination so I'm
+sure you can probably think of other
+ways that this could be used I'm
+interested in using this as a heap for
+allocating memory for my shared memory
+databases or actually for my databases
+and having them exist either in private
+address space or in shared memory I
+think these could also be useful if one
+wanted to implement a very highly
+instrumented debug allocator I mean
+think about being able to be capture
+information from the pointer interface
+and capture information for every single
+operation that a pointer does whether
+it's being incremented or dereferenced
+or indexed with the pointer interface
+you can capture that information you
+could capture stack information for
+every operation whether it's the pointer
+interface or in the allocation strategy
+or in the storage model or in the
+addressing model as I said before this
+is simply one possible implementation of
+these concepts and there are many ways
+that this could be done in early work I
+actually made the addressing model be a
+type that is nested within the storage
+model and that sort of made the shared
+the reciprocal friendship a little bit
+easier I'm not sure that's the best way
+to do it but you know it's worth a try
+finally this is a work in progress and i
+will say that i've tested this I've done
+some light testing with clang and visual
+c++ and clang and lib c++ is pretty good
+at its allocator aware containers so far
+all my tests pass with visual c++ 2015
+update 3 all of the tests pass except
+for one and that has to do with stood
+map so other than that I think this is
+the end are there any questions
+sir I actually wanted to do this in such
+a way that I did not need to specialized
+allocator traits I wanted to provide an
+interface to allocator traits which was
+close enough to what stood allocator
+provides so that that was not an issue
+uh but there's I don't see any
+performance benefit one way or the other
+it was a nip and implementation decision
+driven by laziness sir so the question
+is how do I deal with binary
+compatibility well I don't deal with it
+per se other than to say as I said in an
+earlier slide that there are
+requirements for the types that need to
+be relocated and there are assumptions
+that are made when you do the
+serialization between the source and
+destination platforms and those
+assumptions are that the platforms on
+the source and destination site are
+basically the same that the class member
+layouts of objects on the source and
+destination sites are exactly the same
+and then i'm using the same object code
+on each side effectively i'm using clang
+381 on the source side and clanging 381
+on the destination side with the same
+compilation settings sir
+well performance is going to be slower
+and in this particular case instead of
+dereferencing a pointer there is an
+indexing operation there is a bit
+masking operation and there's an
+addition operation and then finally when
+that's done a dereferencing operation
+that must be done right so the speed of
+the dereferencing itself is naturally
+going to be slower my experience
+depending on the application is that in
+a lot of circumstances that performance
+decrease sort of gets buried in all the
+other costs and if one is designing and
+if one were to design a container which
+used this scheme if I were going to
+create a new kind of container that used
+this allocator or this this scheme what
+i would do is once i got a pointer back
+from the allocator and had constructed
+the object from that point forward I
+would actually only use the ordinary
+pointer I would use the synthetic
+pointers basically only to carry
+information for allocation and
+de-allocation operations once I had them
+I would convert them to ordinary
+pointers and use them that way except of
+course where you need to store the
+synthetic pointer think about an element
+in a doubly linked list right for this
+to work each each of the two pointers in
+the node of a doubly linked list needs
+to be a synthetic pointer but if I need
+to do operations on that node I might
+convert one of those pointers to an
+ordinary pointer and do it that way so I
+guess the answer is I don't have a good
+answer for you and it depends
+so have the question is have I tried to
+run this test comparing the performance
+of the same containers the same element
+types with the standard container and
+with this demo and the answer to that is
+not yet I do expect a decrease in
+performance but I've not measured it sir
+yes the question is can I describe my
+deallocation implementation and its
+effect and I will tell you right now
+that the allocation and de-allocation
+strategy that I used for this
+demonstration is very simple I have an
+array of bytes and I allocate from the
+bottom and deallocation is a no op I
+call it the leaky allocator I don't
+really care about allocation correctness
+at this point I'm trying to make the
+allocator aware containers work to make
+sure that compilation and linking can
+occur and everything works correctly now
+the idea behind the allocation strategy
+which i think is what you're really
+getting to is that's the piece of the
+puzzle that would allow you to implement
+allocation and de-allocation algorithms
+to improve performance the way you want
+to do that in that improvement whether
+it has to do with locking and unlocking
+or the way that you divide memory into
+chunks or deallocate them to provide to
+minimize fragmentation that's the role
+of the allocation strategy and it would
+it's up to the implementer of that to
+make that work the way you want to I
+chose something very simple because I
+actually wanted to make this work first
+okay well I'm told that this is the end
+of the hour thank you very much for
+coming i greatly appreciate your time
+and attention</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

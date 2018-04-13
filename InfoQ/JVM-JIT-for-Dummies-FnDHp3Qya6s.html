@@ -1,0 +1,1196 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>JVM JIT for Dummies | Coder Coacher - Coaching Coders</title><meta content="JVM JIT for Dummies - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/InfoQ/">InfoQ</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>JVM JIT for Dummies</b></h2><h5 class="post__date">2012-09-12</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/FnDHp3Qya6s" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hi I'm Charles Nutter I am one of the
+JRuby guys worked at Sun Microsystems
+for some amount of time Bob around three
+years and then moved in jr. about three
+years and now I'm at Red Hat essentially
+doing exactly the same thing that I've
+been doing for the past six primarily
+been responsible for the compiler and
+JRuby and more specifically performance
+and profiling and trying to make Ruby
+code run as fast try to make our core
+libraries run as fast as possible and so
+as a result I spent a lot of time
+looking inside the JVM how it optimizes
+how it compiled stuff and trying to
+figure out how to use that information
+to improve JRuby so today what we're
+gonna learn in this talk is how the JVM
+JIT works and specifically we're talking
+about open JDK here which is what the
+vast majority people run how to monitor
+the JIT so you can see what's happening
+and actually see the decisions it's
+making see the code it's spitting out
+and adjust your expectations
+appropriately finding problems in that
+output so how to tell when there's
+something that's bad in the JIT output
+or in the resulting assembly code and
+then we actually we'll take a look at
+what the assembly code the optimized
+native machine code that hotspot outputs
+and we'll do a little primer so you can
+understand how to read it and it
+actually will and hopefully about the
+end you'll see that it actually is
+useful at some point to be able to look
+at that assembly and figure out what
+you're doing wrong and why hotspots
+making bad decisions because of it
+things we won't cover I won't talk
+anything about anything GC related as
+far as tuning the monitoring and
+optimizations that you'll see here are
+largely if you've got a piece of code in
+your system that it actually is CPU
+bound and it's not optimizing the way
+you expect it to
+rather than being memory bound or i/o
+bound that's what you'll get out of this
+so there's other talks about GC tuning
+and about how to do better on GC and of
+course if you run a Zul you don't have
+to tune the GC at all as Gil was telling
+us but there are lots of other tools and
+lots of other talks for that that I
+won't go into I won't talk about how
+open JDK is implemented in
+Colonel II will talk specific we'll talk
+a little bit about how the JIT and
+OpenJDK is structured and what decisions
+it makes and when but not really how
+it's implemented directly and it won't
+talk anything about like the j'ni native
+layers so we're focusing almost entirely
+on optimization and JIT at the JVM level
+so what is JIT just-in-time compilation
+but it still has quite a few meanings
+it's basically means you compile the
+code or optimize the code when you need
+to or when you've decided that it's a
+good a good time to make that
+optimization decision as on the seat on
+the CLR for example Microsoft's
+implementation there is no interpreter
+that's not mixed-mode they still call it
+a JIT because immediately before the
+code executes they will compile it to
+machine code and then cache that forever
+whereas on the JVM typical JVM will run
+an interpreter for a little while and
+decide which code is hot or important
+and then we'll go through the effort of
+making native code out of it and a large
+portion of java code in a typical
+application or application server may
+never JIT it may actually get hot enough
+so it saves the time of doing all that
+compilation upfront and that's and of
+course never there's a if you only call
+a piece of code once or twice there's no
+reason to go through the effort to try
+and analyze it optimize it turn it into
+machine code just run it in the
+interpreter a few times and then you're
+done you move on with the rest of the
+application and now for a hotspot we're
+talking about what's called a mixed mode
+JIT for a mixed mode runtime which means
+that it will interpret for a while and
+that's just normal bytecode walking with
+an artificial stack a real virtual
+machine at that point and then at some
+point it will turn that into compiled
+native execution and actually run it
+directly on the native system a real
+native hardware native register machine
+and it decides how to do this by
+profiling while it does the
+interpretation so the code runs for a
+certain amount of time hotspot inserts
+little hooks into it and gathers metrics
+about how it's running what methods it's
+calling what sort of looping structures
+it's doing what sort of locking it's
+doing basically gathering information
+about invariants and constants and
+statistics about the code the the
+hotspot guys talked a lot about the
+shape of code and that's what it does
+during interpretation
+time to try and gather that information
+so we can make good decisions for
+optimizing and now even then that is
+still kind of an educated guess you
+can't predict all possible paths through
+a given program you can't tell whether
+the program is going to reach certain
+places so things may change in the
+future you may have one request that
+represents 99 percent of your
+application and then there's another
+request that is that last 1% if that
+hits it may change the assumptions that
+the JVM has about optimizing and it may
+have to back off a little bit so
+everyone should know the golden rule of
+optimizing anything just don't do
+unnecessary work and the purpose of this
+profiling is to figure out where the hot
+sections of code are gather as much
+information about unnecessary work
+they're doing as you can and get rid of
+that work try and get it down to the
+bare essentials of what the code
+actually needs to do and there's a
+number of different ways that hotspot
+and other VMs do this this is a long
+list we'll go through each of these more
+in detail so first of all inlining is
+kind of the biggest one if you can't get
+your code to inline on the JVM you're
+not going to get a bunch of the other
+optimizations that fall out of it
+inlining essentially just takes a caller
+and a collie and combines them into one
+unit sometimes that can be done
+immediately easily without a lot of
+checking like for example calling a
+static method you always know what body
+of code you're hitting it's easy to
+inline that whereas calling a virtual
+method you may have to profile at that
+call site figure out what the types are
+that are seen maybe only one maybe
+you're only ever calling string to
+string or object to string then you can
+inline that logic directly into the the
+directly into the caller and then
+optimize it as if it were part of that
+code so with all of these more code
+means better visibility the more levels
+we can inline the more pieces of logic
+we can put all together in one unit the
+better we can see the unnecessary work
+like extra argument juggling or varargs
+arrays things like that that you can't
+see unless you're able to pull the
+methods together into a single unit well
+cereal actually looks like in practice
+so we've got a little accumulator here
+that's just going to add up a bunch of
+numbers the add all method takes a max
+which will be the CAMAC sum of number
+we're gonna add and then it calls this
+add method to do the addition for you
+it's gonna demonstrate somewhat
+contrived case of doing the inlining now
+here in this case only one target has
+ever seen even if this is a virtual
+method we can see that there's only one
+that's ever getting called here and
+hotspot will recognize that profile it
+and say it's always calling this
+particular body of code and it'll
+actually emit code that looks like this
+the JVM guys are always telling us that
+it's very cheap and very easy to just
+split code off into small methods let
+the JVM figure out which of the hot
+pieces and it will inline it and the
+fact that it's making the call to a
+virtual method in the first place will
+almost completely disappear out of the
+execution profile make things a little
+bit simpler by breaking things up so
+loop unrolling
+loop unrolling basically analyzes a loop
+to determine whether it's has a constant
+stride whether it has a fixed number of
+elements and then can unroll certain
+size loops so that rather than
+constantly jumping back to the top for
+all those three or five or ten elements
+it just goes straight through
+there's no jumps and there's no tests
+that have to be done as a result of that
+because it can prove the shape of the
+the loop ahead of time look at an
+example here we're looping over a fixed
+size final string array so this is using
+the standard that the Java 5 iterator
+style for loop and the JVM is able to
+see that this is always going to be a
+three element array it's always going to
+be one element at a time there's no
+reason to do all of the extra logic to
+test do we have another element do we
+have another element loop back to the
+top we can just omit it directly and
+here's what you actually will end up
+with in many cases the native code will
+completely omit the jumps and you'll
+just see each of those calls happen in
+place possibly with the actual strings
+in line as well
+Laak worsening is another one that can
+come out of inlining so here we have a
+private synchronized method called
+process that we're calling repeatedly in
+a loop and now I've printed profiles the
+right way it may turn out that we don't
+really want need or want to do that
+locking for every single call acquire
+the lock do the call
+release the lock every single time we go
+through this loop if we can actually
+inline that logic we can move the lock
+out further lock at once do the three
+calls and then unlock it save us the
+overhead of doing that locking all the
+time again very important that inlining
+happens here so we can't so we can see
+that downstream us removing the
+synchronization is not going to affect
+something else locky lighting is another
+one it can do you have goofy
+overprotective code for example this
+where we're actually synchronizing on a
+local variable the the JVM will actually
+see that this variable never actually
+escapes this piece of code no other
+thread can ever see it and it will
+simply just eliminate the locking in
+that case entirely the the canonical
+story about this one is the string
+string buffer versus string builder
+string builder being added later on to
+remove the synchronization from all of
+the string append methods and so on but
+by the time they ended up getting it out
+there the JVM already was good enough
+that telling a string buffer was only
+being used by that one thread and
+eliminating the locks and so in most
+cases string buffer and sting build have
+exactly the same performance
+characteristics now it's kind of a funny
+way that it ended up escape analysis a
+little bit newer and slowly improving at
+the JVM level escape analysis allows us
+to take object structures like arrays or
+classes or objects that have fields and
+eliminate the object creation only use
+the contents of the object for example
+of passing varargs right now without
+escape analysis there's no way to
+optimize that intermediate array away it
+has to create create the array stuff the
+arguments into it
+pass it someone pulls the arguments out
+and then that goes into the garbage
+collector pool at some point probably
+the young generator
+but you've got that array that sticks
+around you've got the overhead from it
+all the time if you can escape and I'll
+analyze it and inline those two together
+there's no reason to have the array
+let's look at an example that uses our
+little fou struct here so we got three
+methods bar baz and quacks that call
+each other we're constructing a foo up
+at the top and passing it through each
+of these levels same object all the way
+through
+we're only accessing the individual
+fields of that class now if we can
+inline all these together and we can't
+then no one else outside of these three
+methods can see the foo object then
+escape analysis can actually just make
+it this code essentially it will just
+have those fields directly in place
+it'll see that the field values are not
+changed along the way it'll see that the
+object itself is not used or passed out
+to an API or passed to a hash table or
+something and just do that stuff
+directly inline now we're allocating no
+objects these strings are coming out of
+the constant pool in the class and are
+just interned and always available and
+we've massively improved the performance
+of this by not having to create that
+intermediate struct now this is still
+probably one of the weakest areas as far
+as hotspot goes it can do escape
+analysis but only if every single path
+that sees that object gets in line if
+anything if it ever escapes out of that
+inline body it has to have the full
+object there this question yes it should
+be it should be it'll be able to see
+mostly what it's looking at here is can
+the contents of the object be the only
+thing we actually see the only things we
+actually use or do we have to create the
+full object to pass it around and
+regardless of where the data from the
+for those fields comes from it should
+still be able to see it it may optimize
+it down to just the field accesses well
+the JVM is going to do all this at
+runtime regardless of what your code is
+but if it can see that this happens at
+runtime that you're never leaving this
+object never leaves a certain set of
+methods it'll optimizes it if it wasn't
+there at all
+yeah is it true for only hot spot or is
+it also for other JVMs uh I believe they
+all have some level of escape analysis
+the J Rocket guys think theirs is right
+up there I know these little guys think
+they've got some of the best escape
+analysis in their VM a hot spot maybe
+actually with one of the weaker ones in
+this area I've seen some of the
+demonstrations of J rocket where it can
+do partial escape analysis which is a
+little bit trickier and defer the
+creation of objects until it actually
+needs them or have separate paths that
+if it does leave this particular context
+that will create the object but they are
+all moving this way and especially with
+the move I guess is supposed to be Java
+9 where primitives are no longer
+supposed to be actually part of the
+language there's probably going to be
+have to be a little bit of work to make
+sure that the actual objects the numeric
+objects can either escape away or be
+optimized
+just like primitives are today I'm
+focusing in on runtime there are things
+that Java C will do at compile time to
+eliminate some of this stuff it doesn't
+go as far as eliminating object creation
+but it will eliminate things like field
+accesses to constant fields and whatnot
+all right so what are the usual perfo
+sinks that you have in your application
+by far other than Li actually leaving
+the process memory accesses are usually
+going to be the biggest problem
+allocating lots of objects a garbage
+collection costs blowing the cache and
+not having enough cache space for the
+data you're accessing or accessing in
+the cache on friendly way the next thing
+that you'll have is the actual cost of
+doing calls you have to do a memory
+reference and a branch that kills a lot
+of the pipelining aspects of the
+processor it can't figure out we're
+actually going until you get to that
+point of doing the branching you have to
+save off different you have to save off
+the stack save off the registers and
+restore them on the way back so there
+are costs involved with doing those
+calls and that's where a lot of the
+inlining actually helps save you some
+time and then of course things that are
+somewhere in between with locks and
+volatile writes
+who actually knows what volatile does
+and why okay it's a few folks so the the
+quick version of this is that each CPU
+contains a cache of what's in memory a
+view of what's in memory because it's
+very expensive to go all the way back up
+to main memory in the grand scheme of
+things a hundred times slower than just
+getting it from the processor cache
+those caches might be out of sync now if
+it doesn't matter that they're out of
+sync and eventually whoever wins it
+doesn't matter for the correctness of
+the application then it's not a problem
+however if the cache is really must be
+in sync and you've got code that has to
+be data that has to be seen the same
+across all threads and across all cores
+you have to have some way of
+synchronizing those and what volatile
+does is say this particular field on
+this object must look the same to
+everybody after a given write forces it
+to be flushed so the other threads will
+see it and that's expensive because that
+does have to go across cores and
+potentially all the way out to main
+memory as well
+another term call site I mentioned it
+once place ik is just a place in a piece
+of code where you make a call at the bit
+at the byte code level is where you have
+an adverse and invoke static and so on
+and again there are different shapes of
+call sites a couple examples of these so
+I mentioned that the static methods are
+very easy to inline they're guaranteed
+to be monomorphic there's only one
+target that you're ever going to see at
+a particular static method call point
+unless you do you know class reloading
+tricks outside of scope for this right
+now so current time Millie's here is
+actually a static method
+it's monomorphic it will in line
+potentially be an intrinsic we'll talk
+about that later constructors are also
+monomorphic you're saying a specific
+class that you want to call the
+constructor on and also with this super
+calls are also always monomorphic and if
+they haven't exceeded budgets they will
+in line in almost every case here we
+have a by morphix site where we have two
+different kinds of lists that have their
+own implementation of add hotspot will
+actually inline biomorphic call sites it
+won't go any further than that so if you
+run this code and you look at the actual
+optimized code that comes out of it you
+will probably see those two different
+pieces of code with a type check to
+determine which one actually in line and
+at the bottom we've got polymorphic
+which for hotspot is three or more
+different types and at this point they
+will all just end up being calls or I
+think in some modes one of them will
+inline the others will be calls it'll
+fail over to those
+all right mention that we're talking
+about hot spot everybody knows client
+and server that's done Java for any
+given time the JVM guys call these c1
+and c2 compiler one and compiler to see
+one does do inlining but it is much less
+aggressive it can inline things that are
+obviously inlinable like constructors
+static calls has fewer opportunities to
+profile and optimize it needs to get
+code out there and executing as fast as
+possible sooner in the in the process of
+the application server mode the c2
+compiler will inline it much more
+aggressively code will run a lot longer
+it will gather a lot more information a
+lot of profile and shape of the code and
+then perform a more expensive
+optimization process to actually turn
+that into native code we're going to
+focus on what c2 actually does a tiered
+mode is I think it was in Java 6 but not
+really working in Java 7 it has been on
+sometimes off sometimes it's supposed to
+combine these two so it essentially does
+a client mode pass very quickly to
+optimize that still has some profiling
+and instrumentation in it to gather
+additional information after that runs
+for a little while the client mode
+optimized code it will then fall over
+back into situ server optimized code and
+so the idea is you get the fast startup
+and the eventual server old style
+performance it's still a bit flaky
+sometimes though and you don't always
+get all the way back to regular c2
+performance so c2 server inlining
+profile the C hotspots gather
+information at call sites and at branch
+edges profile until we have 10,000 calls
+of a particular method this is a lot it
+does mean that's short running
+applications it's very possible that
+none of the code you're actually
+interested in will compile down to
+native code it'll remain in the
+interpreter sometimes it means that
+large top-level methods that do a lot of
+work will not compile the JVM does has
+some ways to compile it in place but
+they're a little bit tricky and they're
+usually only useful for benchmarking
+purposes but 10,000 calls is kind of the
+magic number for hotspot in most cases
+like I said it in lines both monomorphic
+and biomorphic calls
+and that does have other mechanisms like
+caching and and whatnot for or polymorph
+or calls and making them faster all
+right so now we have to actually look
+and see how this works so monitoring the
+JIT there are dozens of flags to turn on
+all sorts of different metrics and all
+sorts of different output to watch it
+we'll go through a few some of them
+generate massive amounts of output and
+actually require a separate tool to
+analyze that output and figure out what
+it means and I'll show that too
+it is always evolving they're adding new
+flags all the time new ways to tune the
+JVM new as the tune in lining and escape
+analysis and monitor those things and so
+it's it takes a little work to
+understand well go through some of the
+basics here to try and give you a good
+idea of what you can get out of the JVM
+as far as inlining metrics okay so we've
+got our accumulator again we've got a
+little bit more boilerplate here to pull
+in an argument off the command line so
+we've got that we run our accumulator
+looks like it's working ok the first one
+that we're gonna look at is print
+compilation all these flags are specific
+to hotspots so they'll have the dash X X
+colon prefix on all of them plus usually
+turn something on - turn something off
+and then if it's a numeric thing like in
+lining size or in lining count it'll be
+whatever equals so print compilation is
+the first one and this essentially does
+what it says it just prints out the
+methods as they compile gives you a
+little bit of information about why it
+compiled them how big they were and so
+on so we run our code and all we see is
+this string hash code compiled not only
+nothing but nothing of ours actually
+compiles in this case what's the problem
+here does anybody see the problem
+how many times did we actually run this
+loop we ran at a thousand times Rio you
+said only methods that are called 10000
+times or even considered for
+optimization so let's bump that up okay
+got those two all right so bump that up
+to 10000 now we've got actual 10000
+calls to that add method and we see that
+ad actually will optimize here and we'll
+get down so it's kind of the first thing
+that you look for if there's a
+particular piece of code that you know
+is hot and that you're expecting the JVM
+to optimize if it doesn't show up here
+it's not doing it and they'll be various
+though there's other tools it will help
+give you a little more information about
+why so now what is this hash code call
+in previous versions of the JVM there
+was actually more stuff that would JIT
+just in startup enough code was getting
+called just to load jars up do security
+verifications unzip things pull classes
+in and verify them and so on and the you
+would see about a dozen methods or so
+that would get before it even got to
+your code and so this is now they've got
+it down to this one method that actually
+is getting hot enough during startup to
+actually JIT and C to compiler all right
+so now there's longer versions of this
+output Y this is the same flag but
+you'll get more information if you let
+it run for a while let hotspot make some
+decisions back off from some decisions
+so we've got things that are we got
+zombies that are in the code we have
+methods that are made not entrant
+anymore what what are these things mean
+now one thing I didn't mention about the
+way the JVM works and the way similar
+VMs work these are optimistic compilers
+optimistic VMs so it's going to assume
+at any given point that the profile of
+the code that it's gathered the shape of
+the code is accurate at that moment and
+it'll make us decisions for optimizing
+based on that profile now if we're wrong
+we need a way to bail out one of those
+would be to constantly be checking some
+detail the class hasn't changed we've
+still got the same type no new code has
+been loaded into the system things like
+that active checks and the JVM also has
+mechanisms for sort of lazily checking
+periodically just pinging something core
+to the VM to see if a class class has
+changed or causing code just to branch
+off into the interpreter if something
+changes rather than doing the checks
+constantly and this is called
+deoptimization so we have a piece of
+running code we've made a mistake
+essentially and we need to back off
+and we need to reanalyze the shape of
+the system reanalyze the code so what
+you'll see these in the output of print
+compilation and a few other of the jvm
+output uncommon trap basically means we
+were wrong about our assumptions a
+branch didn't go the way we thought it
+would a method that we were calling on
+Class A suddenly became a method on
+Class B we need to back off and so
+you'll see that in the logging output
+for four different four other flags
+uncommon trap not entrant means that
+we've decided this code is no good
+anymore anyone who walks into here is
+probably going to fail and come out this
+other and follow the wrong path but an
+non-optimized path so we make it not
+entrance no threads can enter this code
+anymore and then zombie means that
+everybody has left that code there are
+no threads live still running be badly
+or incorrectly optimized code and it is
+now almost dead it will be dead soon
+zombies quite appropriate for that so
+then why don't we see a JIT at all of
+course we didn't get called enough was
+one of the reasons but there are upper
+limits for what hotspot will even
+consider to optimize for example if you
+generate a parser that has a really
+large jump table and a big switch that
+does all of the jumps in it or if you're
+just doing a jump table of your own with
+a large switch it can very easily cross
+the threshold where hotspot will just
+say it's too complicated too big the
+benefits of going through all the
+optimization are not going to be worth
+it it just won't get it and you will get
+that output not in this this will only
+show the compiled ones a log compilation
+which I'll talk about later will
+actually show why it decides not to
+compile things as well
+all right some other stuff you'll see in
+this output there's little sigils over
+here an exclamation point must be
+important otherwise why wouldn't they
+why would they use an exclamation point
+but it's not actually that exciting it
+mostly just means that there's there's
+exception handling in here and I think
+in a lot of cases this is exception
+handling that's occurring across a
+native boundary I'm not sure if it's
+always just a regular exception
+exception handling block there's this N
+uh probably guess what this one is it's
+not too hard this one is actually a
+native method and possibly an intrinsic
+which again I'll come back to in a few
+minutes this one down here this is where
+I was talking about the JVM can actually
+replace running code doesn't necessarily
+have to be left it can still be in the
+interpreter executing and the JVM will
+decide while it's executing to compile
+it fix up the stack fix up the execution
+context and then start running the
+native code at that point the JVM guys
+usually say this is really only useful
+for benchmarks because if you've got one
+big loop in your application you're
+probably not written a very good
+application
+and then the other columns here those
+are just milliseconds from the start of
+the JDM and then a sequence number of
+when it was compiled so you can see that
+these are not in order the get bytes
+making it not entrant is at number 42
+that one was compiled earlier and we're
+just using that sequence number as
+additional information referring back to
+that particular compile compiled body
+okay so we've got compilation what about
+in line
+now we're going even deeper we have to
+pass the magic unlock diagnostic vm
+options flagged to get this one out and
+this one to display a hierarchy of the
+inlined methods it'll actually get to
+see an indented hierarchy that shows the
+decisions hot spots made about
+optimizing and in lining those methods
+together it will often include reasons
+why it didn't inline if it gets too deep
+or if the overall size of the code is
+too high it'll say that he'll say I
+stopped at this point you figure it out
+and OpenJDK actually has improved the
+output of this quite a bit
+alright so let's run our code again and
+now we we don't get any of our output
+but don't get any inlining information
+why is that well if we look back at our
+original code you see the parse int
+print line and a doll or each called
+once
+at all calls add 10,000 times but when
+that one jits so we do actually get hot
+enough for it to turn into machine code
+but there's nothing in there to in line
+so we actually don't have any piece of
+code here that's getting hot enough for
+the JVM to compile it and in line other
+methods into it all there is is a
+standard native plus operation here so
+there's no waiting line need to be done
+so we'll fix this up a little bit and
+we'll add another layer and we'll add
+all the square roots and do our own
+little square rip call that will then
+eventually call math dot squared try to
+get a few more layers in here for
+demonstration purposes now if we run
+this we see our hash code and compiles
+there and then we see add I've also got
+print compilation out here so they've
+got that output as well it says I
+compiled this and then the print
+inlining will print the in line and
+graph so add square root compiles within
+there it calls our square root method
+and that in lines because it's hot we
+can see that it's getting hit a lot and
+then below that we can see math square
+root the actual operation that's doing
+that and again it's marked intrinsic so
+here's our hot method
+and that's all that in lines here you've
+got the square root isn't intrinsic and
+I will again come back to that so log
+compilation is another one that gives
+you more information kind of combines
+the print compilation output and the
+print inlining output and a bunch of
+other things including why it doesn't
+compile things or why it doesn't
+optimize things and it spits out the
+most horrendous XML ever and it's
+essentially like a relational graph
+transposed into this massive flat XML
+file so you don't want to read it I mean
+it looks like this throughout the whole
+thing it's all like compile ID and you
+have to refer back to other compile
+elements to figure out what compile ID
+23 is awful stuff but as a part of open
+JDK there is a tool called log
+compilation log see and I actually on my
+github account github.com slash peteus I
+have just pulled that out of open JDK so
+you can just build the jar and run it
+and this will analyze the output from
+log compilation and give you good
+information so here we have a very basic
+version of the compiled methods here we
+have one that's actually showing the
+inlining happening I'm showing the time
+that it took to do the compilation
+showing what the size of the in-memory
+graph of the code the node graph was you
+can also see the bite sizes of each of
+these methods as we go along and now the
+same things that we saw earlier making
+not entrant on common traps they will
+also show up in this output and show why
+certain things needed to be bailed out
+of what decisions were wrong
+so you'll see things that say tight
+profile here's a piece of code or we're
+just calling an equals method on an
+opaque object reference the JVM is able
+to see that it's always been string so
+all it does is insert a type check in
+there confirming that it's string before
+it proceeds with the optimized version
+here's another one where it couldn't
+actually inline the string index of
+supplementary method it's too big to
+inline for whatever reason maybe it
+didn't get hot enough for the size maybe
+it's just a gigantic method but
+something to look into if you see that
+that's your code and something that you
+want to inline and want to optimize well
+so intrinsic I said a couple times
+intrinsic SAR essentially just methods
+that are known to the JIT and that there
+may be some operating system or Hardware
+specific fastest way to do that
+like array copies or an optimized square
+root rather than doing the hand and done
+square root so when you see intrinsics
+you'll basically it'll insert into that
+point the best code possible rather than
+trying to do its own optimization around
+that so here's a couple here's the
+examples that we had before the square
+root function is intrinsic in fact I
+think all of math is intrinsic and
+they're just treated specially by the
+JIT and injected an optimized version
+instead here's the intrinsic sino of
+there's there's certainly a lot of other
+ones string equals I think object hash
+code the base hash code is almost all
+the way at math methods array copy is
+done as a fast native memory copy and
+then as much Sun missive miscellaneous
+unsafe methods that have to be intrinsic
+because they're doing low-level
+processors tweaks and a lot of cases so
+now we're talking at this point about
+having the optimized machine code and
+we're getting everything down we're
+getting everything to optimize and JIT
+an inline so now we can go down to the
+next level
+so at this point it's kind of like like
+a choose-your-own-adventure thing a lot
+of people don't really want to see this
+part I feel proud of the distinction
+that I'm one of the few people that
+actually is assembly code in my talks at
+Java conferences
+but you know it's sort of your decision
+whether you want to take the blue pill
+or the red pill here I think it's a lot
+of fun and I have learned a lot and fix
+they'll have some interesting problems
+because of this and so I'm gonna say
+that we're all gonna continue down the
+rabbit hole so knowing that your code
+compiles is good that's the first thing
+that you can get out with print
+compilation knowing that it in lines and
+that hot spot is optimizing it as a
+whole is better but seeing what it
+actually does to the code and how it
+optimizes is at some point the only
+thing that you got left you may have to
+actually look at it
+so the caveat here is that I don't
+really know assembly all that well but I
+do fake it pretty well and it's not that
+hard okay print assembly my favorite
+this one does not come with open JDK by
+default for whatever reason I think it's
+mostly because of the assembly plugins
+or other licenses but you can google for
+hotspot print assembly and there are
+some pre-made builds for open JDK on on
+various platforms and it's essentially
+just an assembly jump dumping plugin for
+hotspot every time it compiles a method
+it will also spit out to the console
+what the assembly code for that method
+is with a whole bunch of annotation to
+show you where the where the assembly
+lines up with the java code there is an
+alternative that's built in called print
+opto assembly you have to get one of the
+debug or fast debug builds and it's it's
+okay it's kind of like the last phase
+before it actually does real x86 or xat
+664 assembly so there's some sort of
+weird hotspot assembly instructions in
+there that's not as pretty as the other
+one but it is available and built in to
+the debug and fast debug builds alright
+so we have to unlock this one again
+turn on print assembly and then run our
+stuff and let's see what we actually get
+up okay here we are you'll see tons and
+tons of output because lots of stuff
+will get in a typical application here
+is our add method in accumulator which
+is the interesting one so there you go
+it's pretty self-explanatory right
+everyone understands the x86 assembly
+and I can just drop you right into that
+so there stuff you're gonna see here
+you'll see things like add and sub which
+are pretty easy to understand moves are
+just moving data from one place to
+another the various jumps pushing and
+popping for stack operations deserving
+registers and whatnot calling and
+returning from subroutines and then the
+various registers that you'll see
+so we're talking about a register
+machine now rather than having stack
+moves or we're doing pushes and pops of
+values into fields or values from fields
+into the stack and from the stack back
+we're doing essentially slots we have a
+certain number of slots on the processor
+move data into slots trigger operations
+that work against them and then get the
+data back out of the slots again and so
+the JVM stack and local variables and
+parameters all essentially just become
+register moves moves to and from
+registers to and from memory and so on
+now a dimension that there's a native
+stack the native code has a stack to has
+to maintain the registers and the view
+of the processor between calls once we
+jump from one piece of code to another
+and then go back we want to be able to
+continue executing from the same point
+so it maintains an additional stack that
+preserves those register values from
+call to call and this is where some of
+the cost of doing actual hard calls at
+the assembly level can bite you you're
+doing a lot more moving of data around
+when you don't need to and there's
+various conventions for this you can
+have the caller saves off its own
+registers and reserve restores them you
+can have the Cawley saves off the
+registers and restores them and there's
+a couple others that we don't need to go
+into okay so we'll break this down a
+little bit more here starting at the top
+decompiled method 1 1 3 4 CBD 0 this is
+the address of the native code and what
+tells us which method it's actually
+compiled compiling at this point or
+what's where it's outputting it into
+memory we can see what architectures
+it's disassembling for various flags
+about what kind of entry point this is
+what kind of JVM level checks need to be
+done when entering this code there are a
+number of constants here we can see the
+actual signature so this is the add
+method and it takes two integers that's
+the double I and returns 1 integer
+the first parameter is going to go in
+the RSI register the second parameter is
+going into RDX and then we've also got
+the stack pointer of the caller so we
+know where we are in the native call
+stack and now we're ready to do the body
+of the code
+so first off we get our BP which points
+at the current frame the current stack
+frame from whatever the previous call
+was we'll push that down we're going to
+subtract two from the stack because we
+have two arguments being passed so we
+need two slots for our own rigid for our
+own values that are being passed in here
+you'll see no ops like this to just
+memory align code on certain boundaries
+to hiza use the decoding process on the
+processor and now you can actually see
+that we're actually at accumulator dot
+add line minus one essentially that says
+line 16 this is in the native code but
+we're at negative one we're right about
+to enter that code we're not at the zero
+line of the method we're at the minus
+one line of the method
+all right so we'll move parameter one
+into EAX we will add those two
+parameters together storing the result
+back in EAX and this actually in a lot
+of cases that will be able to correspond
+the assembly code back to at least Java
+lying numbers but sometimes to
+individual java bytecodes here is our I
+add actually happening in assembly code
+one-to-one matching put the stack
+pointer back where it was pop it off I
+know this one I wasn't sure about it
+first I'd ask the JVM guys but this is
+actually a safe point this is where we
+check in with the JVM and say do you
+need to do any garbage collector work
+you need to do mais some code other
+things the JVM might want to do on these
+little boundaries check in periodically
+that's all this is doing and then we
+have our return from the method
+that's all there is to it and so the
+bulk of the bulk of methods that you'll
+see the bulk of code that you can't see
+out of coming out of hot spot will be
+these instructions a few additional ones
+that you'll see will be things like lock
+L or a Dell for doing volatile reads and
+writes you'll see call operations actual
+go into some of these so things to watch
+for if you see just straight through
+operations against registers and memory
+locations you're probably doing pretty
+well if you start to see a lot of call
+operations things aren't in line if you
+start to see lock operations or whatever
+the the current processors locking
+mechanism is that could be a problem for
+your application - you could be busting
+caches you could be overusing volatile
+fields here's what a call looks like so
+this is in a piece of code within JRuby
+normally when we add two integers
+together - ruby fixed nums what they're
+called
+they'll just produce another fixin up a
+standard 64 bit long value we don't
+overflow the same way Java does so if we
+overflow past that 64-bit value we need
+to produce a ruby big num instead a
+larger arbitrary-precision integer
+usually it doesn't happen so usually
+we're okay and in this case the JVM will
+optimize the code in such a way that
+that call is never followed it avoids
+the add big numpad because we're not
+using it it's seeing that we're never
+making that call so it just leaves it as
+a call in the future if we started
+hitting it a lot more I started doing a
+massive amount of fixed numb and big
+math this might change it might back off
+on those assumptions and reoptimize it
+so the big numpad the one that's
+followed
+now this is one that actually bit us
+early on in JRuby one six cycle or maybe
+one five about a year ago I was looking
+at code to try and figure out how we
+could make our object construction
+faster I thought I had figured
+everything out it was pretty clean and I
+actually dumped the assembly and
+profiling told me nothing I mean it's
+the death of a million billion cuts
+every single math everything every
+single object was having some unknown
+hidden performance problem on
+construction and so I looked at the code
+the assembly code that came out of our
+basic objects default constructor and I
+saw this lock and I knew that that's not
+the greatest thing to see in the
+constructor constantly hitting some
+volatile field and flushing a cache
+somewhere so why are we doing this
+volatile right in the constructor so I
+went back to the code and looked around
+found this piece of code I thought I was
+being so proactive here and early
+initializing this volatile field so that
+I didn't have to null check it later
+well it turned out it was a terrible
+idea to pre initialize a volatile field
+in the constructor this way it's much
+cheaper to do the null check and what I
+was essentially doing was every Ruby
+object in the system was doing a
+volatile right when it was constructed
+every single time rather whether it
+needed to or not
+so fix that pull that out with the null
+checks back in and array I use the
+assembly output to actually fix a
+massive performance problem in the
+system and suddenly all objects in the
+system became many times faster to
+create benchmarks works considerably
+better than and that's an example of
+something very small one assembly
+operation that was happening
+that you can't see in a profiler you
+can't see it in a lot of the other tools
+but it had a tremendous impact on the
+performance of the application now there
+are also various flags for tuning in
+lining
+none of these are standard and they're
+subject to change and so on but you can
+change what the maximum size of a method
+that it will inline is what what it
+considers small code it optimizes small
+code differently than large code how
+frequently a method needs to be called
+in order for it to in line
+there's also tuning for how far down it
+will inline normally it will inline up
+to nine calls and if you think about
+that you've got a really deep class
+hierarchies it's possible that the top
+levels of the constructor chain may not
+inline in that case but nine is the
+magic number that they've they've kind
+of settled on it in hotspot and it has a
+separate metric for recursive inlining
+oftentimes if you have a heavily
+recursive method inlining too many
+levels of that will actually push out
+other code that's potentially more
+important the recursion is often not the
+most important thing to inline them in
+that case and they get over emphasized
+because you're making so many deep calls
+all right so what have we learned here
+hopefully we've learned a little bit
+about how the hotspot JIT works what
+optimizations it does and why how to
+monitor it and see what it's actually
+doing as far as compilation how to find
+problems in that output and then how to
+fix those problems in a lot of cases
+things we missed like I said not doing
+anything with GC you haven't tried
+visual GC it's really amazing and it
+will help with your GC problems for sure
+and hopefully you're no dummy now you'll
+be able to take this and do something
+interesting with it optimize some code
+to death and you know if you're able to
+do that let me know tell me your story
+that's all I have for today
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,1307 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Martin Kleppmann - Conflict Resolution for Eventual Consistency | Coder Coacher - Coaching Coders</title><meta content="Martin Kleppmann - Conflict Resolution for Eventual Consistency - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Martin Kleppmann - Conflict Resolution for Eventual Consistency</b></h2><h5 class="post__date">2016-11-22</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/8_DfwEpHE88" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">if you don't know what a CR DT is don't
+worry it's actually kind of not that
+central to this talk although it's
+that's kind of the theme that will come
+out over the course of it so I want to
+talk about conflict resolution if you
+have stuff happening concurrently in a
+system and my background is I'm a
+researcher at the University of
+Cambridge I'm currently working on this
+project we call true data where we're
+actually trying to bring end-to-end
+encryption to a larger range of
+different applications so we have stuff
+like interned encrypted s instant
+messaging like the signal app for
+example but we don't yet have said the
+same thing for Google Docs so that you
+could have two people being able to
+collaborate on some document without
+having to trust any of the servers along
+the way so having all of the edits of
+the document encrypted on one machine
+and only decrypted on the other end
+users machine but what I'm talking about
+today is not actually any of the crypto
+or security protocols but purely the way
+how we get edits of a document from one
+device to another in some same way and
+so I'll start with the scenario that's
+probably familiar which is you are a
+little blue stick figure and over this
+timeline time flows from left to right
+you are hacking on some code and in your
+favorite language whatever you want and
+at some point you commit it using your
+favorite version control system I'm
+going to use git here's an example just
+because you're probably familiar with it
+and then maybe you push it to some
+repositories on maybe a service like
+github or whatever your favorite
+services so at some point they're here
+you have this kind of communication
+going over the network where you do a
+git push to send the the code that you
+just committed over to some other people
+and so maybe you're collaborating with
+someone so maybe does this red person
+sig figure here is your collaborator and
+they are working on the same code base
+as you and they're working at the same
+time as you so they are individually
+hacking on their own copy of the code
+and they commit it and so at some point
+they're going to maybe fetch from the
+repository and they're going to then
+merge in the changes or maybe rebase if
+that's what your workflow look
+like but some point these changes need
+to be combined in some way and so this
+is kind of inevitable to this this mode
+of interaction and as you know if people
+are editing different files in the same
+repository you're probably okay if
+people are editing different parts of
+the same file it'll probably be able to
+merge them automatically if you're
+editing the same lines at the same file
+you're going to get a merge conflict and
+you're going to have to resolve it
+manually and that's kind of the workflow
+that we're used to with software
+development let's look at the same thing
+that happens in a different scenario
+let's say you are lawyers in law firm
+may be under client negotiating some
+kind of contract and the way that works
+is that you send Word documents back and
+forth so you've got one person editing a
+word document on on one machine and then
+save it and then another person on a
+different machine is independently maybe
+editing the same Word document and then
+they send it to each other by email
+that's what people still do wrong Cobley
+and so you've got again this network
+communication happening where somebody
+sends their copy of the document to this
+mail server and somebody else picks it
+up and now they go oh crap because they
+realized that we've been editing the
+document at the same time and I don't
+actually know like does this word have
+some reasonable user interface for
+three-way images I haven't come across
+any so like you can do track changes and
+stuff but you still end up copying and
+pasting changes manually from one copy
+into another it's kind of horrendous and
+but if you look at it like structurally
+this is exactly the same thing happening
+so you've got some changes being made
+concurrently and if they are made
+concurrently they have to be merged and
+so this is whether you're working with
+source code or Microsoft Word documents
+or something else is is kind of
+irrelevant here let's look at another
+example to-do lists are fun so let's try
+to solve this concurrency problem by
+simply making it a web app and having it
+in a central server so we've got a to-do
+list here and little blue stick figure
+is going to add my milk to the to-do
+list and go to send it as like an HTTP
+POST request to a central server where
+it's going to sit on a database and
+concurrently a little red stick figure
+wants to add
+during the plants to-do list and they
+also post it to the central forever and
+so this is like the web app model that
+you're familiar with developing you have
+got some kind of central my sequel or
+Postgres or whatever you like database
+and you're going to execute transactions
+on those databases and they are going to
+be applied in some kind of sequential
+order or a serial order and so we talk
+about things like serializable
+transactions which just means like
+putting them all into some kind of
+serial order now the exact extent to
+which transactions are really
+serializable is a whole other topic
+which if you want look at my strange my
+my code mesh talk from last year where I
+go into far too much detail than you
+would ever want to know about weak
+isolation levels but for the purpose of
+this talk we can just assume like this
+central server is going to provide some
+kind of serializable transactions and so
+in this point here we don't actually
+have concurrency we've taken up the the
+concurrency by making things happen one
+after another
+so first the buying milk gets added to
+the to-do list then the watering the
+plants and so if they get appended to
+the end of the list then you know that
+the buying milk is going to appear first
+and then the watering the plants is
+going to appear second in the final list
+so there's no merging required here the
+problem here is that well what if you're
+disconnected and you can't reach the
+server then well you press deformed to
+save your new item on your to-do list
+and it happens or you get a spinner or
+you get a page say you're not connected
+to the internet and you go like how come
+I edit I can edit code on my laptop
+while I'm not connected to the Internet
+I can edit a document in Microsoft Word
+while I'm not connected to the internet
+but I can't add an item to my to-do list
+well I'm not connected to the Internet
+and so if you're somewhere in the
+underground or something like that it's
+kind of annoying so so we have now this
+problem that bits of network can become
+separated from each other
+and that means we no longer have
+availability so we can't perform
+operations on the system anymore so
+that's one issue with having the central
+server you have to be able to connect to
+it all of the time which is maybe an
+unrealistic scenario if you're like
+stuck in the middle of a mountain
+somewhere then you won't be able to
+connect to your server because you
+wouldn't even have a cellular network
+you've also got a performance problem
+which is that you have to wait for a
+round-trip to the server if you want
+your right to be acknowledged in some
+way so that is in the case of dududu
+third to-do list you only know that your
+item has been added to the list after
+you post it to the server and you've got
+the acknowledgement back from the server
+saying that it has been added and then
+maybe if several people try to add
+things concurrently then you'll also
+find out what else has been added but in
+the document editing case if you like if
+your unit of editing is a single
+keystroke in the like you might have in
+the case of a text document so if you
+think about Google Docs also the unit of
+editing is a single keystroke there in
+that case you would have to wait for a
+round-trip to the server on every single
+keystroke before it appears on your
+screen
+and that would not be very nice to use
+in fact it would be like using vim or
+Emacs over SSH which does in fact
+exactly that's where you press a key and
+you wait for a round-trip to the server
+and wait for it to come back to you and
+then the character appears on your
+screen
+so it kind of just about works but it's
+not exactly a great user experience and
+finally well it's a single point of
+failure so like if somebody wants to
+denial-of-service you then you have
+exactly these problems like oh we have a
+nice decentralized Russian control
+system like Gibbs let's make it all
+centralized again and put it all on
+github in a central service that people
+can do a denial of service on yay
+okay and so one option with this now is
+if you don't want to rely on one single
+server is okay let's have several
+servers let's have them in different
+data centers let's spread them out
+around the world and then we can make it
+such that each user can connect to their
+local data center whichever is closest
+to them so let's remove some of the
+performance issues of sending packets
+halfway around the world and back again
+so the blue user is going to add this by
+milk item to their to-do list on their
+local data center one and there are red
+users on the other side of the world
+they have a different local data center
+so they're going to talk to that data
+center at the items to their to-do list
+now all well what you've got here is
+again is you have to have some kind of
+replication process between these data
+centers and that's going to be
+asynchronous in most cases because
+otherwise you've just introduced that
+central server again essentially
+so you've got like speed of light
+gradually going around the globe
+gradually replicating the data changes
+from one to the other and the effect is
+here in data center one the blue update
+arrives before the red update in data
+center 2 they arrive in the other order
+so again you've kind of got this non
+determinism about what order these
+things are going to be applied in and
+you don't know which order they're going
+to appear in the two duelists who came
+first in fact if you think about it this
+is kind of the same as if you just write
+to your local device storage so it's not
+even just a case where you've got
+multiple data centers geo replicated
+it's even a case where you just write to
+your local device and then that has the
+advantage that you know you can't have
+any network partitions between your user
+interface and the flash on your tool
+device and then you have some kind of
+network stuff that makes sure that these
+edits get translated get transferred
+from one of the devices during the
+editing to the other devices and that
+can go via servers it can go by a
+peer-to-peer networks I don't really
+care some some mechanism which
+asynchronously propagates these changes
+of the data from one device to another
+so first of all I think that's kind of
+an interesting observation that I don't
+see people make that often is this kind
+of client-side editing of data actually
+has many of the same properties as a
+multi data center deployment of
+databases where people call it like
+multi leader
+multi master deployments where you can
+have conflicting things happening at the
+same time concurrently it's basically
+exactly the same problem so whenever we
+have this kind of scenario we have to
+worry about the conflicts that ensue and
+so in the case of adding two different
+items to do lists you can kind of
+imagine okay we'll give each item an ID
+and that'll be like a UID or something
+and then if we have two conflicting
+insertions then we're just going to
+order by UUID and so that way we get a
+consistent order okay that's that kind
+of works but there are more tricky
+things so let's say you really have buy
+milk under to do less and this is me and
+my wife editing the to-do list at the
+same time and maybe I just delete her
+buy milk I turned
+and she updates by milk to buy soy milk
+so what happens now like because do we
+bring back this item that said buy milk
+and now I have it with the new value buy
+soy milk but in that case we've
+forgotten the fact that I deleted the
+item or actually do we delete it and
+have the deletion override this but in
+that case we've lost the information
+about the soy milk so this is kind of a
+tricky thing in general what we want in
+this sort of scenario is that we have
+the possibility for concurrent
+operations to happen and what I mean
+here with concurrent is simply they
+happen without knowing about each other
+so it doesn't mean necessarily at the
+same incident in time it just knows that
+the blue edit didn't know about the
+right with the red edit and vice versa
+and at the end we want them to somehow
+converge into something sensible which
+kind of often people talk about under
+the heading of eventual consistency I
+don't like the term eventual consistency
+very much because it's super vague and
+we don't actually know exactly what
+people mean with it so I'm going to
+break it down into three more precise
+properties
+the first one is eventual delivery of
+messages and that is if you assume
+anything that is sent over the network
+is a message and I don't mind whether
+it's an HTTP POST request or whether
+it's some message that goes via message
+broker or anything we wanted to
+eventually get through and that means
+after some kind of finite amount of time
+the data will eventually reach its
+destination
+because if the network is interrupted
+forever there's no way that they can
+synchronize okay so that this is kind of
+a minimal liveness requirement if we we
+just have to assume that within some
+finite but undetermined time periods
+messages are going to get through but
+we're not going to make any time
+guarantees that like you're able to get
+through within 30 seconds because that's
+not the way networks work you might
+actually be stuck in a tunnel for
+several hours and in that case it'll
+take several hours with retries for the
+message to get through but it will
+eventually but we are not going to
+assume any time any are ordering
+properties so we're just going to say
+like messages arrive in any order may be
+duplicated but we can deduplicate them
+based on some ID or something like that
+the second thing we want is convergence
+that is if two people edit the data
+currently and so they diverge this is
+like think branches in get then we want
+some way of converging again which is
+like merges in get so we want everyone
+to be able to end up in the same state
+again at the end eventually to make this
+more precise if two nodes have received
+the same set of operations we want them
+to be in the same state but we want them
+to be in the same state regardless of
+which order they received those
+operations in so we just want to make
+sure that the operations are commutative
+and assuming that all of the operations
+reach their destination at the end then
+everyone ends up in the same state okay
+and the final property we want is not to
+lose data it sounds kind of facetious
+but I mean it seriously because like a
+bunch of distributed databases which
+have this mode called last writer wins
+which is essentially code for we're just
+going to throw away data if it doesn't
+suit us so several people writes to some
+value concurrently we're just going to
+keep one of them arbitrarily and throw
+away the others and I think you know
+that's certainly one way of making sure
+everyone ends up in the same state at
+the end it's just by discarding random
+things if you take that to the Microsoft
+word editing example that would be like
+okay I've been editing this document I
+receive a copy in by email where someone
+else is edited and I'm just going to say
+actually you know I don't care about
+your changes I'm just going to keep my
+version go away here's my version if you
+want to apply your changes to my version
+again so you can solve the convergence
+problem simply by throwing away data but
+we should try better than that so I'm
+going to use here as a kind of a running
+example of the kind of data we might
+want to edit aid to do list represented
+in a JSON like format and it has a few
+interesting features that I want to
+highlight it has an ordered list which
+is the the items that appear in the
+to-do list appear in some well-defined
+order and it has some kind of like
+nested map structure where you can have
+some settings oh I don't know it's kind
+of running out of ideas at this point
+and so they're now various editing
+operations you can make to this data
+structure so for example you could
+assign a value so you could check the
+box to say I have watered the plants
+this item is now done I do that by
+setting the dunphy
+from false to true another thing I could
+do is do some string editing so I could
+change my milk to buy soy milk by
+inserting this word into a string
+another thing I might do is insert a
+completely new item into a list
+I might even insert a new key into a map
+I might even just delete an entire key
+and all of its subtree from this entire
+document so there are lots of different
+operations I can do here and what we
+want to do is allow people to
+arbitrarily make some kind of operations
+concurrently and still achieve
+convergence and still achieve not losing
+any data so we can represent this Jason
+tree well this Jason document is a tree
+which looks something like this with
+some type annotations I won't go into
+too much detail with this but we can see
+now that what we're trying to do is
+capture some kind of modifications on
+this tree structure and communicate them
+to copies of the data that live on other
+devices and so a colleague of mine and I
+wrote this paper a couple of months ago
+called a conflict-free replicated jason
+datatype which essentially describes an
+algorithm to to do precisely this and
+I'm just going to run through some of
+the ideas behind it not in great detail
+because the great detail looks like this
+and that's only part of the operational
+semantics of the data type so if you'd
+like pane you can go and read the paper
+but assuming you don't then I'm just
+going to like give you some of the
+intuitions in this talk so let's start
+with something like a text document
+think like Google Docs style so it's
+basically a list of characters the
+smallest unit of editing is a single
+character so that is you can delete one
+character and that change will appear on
+somebody else's screen and you can
+insert a single character and that
+change will appear on someone else's
+screen within a few seconds and so we
+can represent the entire document as the
+list of characters we can also give it
+like a file name which is just a string
+and we can have some cursors that's kind
+of neat to see where the other people
+are editing so you can have a this map
+from each person who's participating
+who's collaborating on this document to
+their cursor position in their document
+and so that tells you like the set of
+all of
+different curses of all of the different
+people editing this document so you
+might see here this where's this body
+here list of string not a list of
+characters this is kind of just me being
+RC but basically the if you're
+representing this as a Unicode documents
+then the smallest editable unit what we
+call a character colloquially does not
+actually correspond to a single Unicode
+code point because you have stuff like
+combining marks or like if you have an
+emoji with a skin color attributes then
+that skin color attribute is represented
+as one Unicode code point and then the
+actual emoji is a second and the two are
+rendered together as one thing and when
+you're editing it it looks like one
+character but actually like you need a
+list of Unicode code points to represent
+it so that's kind of completely off the
+topic but I just wanted to add that it I
+should give you a little demo of what
+this looks like so we implemented this
+as a kind of hacky prototype this is a
+text editor using using this CR DT
+structure and let's see if it works yes
+okay so it doesn't use any space monads
+or anything it's it's ugly and hacky but
+it kind of works so you can see I can
+edit stuff on on one side of the screen
+and it will transfer over to the other
+side of the screen and these two
+processes don't fare anything on the
+local machine so they could they could
+easily be distributed across different
+machines so this is just like Google
+Docs with a terrible UI and up here I
+have here running a a WebSocket server
+which is the way how these two lower
+windows communicate and I can just kill
+that WebSocket server and over here I
+can now keep editing offline so I can do
+to earn favors with the organizers so
+I've edited it on both sides of this and
+currently these two windows cannot
+communicate with each other because
+we've effectively turned off the network
+so I was still able to continue editing
+no problem and I've been able to make
+divergent changes in the two sides and
+so I'm going to restart the server now
+and the editors will just qui keep
+retrying in the background and so we
+want my favorite conference and everyone
+at to appear
+look it's resynchronize and we've got
+both everyone at and my favorite
+conference now appear on both sides so
+we've automatically merged these two
+concurrent changes alright so let me
+tell you a bit about the algorithm of
+how this thing actually works or rather
+I'll first tell you about the algorithm
+that Google Docs uses which is something
+called operational transformation and
+then I'll show you how our CEO DT based
+approach is different from it so say you
+start with this document and the
+contents of which is hello spelt with
+one L and so you can address each
+character through an index so in 0 if
+character is 8 the first character is e
+and so on and so on the left hand side
+the green node is going to edit and it's
+going to insert a second L character and
+on the right hand side the purple node
+is going to concurrently edit and insert
+an exclamation mark at the end and so
+what we want now is for both the
+insertion of the L and the insertion of
+the exclamation mark to both be
+preserved and to be transferred to each
+other and so in this case what they're
+going to do is send this operation to a
+server saying insert the letter L at
+position 3 in the document or insert
+exclamation mark at position 4 in the
+document and that's fine at the server
+can forward these messages from one
+client to the other and so this insert L
+at position 3 gets forwarded from the
+left hand side to the right hand side
+and it inserts L at position 3 and we
+get the outcome that we want which is
+hello with two L's and exclamation mark
+now what happened on the other side is
+well if you would simply take this
+insert
+exclamation mark at position 4 and apply
+it in the same way you would get hell
+exclamation mark oh because we inserted
+the L previously and so that means all
+further positions latent or document
+have moved along by 1 and so what the
+server has to do now is to transform
+this operation and now instead of saying
+position 4 it's got to say position 5
+and so the server's to keep track of
+what edits have happened at which point
+in the document to some extent this job
+has to also be
+by the clients so they kind of share the
+work here of doing this transformation
+and and so if you notice that okay
+concurrently to this insertion of four
+we have an insertion at three so that
+means that any concurrent insertion that
+happens after three needs to be bumped
+along by one so it changed a four to
+five and so people have put a lot of
+effort into trying to understand what
+these kind of transformation functions
+look like the original idea is quite old
+it dates back to 1989 or so though the
+first algorithm that was published was
+actually wrong and they actually say
+that so in the paper and like put a
+little puzzle at the end of the paper
+saying like this is a case in which our
+algorithm fails can someone figure it
+out for us please and then over the next
+decade or so over the mark-19 people did
+figure it out and various different
+algorithms were developed the one that
+kind of had the most longtime influence
+was a system called Jupiter from 1995
+which is kind of where I think the
+heritage of Google Docs and etherpad
+and Google Wave now Apache Wave and so
+on where I think they all draw their
+heritage from and so the design model
+that they had here is that they funnel
+all of the changes through a single
+server note we're back in single server
+land again it makes the concurrency
+problems a bit easier especially if
+you're dealing with three or more people
+editing the document simultaneously
+because that's the case where deopt
+broke down go to and adopt it actually
+managed without the central server they
+instead use stuff like repeatedly
+undoing and redoing operations or do
+they do things like keeping kind of in
+dimension or there's some kind of
+hypercube of all of the different
+operation and histories that have
+happened concurrently it gets kind of
+hairy do you think on the other side you
+can actually achieve much the same kind
+of thing with CR DTS now I haven't seen
+people talk much about the similarities
+and differences between operational
+transformation and Ciardi T's I'd love
+to see more understanding of that
+because like a lot of the CR DT work
+seems to somehow ignore the operational
+transformation work that happened in the
+90s the CL DT work is kind of from the
+2000s
+happened in the last ten years or so but
+similarly here they're a whole bunch of
+different algorithms were developed and
+they all have the similar text editing
+purpose so they allow several people to
+concurrently change a text document I an
+ordered list of characters in such a way
+that every one end will end up in a sane
+state at the end and the one I'm going
+to talk about now is one called rg8
+which was developed by a Korean research
+group and so that's the one that we
+based off but a couple of others around
+as well so let me give you the intuition
+for how this algorithm works so we start
+off very similarly we've got again hello
+with 1l but now instead of having
+indexes on each character we're going to
+have unique identifiers so we're just
+going to make up a unique identifier for
+every single character in the document
+challenge here is of course how you
+represent that efficiently but I'll get
+back to that and so the identifier is
+here I'm going to make a number and a
+letter the number is basically like a
+sequence number so it just keeps
+increasing as people keep editing the
+document and the letter is which node
+that message K that letter was inserted
+on so here we've got no day on the left
+and it started writing the document hclo
+so the IDs are 0 a 1 a 2 a 3 a and now
+you've got the two same edits that
+happen again and we need to generate a
+new ID for each of the characters that
+was inserted and the way we're going to
+generate an ID is first of all if a node
+looks at all of the numbers that it has
+already for all of its IDs and then
+picks one bigger than the greatest that
+it's got so far so so far we have 0 t3
+so the next biggest is 4 and then the
+left-hand side is going to construct for
+a because it's no day the right-hand
+side is going to construct for B because
+it's node B and so because the node a
+and B they have unique names so as a
+whole this thing is going to generate
+unique identifiers because each node
+uses the same number only once while the
+same number can be concurrently used on
+multiple nodes the node ID makes it
+makes it unique so now we can transfer
+those messages of a network
+and if you look at those operations that
+happened they look kind of similar to
+what we had previously except now we're
+going to identify positions in the
+document not by our indexes or offsets
+but by our IDs and so we can say insert
+exclamation mark with ID for B dot C Rd
+we just made up after ID three a three a
+is the oh so that means insert
+exclamation mark after oh and on this
+side we can insert the L with ID for a
+that's the one we just made up after two
+a which is the first L and the nice
+thing with these messages is now we can
+forward them in exactly the same way we
+don't need to do any transformation this
+L after for a sorry for a after to a for
+a after to a still does the same thing
+so we put the L in the right place on
+this side insert the exclamation mark
+after three a three a is still the O the
+fact that we inserted an L before it
+does not change the fact that three a
+still refers to that Oh
+so the exclamation mark still gets put
+in the right place so no transformation
+needed which is great news for us
+because we want to encrypt these
+messages and we don't want the server to
+be able to read them and transform them
+and tamper with them so this actually
+suits us a lot better for the kind of
+security point of view it also means we
+just can have some kind of asynchronous
+network here we don't rely on any server
+to impose some ordering of these
+messages we can just have any kind of
+messaging infrastructure that is just
+going to make sure that eventually the
+messages arrive at their destination
+this is kind of nice so if you're
+thinking about it there's one problem
+that is unsolved here so far I'll give
+you five seconds
+exactly what happens if two people
+insert at the same position in the
+document and so I'm going to make a
+simpler document is just a B and C and
+I'm going to have the left one insert
+X&amp;amp;Y between the a and the B the same
+exactly the same happens if you're
+appending at the end of the document or
+prepending at the beginning it's there's
+special cases of inserting in the same
+place so we have here X &amp;amp; Y being edit
+being added and they receive IDs under
+the same scheme as we had before so this
+is the number for operation so it gets
+for a and this is the number v so it
+gets five a and on the right hand side
+we're going to insert P and Q also
+between a and B and so we've now got
+insertions happening at the same point
+and these operations are going to have
+IDs for B and 5b so again we have the
+same rule for assigning numbers and we
+stick the node ID in there and now what
+happens okay so we take this the
+insertion of the P with ID for B after 1
+a 1 a is the letter A so that puts the P
+here before the X between the a and the
+X okay that's one valid choice and we
+take the Q the Q is has an ID of 5b and
+we're going to insert it after for B so
+if for B was the P so the Q comes after
+the P okay so this is going to over here
+put 5b after four B put the Q after the
+P so we've kept the P and the Q in the
+same order and we seem to have
+arbitrarily decided here the peak you
+come before X why there's no particular
+ordering there that's better or worse
+this is just completely arbitrary choice
+but now if we go in the other direction
+so this X we've got to somehow make sure
+that this X also ends up between the Q
+and B because otherwise we wouldn't be
+merging towards a consistent state but
+here this operation at this point of
+course it doesn't know that the P and Q
+existed so yeah it's just going to say
+insert with ID for a after one a after
+one a so what this thing wants to do is
+actually have a X P Q and that would be
+wrong so we're going to have a little
+extra algorithm here which looks at
+ordering on these IDs and that is if you
+have an incoming operation here an
+incoming
+operation with ID for a and you see
+after one a so you first of all you find
+one a this is your insertion position
+and then you're going to skip over any
+IDs that are greater than the ID of the
+incoming operation so the incoming
+operation has ID for a it sees here the
+next one is for B o4 b is greater than
+for a so it's going to skip over that
+one next C is the next one 5b 5b is also
+greater than for a also going to skip
+over that one look at the next one to
+802 a is less than for a so now we found
+out insertion possession so it's going
+to put the X here between the 5b and the
+two 8 because that's where the the 4a
+fits in terms of ordering and now the y1
+is easy again because here the Y is
+inserted after for a we've already
+established a position for for a so the
+y gets put in the right place and we've
+got the same end result in both places
+it's kind of cool that this algorithm
+works the paper that explains it
+originally is completely
+incomprehensible but it it does actually
+work and like we've proved it correct
+and stuff so I I do kind of believe it
+so what this means now okay we haven't
+talked about deletion yet but deletion
+is kind of easy and that is we just say
+well if one person deletes a character
+we delete it but we keep its ID around
+we call that a tombstone and that means
+that any operations that still refer to
+that ID is describing a position in the
+document they still know where to go but
+we just marked a character as deleted
+and we don't show it in the user
+interface if two people can currently
+delete the same thing it's just the same
+as deleting at once so now if you have
+this text here that say hey guys and
+then we decide that's not gender-neutral
+enough so one person changes their to
+hate everyone and the other person
+changes it concurrently to hey folks
+what happens as you merge these two
+well the deletes are going to be
+idempotent so we're we're going to
+delete guys but we can't deleted more
+than once once it's deleted but the
+insertions on both sides are going to be
+preserved and they're going to be put in
+an arbitrary order so after exchanging
+messages we're going to end up with hey
+everyone folks or maybe we would end up
+with hey folks everyone either way is
+fine but we could simply going to end up
+with these two insertions concatenated
+which is
+kind of not nice it's certainly not an
+English word the thing as far as I know
+but this is what Google Docs does so at
+this point I'm kind of willing to just
+put up my hands and say it's good enough
+like people can sort this out humans
+know that if they're going to be having
+several people edit a document at the
+same time maybe some weird things will
+happen maybe we can like pop up
+something in the user interface saying
+oh by the way someone edited something
+really close to where you edited so
+maybe you want to sort that out
+or maybe just a spellchecker pointed out
+or something okay so I'm just going to
+declare this is good enough but they are
+still a whole bunch of open problems
+there one is garbage collection that is
+we're keeping these tombstones around
+over time that means the data structure
+keeps growing and growing so we're going
+to have to delete the crap out of that
+from time to time these IDs for
+addressing each individual character can
+become large if you don't if you're not
+clever about that so need to find some
+way of representing them efficiently I
+think that can be done we have some kind
+of prototype stuff for that but it's
+still in the works to do some actual
+performance measurements I haven't
+talked about things like undo all I can
+be ordering items in the lists there's
+actually there's some research on this
+but it's actually kind of poorly
+understood so I hope to continue working
+on the stuff over the coming months so
+maybe if I come back next year I'll have
+some stuff to talk about there in that
+area let's talk about something other
+than text editing so here's an example
+of nested Maps representatives Jason but
+so I mean this not as a list of
+characters that is open curly-brace
+quotes blah it's so this is actually
+representing the map data structure and
+we've got a map of colors to their hex
+CSS hex things because it's bit of a
+contrived example I couldn't think of
+anything better and now you have on one
+side you have a node that edits this
+data structure and adds the mapping for
+red to this map so now you have blue and
+red and there okay and that seems like
+quite a natural operation to want to do
+concurrently to that you have a node
+that decides it wants to just wipe out
+the entire contents of the map and
+replace it with an empty map and then
+subsequently it adds green into the map
+so now we have green here and we have
+blue and red on the other side when we
+merge these two what should happen and
+it's kind of almost a question of policy
+of like what do we consider to be a
+sensible outcome I'm not sure if there's
+like a really systematic way of defining
+what correct means in this context but
+I'll try thinking about it reasonably
+systematically so we can think about
+okay does these are the three kind of
+potential map entries that existed at
+various points in time there's blue red
+and green what has happened to each of
+them
+well the blue has been deleted by virtue
+of this emptying out the entire map so
+blue should not be in the end result but
+red that was added explicitly and so
+that should be there and green was also
+added explicitly so it seems like the
+most logical merge here is to preserve
+red and green so we keep red and green
+but blue has gone and I believe this is
+actually what reactors in it's merging
+of nested Maps is is that right
+Christopher okay I've not actually tried
+it I only read the paper and so notice
+an interesting thing has happened here
+so this setting colors to an empty map
+has not actually wiped out this red so
+even though you might argue that you
+know this is emptied everything so if
+this emptying here is applied after
+adding the red then the emptying should
+remove everything but actually the red
+adding red happen concurrently with
+emptying out the map so really what we
+need to do is keep track of what the
+state of this map was at the time when
+it was blanked out and kind of
+translated into deleting all of the
+elements that existed at the time when
+it was blanked out rather than just
+making it this like this without
+question wiping out everything so that's
+what people refer to as portal context
+or people use vector clocks and version
+vectors and stuff like that for this
+purpose of keeping track of these causal
+dependencies of what did this node
+actually see at the time when it
+performed this operation and that kind
+of works but and I'm going to plot up
+exactly the same argument to a different
+example and so we're back with a to do
+list again and in this case everyone
+starts off with buying milk which is not
+done and on the green side that to-do
+lists items simply deleted so there's no
+more buying milk under to do list on the
+right hand side that to-do list item is
+set to done so someone presses the check
+box to say this item has now been done
+and now how do we merge these two
+changes so again it's not entirely sure
+what not entirely clear what we should
+do it's kind of similar like this
+deleting an item is similar to what we
+had with the blanking of the map in the
+last example and this is like adding the
+red to the map in the last example so
+think about it in the same systematic
+way again does it contain the title of
+buying milk well the title was deleted
+here and this thing didn't touch the
+title so I guess the title is gone what
+about done false well done false was
+deleted here and here it was overwritten
+so it's definitely gone it's gone in
+both sides done true does not exist on
+the left hand side and the right hand
+side done true was added so that should
+exist so if you apply exactly the same
+reasoning what we end up here with is a
+to-do list with an item that contains
+done equals true but no title which is
+kind of not what we expected this looks
+broken and looks weird and how do we
+resolve this it's kind of unclear like
+maybe we need some kind of schema that
+tells us that a to-do list item always
+contains a title and the done flag and
+if a merge would lead to that schema
+being violated then do something do
+something might be like resurrect the
+entire to-do item so if the done field
+was set to true concurrently with the
+deletion then actually the merge of
+those makes the to-do item come back
+from the tombstones again or maybe we
+say that actually the deletion always
+overrides the change inside it so nuts a
+thing we say okay the update of the done
+field we're just going to discard that
+because it's within the subtree that was
+deleted deleted subtree is gone
+sorry your edit has been lost so at this
+point it seems we can't both preserve
+the schema and obey this rule we set
+ourselves of not
+losing data it's kind of a annoying
+situation to be in
+we could also think about in the
+previous example we had emptying the map
+was assigning an empty map to this key
+whereas here I just deleted the entire
+item from the to-do list
+are those two things equivalent is
+assigning an empty map the same as
+deleting the mapper and adding an empty
+map again or is it actually a different
+operation it's it's simply not clear I
+think what what the right semantics here
+should be so I feel that a serious
+problem for people building applications
+on top of these sort of models is simply
+how do we convey the problems of of
+concurrent editing and these merges to
+to application programmers because the
+the API is for this stuff have their
+potential to be horrendously confusing
+like you might have a schema and you
+might have an annotation in there saying
+delete wins and who's going to
+understand what delete min wins over
+like resurrect tombstone if they don't
+have a PhD in distributed computing I
+really don't know so I think that's a
+challenge to all of us and I don't have
+any answer I'm just going to end that's
+talk on a kind of depressing note of
+like I don't know maybe you can help me
+how do we design ap is that are not
+horrendously confusing we could just say
+okay we're going to simply not bother
+and we're just going to let the user
+resolve all of the conflicts which is
+basically leading back to this oh crap
+point right so yeah we can do that and
+that's what Microsoft Word does now and
+I think that's kind of an unsatisfactory
+state of affairs so I think having to
+resolve all conflicts even if they're
+like in totally separate parts of the
+document having to resolve that manually
+is kind of ridiculous so computer should
+be able to do that but if we do all of
+the resolution automatically we run into
+these really strange counterintuitive
+edge cases another option is well we
+just stick everything on a central
+server make everything serializable but
+then well we have a lot of problems I
+talked about earlier of like it doesn't
+work offline we have to trust the
+central organization if this
+organization gets under DDoS then we're
+stuck and so on so this is kind of not
+ideal either so so if you want to read
+lot
+more about it here's three pages of
+references which I've all the slides are
+already online most of this is on both
+CRD T's and ot if anyone has further
+thoughts on comparing CR DTS and OTS I'd
+love to talk further about that
+apart from dis I'm just going to leave
+you with an advertisement for this book
+which is I'm writing the last couple of
+pages these days now so I'm almost
+almost done and I hope we have a little
+bit of time for discussion and questions
+thank you very much okay we have some
+time for questions all right already
+ready to go in one of your slides you
+said for deletions don't delete delete
+but keep tombstones can you explain that
+yes let's see where to let's go back to
+so in this case here so we've got this
+insertion at of L with ID for a after to
+a so that means it's using to a
+effectively as an address to point to a
+particular position in the document so
+what happens now if this person rather
+than adding the exclamation mark
+actually deleted this letter L so at
+that point the the anchor at the
+reference point that is using to
+describe the position in the document no
+longer exists and that's inconvenient
+because then it doesn't know how to
+apply this operation and one thing we
+should always preserve with these kind
+of CRD T's is if something has been
+applied locally on one node you can't
+then refuse to apply it on another node
+because in that case you would
+definitely not be able to get back into
+a consistent state so we have to somehow
+guarantee that we're always going to be
+able to apply operations even if they
+arrive sometime later and the way we can
+do this is by actually keeping this to a
+item in the list so even if the letter L
+was deleted we actually keep the to a in
+the place where it is just set a little
+boolean flag on the L saying actually
+don't render that in the user interface
+and that means to the user it looks
+deleted but under the hood it's still
+there and so this message addressing it
+can
+still point at the right place that's
+just what a tombstone is hi great talk
+yes okay so I have thought about the the
+part at the end or like an observation
+where the reason those things look funky
+and this happens and like key value
+stores all the time is because there's
+actually a relation between those two
+items and there's nothing in a C or D T
+that's preserving it it's almost like we
+need some kind of transactional
+semantics between different objects and
+a CRT T if you guys looked at anything
+related to that so a kind of lightweight
+transactional semantics you can get
+fairly easily in that like if you just
+want atomicity of several operations
+that's actually fairly easy to do but in
+the sense of like preserving arbitrary
+invariants it's kind of tricky or I
+don't really know of any interesting
+work in that area I
+I had a question about sort of choosing
+operations and I think this is I'm not
+sure you're quite prepared to answer it
+at the moment so I'm gonna ask slightly
+more focused question which is have you
+looked at immutability as a guideline
+for good operations versus bad
+operations because I'd make an argument
+that if you're not keeping immutability
+you're not preserving that kind of don't
+lose data and many of the problems
+you've got are down to the fact that
+well actually hang hang on I've already
+forgotten something that would help me
+order these things when I come to try
+and sort them out you know and the
+tombstoning is a great example of that
+you know I first saw that in Active
+Directory almost 20 years ago now and
+you know if you had something that said
+well I've replaced this piece of text by
+that piece of text if you knew which
+piece of text you had replaced then you
+could probably kind of work out an
+ordering which was globally unique and
+it's the kind of there's something that
+feels like a design smell about the fact
+that you are allowing mutable operations
+yeah have you looked at immutability as
+a kind of guideline somewhat yes so I
+find so event sourcing for example is
+one approach you might have come across
+so that's a design methodology where
+people say instead of describing updates
+to our database in terms of these
+mutable operations we're actually just
+going to have a log of events that
+describe in like a factual terms the
+thing that happened and any state
+updates are then purely derived in some
+deterministic way from that log of
+immutable events and I think for like
+the type of sort of relational database
+business applications type area that
+event sourcing was designed around that
+works really well and I'm actually quite
+a fan of that approach in this this
+domain we're talking about here where
+it's kind of document editing in the end
+it's a human providing input into the
+system as to like I want to change this
+thing in my document so the human thinks
+about the document in a mutable way the
+human is not going to like provide these
+these declarative instructions of I want
+to replace this word with that it's it's
+a much more like I'm just going to
+delete this paragraph and write another
+paragraph down here so I struggled to
+see how the immutable philosophy
+translates across very well to the to
+the document editing kind of application
+context I think you can do if it's
+something like a to-do list you can
+express it a bit better so you could
+have like an event that is user added
+item to to-do lists user checked off
+item things like that and so those are
+like more meaningful application level
+events and you could define how the the
+state of the to-do list is updated as a
+function of those events so there it
+kind of works again reasonably well so
+you write maybe like to-do list is the
+wrong kind of mutable data structure to
+use for this sort of thing though
+mmm I think that's really interesting
+line of thinking that we should think
+about further okay we can do one more
+and then we gotta end it so my question
+was is there any work around like this
+kind of conflict like programming
+language for instance because very
+realistically like yeah if you have like
+a merge conflict a lot of time we can
+fix it but sometimes it's just someone
+change the tab and someone added a
+parameter and could you resolve that
+automatically so anything workaround
+that I identify what what's this got to
+do with programming language lc/ld C for
+programming language syntax so kind of
+oh I see I've not seen anything along
+those lines I guess you could represent
+the syntax tree as that's like some kind
+of Jason like or XML or whatever you
+like structure and then use that some
+other people seem to be very wedded to
+this idea of having source code files
+just being sequences of bytes without
+any further structure but I think people
+have tried from time to time to change
+that without very much success but I
+guess there's nothing in principle
+stopping that if you mean programming
+language is operating on C our duties
+Christopher's your man okay let's think
+this speaker again okay</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

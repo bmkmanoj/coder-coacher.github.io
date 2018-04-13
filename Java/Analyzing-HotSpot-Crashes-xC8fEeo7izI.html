@@ -1,0 +1,954 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Analyzing HotSpot Crashes | Coder Coacher - Coaching Coders</title><meta content="Analyzing HotSpot Crashes - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Java/">Java</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Analyzing HotSpot Crashes</b></h2><h5 class="post__date">2017-10-04</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/xC8fEeo7izI" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">ok so I think it's 8:30 good morning
+everybody I'm happy that so many of you
+could make it to the first morning
+session I hope it will be interesting
+enough for you so you really can wake up
+so I was speaking today about analyzing
+hot spot crashes
+my name is focusing moniece I'm working
+for sa P in the AP JVM team we are doing
+our own s AP Java Virtual Machine which
+is based on a hot spot a licensed
+version of hot spot at the same time we
+are also working heavily in the open JDK
+we are the maintainer and contributors
+of the PowerPC ax and s/390 port and we
+are also in the Java Executive Committee
+ok so let's get started with the talk if
+there are any questions please ask if
+they are quick it will try to answer
+them if not we can do it after the talk
+so all the examples I have in this talk
+and the slides themselves are on github
+so if you want to take pictures you can
+take picture of this slide I will show
+you slide once again
+at the end of the talk so you will have
+one more chance to get it ok so
+everybody ready so what's a hot spot
+crash well it's actually a fatal error
+or situation which from which we cannot
+recover it's not compared to an
+exception for example which we can
+handle an exception and or an unhandled
+exception shows error in your own
+program in the application while a hot
+spot crash or VM crash shows an error in
+the in the virtual machine itself which
+should not happen so the only thing we
+can do as I say it's an unrecoverable
+error the only thing we can do is we can
+try to gather as much information as
+possible from the crash to analyze it to
+find the root cause and to prevent it
+the next time so to bring everybody up
+on the same line just a very quick brief
+introduction about a hotspot VM so on
+the very base we have two CPUs I won't
+go into CPUs today during
+my last 12 years I was working on hot
+spot we find some cpu errors as well but
+I won't go into this topic today so on
+the base we have C++ code we have the
+Java launcher we have different Java
+libraries Lib Java which is the native
+part of the class library we have the
+system C libraries which is all C code
+or in memory then the biggest part is
+obviously the hotspot itself the virtual
+machine itself which is in the Lib JVM
+shared library it consists of the
+runtime then GC and to JIT compilers if
+you're using the server version of the
+hotspot which is the default today this
+is also written in C++ then on the next
+level we have generated code so this is
+one of the major problems when it comes
+to debugging and analyzing hotspot
+errors that we have to deal a lot with
+generated code where native debugger
+cannot help us very much so first of all
+the interpreter itself is generated I
+will show you a quick example in one of
+the following slides how this looks like
+then we have various tabs which is kind
+of glue code between the native C code
+and the generated compiler just in time
+compiled code we have C 1 compiled
+method C 2 compiled method so by the way
+C 1 is the client compilers it - is
+there a server compiler which runs
+slower but generates by the code and
+recently we have ahead of time compiled
+message which also appear in the code
+cache now and finally we have the data
+of our program so we have the Java
+objects in the Java heap we have the
+classes themselves which today live in
+the meta space previously they lived in
+a part of the heap the circled term
+generation but it was removed with in
+Java 8 and we still the VM still uses a
+considerable part of C heap so this is
+also something many people are not aware
+of
+they configure the virtual machine let's
+say with 8 gigabyte and then they wonder
+why it uses 12 so for example a
+just-in-time compiler can very well use
+up to a gigabyte for compiling a very
+large method and depending on the
+hardware you are running on you have a
+lot of threads running
+even if you start just the hello world
+program a hotspot VM will today start at
+least 10 threads we have the VM straight
+which does some bookkeeping you have a
+GCS write various number of uses right
+depending of the course you have various
+number of JIT threads and they all also
+of course need memory and when they
+while they are running they also consume
+Sahib and finally we have the
+application threads the Java threads and
+these Java threads they execute the code
+from here so they are started by the
+launch art and they jump into the
+runtime they execute some interpreter
+code to execute maybe just in time
+compile code and so on and during this
+talk we will see which places we can
+crash and how we can detect that and
+hopefully fix it so we have a very small
+crash example so who of you has seen
+this before when he was running a java
+application so may probably a lot of you
+that's why we're here ok so what does
+this say us so first of all it gives a
+short brief summary what happens so in
+this this case the segmentation fault
+happened at this program counter it
+tells us the function which was on top
+of the stack when the error happened so
+in this case it was in the Lib JVM so in
+the virtual machine itself it was a
+memory access function it tells us where
+the core file was written to and it also
+tells us where the hotspot error file
+was written to so this hotspot error
+file is actually the data we will look
+at most during this talk because it
+contains a lot of useful information so
+there are some Cavett's when you on run
+with you limit minus c 0 so core 5 0 no
+core 5 will be produced so usually it
+can be very helpful to have core files
+as we will see so at least when you run
+into a problem and want to reproduce it
+you should set your limit minus c 2
+unlimited so you get a core file also
+gnu/linux systems like a bun too even if
+you settle in
+- unlimited qualifies won't be created
+in your file system but they will be
+piped to a system application like
+airport and you won't see them so you
+may have to configure this in proxies
+comic or pattern or depending on your
+system this may be a different file but
+you may have to configure the core
+pattern to a file on your file system
+and not to to a pipe somewhere here to a
+service program okay so how did I
+produce this crash it's actually very
+simple by using unsafe you know you
+shouldn't use unsafe because as the name
+says it's unsafe but it's very handy for
+producing crashes so actually what we do
+here is I just define a method crash and
+it uses unsafe to write a value X to
+address 99 so address 99 is usually not
+accessible and we call crash is 42 and
+write it to others 99 it is crashes the
+program so let's see how that's what
+error file looks in this case so on top
+of the hotspot error file we have a
+summary
+it contains the exact command line this
+already can be very useful when you for
+example get what's whatever file from
+your client this can be useful to see
+what what you run it contains quite
+detailed information about the CPU the
+hardware which was used both operating
+system which was used and how long the
+program did run in our case this was
+just a second of course but we often get
+crash files from clients which run for
+weeks or even months so you see if a
+problem appears after a few months
+that's not easy to reproduce usually
+usually so you better have all the
+information you want in this error file
+or in the core file if you have one
+because you won't get a second chance
+ok let's dig deeper into the hot spot
+error file as next section is the Java
+stack trace it contains all the Java
+stack frames which were on the stack
+when the error occurred and we see we
+called our crash program and this called
+unsafe then according to JDK misc and
+thermal unsafe which is in JDK 9 simply
+datian of unsafe and then called put in
+but that's just the java frames when you
+if you remember in the beginning we saw
+that we actually crashed in a c function
+which is in lip JVM so the next section
+what's what arrow fire contains the so
+called native or Mixtec trace which
+contains all the actual frames which
+have been on the stack and here you can
+see we start with sleepy sweat starts
+right then the Java main in the drama
+launcher which in leap jli then we go
+through Jane I call static and so on all
+the stack up finally we arrive our Java
+methods and the last Java matter tend to
+put it unsafe put in course into native
+code so unsafe put it it's the
+implementation of this this is declared
+negative in Java and this then calls
+into the Lib JDM itself where we come to
+the actual method where the crash
+occurred yes so it's just an animation
+of what I showed you it was not true I
+will have a laser pointer so to come
+back to our overview so we crashed in
+the runtime while executing runtime code
+in a Java thread so that was easy so
+digging further into the hotspot error
+file there is a section which contains
+order which registers the value of the
+registers when the VM crashed and as you
+can see the register ax contained the
+value 42 this was actually the way we
+were writing to the address 99 if you
+remember and address that register dxdx
+contains the address but this is a
+register to memory mapping it's not
+actually just the pure register values
+as you can see here while writing this
+hotspot error file the VM tries to make
+sense of these values and for example
+the register RBX contained a strange hex
+value which we in knew what it is but
+the VM could find out that this is
+actually a pointer to the put int method
+so
+for these other values the VM couldn't
+find out or actually this one is
+pointing into the stack but there is no
+more information about it and finally we
+see it at the top of the page we see
+this strange arrow it says error
+occurred during error reporting so while
+the VM was writing the error file it was
+trying to make sense of the values
+contained in the register it's run into
+another problem probably another
+segmentation fault because as I told you
+we are in an inconsistent state the VM
+cannot be sure about all the values in
+the register if there are objects or
+where they are pointing to but it tries
+to find it out and during this procedure
+it may run into another problem but
+there is a very sophisticated algorithms
+in the hot spot which catch this
+segmentation faults ignore them and
+tries to go forward inverting the
+hotspot FS to provide as much
+information as possible so after this
+error this section will be closed the
+register mapping but the hotspot writing
+will continue with the next section and
+actually the next section is the pure
+register values and here you saw it
+couldn't make sense of register R 9 so
+here we see register R 9 has this value
+and this happened to point into the heap
+but it didn't really point at the
+beginning of an object so while the the
+VM wanted to print out the type of the
+object but because it just happened to
+point into heap but not at the beginning
+of an object it crashed while followed
+the class pointer of the object so here
+we get at least the naked values of the
+registers yes
+so going further we also get the values
+which have been on top of the stack when
+the error occurred and we also get the
+values near the before and after the
+instructions where the crash happened
+so when the crash happened happens in a
+C++ matter in Lib JVM we can actually we
+could actually extract that
+manually but if that happens in
+generated code this may be quite useful
+to have the actual instructions which
+have been executed because wouldn't be
+easy to extract them it is not if you
+wouldn't have a core file yes yes non
+mapping this various back to I just I
+tell you because I know I mean we we are
+just analyzing the hot spot error file
+and we saw that it has this line so it's
+saying that when this hurts whatever I
+was written it couldn't make sense of
+the register a nine and I just told you
+why that happens because I know so when
+you when you're debugging this crash and
+you you you're debugging how the hats
+whatever file will be written you will
+see that it tries to print the value of
+this object and then crashes a second
+time and then it prints this this value
+I think this West Java 9 actually we can
+just look it up should be here on top of
+the I don't see it here but it was Java
+9 I just used a debug build of Java 9
+for it but it would also happen in Java
+8 because if you write to address 99
+with unsafe you crash in every average
+ever version okay so let's continue
+we were the instructions and even if you
+have only this hex term of the
+instructions you could use gdb or object
+dump or online or SEM disassembler
+something to disassemble this
+instruction and you see actually this
+instruction wrote the content of
+register ax which is was 42 to address
+RDX which are the X was 99 okay so we
+saw that the hotspot error file contains
+a lot of useful and interesting
+information
+so sometimes we may want this
+information without crashing the VM so
+therefore we can use the J command
+utility which comes with your JDK
+distribution and we can just call J
+command with the PID of your process of
+your java process and command vm info
+and if you generate a so called vm info
+file it doesn't contain all the
+information of our hot spot error file
+when a crash happens because obviously
+we're not at the crash but it still
+contains a lot of useful information so
+for example here you can see this this
+was jdk 9 slow debug field it contains
+the command line it contains the
+hardware
+it contains heap addresses and a lot of
+other useful stuff so sometimes when a
+customer has problems you can just ask
+him to send you such a info file for him
+to generate it so generating this info
+file suit should be quite safe so for
+example generating such an info file
+doesn't do the register to region
+mapping because as we saw that may be
+dangerous so it only prints the the pure
+value of of addresses because you don't
+want to crash the VM just to get the
+information all of it
+learning virtual machine sorry ok so now
+let's start with a is a real example
+let's say somebody some of your clients
+or colleagues shows you this crash file
+or this crash and ask you what can you
+say what happened so any idea I mean the
+audience was happened here so having a
+look we see that this time we didn't
+crash in a native code or in the lip
+when the VM request in interpreted code
+so this lowercase J means it's a Java
+method and it's an interpreted method an
+uppercase J would mean it was a just in
+time compiler method so we crashed in an
+interpreted method which is called crash
+because again it's from an example and
+we get the PC segmentation fault
+happened this time
+we also get another information because
+we crashed in the just-in-time compiler
+so the hotspot error file so this is the
+content of the hotspot error file a
+summary I left out some of the parts
+which we know already so this time the
+hot so terrify also contains the the
+template of the bytecode in which the
+interpreter cache crashed so the hotspot
+has a so-called template interpreter
+which means that it generates assembly
+for each Java bytecode and then it calls
+them one after another and executes you
+know byte codes and this time we crashed
+in the error length byte code and the
+hotspot error fire contains the
+generated code for for this error length
+byte code and we can see the address at
+which we crashed and we see the
+instruction at which request so this is
+the instruction where we crashed we see
+the register area X contains the strange
+value batbabe so this is a so-called eye
+catcher which is used throughout often
+use throughout the hotspot 2 to zero out
+memory or to flex some values which are
+illegal so if you see such values
+you can search over the code and see
+where these values are written and this
+may give you an idea why this crash
+happened and here we are actually moving
+the value of ax to this address and an
+entry crash so let's take a look how I
+have provoked this error how I how I
+managed to bring the VM in a state where
+it crashed in the interpreter so this is
+a very simple program called crash int
+it has a it contains an integer array
+and you have a crash function which just
+returns the length of this array and
+again then we create a crash into object
+we use unsafe to put some this this bad
+paid value at the address of this object
+with unsafe so again this is something
+you shouldn't do it's just for the sake
+of example and then we call crash so
+this is the memory layout of our crash
+into object in the heap so it contains
+the object header which has a pointer to
+the class or object in the mark word and
+then the actual data itself so in this
+case the data is just a reference to an
+integer array and then somewhere another
+place in the heap we have the integer
+error itself again the integer array has
+object header then it has a length field
+and it's an integer area of length one
+so it contains one integer so when we
+write this value bad pipe into the I to
+the at offset 12 of our current object
+we will overwrite this reference to the
+integer array and this will point
+somewhere to nowhere so when we then
+actually execute our crash in function
+so this is the bytecode of our crash in
+function which you can get by running
+Java P on the class you see that it
+actually does a load so this loads this
+then gets a get field for for pushing
+the integer area onto the stack and any
+cost error wailings and error legs of
+course wants to access the length field
+of this object so this is what you
+actually what we actually saw here this
+is offset twelve of this object that
+contains the length but when we were
+accessing this we were crashing because
+we've overwritten this so again this was
+just an example and this example also
+shows you something
+very important when analyzing crashes
+because actually we've crashed in the
+interpreter in an interpreted method but
+this was wasn't an error in interpreter
+the interpreter what works just fine if
+you have for example jane i code
+actually i've actually simulated j'ni
+code with unsafe here so if you have J&amp;amp;I
+code for example and pollute your heap
+or do some bad things in your heap
+everything can happen so we've just
+corrupted our object in the heap and
+then we finally crashed in the
+interpreter so this is something you
+have to keep in mind the cost of your
+object is not always related to the
+place where you really crash and this
+makes finding errors very tricky
+sometimes okay so I will come now to a
+real example so a problem which you
+really got from our customer until now
+we only had two examples to show you how
+everything actually works so we got such
+a message from a customer that he gets
+out of memory errors out of memory meta
+space this was all we received in error
+message so there is one option you can
+use so if the program at the customer
+stops anyway because of an exception you
+can try to use this xx crash on out of
+memory error so in this case the VM will
+not only exit with an with an exception
+but it will at the same time produce a
+complete hotspot error file and a core
+file we ask the customer to do this and
+he sent us that
+generated hotspot error file and the
+corresponding code file soon this
+happened in Java 8
+the problem is in Java 8 but I've
+analyzed it with Java 9 metastasis
+already in Java 8 so prom cane was
+removed in Java 8 and replaced by meta
+space so this is Java 8 upwards okay so
+how does this look like okay this is not
+the hot spot error fry from the customer
+I cannot show you this but I've done a
+reproducer which that's exactly the same
+thing what happened in the customer side
+and I will show you that at the end of
+the talk okay so you can see that the
+program was calling define class it has
+a class loader classifier parser then
+actually constant pool allocate it run
+into the into the error so this doesn't
+look weird I mean Java program should
+load classes and allocate constant pools
+and so on so another part of the hotspot
+error file which I haven't which I
+haven't shown you before it's the event
+section so the hotspot error file also
+has a section which records important
+events which happen during execution and
+you can see that before the crash
+happened
+the problem was loading a custom class
+loader and at the end it executed a
+collection a meta space collection
+because it obviously ran out of space
+and you see that the meta space
+collection tried very hard to free
+memory but it couldn't succeed so that's
+actually the cause of the of the error
+so with this information we cannot get
+any further but there are other useful
+tools for example serviceability agent
+which you can use to inspect the core
+so we also got the core file and we used
+the hotspot debugger with Java hotspot
+debugger of Java 9 the serviceability
+tool to analyze this core file and the
+hotspot debugger has a class browser
+which allows you to look for all the
+classes all the active loaded classes in
+a core file when the VM crashed and when
+you look for these classes for in a in a
+package showing this this example quarks
+Simonis we see that we actually have
+this custom class loader which was
+loaded before the crash and we have two
+versions of the same class so that's
+actually also not unusual because you
+know in Java every class loader can has
+its own version of a class so when you
+have a custom class loader it's possible
+it has is version of crash out of memory
+and the same time the application class
+table could have floated this class
+before so two two versions of a class
+it's actually not bad that shouldn't
+fill up the meta space so we can dig
+further in the hotspot error file and it
+also contains the last exceptions which
+was thrown by the virtual machine the
+last ten exceptions before the VM
+crashed and here we see an interesting
+thing so before the VM crashed it showed
+a linkage error exception and this
+linkage exception was thrown by our
+custom class loader and it says attempt
+to placate class definition for name for
+our class name so obviously there were a
+lot of the appliques last definitions
+happening and of course one class order
+can only have one class one version of a
+class so if it tries to reload the same
+class it it gets this exception but this
+exception were obviously handled by the
+application so we didn't saw them but in
+the end it resulted in an out of memory
+in the meta space so still this
+shouldn't happen because I mean we
+handle this exception why do we get an
+out of memory error here so the
+stability agent is actually a very very
+powerful tool and we cannot only use the
+graphical tools which are which come
+with it we can also use it
+programmatically it has an API and it
+allows us to inspect all the data
+structures all the C++ data structures
+which the hotspot maintains during its
+run time so for example every class
+object which you have in Java you know
+in Java you can get you can call get
+class on each object has a corresponding
+class with Kay a C++ object in the
+hotspot and now we can use the
+serviceability agent to walk these these
+these these C++ representations of the
+Java classes in in the core file for
+this we get a so-called class of the
+data graph object which is all the class
+class loaders in the hotspot then we
+walk them and for every class loader we
+query all the C++ class objects in which
+were active at a time and we print them
+out to to memory so when we run this
+program again this is done with Java 9
+so we have to add the JDK hotspot agent
+module for Java 8 it's in the tools I
+think tooth jar files so if you have a
+JDK you don't have to do anything
+whichever 9 you have to add the module
+and also add a lot of exports because
+unfortunately the API isn't publicly
+exported anymore so if you run this on
+our core file we will see that we had in
+we have a lot of C++ classes for
+actually the two class versions which we
+have in Java and then we run this
+through what count we see we have
+actually 320 versions so this is
+obviously not ok because you should only
+have one C++ class representation for
+every Java
+in the heap so with all this information
+we were able to reproduce the problem
+and this is actually the reproduced er
+which I also used for this presentation
+so what we actually do is we get the
+byte codes of our class we define a
+known class loader in order to redefine
+the defined class method the class order
+which is protected and then in the loop
+we rapidly define the same class so this
+will succeed the first time and after
+the first time we will obviously get
+linkage errors which we catch and when
+we do that in a loop we can reproduce
+this problem and find the memory leak so
+this was a day 1 problem of the meta
+space change which was introduced in
+Java 8 obviously never nobody did this
+before catching linkage errors so our
+customer for some reason did this and
+then he run into this problem so I fixed
+this like in February 2017 just in time
+for Java 9 okay so let's come to the
+next example
+so I have a look at this hot spot error
+file this time we crashed in the lip JVM
+in massive code generate array copy if
+you're not familiar with shorts what
+this doesn't tell you anything but you
+see it generated a core file a hotspot
+error file and this time cert file has
+been generated so called replay file so
+this is interesting because it means
+this happened to this crash happened
+during compilation of JIT compilation
+and we can see this in the house word
+error file so we see the command line of
+the program and we see that the current
+threat where the crash happened was the
+C 2 compiler threat we also see that the
+crash happened to read the compilation
+of a crash method and then we get the
+stack trace and see that
+happened in a method called generate era
+coffee so obviously again we compile a
+array copy system every copy method and
+while we were compiling that one
+compiler crashed for some reason so
+where are we here now we crashed in the
+c2 compiler in in C++ code not in
+generated code but in C plus per call of
+the c2 should come compile the sweat so
+now we can use the replay compiles and
+replay data file option of Java feed in
+this replay file to reproduce the
+problem but sad enough when we try to
+reproduce the problem the crash doesn't
+happen so any idea why it didn't happen
+so if you look carefully at the hot spot
+error file you may remember that it's a
+command line use the option called
+xx- to escape analysis so the program is
+running without escape analysis when it
+crashed so if you want to reproduce the
+problem we obviously have to use the
+exactly same command line options
+because otherwise other code will be
+generated other cost paths will be taken
+doesn't mean we can reproduce the
+problem so that's why the command line
+parameters in hotspot error file are
+useful for reproducing the problem so
+when we use the exactly same options on
+the command line now with our replay
+file you see we can easily reproduce the
+problem
+so obviously this means we need the same
+classes on the class path as the
+customer so you can only do this if you
+have the same version of the program to
+the customer has and now that we can
+reproduce the problem with this replay
+file it is very easy to use other native
+debugger like gdb for example place a
+breakpoint into the offending method and
+run the program and see what happens so
+here again I cheated a little bit
+actually I have just just patched the VM
+such that it crashes in this special for
+this special example but this is
+actually how it also happens in a
+relative there there is a problem in the
+in the they often are not often but
+sometimes there are problems in the
+indicate compiler which only occur in
+very strange situations you know
+profiling is that just-in-time
+compilation is done Tina McGee does
+inlining that's profiling and in some
+strange situations sometimes there
+happens some inlining some optimization
+which never happened before and the
+compiler and enter in the compilation
+crashes and then it's very useful to
+have this replay file because this
+replay file allows you to compile a
+message in exactly the same way which
+happens when the crash was recurring so
+this time what what what have I added
+here I actually say that when we compile
+an array copy a generic copy method and
+the type of the destination array is
+crash in the class X or crash 5 in the
+class X or crash 6 in the class X then
+we will just just crash so looking at
+the program which we used we have a
+crack class crash 5 we have in across
+this x and y we have the crash method we
+just cause array copy it takes a source
+object and copies that into a
+destination array of type X so that's if
+this happens here we can provoke the
+crash and then we call this 20,000 times
+to warm up the JIT compiler and compile
+the message so we use this method to
+provoke the problem
+for some reason the slides are okay so
+now ii take let's see what you have
+learned until now we have a similar
+crash again we crash at the same exactly
+same location and we have a replay file
+so this time we are smart enough to use
+the same command line options which are
+in the hotspot error file and we want to
+reproduce the problem but this time we
+get another error we actually cannot
+reproduce the problem we get an error
+while replaying the compilation there's
+a strange sorry the strange error
+message saying java.lang class not i
+found lambda form goodness that handled
+something like this so what does this
+mean well during forum s it handles and
+invoke dynamic that the VM generate
+dynamically generates bytecode for
+helper classes and these classes are
+generated dynamically at runtime they
+are not in in your class files in your
+application class files so this time we
+want it to reproduce our compilation but
+not all the classes which were active at
+the time when the problem happened are
+available to the VM so we get this error
+but as we saw before our example didn't
+use lambdas so maybe this is not
+important and often these methods are
+not really required so we have the
+hotspot offers an additional option
+called replay ignite reply ignore
+initialization errors and you can use
+that one to ignore these errors so we
+see the errors are then ignored but we
+still cannot reproduce our our problem
+all the initialization airs are ignored
+but still the error doesn't happen so to
+verify that our message actually gets
+compiled we use the print compilation
+option as you see that this time the
+crash six crash method which where we
+crashed
+we notice from the hotspot error file
+was indeed compiled compiled but
+without an error happening so what can
+be the problem here so again the hotspot
+error file may help us here to gain some
+more information for example here it
+contains and if it shows us that before
+the crash happened
+we had a class redefinition event so
+during runtime you know you can use
+class instrumentation and class
+redefinition to redefine classes for
+example a lot of tools monitoring tools
+for example do this sometimes profilers
+they just redefine classes or debuggers
+can also really find classes so here our
+class where we crashed was really find
+so we see the class was loaded and then
+it was redefined so against
+serviceability agent may be of use here
+because it allows us to dump the classes
+in a form which they were active when
+the crash happened form a core file so
+it uses the information in the qualifier
+to reconstruct the class files and this
+is actually not a version of the class
+files you had statically on your disk
+but the redefined version of the classes
+which were active at the time when the
+crash happened which maybe did which may
+be different if free definition happened
+and actually this is not not an not an
+easy step because the meta space doesn't
+contain your class file one to one
+focused on the disk it contains it
+contains the decomposed word data or it
+has all the information of the constant
+pool and the byte codes in the methods
+and all in different places but the
+serviceability agent can just gather
+that together and create a very class
+part of it of it so we call the Java
+hotspot debugger command-line interface
+this time yes
+and this is all openjdk it's all OpenJDK
+what I show here so I called the command
+build replay jars I quit and I see that
+hot sweaty Burger created to jar files
+one with the application classes which
+were loaded by the application class
+loaders and one was the one called bucho
+which which was which contains all the
+classes loaded by the boot class loader
+and now we can try the replay again but
+this time not with the class is on the
+on the disk on the class pass but with
+the classes which we have it extracted
+from the core file and when we do that
+we see that now we can really reproduce
+the error again which is fine because
+now again we can go into the debugger
+see what happened and hopefully find the
+problem so how I did this this example
+it's actually the same example like
+before the only difference is that now
+the element type of the destination
+array of the array copies is not X but Y
+and you remember we only crashed when
+the destination when the element type
+was X so when we use this program as it
+is statically no no error will happen
+but here during runtime we used class
+redefinition I won't go into details how
+does this be done I just use the
+instrumentation agent to redefine this
+class and replace Y by X so when you
+just use this class it is on the disk
+nothing will happen but when you run
+this program this class a will be
+redefined to have another destination
+type not Y but X and then the crash
+happens so that's why when you used the
+class is extracted from the core file
+they had the redefined version of the
+class and we could reproduce the problem
+this is actually a quite common problem
+nowadays because many customers in big
+installations that you
+all kind of instrumentation tools to
+monitor their tools and the actual code
+which gets executed may be quite
+different from the one you your ship to
+them and it's it's often very hard then
+to reproduce problems in your lab okay
+so again this is where the crash
+happened
+somebody no yeah actually come to a
+conclusion No so as I told you before
+crash location crash reason are often
+quite different so if some Jane I caught
+some bad code changes your your Java
+heap you're really out of luck because
+you can for example question that you
+see you could also crashing in the
+interpreter as you see or in generated
+code so crash location a crash reason is
+unfortunately not always related so for
+example if the just-in-time compiler
+generates bad code doesn't mean that you
+crash during code generation but during
+the execution of a method so then it's
+very hard this this method may then
+corrupt the heap and again later you
+crash a very different location so
+finding the crash reason just was having
+the crash location is very hard so with
+this I actually come to the end of my
+talk there is a lot of interesting stuff
+which about crash analysis on the web
+there is some articles in the Java
+magazine and roppongi net sink last year
+which I want to talk about building your
+own Java debugging tools with
+serviceability agent and instrumentation
+and stuff like that the last thing I
+wanted to point out that serviceability
+agent was actually introduced 2001
+already you know by a paper of Kenneth
+Russell and last buck so this is a very
+old technology
+and unfortunately it's still not
+officially supported and it breaks from
+time to time because it really has to
+always keep the Java implementation at
+the hot spot implementation and sync but
+nevertheless if you want to dig into the
+implementation details of hot spot it's
+it's it's a tool I can really advise you
+to use so that's it here once again the
+slides and I think we run out of time
+but if there are quick questions I can
+try to answer thanks a lot</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

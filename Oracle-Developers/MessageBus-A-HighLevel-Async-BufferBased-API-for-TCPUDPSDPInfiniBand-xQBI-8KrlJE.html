@@ -1,0 +1,1258 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>MessageBus: A High-Level Async Buffer-Based API for TCP/UDP/SDP/InfiniBand | Coder Coacher - Coaching Coders</title><meta content="MessageBus: A High-Level Async Buffer-Based API for TCP/UDP/SDP/InfiniBand - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>MessageBus: A High-Level Async Buffer-Based API for TCP/UDP/SDP/InfiniBand</b></h2><h5 class="post__date">2015-06-02</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/xQBI-8KrlJE" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">thank you for being here at lunchtime
+and you guys are definitely hardcore
+gopher InfiniBand not a typical Java
+subject but I found it very interesting
+and my name is Harold Karr I've been
+with Sun / Oracle for quite a long time
+I started working on stuff thinking
+about InfiniBand
+around 2002 I built an architecture for
+remoting systems that was used in korba
+and in soap so you could plug in
+different transports and one of the big
+target transports was InfiniBand what's
+interesting I built that architecture
+specifically for that and I never got to
+use it for whatever reasons and recently
+though I got to work on InfiniBand
+directly and once this is in place we'll
+actually then we'll use that
+architecture to plug in and fin aband
+to soap in the right places it's it's
+good plugged in anyway as you'll see in
+some different slides but in a more
+direct manner so in a way I've been
+thinking about InfiniBand for a long
+time we're wanting to do something with
+it
+so I'm finally have had my chance and
+first you'll all have to read every word
+of that particularly this slides because
+I'm going to show some performance
+numbers and they're just numbers and
+they prod there's no product release
+date no promise of numbers but I'll show
+you some numbers anyway so what I'm
+going to do is talk about InfiniBand why
+even should you be interested InfiniBand
+and then on top of InfiniBand why
+message bus which is the software we've
+got here then I'll deep dive into a
+little bit of InfiniBand to show you
+what it looks like down at the hardware
+and the lowest sea level then I'll
+actually talk about message bus which is
+something we've put on top of it if the
+Java level although it's also in C++ and
+then I'll talk about buzz which is yet a
+little bit more for certain use cases
+and then talk about the performance of
+that software okay so let's start with
+the InfiniBand so this is a slide which
+shows typical typically the way we're
+connected today and that is you have an
+application which is talking to the
+socket API in some manner you might be
+talking to servlets but eventually
+somebody's talking to us a socket API
+that talks to the socket library and all
+of that's in user space and then the
+actual networking code is in the kernel
+that's the middle section of the slide
+that the kernel and then you're talking
+TCP which is over IP which is then
+formatted into Ethernet and then that
+goes out to the bottom level which is
+the hardware and here I show a nick and
+then that dotted line on the bottom is
+in for this example some fiber so that's
+your typical networking stack for a long
+time and continuing into long time in
+the future what we do with InfiniBand
+step one so to speak is we add this
+thing on the bottom called an H CA that
+stands for Hardware channel adapter it
+basically functions as the same as a NIC
+one side talks to the fiber the other
+side talks to the host above that we
+have what's called a verbs driver and
+that's just the the driver that's
+talking to the ACA and the InfiniBand
+consortiums define this de facto API
+called verbs although every manufacturer
+implements it differently but it's still
+just like here's kind of things you need
+to be able to do with this channel
+adapter above that there is yo IB which
+means Ethernet over InfiniBand so it's
+just taking the ethernet form packets
+and then putting them through the verbs
+driver onto the h CA and then you've got
+the rest of the stack that's typically
+if your software is running on
+InfiniBand hardware it doesn't have to
+do anything to get some of the benefits
+because it's going through this route
+it's just
+automatically depending on the library
+the library will probably do some sort
+of checking to see you know a teen finna
+Benz available and then it'll use that
+instead and this is you there are some
+benefits here but there's the big
+drawback to this one is latency and
+memory copying because as with all the
+rest of the network stacks the tcp/udp
+IBP library is doing copying from the
+memory in the user space in the kernel
+space so you've got a lot of bufferton
+going on so there is another thing where
+they drop out the ethernet level so you
+have IP over InfiniBand and that helps a
+little bit because you're not sending so
+many useless bits because you really
+don't need those because InfiniBand has
+it's the protocols have all the
+information that tcp kada that ethernet
+has anyway so in generally on exa logic
+hardware that's what's if you're running
+socket based applications that's what's
+happening it is running over IP over
+over InfiniBand
+so that's a step in the right direction
+and then the final step of this
+particular progression is this thing
+called SDP which means sockets direct
+protocol and with the sockets direct
+protocol it's written so it is a sockets
+API but underneath it's talking directly
+to the verbs driver so you don't do any
+of the unnecessary TCP UDP IP stuff is
+just directly to the verbs driver and
+that actually does help quite a bit
+you'll see some numbers on that later so
+that you don't have to do a thing to to
+get these benefits because if your
+software is running on InfiniBand it's
+using one of these things so the next
+step though is talking directly to the
+verbs api because what you get here is
+the kernel bypass in other words you're
+not even talking to the kernel there's
+nothing happening your driver talks
+directly to the
+and hardware so it's application to
+application messaging with no it's not
+generating interrupts like the TCP side
+does the trouble with that is the verbs
+library is only available and C is super
+duper low-level and it's it's not very
+pretty I'll show you an example of it
+pretty soon and then we'll see how many
+people want a program in the verbs
+library not me so that's us of the first
+step and what we've done and this is
+where it gets to what this talks about
+is added this thing called message bus
+and the message bus talks to the verbs
+library so the message bus user doesn't
+see that so the app talks to the message
+bus and it provides a lot higher level
+services and I'll get into what those
+services are the message bus itself is
+great for use cases where you've got a
+lot of data to just move from one
+location to another but it's not really
+for sending you know request response
+based type of messages and that's where
+the final piece comes in that little
+piece called buzz which is optional
+you're an application can use message
+bus directly or if it needs the
+capabilities of something like buzz then
+it can use buzz and I'll tell you what
+buzz is going forward so that's kind of
+the why of the message bus starting on
+the left hand side you're still using
+InfiniBand but you're not getting all
+the advantages particularly speed and
+latency and as you move over to the
+verbs direct use of verbs you're getting
+like maximum throughput and latency but
+you're getting a very complicated API
+and it's not Java based and message
+buses Java based as well as buzz and so
+it's a lot easier to use so that's kind
+of the why of message bus in this next
+slide is kind of the why of InfiniBand
+and it shows this is basically from the
+links at the bottom the Wikipedia page
+which is is accurate
+and it shows the various specs for
+InfiniBand
+right now in Ex illogic machines we're
+running qtr and another generation will
+start to use either FDR EVR in the
+future and what this same actually this
+is a little confusing because our qtr
+the the first line it shows the gigabit
+per second throughput and it says 8 on
+qtr but we've got 10 so i guess this
+thing is not quite accurate and what
+they tend to do is you that's the the
+device raw speed but there tends to be
+multiple lanes or connections between
+these and they're typically in 4 or 8 or
+12 lanes and so that's what these next
+numbers mean 8 32 and 96 and then
+there's the encoding what how many bits
+are used in the encoding the latency the
+latency is terrific and a lot of
+financial institutions are based on
+InfiniBand or something like it to get
+every microsecond out you know squeeze
+it out of their thing because if they
+can squeeze out to microseconds they
+probably made a few million dollars so
+they're you know high performance
+computing one of the big users of
+InfiniBand as well as finance ok so now
+we'll actually take a little deep dive
+InfiniBand and the purpose of this
+section of the talk is to convince you
+that you don't want to go there I've
+done some playing with this and it's
+it's definitely hard to use but since
+some of the the main fin InfiniBand
+operations that are available are send
+and receive which shark are typical and
+you just say here's a chunk of memory
+send it to the other side and with send
+and receive semantics it's actually
+doing under the covers a direct memory
+are the Guardium a write from but it's
+in one machine to another was customers
+like having shared memory but it's on
+actually there isn't shared memory but
+but it is so it takes your buffer it
+does copy it on to the wire sends it to
+the side and the receiving side decides
+where to ride it and then wakes up the
+other side so that's the send received
+semantics and then there's already made
+right and read what that says is I've
+got some mint you know some data and it
+can be one byte or it can be you know
+gigabytes and to say I want you to place
+it in this other memory over on the
+other computer and it will do that for
+you and there's other things here in the
+bottom they you've seen the atomic
+compare and swaps because are you doing
+that obviously you've got shared memory
+semantics even though you're on two
+machines and so it has in the InfiniBand
+Hardware this atomic comparing swap
+which allows software vendors and people
+to build more sophisticated locking and
+protection mechanisms so you actually
+can write into that memory so that's the
+RT may read and write you're saying I
+want to read or write a very specific
+memory location in the other person's
+memory and then atomic fetch an ad in
+compare and swap so those the basic
+InfiniBand operations this is the
+communication model on this other that
+the InfiniBand is a is a peer-to-peer
+type operation anybody can send at any
+time anybody can receive at any time so
+on this one you have the top there's the
+two consumers or producers they talked
+to things called completion cues and
+work cues and work cues are consists of
+cue pairs one for sending one for
+receiving and you interact with the
+communication mechanism by putting data
+or getting data from these cue pairs and
+the completion cue just tells you when
+something's done then it just goes
+through the bottom layer which is the
+typical kind of port type of things it
+says port but it's not a TCP port I an
+infinite band port there can be relays
+just like in anything else and finally
+received on the other side
+so in a little bit more detail for
+sending you put something in the send
+queue and then the InfiniBand device
+puts that gives that to the you actually
+put it the receive queue isn't in the
+channel adapter excuse me that says
+InfiniBand device that should say h CA
+so you put something in there it gets
+put on to the wire and after it's put on
+the wire and after its received by the
+time because the other side acknowledges
+it at the hardware level and once it's
+acknowledged at the hardware level they
+an item is put in the completion queue
+saying it was sent you don't know if the
+actually applications done anything with
+it yet but you know it got to the other
+side and that's that's all you know
+similarly for receiving you've actually
+put something in the receive queue which
+says here's some memory if for the send
+received cymatics and when when someone
+a message comes in you're notified by
+way the completion queue let me this
+slide kind of goes through that in a
+little bit more detail and just my
+cursor show up oh good it does so what
+this says is like here's a receiving app
+what it does it one actually it that
+step zero which is not shown here it
+first registers some memory because you
+have some memory and that needs to be
+you need to tell the operating system
+don't mess with this you need to tell
+Java everybody like this is kind of
+off-limits so now this is owned by the
+hardware channel adapter that way that's
+the you're talking application memory to
+application memory so you first register
+the memory in that way it's off-limits
+to the application so for receiving at
+step one you actually put on the
+received queue and item among other
+things what it has is a pointer to that
+memory so it knows where to put things
+when something comes in on the sending
+side at step two it puts a send item
+which is pointing to some data in some
+buffer that you want to
+and then the channel adapter takes
+things off that queue in the order they
+were put in and sends it so on three
+it's going to send it across the wire
+and at four it's pulled out it takes the
+received cue item out because it needs
+to know where to write this data it
+writes at the data at 5 at 6 it says you
+know it puts a completion I'd I'm a
+received completion item in the
+completion queue and then the receiving
+app can see that likewise on the after
+it's made it to the HCA that 8 it gets a
+completion queue item put in which is a
+send event saying the send is now
+complete which then the sender can know
+about that so there's a lot of steps to
+sending and receiving a message and
+these are some of the things you can do
+with the InfiniBand verbs API and that's
+register the memory create a cue pair or
+destroy one B when I say cute pair 2
+there could be actually litter tens of
+thousands of these things isn't like the
+channel adapter has this preset built-in
+to begin with they can be created you
+can complete create and destroy
+completion handlers address handles you
+can post send receive requests you can
+pull for completion or you can request
+you notification when something
+completes and then there's the async
+handlers for the notification so let's
+take a look and what that looks like
+this is basically the now on Linux in
+Solaris there is a library called Lib IB
+verbs and that is the thing that talks
+to the channel adapter and this is an
+example which is taken from at the very
+bottom you'll see that link the HTTP
+link that's actually a pretty cool paper
+that was it just got dissect a real
+simple ping-pong application but it's
+every single line of code
+it's doing which is great because when
+you try to find it it's actually really
+surprisingly hard doing a Google search
+for InfiniBand to learn anything there
+is so much marketing stuff that shows up
+that doesn't tell you anything and then
+kind of general good speeds and feeds
+information but if you really want to
+try to learn like where's the latest
+spec where is this it's surprisingly
+hard to really come up with that good
+search results are near the top but I I
+found this one which is great because it
+it's something everybody can look at if
+you're interested you can really see
+what to do so I'm not gonna guess why
+I'm gonna kind of step through this so
+you know this is allocating some memory
+which is for sending opening a context
+because there's always these context
+objects at that level which I won't go
+into further because we don't actually
+need to it has concepts of protection
+domains meaning who can send and receive
+and read and write data and then that
+step at line five there's the really big
+step and that is registering the memory
+because you've got to tell the device in
+the operating system about this memory
+creating cue pairs completing creating
+cute completion cues and then finally
+then you're posting a receive request
+and that's your gonna just don't receive
+out of nowhere you actually have to set
+up in advance to receive and then you're
+setting up the destination information
+information I just kind of skipped the
+nine and ten steps and finally you do
+the sin and only thing the hard work is
+going to do is send it and notify you
+that it was sent if you're expecting
+your receive that receives because of
+the application level you have higher
+level semantics that say there's there's
+responses at the InfiniBand it's just
+bits that's going to get sent from one
+side to the next and nothing more and
+the acknowledgments for those bits so
+one thing I'm not going to talk about
+today on top of the Lib ID verbs we have
+this thing called MQL
+which is a little tiny bit higher level
+than live IP verbs and we that's a
+Seymour C code and we have a j'ni
+binding to that and that's what message
+bus is built to is the MQL library so
+it's a little bit higher level okay so
+that is InfiniBand the night I hope that
+little bit convince you that you don't
+want to write at that level unless
+you're really hardcore C hacker then
+it's pretty fun but otherwise it's you
+know it's it's not fun so now we'll talk
+about message bus which is really the
+focus of this talk and before we
+actually talking to miss about message
+bus to talk about why we built it and
+the main use case is coherence coherence
+is an in-memory data cache so in
+replication so it's the kind of like
+memcache only a ton better it truly so
+what that means is it on the on the Left
+if you have a client or clients and
+they're got some requests coming in or
+whatever whatever it's doing and it
+looks for the data in its near cache if
+it's there great you're done you just
+keep going but otherwise coherence goes
+out and you have a whole bunch of other
+nodes in a cluster and one of those
+nodes will have or one or more those
+nodes will have a copy of that data or
+if they don't well actually they will
+the arrow I'll show you something about
+that arrow later so it's just a way and
+this also is great for clustering
+because if you have requests coming in
+they get routed to different nodes it
+doesn't matter because the data is
+always available to all nodes in the
+cluster and with a really high speed
+InfiniBand network underneath it
+underneath it you can access that data
+regardless of where it's at so this is
+the main use case this is a little bit
+deeper dive into that use case so let's
+let's go through this let's say that
+this application a wants to get
+excuse me this application wants to get
+memory called a so it says get get a and
+it looks in its near cache for that
+memory if it's there great you're done
+it just gets it looks like you would any
+other time if it isn't it actually looks
+through to the one of the primary near
+cache and gets it from there
+and it is possible for data that's
+hasn't been cached before that it might
+actually be loaded off the database all
+of this is configurable so you wouldn't
+actually necessarily have this load it
+actually might return you know no data
+but if you had it configured to say if
+it's not no data if there's no data
+there then you know I know it exists I
+know it's in the database so loaded up
+the very first time so the main point
+here is all of these links to the from
+the database and the link from this
+cache to this cache is all going over
+InfiniBand specifically message bus
+implementation of InfiniBand likewise
+later if you're storing some data with
+the put whenever you do a put it then
+while behind the scenes store that in a
+primary cache and in a secondary cache
+and if you have it configured this
+doesn't always happen it'll do a right
+either a right ahead or right behind
+store to the database and right ahead
+just means it will write it to the
+database before this put returns right
+behind means this put will return and
+this store will happen sometime in the
+future sears not if so there could be a
+moment where you actually come back out
+of here but it hadn't been stored and
+you crashed right then depending on if
+all the backups are there you may or may
+not be in sync that's what's amazing
+about coherency does a very good job of
+coherence you always hear these things
+about eventual consistency coherence
+that's one of its names is they actually
+don't really kind of follow that line of
+eventual it's just like no it is
+consistent it is coherent anyway I'm not
+here to sell coherence the point is
+there is this you know these lines
+between the very No
+they're all talking over InfiniBand and
+it actually runs I had the title my
+slide says message bus TCP UDP SDP and
+InfiniBand the message the nice thing
+about message bus cuz even though I keep
+talking about InfiniBand 100 Gigabit
+Ethernet is making some really good
+gains and there's talk a 400 Gigabit
+Ethernet so rather than write bus it in
+a certain census transport agnostic we
+don't care if it's InfiniBand or
+Ethernet or whatever you know right now
+it can already go over SDP and
+everything else so if some other
+Hardware wins boom we just write stuff
+for that and it'll continue to work so
+the main point is is to automatically
+pick up for the available hardware the
+fastest transport available and start
+talking ok so here is the message bus
+API this is the the main pieces so up on
+the top we have just what we call buffer
+sequences and they're actually a
+specific class but underneath what they
+are really are just direct byte buffers
+the nice thing about buffer sequences is
+you you don't have to think so much
+about byte buffer boundaries because it
+can be one or more direct byte buffers
+so you can kind of that manages some of
+that for you so you would basically
+write data into a buffer sequence then
+send it on the wire goes to an end point
+and it's asynchronous so that's that's
+the end of it and then we have have a
+thing called the collector and the
+collector is where we get events which
+can be notifications that one of your
+sins completed or a receive comes in or
+a few other things so what I'll do next
+is show the send flow to start out
+sending a message you would ask the
+buffer managers which I haven't shown
+here for a buffer sequence or a buffer
+sequence output stream
+and generally it's easier to use the
+output stream because you just do the
+right in right pike right whatever and
+then it does the right thing in terms of
+the underlying buffer sequence so you
+write your data then you call sin on the
+to the message bus and I left out here
+that should say send to it particular
+endpoint it will then send that over
+this lwm B which is a protocol for for
+message bus and that's important that
+there's a specific protocol because it
+even though our our implementation that
+I'm talking about today is Java we have
+AC and a C++ implementation of message
+bus which interrupts with the Java
+implementation and they don't share any
+code other than the underlying MQL Lib
+IP verbs that's common but the actual
+implementation of message bus are
+completely different so it sends the
+message over the protocol and then later
+oh and also the the boxes are in gray
+they represent things that the user
+creates or owns so the user has what's
+known as a collector which is just the
+place where you are given notification
+so it's kind of like your call it's your
+callback interface so for a sin the main
+thing you're going to get is an
+addressee tent and that can tell you can
+use that receipt event to note that you
+know I really did send this data you can
+actually make that receipt into a cookie
+so I'll show you one other that well
+yeah
+so you'll dispose one thing that you
+have to do and this is this is a much
+higher level API than the C API but you
+still have to do memory management in
+other words you have to ask for a buffer
+out a sequence output stream and when
+you're done with it you have to dispose
+of it and this is important because this
+is memory that the operating system and
+Java doesn't know about anymore once
+you've you know
+distorted actually don't have to
+register it with message bus because it
+does all that under the covers but it's
+still you have to give it back to
+message bus so it knows we have it which
+turns out to be pretty straightforward
+because what generally what you do is in
+the sin is you either give the buffer
+sequence as a cookie itself besides the
+data or you have a custom cookie object
+which contains that buffer a lot of
+times you'll have a custom cookie so you
+can note things like which particular
+message am I getting a receipt event for
+so then when you get a receipt event
+which just means it got sent to the
+other side for sure and put in its
+memory it doesn't mean that the
+application sought it but it definitely
+means that it made it to the hardware
+channel and into the memory and at that
+point then you can dispose of the memory
+so that's that's the general flow of
+doing the allocate the buffer and then
+dispose of it so this is actually as
+some code I took out that I removed some
+of the the error handling code but it's
+it's using message bus so at 0 1 this
+this is actually taken from the buzz
+code which is not on the next layer up
+and that is the user has some data they
+want to send and I'm calling that body
+and then it's step two I'm getting a no
+buffer output stream from the buffer
+manager as step 3
+I'm writing a byte and here it's called
+frame type but could be anything so
+you're writing a byte step 4 you
+continue to write whatever data and then
+it's step 5 when you're done writing
+data and it doesn't mean there's end of
+the message but just as much data you
+want it right at this particular moment
+you create you get the buffer sequence
+from the output stream and it step 6 I'm
+creating a composite bucket or sequence
+which is the header which I've just
+created and the users body now this kind
+of nice thing about the composite buffer
+sequences and it's a pretty typical use
+case with networking and that is you
+create very
+levels create their own headers and then
+you finally have some sort of payload if
+you have to do that all in one buffer
+that can sometimes can be very hard
+because sometimes the users data is
+available before the headers so now you
+have to actually copy the user data or
+something like that where you can
+actually the kind of a scatter gather
+technique so you're just instead each
+one can be a completely separate buffer
+and then we put them together in this
+composite buffer sequence within it gets
+sent on the wire in the order of the
+composite so it's seven we actually are
+then are sending the data to the
+endpoint and notice I said request
+request twice and that's because request
+is the actual data to send and the third
+argument is a cookie I could make that
+cook anything I wanted to in this case
+I've just made it the actual request
+object so later when I get a receipt I
+can just dispose of it which is what's
+happening at step 10
+I've got a collector where I'm saying
+new collector and saying set Event
+collector you'd actually only do that
+once and inside of that got an anonymous
+interface with an ADD method so it takes
+a look at the event type it's bad step
+11 at line 12 I mean it's the line 12 in
+this case it's a receipt so I grabbed
+the contents I check that it's an
+instance of buffer sequence and then I
+cast it in disposed of it so that's the
+that's the only part of this API which
+is kind of a low-level and that's your
+manual allocating dispose but there's
+just no way around that I'm aware of
+because Java can't help because it
+doesn't know about the memory once it's
+already a registered so you have to do
+it okay so now I'm going to do this same
+thing for the receive which turns out to
+be easier so the receive flow we've got
+an endpoint on the right it sends some
+data to our message bus we then get a
+receive event before remember a moment
+ago it was
+receipt event meaning we are getting
+told we are send is completed
+in this case we're saying you're
+receiving some new data and those by the
+way when you do a send you don't
+necessarily immediately get a receipt
+even if you did ten cents you might not
+get it received we actually are lazy on
+the receipts because they're not as
+important as really sending the data and
+when you say send it won't necessarily
+happen at that moment either because
+internally we're doing stuff like
+getting things to the right buffer sizes
+which we know it to be optimal and then
+we'll do a send you can't force things
+by calling flush but generally you will
+wait until the right time and so you
+don't necessarily see a receipt right
+away anyway you hear I'm seeing a
+receive so with the received you're
+given buffer sequences that were created
+by message bus when it took the data off
+the wire so you can then read from those
+buffer sequences or wrap a buffer
+sequence input stream around it and when
+you're done then you dispose of it yet
+even though it was created by the
+message bus message bus doesn't know
+when you're done with the data so when
+you done with it then it's your
+responsibility to dispose that was that
+one slide
+it's point-to-point and in this example
+the guide maybe this is probably that
+you realize not a good example because
+this is actually putting another
+protocol on top of message bus so this
+particular header and body have nothing
+to do with message bus headers and
+bodies as a user you don't have to do
+anything other than say here's an
+endpoint here's some data send it to the
+side and it goes so you don't have to
+put header information or anything like
+that I'm glad you said that because I
+just realized this is a bad example
+because it's misleading this particular
+example I took from the buzz code and
+Buzz is the request response layer on
+top and which does have its own little
+bit of header like and then so this
+that's what this is from Ted that makes
+sense okay go ahead
+there is that's a bitching in using
+message bus there's no security api's
+for it right now and the way we've been
+using it all it's inside a data center
+in an infinite back InfiniBand usually
+within the same rack or you know a group
+of racks and so we haven't really had to
+it's made more like physical security
+than then wire level security we are
+starting to build separate from message
+bus other things so you can actually
+have basically packet filters and
+analyzers for security on InfiniBand
+it's interesting because we actually
+don't feel like we actually need that
+but there are a lot of customers that
+won't buy unless there is something
+inspecting every single packet coming in
+and out regardless it's coming in and
+fin abandoned the only way you can get
+there is our own software putting it on
+they still want to inspect it but from
+from the message bus usage point of view
+there's no no security
+Yeah right now message bus has that has
+no api's for that you'd have to do that
+at the application level oh I see you're
+saying the bright you actually message
+bus you can create multiple buses so yes
+there would be a bus per application so
+to speak so you'd just be talking
+peer-to-peer from one application to the
+next however it turns out that that's
+not the best thing to do in terms of
+resource usage having multiple buses so
+we are looking in to making it so we can
+multiplex application usage over the
+same message bus and in the next level
+up when I show you buzz we're actually
+do have that kind of support right now
+but it's we call it sub protocols so
+each sub protocol can use the same bus
+and then Adi multiplexes appropriately
+but at the message bus level it is
+thought of as application application
+okay so in the message bus to receive is
+looks very much like the receipt event
+and that's we have a collector we do a
+switch on the event type and in the case
+that it's a message event we grab the
+endpoint and that's who the message is
+from we grab the buffer sequence because
+we know in this case it's a buffer
+sequence and I won't go through every
+detail of that of line six and we're
+then we wrap an input stream around it a
+buffer sequence input stream and then at
+line eight we just start reading the
+data and it's all application level data
+so it's up to the application what's
+there and when we're done once again we
+need to dispose of it so I'm closing the
+input stream which will also dispose of
+and release the underlying buffer
+sequence so you definitely have to do a
+manual dispose so the message bus API is
+pretty straightforward this kind of the
+listed here in a life cycle manner and
+that's you would open a bus which is
+after you've created it you've got to
+open it which just says now you can
+start receiving messages or sending them
+get local endpoint it's just so you know
+your local address particularly if you
+start up on an ephemeral address you'll
+want to know that connect it so you can
+connect this end point to another
+endpoint and then finally really sending
+the data which we've seen you say you
+give it an end point you give it a
+buffer sequence and then you give it any
+object you want which is going to give
+it be given back to you when you get a
+receipt event flush which just says I
+really want you to send any buffer
+information now release so you can stop
+ten talking to an end point and then
+closed meaning your endpoint can't
+receive new connection requests anymore
+one thing message bus doesn't have is a
+graceful shutdown API so it's up to the
+application to do make sure everything's
+quiesce before shutting down Buzz the
+next level up does
+that so the the events and remember this
+that's the collector piece which is
+getting all the events this is the type
+of events we already saw a message this
+means you've just received a message
+receipt means you've complete you've
+you're getting notified that you're send
+completed it also is things like if you
+do a connect it'll tell you your connect
+completed because everything is async in
+in message bus and two very important
+events are these backlog events and that
+is if you're sending tons of data and we
+see this when we're doing performance
+testing we have two main performance
+tests and one is just throwing as much
+data from one side to the other as quick
+as possible it's just got a little tight
+loop which is just creating these and
+not even creating empty by first it's
+taking some buffers that were prefilled
+so you don't pay any time at all for
+that part and just keeps calling syn so
+you're trying to saturate the actual
+underlying trance transport channel as
+much as possible and what backlog
+excessive is is it's telling you like
+hey you're sending me too much slow down
+for a little while if you ignore this
+will actually keep sending when you keep
+buffering internally but use up a lot of
+memory and things get a lot slower until
+it clears out so generally your backlog
+excessive is hooked up to your the way
+you're writing your data if you're doing
+this I for a lot of use cases is almost
+unnecessary because it's like you in the
+typical HTTP load balancing case which
+I'll show you in a minute you don't have
+generally that big of messages and so
+this is not going to happen that often
+but if you're really setting a lot a lot
+of big data this could happen so that's
+what the backlog excessive and then
+normal means okay we're back to normal
+just start going at it again so it's
+actually fun to watch this stuff go when
+you're doing performance testing because
+the backlog accesses come pretty quick
+when you're really throwing a lot of
+data connect is just an event if you've
+connected to a another input and other
+endpoints connecting to you or your you
+connected to a remote endpoint and the
+release open and closed okay so I better
+speed up time goes quick the protocol
+this is the protocol I'm not going to
+actually given that I'm just realized a
+good not as much time as I thought I
+won't take a lot about it it's just but
+it's two pieces a TCP piece which is
+just for to initialize the upper level
+the real InfiniBand the data level and
+for death detection but after the other
+net it just sits around okay let's go
+into buzz but the use case of buzz is
+HTTP load balancing so the in our use
+case that motivated is to do this and
+that's we've got ot D which is Oracle
+traffic director which is a load
+balancer HT load balancer so it's got
+all these HTTP requests coming in from a
+whole bunch of different clients on the
+left and then it's got a decide which
+cluster in the back that's going to load
+balance it to and when it sends those we
+really want to use InfiniBand not
+another TCP connection and furthermore
+this is different than the coherence one
+and that is when you've got all these
+HTTP lines coming in and they're being
+multiplexed then and possibly fragmented
+that means you've got to assemble the
+fragments on this side when they come in
+so you've got to match them up to a
+specific request and likewise when you
+do a possibly flag fragmented response
+you've got to match them up to the
+particular HTTP channel that it came in
+on so the main thing we have there which
+is over on the left is the capabilities
+and that is message correlations so we
+need message identity message bus
+doesn't have that at the user level buzz
+does so you actually can give it a
+message number and that way you can
+match it to like a DHCP or you can do
+fragment correlation it it's a supports
+message fragmentation at the application
+level and the last thing is sub and this
+goes to you
+about sub protocol multiplexing so you
+can have multiple protocols using this
+and the easte protocol could basically
+be a different app it doesn't really
+even need to be a protocol each one it's
+just saying when you get this data for
+this particular sub protocol send it
+over to this handler and then if you get
+a different number sends over to that
+handler so it could be applications we
+tend to use it for right now HTTP and T
+3 T 3 is a form of IAP load balancing
+excuse me I up communication which we
+use in WL s 4 cluster replication and
+cluster migration so we're also used
+over at the same endpoint we're using
+both HTTP and T 3 so the moment that has
+these start messages at the user level
+they can start a message which means
+this is the beginning and it might be
+the end of the message the complete
+message if it's not it will be followed
+by one or more request data which means
+fragments after the start map message
+and then response data which is either
+one or more fragments of a response so
+here's how you send something you first
+connect to an endpoint then you get an
+ID and Buzz manages the IDs for you in
+its manage / endpoint then you create
+this is just like message bus you create
+the buffer sequence strings you write
+your data into it and if you really are
+a sub protocol you'll write headers in
+there which is that example that I
+showed a moment ago and then you say
+sinned and you've got the endpoint the
+type of message is the sub protocol ID
+the message ID in the actual buffer
+sequence it's sent on the wire and then
+you also will get a receipt and that
+receipt will be given to the right sub
+protocol handler there can be multiple
+handlers registered and then lay it
+could you also might get a backlog event
+saying like you're sending too fast if
+you're just sending one message that's
+probably not going to happen but if
+you're in a tight loop sending tons of
+messages you might see some back
+and then finally you'd get a receipt
+which you do the same thing you did in
+message message bus and that is disposed
+of it and this is a sample code that's
+it
+zero you're connecting to an endpoint at
+one you're getting an ID at two you're
+getting in a buffer manager and this is
+exactly like the line - exactly like the
+message bus case so the message buzz is
+trying to be very very thin layer on top
+of message bus so then you say write int
+you then you get the buffer sequence out
+of it and this side line v I've created
+a custom receipt cookie which has
+nothing to do with buzz this is kind of
+like an application thing so this is my
+custom cookie so I'm putting a message
+ID in there I'm putting a buffer
+sequence and the dot dot dot means I'm
+putting whatever other information I
+want to tell myself once I've been told
+that that message was sent to the other
+side and then aligned six I send this
+thing I say it's a start message it's a
+fragment so it's not that complete
+message and then at line eight after
+seven where I've written some more data
+into a buffer sequence I send request
+data with and with the same message ID
+saying okay here's the rest of the
+here's the rest of the logical data that
+goes with that particular message and
+I'm done
+so in receipt receiving is line ten it
+just says we call the receipt API we
+give at the endpoint that that we got
+the receipt from that you sent the data
+to excuse me we give it an object which
+is whatever cookie you gave us and this
+one looks well doesn't do an instance of
+what it just cast it does it dispose of
+the of the data so you still even with
+buzz need a manual memory management
+okay I'm gonna skip through this because
+not much time and I want to get to the
+performance so in receiving it's the
+same same thing you comes in we get
+DeBolt plex which is different
+a message bus we demultiplexer recede
+but other than that we give the data to
+the to the particular sub protocol
+receiver and you dispose and I'm not
+going to go over the buzz protocol but
+it's modeled loosely after HTTP 2.0
+because it has this concept of message
+IDs that are in open half closed or
+closed State I'm gonna I'm going to skip
+this part and go directly to performance
+so this performance was these numbers
+were taken from an ex illogic X
+basically at X 3 machine that has 32
+cores of xeon processors 256 gigabytes
+just you know your home typical home
+setup infinite has these InfiniBand
+adapters which are basically QDR
+x 8 what that means is we have 80
+gigabytes gigabits throughput and it's
+set up so that's 80 40 out 40 in so it's
+split but the 40 gigabytes is the line
+rate once you add the InfiniBand
+encoding on top of it you actually have
+a maximum data rate of real data not the
+encoding of 32 gigabits per second in
+the bottleneck in this particular
+hardware is this PCIe generation 2 which
+is the thing that talks from the channel
+adapter to your actual host and that
+thing has a limit of 25 point 6 gigabits
+per second so with this particular
+hardware set up the maximum we can get
+is 25 point 6 and when we run it we give
+Java basically 4 gigabytes heat of heap
+both min and Max numbers so this is and
+these like drove drove ms lines because
+they were they're easier to see but
+they're just points so I've taken a
+measurement where I'm saying 1k buffers
+for K buffer 16 K buffers and 64 K
+buffers and the bottom line is
+TCP and it does perform the the least as
+expected the next one UDP which maxes
+out at a certain point and then tmb and
+tamb is is basically message bus over
+InfiniBand those oh yeah those bottom
+two numbers are not using message bus at
+all they're just using in these numbers
+you know as with all performance numbers
+you have to wave your hands a little bit
+because we're not running the exact same
+test we're creating in Java you know
+some buffers and we're sending them out
+but it's not going through message bus
+so but it's not the exact same code but
+the TCP and upda are not using message
+bus all the rest of them are and we have
+T MB is message bus over TCP that's what
+the TP number and it's interesting
+because even though it's running over
+TCP it's running faster and the reason
+is is because message bus has the flow
+control in it and it has the different
+buffering that adaptive buffering
+mechanism so it knows windows when to
+send wind to flush and things like that
+whereas the TCP thing is just sending
+data so it turns out that even using
+message bus just on TCP turns out to be
+faster than TCP the next one up is using
+the socket direct protocol and you can
+see that it does well I mean that's to
+be expected because if you remember that
+very first slide sockets direct protocol
+skips the whole tcp/ip Ethernet stuff
+and goes directly to the verbs library
+and the very top number is imb which
+means just talk directly to the channel
+adapter and you can see right off the
+bat it performs better and it stays even
+slightly better than the STP case so
+these numbers look pretty good and know
+that they on the side the those are
+gigabits per second and this is the
+latency for those same things I wasn't
+able to show
+the latency for TCP and UDP because I
+didn't have the test setup but this is
+using message bus over TM b which is
+remembered message bus over tcp the
+socket direct protocol and InfiniBand
+and you basically notice that the
+InfiniBand is really much much better
+there's like the eight the average of
+thirteen point three microseconds
+compared you know it's hundreds you know
+it's ten times more for the t t mb and
+SD p cases that that but I must say this
+one is using the the one that says
+thirteen point three that is using busy
+wait meaning the implementation says
+when you know when I don't have anything
+to do rather than going to sleep just go
+into a spin so that's why it says the
+CPU is 120 percent that 120 set is as
+reported by top so it's using CPUs to do
+that but it turns out that if you've got
+a whole bunch of course and what you're
+more concerned about latency than you
+are about you know CPUs is you got one
+to burn it's actually good to enable
+that feature because that's that's what
+it's for you can turn that off and
+that's what the very bottom line is
+saying no busy waiting so you notice the
+CPU goes way down to 46% and the the
+latency goes the average goes up to 53
+it's still twice as fast as the other as
+the other cases but not quite the ten
+times as the other case and the bus
+performance buzz is the message bus has
+been around for a while it's getting
+shipped for the first time with
+coherence in this 12 1.3 release buzz is
+brand new and it's going to go out in
+with wls in the next release it's not
+quite ready for I tried last week really
+hard to get some numbers but as if
+everybody's done performance testing you
+know
+in one week's generally not enough to
+know what you're testing half the time
+it's like is that the test that's
+showing me these numbers or is the
+framework or you know what are these
+numbers so I didn't give anything that I
+really felt confident that I knew what
+the numbers meant yet so if you go to
+Harold Karr comm I have a blog there
+eventually I'll put these slides up
+there and also whatever numbers come up
+so that's it this is some links to
+resources message bus is built into
+coherence so if you download coherence
+you can use message bus try out message
+bus there so there's a whole bunch of
+links this these slides will be online
+at my blog Herald car.com
+and also through the conference things I
+haven't uploaded them yet but I will
+this afternoon and these are all linked
+so those links will be easier to get off
+the slides so those are the links for X
+illogic coherence WebLogic server and
+OTD and then if you're interested in
+deep diving on FINA band those are
+probably two of the better links to see
+and then the specific thing about PCI
+interfaces and the reason I point that
+out is because if you notice when I was
+talking about the configuration that PCI
+was the bottleneck we actually had more
+bandwidth available than the PC I could
+card can handle say because it was 32
+available in the PCI cards like 25.6 the
+next generations is using the PCI
+generation 3 of X logics using an better
+card those things are cheap so and
+they're available since X Alexa logic
+was first built so I think yeah I think
+that's it so thank you and any questions
+yes yep there Mellanox
+great well thank you appreciate being
+here I was wondering if people would
+show up for InfiniBand it's not your
+typical no SQL Java subject but thank
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

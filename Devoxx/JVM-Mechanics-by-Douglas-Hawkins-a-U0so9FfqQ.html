@@ -1,0 +1,1066 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>JVM Mechanics by Douglas Hawkins | Coder Coacher - Coaching Coders</title><meta content="JVM Mechanics by Douglas Hawkins - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Devoxx/">Devoxx</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>JVM Mechanics by Douglas Hawkins</b></h2><h5 class="post__date">2017-08-02</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/a-U0so9FfqQ" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hello thank you all very much for coming
+see some people are still filing in but
+I'm going to go ahead and get started my
+name is Doug Hawkins I am one of the
+lead jet developers at a company called
+Azul systems that makes a couple
+different virtual machine products one
+that's rather custom but we also have an
+open JDK implementation I'm going to
+stick to just talking about hotspot
+today but this is going to be the
+mechanics of what goes on inside the VM
+at a high level what we're going to do
+is look at what happens when your Java
+code runs this is sort of a simplified
+view of what occurs you're going to
+start off running in the interpreter
+then we'll do some profiling maybe we'll
+do that interpreter maybe we'll do that
+in a just-in-time compiler then we'll do
+some just-in-time compilation after we
+found a method is hot and yes it's
+actually possible to start this cycle
+over again you can understand time
+compile something or D optimize a piece
+of code and start the cycle again under
+certain circumstances and we're going to
+look at why all of this stuff happens to
+be a little more concrete we're going to
+look at what triggers the just-in-time
+compiler when it triggers why maybe in
+ahead of time compiler isn't a great
+solution for Java or at least the pros
+and cons of ahead of time compilation
+versus just-in-time compilation what
+causes the unfitting the deoptimization
+and some about what impact this has on
+you so what triggers the jet we're going
+to start with a very simple program I
+have a main here it constructs an array
+of random integers 5,000 of them and
+then I'm going to measure how long it
+takes to do this summation
+inside this loop you can probably guess
+what the sum function looks like and I'm
+going to measure that with system nano
+time for good measure I'm going to
+assign this value the results of some to
+a global variable just to make sure the
+just-in-time compiler doesn't get too
+clever and optimize this away if I
+didn't do that in fact we'd end up
+measuring nothing so I'm going to run
+this program and we're going to see the
+table of numbers that it produces so
+here's the program in its entirety
+there's the sum function there's the
+random the in generation and now it's
+running and the first few iterations of
+the outer loop are going to happen in
+the interpreter so that's where we're
+seeing these 75,000 70,000 ish
+nanoseconds to do the summation of our
+5,000 intz as we continue to run the
+numbers start to improve you can see
+somewhere around iteration 1314 we get
+better we get to about 12,000
+nanoseconds that is the first
+just-in-time compiler kicking in as of
+Java 8 we have what is called tiered
+compilation on by default so there's not
+actually one just-in-time compiler but
+two so if we keep running we'll see
+these 10,000 ish nanoseconds for a
+little while and then it'll improve
+further to about 1700 nanoseconds on my
+laptop here
+okay so that is what happens when you
+run the code as the code gets hotter it
+goes through more and more tears of
+just-in-time compilation now we can plot
+it like this
+and you can see interpreter was running
+for about the first 12 or 13 iterations
+then we went and improve some ran in the
+first tier jet this benchmark is
+actually a little unstable for some
+reason and then it settles down once we
+get into the second tier jet and this is
+pretty normal for any program what's a
+little abnormal about it is it looks
+like this perfect step this is a very
+simple program it's composed of
+basically two functions that are hot
+main and the summation and the
+granularity of compilation and hotspot
+is basically a method so it improves in
+when a methods which is from one
+transition to another but most programs
+will look more like a curve because it
+will be a larger number of methods that
+are at play but for an individual method
+it really is a stair step like this if
+you wanted to see what's going on under
+the hood you could run the same program
+with - X X : plus print compilation
+which will actually show you the
+just-in-time compilers triggering and
+you get a table that looks something
+like this the leftmost column here is
+the time at which the compilation was
+done in milliseconds since the VM
+started the next column is a compilation
+ID their assigned sequentially as
+compiles are in queued compilations
+happen in the background in separate
+threads and they won't necessarily
+finish in order as you can see here
+compiles four three and five sort of
+finished not in the order they were in
+queued then we see the method name well
+then we see the tier of the compilation
+in this case we see three one and four
+that refers to the different jets
+we'll talk about why it's not just like
+1 &amp;amp; 2 in a minute then we see the method
+name and the size of the method in bytes
+of byte code at the bottom you can see
+highlighted in green the main of this
+program sometimes its main that gets
+compiled sometimes it's some but either
+way part of the hot loop gets compiled
+and two of the main compilations here a
+little bit funny they have this extra
+percent sign next to them which
+indicates that it's not a compile of all
+of main it's a compile of just a loop
+inside of main and that number off to
+the side is what we would call the
+bytecode index basically think line
+number of the loop and so that's what it
+looks like now reading this output can
+be a little bit tough and it gets
+particularly nasty if you've got other
+output from the program or you've got
+lots of compiler threads you can get
+interleaved output it's pretty ugly so I
+prefer to use this tool called JIT watch
+which I've already started running an
+JIT watch can read a log file of all
+this data but you can also do some fun
+things with it you can open a sandbox
+and write a tiny program and you can
+just run it and it will run it with all
+the right flags and it will give you a
+view like this of say what actually got
+just-in-time compiled so here's the code
+on the left in Java the bytecode in the
+middle it's actually doing some rather
+interesting things like highlighting
+branches inline calls and even showing
+me the machine code if I've set it all
+up properly and for a more complicated
+program I could feed it a whole log and
+it will show me all the compilations
+that occurred and I can go and drill
+into each individual one so if you don't
+want to do it command-line like I'm
+going to do it today
+JIT watch is an excellent tool to go and
+play with
+what JIT watch is actually reading is a
+file called well I call it log
+compilation XML you produce this by
+doing unlock diagnostic vm options log
+compilation those do have to be in that
+order you'll have to unlock first to be
+able to use log compilation and it
+produces this rather gnarly XML file but
+it does contain a lot of interesting
+information that you're not going to get
+through print compilation or even
+through JIT watch you can see when the
+individual compiles are in queued you
+can see when they finished it'll
+actually print out all sorts of
+information about optimizations that got
+applied and profile data and some other
+things that we're going to see a little
+bit later it is all there I'm not going
+to pretend that this is a user friendly
+file format okay so what about these two
+different jets it's a little strange
+well traditionally hotspot was composed
+of two just-in-time compilers because it
+was actually two different VMs a client
+VM and a server VM and client VMs
+purpose was to do GUI code well and for
+a GUI application what you want is fast
+startup no one likes staring at the
+Eclipse splash screen as far as I know
+maybe one of you really likes it but I
+don't I don't want to stare at the
+Eclipse splash screen that's why I never
+restart Eclipse so we want fast startup
+but after that you know I'm applauding
+Li slow human I barely noticed like a 10
+millisecond delay so the code actually
+doesn't need to run all that fast and
+that's actually what the compliant
+client compiler is designed to do it
+compiles very quickly but it produces
+relatively slow code the server compiler
+is designed for the other case we're not
+going to restart this very often we
+don't mind if it takes a while to start
+the server you know obviously we don't
+want to go back to the
+enterprise application servers that took
+five minutes to start but you know we
+can tolerate five or ten seconds
+probably so this compiler is slow about
+four times slower than the client
+compiler but it produces code that say
+twofold and sometimes much more than
+that faster than the compiling client
+compiler and the goal here is to serve
+you know a lot of humans on the other
+side of a server or even a lot of
+machines on the other side of the server
+so different goals in Java 8 they tried
+to basically create the best of both
+worlds by using both using the client
+compiler c1 to get us warmed up quickly
+and the server compiler c2 to get us
+peak performance in the end but the
+cheering system isn't just 1 &amp;amp; 2 as we
+kind of already saw from the log it's
+actually 0 to 4 unity of 0 as being the
+interpreter the normal workflow is
+actually to go to tier 3 first to know
+to go from 3 to 4 we're going to need
+something to trigger it so there are
+some counters and when those counters
+pass a certain threshold we go from 3 to
+4
+there are similar counters to go from 0
+to 3 and then C to the second tier jet
+does all sorts of cool optimizations
+based on observations about your code
+but to get that we're going to have to
+do some profiling we're going to have to
+instrument the code to get the data
+we'll see some of the instrumentation a
+little bit later but for now let's
+accept that's how it works and after
+we've gotten to that data in tier 3
+we're going to go to tier 4 and that's
+when we'll hopefully produce the best
+code now because C to tier 4 is rather
+slow at startup when a lot of activity
+is occurring it's going to get backed up
+it's Q is going to be very full and
+we're just not going to be able to get
+to it right away and rather than having
+all the overhead of tier 3 in that mode
+the system will say well let's go to
+tier 2 let's not add all that
+your instrumentation let's just do some
+counters to see if the method stays hot
+and if it does we'll go to three and get
+the data and then hopefully by then the
+compiled q4c two won't be so busy and
+then there's one more case a trivial
+method case c2 is really good at loops
+and other more complicated control flow
+structures but if you don't have any of
+that you don't really need all the
+overhead of c2 so c1 will actually
+compile it say it tier three or two and
+you'll go well that wasn't very hard I
+can handle this and it will recompile
+right away in tier 1 which has no
+overhead of counters or profiling so
+contrary to what you would probably
+expect your end goals here are to get
+two tiers for or one in Tier one is
+faster than tier two is faster than tier
+3 yeah but that's how it works and all
+of this is basically done at a method
+level there are two classic types of
+jets a message it and a trace jet
+hotspot has always been a message it it
+compiles whole methods at a time at race
+jet will compile a hot line through the
+code which may span methods hotspot can
+span methods by basically copying and
+pasting one method into another it's
+called inlining but the granularity is a
+method except for one case loops there
+are a lot of situations like the run of
+a runnable for a thread where that thing
+gets called once per thread if we're
+only going to compile things that have
+been called a lot it would never qualify
+so there is also this thing called a
+loop compilation or what it's actually
+called as on stack replacement which is
+a crazy sounding term but basically the
+reason the term is what it is is we're
+already running this method we're
+running some it's in an inter it's
+peanut running in the interpreter
+and so we already have an interpreter
+frame on the stack and now we want to
+Justin compile-time compiles just a loop
+and once we've done that we're going to
+put a machine frame on the stack and
+copy all the data from the interpreter
+frame to the machine frame and continue
+running again
+so we're actually changing the execution
+while it's already on the stack and
+that's where the term on stack
+replacement comes from but you can
+basically think of it as a loop
+compilation and for our very simple
+program this was important how many
+times does main get called usually one
+you can call it more than that but most
+times it's only called once and so the
+only chance we're going to get to switch
+to machine code is if we compile a loop
+the exact win of this this happens is
+not so important but basically what you
+should know is every method has an
+invocation counter and when it methods
+been called enough times to pass its
+invocation threshold it gets a whole
+method compilation and also has what's
+called the back edge counter or you can
+think of it as a loop counter and when
+that passes a threshold we get a loop
+compilation but you can also use these
+two in combination to pass a threshold
+to compile methods that have been called
+a little bit and also have loops that
+run a little bit because otherwise those
+things might take a really long time to
+get just-in-time compiled and that would
+not be good
+think of something like ArrayList index
+of if you really do want to know the
+thresholds you can run the VM with print
+flags final and it will tell you in grep
+for threshold and you can see what the
+thresholds are both for Java 8 with your
+compilation or Java 7 without tiered
+compilation so here's the simple mental
+model of what's going on we start off in
+the interpreter after some amount of
+indications or loops we trigger c1
+eventually c1 gets installed we start
+using it we run for a little while
+longer get some more indications some
+more loops
+we trigger c2 we switch to it and that's
+how our performance improves and it is a
+stair-step here shown going up rather
+than down but it is a stair step for an
+individual method in aggregate we're
+doing this for a lot of methods and the
+net effect on performance is more of a
+curve now I wanted to see how this
+worked for a non-trivial example
+so I actually plotted which compilations
+were being used over the course of a
+eighty second run of a benchmark and you
+can see this actually goes out to 100
+seconds because there's a bit of time to
+warm up the VM and a bit of time to
+write out the results of the benchmark
+in the end but this is showing all the
+different tiers of compilation as
+they're happening so the blue at the
+bottom is the trivial methods you can
+see we find almost all of them
+immediately and they're just they stay
+compiled at the beginning when the VM is
+starting there's a lot of work for all
+the compilers to do and see to being
+kind of slow its queue gets backed up so
+then the VM starts producing these tier
+2 compilations once everything settles
+down a bit we won't really produce more
+of those so you can see it's sort of
+Peaks very early on ten seconds into the
+run and then drops off quickly the tier
+3s are pretty stable until the end and
+then as time goes on once we get like 20
+seconds into the run we can see a lot of
+tier 4 compilations the end goal have
+been reached and it's pretty stable from
+like 20 seconds to 90 seconds why does
+it go up at 90 seconds the application
+changes what it's doing from about 10
+seconds to 90 seconds it's running the
+benchmark and so new methods are getting
+hot or they get hot and then they just
+stay hot and then at 90 seconds the
+benchmark is done and we're writing out
+the results and that requires generating
+some graphs and writing out files and a
+whole bunch of new code gets hot and
+that's why we see this rise we call this
+a phase change in
+the application it was doing one thing
+and then suddenly it started doing
+something else so new code is hot and
+now it needs to be just-in-time compiled
+it's pretty typical for any non-trivial
+application okay that was interesting
+but why just-in-time compilation
+why not ahead of time compilation
+wouldn't that be easier wouldn't that be
+better
+not necessarily
+first off almost any program consists a
+lot of warm up and run once code there's
+a lot of like one-time cache setup or
+class loading or what have you and it
+really happens once and that's it it's
+kind of a waste to compile that if
+you're only going to run at once you
+could just run it in the interpreter and
+if you look at the history of say
+Chrome's v8 engine they started off with
+just having a just-in-time compiler but
+over time they actually did add an
+interpreter to deal with the run once
+code because otherwise they were just
+producing a lot of machine code that was
+used once and then never again and that
+was just a wasted memory but there's
+something more to this from my
+perspective
+java is a dynamic language I know you
+think I'm insane you're like Java has so
+much ceremony it's static I have to use
+this compiler oh my goodness how could
+you call this a dynamic language well
+think about it from my perspective it is
+dynamically loaded it is lazy
+initialized it has runtime checking and
+it is almost always dynamically dispatch
+that calls it really cannot get much
+more dynamic than that okay we could add
+dynamic types to but we got every other
+type of dynamicism there is and that
+actually makes it hard for an ahead of
+time compiler there are a lot of things
+that are just tricky
+let's take class loading hotspot does
+lazy class loading that's not actually
+mandated by the spec but that's what it
+does
+and so let's say I have a condition and
+this condition has always been true so
+the only thing I've ever run is the if
+part here I've run class one get static
+I've never run the else condition return
+class to get static so we've never
+loaded class two but we've run this
+method a lot so we want it just in time
+compiled but we haven't loaded class
+- we haven't loaded fully half of the
+code involved in this method what is the
+just-in-time compiler to do if that
+class hasn't been loaded what does the
+just-in-time compiler know about the
+method or the class it doesn't know what
+fields it has it doesn't know what
+methods it has it doesn't know what
+parent class it has it doesn't know its
+interfaces it doesn't really know
+anything other than you think there's a
+class with that name that's all it
+really knows so what does it do with
+this else block it just says I give up
+it installs what's called an uncommon
+trap it just says I don't know anything
+about this I give up and it makes it
+through interpreters job to deal with it
+and the interpreter will then try to
+load the class and we'll see if we can
+in fact run get static and of course
+this means when you hit this you're
+going slow again
+you went from situ which could be
+running 10 to 100 X faster than the
+interpreter to now running slow again
+and that can cause a disruption in your
+performance but it gets worse classes
+must be lazy initialized this is
+mandated by the spec you must initialize
+a class at the very first static field
+access static method call new of the
+class or initialization of a child class
+you cannot do it before that that is a
+violation of the specification and will
+break applications
+which is really unfortunate because at
+least for an ahead of time compiler it
+would be because if I have my class gets
+static basically the what the
+just-in-time compiler would have to
+produce is hey VM have I been
+initialized No okay please initialize me
+okay now my class gets static oh that's
+a lot of code it would actually bloat
+the code size by about 20 percent and it
+would slow down execution by about five
+to ten percent c-sharp actually made
+this behavior optional you can decide
+eager or lazy but in Java that has to be
+lazy and that makes it hard on the ahead
+of time compiler it would have to
+generate a lot more code and that code
+would actually be slower than what the
+just-in-time compiler would produce
+because the justiça time compiler gets
+the benefit of running later by the time
+the just-in-time compiler runs most
+classes have already been initialized
+most usually if I've got a call to my
+class get static inside of that code
+it's already been initialized or I just
+haven't been using it and so at compile
+time we can say hey VM is the class
+initialized great I don't have to worry
+about it anymore just call the method no
+overhead if it's not initialized oh well
+that's the interpreters problem and so
+we can get rid of this overhead and we
+can actually just not produce that code
+that's good but we can only do this
+because we're running late and ahead of
+time compiler by definition well runs
+ahead of time as in before all class
+initialization occurred and it would
+have to check this everywhere okay but
+what if the class fails to anit what
+would happen then and what if that class
+thing class that failed to an it was
+sitting inside a hot piece of code what
+do you think would happen
+let's find
+just for fun we're going to run this
+example here I have a main that is going
+to try to construct 10,000,000 instances
+of a class called uninitialized and I
+wanted this program to be robust
+so I caught throwable inside my loop
+just to make sure it keeps running and
+of course this loop is going to get
+pretty darn hot but as you can see this
+class is going to be rather difficult to
+initialize correctly the static block
+always throws a new runtime exception
+yes I had to add the if true to get Java
+C to shut up and let me always throw a
+runtime exception but that's enough okay
+so this will never work
+so what's going to happen the loops
+going to get hot we're going to just in
+time compile it but the class isn't
+loaded so it's going to put in a trap
+and then we're going to try to run that
+piece of code and we're going to trap
+and we're going to go back to the
+interpreter but we're going to catch the
+exception and we're going to keep going
+so the loops going to get hot again but
+we're going to have to put in a trop and
+then we're going to catch the runtime
+exception and you see what's going to
+happen here so here's our program and
+it's running my that that's unfortunate
+what is happening here is the lines that
+don't have the yellow on the end those
+are the compiles that are getting done
+the ones that have the yellow on the end
+are where we hit the trap and through
+the compiled away and it just kind of
+keeps going like this over and over and
+over again could we handle this case
+better yes our most of you but good
+enough Java programmers to not make this
+happen
+yes so we haven't bothered ok actually
+we did implement this about a month ago
+but not in hotspot
+and if you wanted to you could actually
+take this program and go down into the
+log compilation XML and see that
+everything I'm telling you is in fact
+true you can actually go and find the
+compiled and see that it put out this
+uncommon trap tag you see in the bottom
+left and it says at VCI five I installed
+the trap with a reason uninitialized for
+the class mentioned above and then you
+can find another overloaded version of
+the uncommon trap tag later that is the
+actual triggering of the trap when we
+try to run the compiled code and then
+that bails to the interpreter and then
+the make not entrant is saying I'm going
+to throw this compile away this is going
+on all the time as your program is
+running and this may seem kind of crazy
+but this compiling later and doing traps
+allows us to speculate we can guess
+about what's going to be true we can
+look at what your program does for a
+short time in the beginning and we could
+say well let's assume they're going to
+keep doing the same thing at least most
+of what they've been doing they're going
+to keep doing and let's optimize for
+that and again and ahead of time
+compiler just can't do this you don't
+know until you run the code what you're
+going to do there are other types of
+profile guide optimization we could do
+even within ahead of time compiler but
+you altima we have to iterate and
+compile again so to refine the mental
+model a little bit when we very
+beginning when we start running a method
+there's a short period where we don't
+sample the behavior of what you're doing
+because you do a lot of one-time setup
+stuff and that's not interesting that's
+not what you're going to do for the rest
+of time but after that we're going to
+take a sampling period a little bit in
+the interpreter and a little more in c1
+and we're say we think that's what
+you're going to keep doing
+what you did during that period of time
+let's hope that's what you keep doing
+and then we'll send that information
+over to c2 and we'll let it optimize for
+that and that gives us some really cool
+optimizations that let us deal with some
+of this dynamicism and runtime checking
+and that is in fact the difference this
+profile gathering between tiers 2 &amp;amp; 3 of
+c1 one of them just checks for hotness
+the other one profiles and gets this all
+the sort of information that informs c2
+how to do these interesting
+optimizations but when these go wrong we
+are basically going to unzip the code or
+D optimize the code let's look at an
+example or two null checking every
+access in java potentially has a null
+check associated with it right I have an
+array I check the link well could there
+reference to the array B no sure okay I
+have to throw a null pointer exception
+I'm going to call a method on an object
+say hash code could the met object
+you're using B no sure I have to throw a
+null pointer exception now I'm assuming
+that you're all good enough Java
+programmers that you do not throw null
+pointer exceptions like mad please don't
+dispel me of that notion I hope that is
+true but of course we still have to deal
+with this so I have a program here and I
+have a hot method which I'm going to
+call on the right and on the Left I have
+main and I'm going to call this method
+20,000 times inside a loop to get it
+just in time compiled and I'm going to
+give it the string hello which is of
+course not null and so essentially I'm
+going to teach the VM that I don't
+expect nulls here in all the this whole
+warmup period that we were running where
+I was profiling it you never showed me a
+null so I'm going to assume that nulls
+are
+not going to happen and optimize for
+that then I'm going to kindly dispel the
+VM of this notion in the loop on the
+bottom
+I say I'm tempting fate by showing it a
+null and another null and another null
+now we're going to see how it reacts to
+that just by running this with print
+compilation turned on all right so it's
+running this time I think I turned off
+to your compilation just to make it a
+little easy to read but there you go hot
+method got compiled under the assumption
+that nulls were not a thing and then I
+took faint once and it has to bail by
+throwing a null pointer exception but
+that's okay nothing much happens I tempt
+fate again and the same thing happens
+again
+the third time VM goes okay this person
+clearly does not know what they are
+doing they keep producing null pointer
+exceptions
+I've been dispelled of my notion that
+this person is a good Java programmer I
+need to produce different code to deal
+with bad Java programmer there's
+actually a next level beyond this where
+it optimizes throwing null pointer
+exceptions for the really really bad
+Java programmers so if you have really
+bad colleagues don't worry they're okay
+ode is still okay but
+kind of interesting look at what's going
+on under the hood here you would think
+this called a value dot hashcode it must
+have if value equals equals null in
+front of it
+throw a nullpointerexception that is in
+fact not what it has if you wanted to
+use JIT watch and go look at the actual
+machine code you'd find basically just a
+straight dereference of memory of RSI
+the register that holds value with the
+comment implicit exception dispatches to
+some arbitrary exception or address what
+is what's that mean well think of this
+like C code and think of it as a null
+what happens if you dereference is null
+and c code its egg false yes absolutely
+and that's what the VM does it said
+false your VM crashes no it's installed
+the signal handler for segmentation
+violations and goes ah I seg faulted I
+meant throw a null pointer exception and
+this seems crazy because it's really
+darn slow when it happens but because we
+did it this way we didn't have to do
+this if check inside the machine code
+the machine code got smaller just like
+in the class initialization example it
+gets to run faster we put less pressure
+on the branch predictor all sorts of
+good things happen from this as long as
+nulls don't happen often
+if nulls start happening often this is
+terrible you got to switch from user
+mode to kernel mode back to user mode it
+is slow so if you're dealing with a bad
+Java programmer this does not work then
+you want to go and do the explicit if
+and that's in fact what it will do
+there are other variations on this we
+can take an example like this we got a
+hot method on the right and we're going
+to train it that thing is always no and
+one thing is null we print out the empty
+string when string is when thing is not
+null we're going to do something
+radically different we're going to print
+out the empty string but what is going
+to happen here is it's going to say well
+thing has always been known so I'm just
+not even going to bother to compiled
+else block and so once we get to the
+bottom loop after I have set thing to
+non null we're now violating the
+expectation that's been built up as the
+drogue Ram was running and it's going to
+have to correct that this time with
+tiered compilation turned on this is the
+output you would get in C tier 3 C 1
+tier 4 C 2 speculating that the else
+will never happen then the else hot then
+the value is in fact non null it veils
+to the interpreter and it actually
+throws away the compile and now we go
+through 3 and then 4 again and it's now
+learned from its mistake it said oh that
+else block actually does happen I should
+compile both of them again if you really
+want to you can go and look at the log
+compilation output on the right you will
+find in the compile you'll see branch
+target BCI is this taken 0 times not
+taken 5,800 times probability this will
+occur is never it's actually the inverse
+of the test and I'm going to do an
+uncommon trap called unstable if
+previously this was called unreached so
+it depends on the version of the VM
+you're using and then you can see
+hitting of the trap and then
+subsequently it will recompile and if
+you looked again you could find that the
+branch
+data had been updated to say this was
+taken you know two times or however many
+it is and it seems crazy right because
+after all the if and else were the same
+the outcome is printing out the empty
+string in both cases and what did we
+really optimize the if can we still have
+to actually check that condition if you
+look at the code in the lower left here
+we still have to check it so what did we
+gain in this case honestly nothing this
+is silly but there are situations where
+we would gain something
+so imagine condition is always true so
+we're always going left and X is 100
+versus if condition was false we go
+right and X is negative 1 and beyond now
+there's a check that says if X is
+greater than 0 well by discarding the
+right half we can now actually say up X
+is always greater than 0 and we can
+start to optimize it's not the first if
+it's everything that follows from that
+we do start to get significant gains
+historically hot spots actually gone
+back and forth on how aggressive to be
+about this optimization okay so let's
+revise our mental model of what's going
+on once more we start off we go from c1
+to c2 we're a little over-aggressive
+we've made some speculations that aren't
+quite going to hold and when that
+happens you're going to plummet back
+down to the interpreter and you're going
+to go up again and when you do that
+you're going to do some additional
+sampling additional profiling to learn
+what all the behaviors of the program
+are and then hopefully you'll stabilize
+obviously if you have a class that you
+can't initialize you're never going to
+stabilize well I guess it's stabilized
+in some sense right not in a good way
+and then we can actually Druze this to
+drive really aggressive optimizations
+around say dynamic dispatch function
+calls everything a Java is dynamically
+dispatched so what we actually do is we
+profile all the types flowing through
+there
+as it turns out most of the time you
+only use one type 90% of the time - 95%
+of the time you use two or fewer types
+5% of the time you use get greedy and
+use three or more and so will optimize
+for that will actually take that and
+turn it into if it's this type that you
+used really often just inline the code
+to it directly else if it's that other
+type that you use a little less often in
+line that code to else you can probably
+guess by now
+uncommon trap and if that fails then
+we're gonna go back to just doing a
+virtual call and this is something you
+just couldn't do within a head time
+compiler you have to actually go and
+profile the application first and then
+feed this information back into a
+compiler and so the JIT code can
+actually run faster than the ahead of
+time code could have and well how much
+did these things occur well that
+benchmark I showed you earlier this is a
+plot of the D optimizations over time so
+most of them we get them out of the way
+pretty quickly we don't have a lot of
+sampling information about those very
+first compilers we do and we make kind
+of a lot of mistakes and then when we
+start doing new stuff like around second
+15-20 when the benchmark really starts
+running we got some new code we make few
+more mistakes it quickly settles down
+and we don't really have much more and
+then when we start running some new code
+again when we're doing the benchmark
+output results at second 90 it spikes
+again so each piece of new code there
+will be some failed speculations but it
+usually settles down pretty quickly
+unless you've got an uninitialized class
+okay but how much does any of this
+really matter to you well the speaking
+of optimizations absolutely do matter to
+you they're easily at least 25% for
+almost anything you're running often way
+way way way more than that particularly
+if you've got like a dynamic call inside
+of a loop it's like a thousand percent
+so you probably want this if you want
+your Java code to run quickly and that
+sort of implies you do actually want a
+JIT or some sort of profile guided
+optimization but it's certainly not
+without its downsides most of the time
+when we hit one of these uncommon traps
+not only does the thread that hit the
+trap bail to the interpreter the thread
+that's doing the anomalous behavior the
+thread that's hitting nulls or use that
+third type or whatever but when we hit
+the trap we also throw away the compile
+we lock out access to it and so new
+callers to that compile they all also
+basically unavailing to the interpreter
+and so now there's this brief slowdown
+in your application it's not huge
+your compiler your application didn't
+stop but you went from going 100 miles
+an hour to one mile an hour again if
+this happens to a hot method in your
+system on a modern Intel chip it's say
+25 to 50 milliseconds of disruption
+depending on the type of trap and how
+it's handled it's not huge probably
+smaller than most of your garbage
+collection pauses but it is there and
+it's actually mattingly hard to measure
+it doesn't show up in a GC log sure it
+shows up in a log compilation XML but
+you got to know that the method is hot
+you can really only measure it
+externally in any real way but it does
+occur and if you had say microservices
+and say one microservice fronting
+another microservice and this one does a
+new behavior which sugars the new
+behavior in this one and this one that
+could compound but ultimately it really
+depends on what your goal is is your
+goal startup time great maybe just use
+an interpreter sounds crazy but it's not
+actually a terrible idea
+that's what Android did that's what the
+Hermes VM is doing from Facebook for the
+Facebook application on iPhone they just
+have a really good interpreter starts
+really quickly doesn't run fast but it
+starts up really quickly
+maybe your goals peak performance well
+then you want profile guide optimization
+you want a just-in-time compiler or some
+other speculation and feedback system
+maybe your goal is first response maybe
+that also means peak maybe it doesn't
+maybe an ahead of time compiler is the
+right choice maybe you want predictable
+performance ok ahead of time compiler is
+fine might be slower but it'll be nice
+and predictable it all depends there is
+no one right or wrong answer to this
+question of what the best type of
+compiler or execution mechanism is what
+Oracle is actually doing with there
+ahead of time compiler is they have two
+modes they have a non tiered mode
+produces relatively conservative code
+that has to have initialization checking
+doesn't do get to do all these cool
+speculations but it's rock-solid stable
+and then they have a tiered mode starts
+off in that same stable mode but then it
+switches to profile gathering get some
+data and then goes into the speculative
+mode they have both because there's not
+one right answer to this story what
+we've done it as well is we've actually
+done something a little different we
+take all that profile information and
+information about what got compiled what
+was hot and we do something brilliant we
+put it in a file I know yes this is what
+I get paid for putting things in files
+and then we read that back in again and
+we use that to basically start from the
+same spot not exactly it's a lot
+trickier than it sounds but we start off
+basically running at peak although there
+it's not exactly as good but it's close
+the first transaction that hits our
+system is about three milliseconds
+slower than the second transaction and
+that's at peak speed so this does
+actually work pretty well
+but every approach has its pros and cons
+but in fact it actually gets worse I
+told you we could get more dynamic I
+lied
+it can there's this notion in JavaScript
+that eval is evil
+I'm somewhat inclined to agree guess
+what Java users you are the most heavy
+users of eval in the world okay it's not
+called eval it's called bytecode runtime
+byte code generation like I don't do
+that what are you talking about oh oh
+but you use persistence libraries that
+do it
+are you using aspect-oriented
+programming library that does it or
+rules engine that does it or spring or
+hibernate or reflection or okay we're at
+fault too we added lambdas to Java and
+we used runtime bytecode generation how
+do you ahead of time compile something
+that isn't there it's really tricky in
+fact this is something that the äôt
+project for Oracle is having to deal
+with they are having to change how they
+handle lambdas because the current
+scheme is really not very friendly to an
+äôt now I think this isn't so terrible
+it's not we evolved to use what the VM
+was good at not a surprise but that is
+where we are today all right I hope you
+learned something about the VM I hope
+you found this all interesting and have
+a little bit better understanding what's
+going on under the hood and how it
+affects you if you found this
+interesting please go play with it watch
+and if you'd like to learn more well
+really you have to go read the blogs of
+the people who work on this so you can
+go read the blog of alexey shavelev who
+used to be at oracle who's now at Red
+Hat you can read the Java specialist
+newsletter or you can read my former
+colleagues blog NEETs on McCart psycho
+monic lobotomy saw are all great
+references if you found this interesting
+please go learn some more and thank you
+all very much for coming</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

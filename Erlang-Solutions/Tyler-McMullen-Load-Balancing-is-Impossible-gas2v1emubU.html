@@ -1,0 +1,875 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Tyler McMullen - Load Balancing is Impossible | Coder Coacher - Coaching Coders</title><meta content="Tyler McMullen - Load Balancing is Impossible - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Tyler McMullen - Load Balancing is Impossible</b></h2><h5 class="post__date">2016-11-22</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/gas2v1emubU" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so this talk comes out of months of
+research that I was doing last year
+trying to find a better way to do load
+balancing trying to find a way so that
+you know we as a CDN right we have to
+talk to a lot of customers origin
+servers that's like 30,000 of them right
+and so trying to figure out the best way
+to do load balancing in like an
+efficient manner right because I realize
+that like what most people are still
+using at this point is random or
+round-robin and that struck me as odd
+right like we're a bunch of like really
+talented engineers and that's the best
+we can do random like just pick a server
+at random it's kind of weird
+so I guess spoilers for this talk I
+don't really have anything to sell you
+in this at all like I don't have a
+solution even though there are some
+ideas as it goes on but it's mostly just
+informational like I wanted to
+understand why I was seeing the like the
+weird latency characteristics that I was
+seeing and so I started digging and
+continued digging for months until I
+like had a good idea of what was
+happening it may also have to explain
+some like performance problems that
+you'll see and not really understand so
+right
+I'm Tyler on the CTO of fastly you can
+argue with me on the internet right
+there
+you know mostly what I do at this point
+as CTO fastly is like run interesting
+projects things that may fail is the way
+that I describe it which is lots of fun
+so right what is load balancing it's a
+thing that we like all take for granted
+it's a thing just like you install it on
+the server or you like you know you pay
+somebody to do it and like it's just
+black box it just happens right so I was
+gonna do a diagram but I kind of ran at
+the time so so right I said I'm going to
+do an allegory the allegory of load
+balancing so okay so almost everybody
+here has probably been to some sort of
+sporting event right some sort of
+stadium like large maybe maybe it's
+actually like a play or something like
+that there comes this moment oh right I
+wanted to mention this is actually a
+story that was told back in 1998
+guy named human beheshti who was
+formerly the CTO of radware and strange
+loop and now works on my team haha so
+right so everybody's been to like a
+sporting event of some kind right there
+comes this moment during every sporting
+event or play or really whatever where
+everybody stands up because it is like
+halftime or it is like the break right
+everybody stands up and they all want to
+go out into the hallways and do what
+they want to get a beer or something
+some sort of like beverage right so you
+stand up and you walk out into the
+hallways into like the corridors of this
+thing and you have many choices before
+you right you have the stand here you
+have that stand over there you have this
+one here maybe not all of them have the
+type of drink you want maybe some of
+them have a line and others don't maybe
+some have longer lines than others maybe
+some of them though have more people
+working behind them than others hmm so
+the question is then like would it be
+more efficient for you to go to the
+stand right here or to walk further to
+go to this one with a shorter line but
+then yeah so it's like you're basically
+attempting to load balanced people and
+beer in this case right so this is like
+actually this fits what load balancing
+is like fairly well but you know why do
+we load balance as far as I can tell
+there's three major reasons why we why
+we even care about this thing at all and
+the first two are like far more heavily
+weighted than the others so there's
+abstraction right we want to be able to
+treat many servers as one thing we want
+one entry point we want to just be able
+to pretend that this is all one system
+the second would be like failure right
+we want to be able to deal with the fact
+that servers fail all the damn time like
+and you want to be able to like deal
+with the fact that you know you have to
+then remove it and then be able to add
+it back in so load balancing is a way
+that we do that and like a distant third
+to this is actually the balancing of
+load and that that struck me as odd but
+like it really is a thing that like most
+of us don't actually think about that
+much or care about that much as somebody
+was just telling me right before I
+walked in here that he does
+scribes it as like load distribution
+instead of load balancing because it's
+just not a thing that he cares about
+right which then leads me to why we end
+up at random right silly the good thing
+about random is that it actually solves
+those first two cases really beautifully
+right like it's simple there are very
+few edge cases you can do failover
+really really easily if you want to add
+a new server to your random load
+balancer you just add it in and it
+starts randomly getting traffic and
+that's great right it also works
+identically when you have multiple load
+balancers you have to load balancers
+doing random it's still random it's the
+same thing right super simple what's bad
+about random though is latency and this
+is actually what the like most of this
+talk is about like why random load
+balancing and wide load balancing in
+general is detrimental to latency a lot
+of times so let's talk about why that is
+how many people here have heard of the
+balls into bins problem yes a few of you
+that's actually more than most like the
+other couple times I given this talk and
+so that's exciting though because I like
+can introduce you to a really fun
+probabilists like probability like
+theorem idea right so the the statement
+goes like this the problem goes like
+this
+if you throw a balls into n bins what is
+the maximum load in any one of those
+bins so it doesn't specify how we choose
+the bin but that's fine let's assume
+random for now the obvious answer is M
+right but that's incredibly highly
+unlikely so really what this question is
+about is like what is the answer with
+high likelihood so like okay this this
+problem seems to fit load balancing
+pretty well let me go like do some
+research and like see if I can figure
+out like what is the answer to this how
+can I figure this out so there's a paper
+balls and bins a simple anti-de analysis
+that like great I can just like look at
+this and solve my problem fantastic so
+ok so like let's see for the case that
+let's see yeah there we go ok so for the
+case that M equal
+and it's that great easy if M is greater
+than or equal to n log n that's the
+answer ok cool cool but more generally
+it's that and I solve this it's like oh
+god no I don't even know what a poly log
+is I'm not a mathematician I'm sorry I'm
+like just a straight-up engineer like it
+so I did the thing that any like
+self-respecting like general engineer
+would do and I wrote a python script ok
+so this is a really simple modeling of
+this problem so we have our number of
+servers n 8 in this case and we have a
+number of requests at a thousand cool
+great so we make our bins and then we
+generate and random numbers and choose
+the bins for each of them easy enough
+right
+and so you might be expecting that like
+when I when I print out those bins
+they're going to be like fairly similar
+to each other you know the mean it's
+just a uniform random distribution right
+but it turns out that the variance is
+actually quite high like much higher
+than I expected when I first started
+doing this I'm like is there something
+wrong with my code and I started
+thinking about I'm like no this actually
+does make sense it's not it's not
+choosing them like one at a time it's
+choosing them randomly right it's
+uniform random but it's random still
+right so in this case our lowest bucket
+ended up with a hundred and our highest
+bucket ended up with 148 it's a really
+high variance but this this doesn't
+really model load balancing right
+there's some problems with this for
+instance like every request doesn't take
+the same amount of time right
+ok so let's like modify this a little
+bit ok so minor modification here now
+instead of just choosing you know
+instead of just incrementing each bucket
+each bin by one each time
+now we'll increment the random bucket by
+a random number between 0 and 2 right so
+it should be roughly the same because
+you know it's still pulling that from
+like a uniform distribution similar
+results but actually you know in many
+cases actually worse but this this still
+isn't right this isn't right either so
+really this comes down to the question
+of how do you model request latency so
+yeah before we can actually answer this
+we really need to have a good model for
+how this works so another way to state
+this problem is what do Erlang and
+getting kicked by a horse have in common
+anyone know no damn Poisson processes so
+a Poisson process is well I'll describe
+exactly what it is as we go through here
+but it's using a wide variety of
+different settings right like basically
+any natural process so like this is used
+to model like the probability of trees
+in a particular area of a forest it's
+used to model the likelihood of a new
+star appearing in a particular section
+of the sky it's used to like rate the to
+choose to figure out the rate of arrival
+at checkout counters at grocery stores
+so like a really really useful and
+interesting thing basically anytime
+there are a large number of actors
+making independent decisions it ends up
+following what's called a Poisson
+process one of the uses one of the
+earliest uses for Poisson processes oh
+right sorry
+backing up Poisson processes where
+processes were actually discovered by
+Erlang the mathematician and like the
+mid 1800s so one of the first uses for
+this though was by another researcher
+who was studying the frequency of deaths
+in the Prussian army by horse kickings
+and so that is what Erlang's and horse
+kicking deaths have in common so right
+so when we talk about the leg the the
+rate of arrival of requests at a server
+we often think about it like this if
+that's one second
+that's 150 ticks on there so it's like
+150 a second right but then you might
+think about and go well actually it's a
+little bit more random than that right
+it's not going to like they're not
+arriving each like the exact like
+microsecond right so like maybe it looks
+more like that but it turns out that it
+doesn't even look like that that's a
+uniform distribution poisson process
+looks more like that right so
+things tend to bunch what a press-on
+process is it's a it's a way of
+measuring the inter-arrival times of
+requests or packets or whatever and
+essentially what it comes down to is
+that it's exponential right so most of
+them will tend to fall and like a very
+small like what will tend to have like a
+very small difference in their inter
+arrival times but then there will be
+large gaps between them and so they
+bunch up and so what that ends up
+meaning is that even if your application
+has perfect constant response times it
+doesn't because when the request arrives
+it's not arriving at like and then by
+itself essentially the requests are
+bunching up together which means that
+you're not just processing one request
+at a time even if you have like the
+capacity to do that which means that
+some requests are waiting which means as
+soon as you introduce Poisson process to
+this even if your response times are
+constant it's immediately going to start
+following an exponential curve the next
+that exponential curve might not be that
+bad but like immediately that's what
+happens and the interesting thing about
+this is that this just like gets worse
+and worse as you start building systems
+right packets follow a Poisson process
+which means that like your requests are
+also following a Poisson process and so
+then when your system actually finally
+gets the request it's making requests to
+say your database or your like memcache
+server or whatever else all of these
+things follow that same process and so
+over time they build up into like a
+pretty strong exponential curve and that
+is why your Layton sees always follow
+that exponential curve so what is
+typically used in in describing and
+applications request latency
+distribution is is the log normal
+distribution I had read this before but
+I wanted to test it and so this is
+typically what that ends up looking like
+when I when I pulled it out of like
+various services that our CDN runs and
+so this has a mean of 1 50th percentile
+0.6
+seventy-fifth of 1.2 ninety-fifth of 3.1
+and it like it gets ooh go back
+goddamnit okay anyway so basically it
+follows this curve like in a pretty nice
+way but like up toward the higher end
+the 99.9 percent i'll it tends to get
+really bad
+right so when i first gave this talk
+someone tweeted at me afterward
+explaining that what it actually is is
+it's a fat tail not a long log normal
+distribution if this matters to you and
+i responded saying that well you know
+this is actually like this tends to
+follow the thing and this was the
+response I got and he's totally right
+he's totally right it actually tends to
+actually follow a fat tail distribution
+but I don't care I'm moving on and using
+this one it's close enough so here are
+just two like give further proof to this
+these are some examples that I pulled
+from actual real live sites that are
+using our CDN I'm not going to explain
+who they are or anything like that but
+just like general categories and they
+all follow this curve the curve has
+different like Sigma's in this case
+different factors that go into it but it
+all follows that same curve right so
+what we can do is we can go back to our
+example and we can tweak that to use a
+log normal and so what happens now well
+it's even worse right the variance is
+even higher than what we thought before
+that's basically the same thing yes okay
+so this is why perfection is impossible
+you can't know ahead of time what length
+of time each request is going to take
+you can't tell ahead of time the load
+that that request is going to cause in
+your system for multiple reasons but
+like the primary one just being that
+that's just how systems work across like
+non real-time networks as soon as you
+introduce a Poisson process to it this
+is what happens so why is that a problem
+well if
+Plus taken amount of time that is
+indeterminable from the load balancer it
+means that you end up queueing or it
+means that you end up with parallelism
+and scheduling problems it means that
+you're trying to share resources at the
+same time with each other right so just
+to like really like put up put a point
+on this one let's say we have some
+computers look at those happy computers
+they're so optimistic right now they
+don't even know about what's about to
+happen at them we have here our sad
+little load balance there all right and
+so each of these computers actually has
+a queue they have like a request queue
+coming in to them and so if we knew the
+size of the requests in the queue which
+they look like this
+the obvious answer would be that we want
+to choose the third one right but we
+can't actually know that ahead of time
+and so all we know is the number of
+requests in the queue eventually right
+and so the answer is that we choose one
+one becomes sad and falls over such as
+that computer so what effect does this
+actually have well so right the actual
+just so I started running like more
+complex simulations of this problem over
+time and so like the Green Line here is
+the actual distribution like I'm like
+imposing a distribution on the request
+on the response times for the requests
+coming into the system and that's what
+it looks like the green line but as soon
+as you run that through a random load
+balancer and this is at 70% of the
+theoretical capacity of the system you
+start to see that curve getting higher
+and getting taller and getting steeper
+they're not great but why does that
+matter right it seems like you know 50th
+75th are still pretty reasonable right
+but who here is here to guilt 10a before
+yes one awesome okay so guilt na you
+should totally read his blog it's really
+really good talks about like how to like
+model request lien season like a really
+intelligent way and how to like measure
+latency more intelligently
+right so this is why the 99th percentile
+matters right so the probability of a
+single resource request avoiding the
+99th percentile is of course 99 percent
+easy enough means the probability of all
+n resource requests on a webpage
+avoiding a 99th percentile is 99% to the
+N which means that at 69 requests you
+hit you break that 50 percent barrier
+which means more than 50% of your users
+are going to see the 99th percentile of
+latency at least once during the page
+load time which was super surprising to
+me and so like I knew that like you know
+the number of requests on each page like
+across the internet was like starting to
+rise over the past few years and so I
+went and looked and so like if you go to
+Amazon and these are all like before
+like load on pages right so if you go to
+Amazon there's over a hundred requests
+before the page load happens I went to
+like a particular conference website and
+there was a hundred and ninety on there
+I went to Facebook which had over 200
+requests before the page load CNN has
+700 which means that they're not just
+hitting the 99th percentile on every
+page load by hitting the 99.9 percent
+I'll it seems crazy to me but anyway so
+it turns out that like one of the more
+interesting parts of this is that is
+what happens when you start to increase
+the load on the system that like that
+curve that I showed earlier was that 70%
+of the theoretical load of the system
+but as the load increases this actually
+gets worse and worse and worse and so
+like in this particular example so over
+on the left side here we have like 50
+percent load and then we have each of
+the different colors represents a
+different percentile of like response
+latency okay so like the 99.9 thiz the
+dark blue there and so like a 50 percent
+load it's not that bad right it probably
+follows roughly what the like the curve
+should be but as you start to increase
+the load it gets worse and worse and
+worse especially at the higher
+percentile so a 90% load you're like
+99.9 percent I'll if you're doing random
+load balancing can be really really bad
+what this but this is like interesting
+to me because it means that like if
+you're not seeing this it probably means
+that you're over provisioned and if you
+are seeing this it means that like if we
+could find a way to do it better you
+could either reduce your latency by a
+lot or you could potentially turn off a
+bunch of servers both of which would be
+pretty rad right okay
+so what do we do about it well so joint
+shortest queue is another load balancing
+technique that people use right and so
+this is a graph comparing joint shortest
+queue to random simulation again at that
+like 70% load rating and like it is a
+lot better it's still not perfect it's
+never going to be perfect
+but it's a lot better and like it's
+probably roughly the best that we can do
+for most circumstances so there's
+another way that we can look at this
+though so what this graph is showing is
+the application server load over time
+for that same simulation so what this is
+saying basically is that like each of
+these lines is the current number of
+requests that are outstanding
+at each of the servers right and so
+basically what you can see here is that
+the high amount of variance because of
+that randomness and because requests
+build up basically and then the red line
+is the leg meet mean and I believe the
+black line is like the standard
+deviation there so basically it's like a
+very high variance between the servers
+with joint shortest queue it looks more
+like this which is a lot better
+so very low variance it's still not
+perfect but it's probably roughly the
+best we can do in most circumstances
+another way to look at this is again
+this like the variation as load
+increases right joint shortest queue
+being on the bottom here you get like up
+to the 90th percentile looks roughly
+similar to what the to what the like
+latency distribution should look like
+cool so let's throw a wrench in this
+whole problem distributed load balancing
+because most people don't actually run
+one load balancer no one wants to have a
+like giant single point of
+failure in their system right you run
+multiple maybe you run many that's
+basically my job I just run a whole
+bunch of load balancers all day long so
+the sure to random as we discussed
+earlier is exactly the same no
+communication is necessary between the
+servers it's just random you just keep
+doing random random all day long
+great that's like one of the really nice
+benefits of using random however
+distribute to join shortest queue is a
+nightmare and that comes down entirely
+to the fact that it's stateful like
+every other kind of distributed system
+as soon as you introduce shared state
+into it it gets a lot more complicated
+right so basically in this case if we
+wanted to do a distributed joint
+shortest queue we need to be able to
+share the like each individual load
+balancers view of what like the queues
+lengths are with each other right you
+have to somehow distribute that
+information right but if you do it in a
+way that doesn't take into the fat and
+that does not take into sorry if you do
+it in a way that does not take into
+consideration the fact that as soon as
+you share that information it's already
+outdated you end up with something like
+this so this is again that like the load
+on each one of the individual
+application servers when you are just
+sharing like essentially like a naive
+joint shortest queue essentially what
+this was simulating was I have a bunch
+of load balancers they each will
+periodically tell each other what they
+believe the current application server
+loads are and then they just each of
+them just trust that as if it's true
+right and so this ends up looking like
+that but like what's actually going on
+here okay so like we can we can actually
+pull this apart and look at it so this
+is that same information but like now
+each of the lines are separate right so
+you can see what's happening here is
+you're getting oscillations you get
+oscillations in this case because as
+they share their information as you
+share the information between each of
+the load balancers they all have a
+single view for a brief second there and
+they go oh that application servers the
+lake has the shortest view let's all
+send
+our lake requests there oh that one
+now has like way too much let's send
+them all over here right and so you end
+up with this wave pattern going on
+they're highly unfortunate so we could
+do this better though there's a pretty
+amazing paper it's actually like a PhD
+thesis written by Michael mitts and
+mocker called the power of two choices
+in randomized load balancing it was
+actually published like all the way back
+in 1991 but the claim in here is that it
+actually like should reduce that
+variance exponentially that's pretty
+cool
+must be really complicated algorithm
+right no it turns out that like
+basically all all all the paper is all
+like the algorithm that he describes is
+is this okay you pick two servers at
+random and you choose the shortest like
+the one that you believe has the
+shortest queue that's it that's the
+entire algorithm okay cool let's see
+what happens so this is the code from
+earlier you know okay cool
+so looking bad great and so that is the
+change that we introduced in order to
+introduce the like power of two choices
+algorithm that's it
+that's all of it two lines so what does
+that do well I know you can't really see
+that there but I will show you on the
+next slide so the top one is the
+previous example and the bottom one is
+the new example using the power of two
+choices algorithm and you can see that
+in fact it does reduce this reduce the
+standard deviation reduce the variance
+between them by a whole hell of a lot
+it's super impressive to me like I can't
+believe that it like it's actually that
+simple in a lot of cases really neat so
+you can see here this is again back to
+that like that same example as before
+where we have our random line at 70%
+load we have our joint shortest queue
+line which is green and now now we have
+our randomized our power of two choices
+joint shortest queue which actually ends
+up splitting the difference between them
+neat but the difference actually becomes
+more pronounced as the load increases on
+the system so here we have the power of
+two choices in the middle we have joint
+shortest queue in the bottom and we have
+random on the top and you see that like
+even as you approach like 90% 80% 90%
+load like it actually is still making a
+really big difference great that's
+really cool so it turns out that like
+people have despite the fact that this
+is like actually working pretty well
+people have continued to try to make
+like new approaches for this so myths
+and mocker are published another paper
+how useful is old information there's a
+similar one interpreting stale load
+information and both of these actually
+take a look a really interesting
+different approach to it where instead
+of just like blindly choosing two at
+random instead what you attempt to do is
+in addition to just like looking at it
+currently looking at the load on each of
+the servers currently you try to project
+based on the like current rate of
+requests where they're going to be right
+so you can say like okay I got this
+piece of data I got this like this
+information from this other load
+balancer one second ago now I know that
+the number of requests that are coming
+into the system is this rate and so I
+believe that what will have happened by
+now is that it should look like this
+like whatever this is right and so this
+actually does I did simulations for this
+I don't have graphs for that but it
+doesn't prove it beyond the power of two
+choices algorithm mildly a little bit
+anyway you know that's cool
+there's another one that came out a
+couple years ago called c3 this was
+actually an attempt at doing a better
+load balancing algorithm for Cassandra
+it was pretty neat this one actually
+attempts to take a bunch of the ideas
+from multipath TCP and bring them into
+load balancing it was so complicated
+that I could not actually get it working
+like I tried actually for like multiple
+days to like write this into a Python
+program and failed so if you can do it
+that's great I would love to like know
+how good it does but I I couldn't do it
+I'm sorry there's some other crazy ideas
+though as well this paper came out last
+year
+Microsoft research called join idle kill
+Sargon looks confused was it I really
+thought was 2015 goddamnit
+alright 2011 Thank You Sargon
+but basically flips random on its head
+what it does is instead of having the
+load balancers choose which server to
+send it to you instead have these
+servers tell a random subset of the load
+balancers when they are available when
+they're free when they can take another
+request and so like it turns out that
+you can actually just you can like add
+this information on to like the response
+headers of something like the responses
+you're sending back and so it's actually
+pretty straightforward to implement
+their argument is that the app servers
+know their load better than the load
+balancer does my argument is that it
+doesn't matter and that in fact the load
+balancers perspective is the one that
+does matter because that's where the
+requests are going through just because
+the server thinks it's load is low
+doesn't mean it actually is low and that
+it's responding quickly but it turns out
+that they're their results actually look
+really impressive for this
+so here the pink line you can see is
+random sq2 is actually the same thing as
+the power of two choices algorithm which
+kind of splits the difference there and
+then their joint idle queues come up
+even lower than that which is pretty rad
+so maybe that's the future I don't know
+right so why does this matter mostly
+it's just that it's interesting I just
+found it fascinating to work on and
+fascinating and like I basically just
+didn't want the stuff to like continue
+to set on my laptop and like only have
+like me know what I like looked up so
+hopefully this was useful to you all
+hopefully it's like interesting at the
+very least even if not practical for
+your like day-to-day life but one of the
+other interesting things that that I
+gathered from this is that many for many
+of these algorithms open-source
+implementations don't exist which means
+that we're still using random even
+though there actually is better stuff
+out there so if you're the type of
+person to go work on some open source
+like load balancer projects
+you should totally implement some of
+these it would be great anyway that's
+all thanks
+I will happily repeat
+yeah so like the alright so the question
+was what are the best algorithms
+available in like current open source
+load balancing projects as far as I know
+like H a proxy doesn't have any of the
+more intelligent algorithms implemented
+I think they were talking about it a
+while ago but I don't believe it ever
+actually happened varnish doesn't Apache
+as far as I know doesn't like most of
+these are still just using random and
+round-robin and then occasionally you
+have consistent hashing which is a whole
+other thing
+so yeah it's sad yeah
+so the question was did I do any
+research with direct server response
+load balancers no I did not sorry
+actually I would love to chat with you
+afterward to hear more about that if you
+have any like knowledge about that sure
+yeah
+yeah so write two questions that was I
+lost track of the first one already
+Jesus oh right how does how does joint
+shortest queue effect like buffer bloat
+and like what to what effect is like the
+buffer size come to do with that and
+then the second question was about and
+speaking is hard right Poisson versus
+the viable process right sorry the the
+first one I don't actually know I don't
+I'm not sure that like I didn't really
+look much into like the actual
+individual queue sizes and most of my
+like simulations I assume that the queue
+sizes were like infinite right because
+essentially if you don't do that then
+you either have to fail the request or
+you have to retry to something else
+which kind of is weird in skews the
+results so I don't have an answer for
+that one either the second one yes I
+totally did run into the fact that like
+Poisson is probably not the best way to
+do it the Bible process this yeah I
+believe this is actually published back
+in like 1995 right and in this case they
+were close enough that it doesn't really
+matter but yeah if I were to do it again
+I would probably use a viable process
+instead but yeah fair question anything
+else Sargon
+man it's been a long time since I read
+the tale at scale paper do you want to
+like explain that one oh right oh right
+okay so sorry was start guns asking the
+question about like the tail at scale
+paper which talks about like racing to
+request against each other so I did run
+simulations of that and that actually is
+probably better than almost any of this
+I just felt that it was probably not
+applicable for most people but basically
+like if you can run even if you're doing
+random if you can run two requests
+against each other like run them
+simultaneously down to two application
+servers you dramatically reduce the
+amount of time that you spend it's like
+incredibly impressive how well that
+works yeah good point Sargon yeah so
+question is about like being able to
+guess how long a request is going to
+take from the load balancer basically
+like looking at something about the
+request to tell I so I've given this
+talk couple times before and I get this
+question every time I probably should
+just build into the talk at this point
+but so okay you can do that to some
+extent right if you can tell like you
+know which requests are going to take
+long with another you maybe you know
+like certain admin like you know request
+paths are going to be like much heavier
+weight than other ones right and so you
+can do that but the problem is that even
+even even when you segment the requests
+like that each of those segments is now
+going to follow an exponential curve
+right and so you end up with a very
+similar problem and so I know that
+internally I know that Google was doing
+this for awhile or at least like playing
+with doing this for a while and they
+ended up ripping it out because of the
+fact that when you get it wrong in that
+case it makes the whole system much
+worse
+so in short yeah like it's possible to
+some extent but like it ends up not
+working all about well for DES torque
+all right thank you all
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,1224 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Adventures with Concurrent Programming in Java: A Quest for Predictable Latency - Martin Thompson | Coder Coacher - Coaching Coders</title><meta content="Adventures with Concurrent Programming in Java: A Quest for Predictable Latency - Martin Thompson - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Adventures with Concurrent Programming in Java: A Quest for Predictable Latency - Martin Thompson</b></h2><h5 class="post__date">2015-11-24</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/eKVpea51tvo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">okay welcome everyone I wouldn't say I
+invented the disruptor I'm definitely
+more with the discovered yesterday as it
+was mentioned because it's really a
+whole bunch of ideas stolen from other
+places they're sort of some people like
+Tony Hoare is actually here I've noticed
+that some of its ideas from CSP some of
+the other ideas are from the work of
+Lamport particularly and so he's a lot
+of really really great stuff in
+concurrency that we're kind of
+rediscovering again because we don't
+bother to read a lot of the grid history
+of the past and stuff what I want to
+talk this morning about is a lot of my
+quest over the last 10 years to find
+algorithms that give predictable latency
+because particularly if you're working
+in finance we need to be able to respond
+and respond in a timely manner if we
+don't respond in a timely manner things
+can kind of go wrong and particularly
+the more spinning wheels we have the
+more things that are happening at the
+same time the more likelihood we have of
+not being predictable in our latency
+like does anyone here have kids have you
+noticed that the more kids you try to
+organize this the more unpredictable
+will be before you leave the house
+you're gonna do anything yeah
+concurrency is very like that as well as
+the more things we tried to juggle the
+harder it will be to try and be
+predictable and try and do something in
+a timely manner
+but there's a kind of interesting thing
+about being responsive and one way of
+looking at it is if you're not
+responsive to whatever your SLA deadline
+is you're effectively unavailable so a
+system that doesn't respond is just the
+same as a system that's not there we
+can't really tell the difference so we
+need to be predictable the more
+predictable we are the easier it is for
+us to work out what's going on so what
+am I going to talk about I'm gonna talk
+about causes of blocking and algorithms
+because it's actually one of the
+fundamental issues why things aren't
+predictable go talk a little bit about
+what we mean by latency we misuse terms
+an awful lot particularly this industry
+I love how we just don't even look up
+things in the dictionary we put names on
+stuff and one of my favorites is random
+access memory how is it random it's
+arbitrary please use the dictionary look
+at loads and loads and loads of examples
+like this but so cover latency
+that go talk a bit about locks and cues
+and also going into all the alternative
+five foes because it's really
+interesting what structures we have out
+there and also want to look at a little
+bit of where we go next I spend a lot of
+time working on the JVM but I also work
+in need of languages and it's
+interesting how things have not moved in
+the JVM particularly in summer it's done
+wonderful things in other areas but in
+summer is it just hasn't moved and it
+needs to move forward so let's start off
+and it's really I want to talk about the
+blocking and what are the causes of us
+being slowed I'm because whenever we're
+blocked we can't make progress so when
+you get many of these spinning wheels
+happening at the same time whenever one
+is waiting on another we are effectively
+blocked and that means we do not make
+progress and the lack of progress causes
+a lot of our problems that we have with
+being responsive so we're gonna get over
+this blocking problem there are two
+major causes of blocking when we look at
+this from an algorithmic perspective the
+first is when we have these concurrent
+algorithms we have to deal with things
+like me to exclusion letting one thread
+and add another thread know that
+something's complete this handover sort
+of stage and we're also synchronizing
+and rendezvous in a different point so
+this feeds inter algorithms this is
+going to be the body of what I'm going
+to talk about today but just for
+reference it's really important to note
+that probably one of the biggest causes
+of our outliers in your system are
+systemic pauses this is things like GC
+pauses we've got things called stop the
+world pauses inside our VM GC is one
+example of it but there are many others
+like revoking a bias lock there's lots
+of other things through a compilation
+and different things inside our VM that
+stops every single thread and when all
+those threads are stopped that can then
+do some work that needs to be done the
+problem is if we get into bigger and
+bigger core accounts bringing all these
+threads to a stop it's becoming a big
+issue um those law starts to hunt you
+dimed then we've got to get all these
+threads started again and so being aware
+of this but it's not just the JVM it's
+things like transparent huge pages
+underneath or Linux buts most people are
+not even a world there's lots of things
+that need to be configured and there's
+lots of things happening and hardware PC
+it sees the it's SM eyes all of this
+sort of stuff is an interesting to be
+aware
+so can I leave that aside because that
+could be a whole great talk on its own I
+want to focus on the first one now when
+we start focusing on the first one are
+concurrent algorithms and how do we
+coordinate what's going on
+we have two major means of doing this
+one is we use locks which I'm not going
+to talk very much about other than point
+out some of the serious issues we have
+with locks I'm going to talk about using
+things like cows instructions who here's
+herd of cows instruction good plenty of
+people have got that so the ability to
+do atomic operations in hardware where
+we can compare and set so I'm gonna read
+a value I can update that value that
+hasn't conditionally changed this is one
+of our fundamental building blocks that
+we have it's also got some fundamental
+scalability limitations which we'll go
+through and they're hard to program too
+by the way so let's go back and let's
+talk about latency for a second what do
+we mean well this is a lot of my life I
+turned up at many different airports and
+I form queues but pretty much everything
+you need to know about queuing theory
+happens in these sort of places because
+we talk about you've heard of response
+time latency all sorts of different
+things we mix and match all of these
+terms but what do they really mean and
+if you don't pull them apart
+you can't model a system if you can't
+model a system you can't predict how
+it's going to behave at the end of the
+day so let's look at this from a
+queueing Theory perspective we'll have
+services that we need to take and that's
+known as the service time so in the
+previous example whenever you go up to
+the desk you're not being serviced
+there's a time it takes you to be
+serviced when you reach that desk and
+then you get through but there's a time
+when you're little you have to wait to
+get to the desk in the first place that
+is your latency typically I think about
+the names that we don't look stuff up in
+the dictionary it's the time you're a
+latent response time is the total time
+from when you go to use the service the
+fact that you cue to use it and then you
+get service as well so those combined
+times are your response time what's
+really interesting is what people don't
+typically talk about is the time to
+NQ and DQ and in many cases it's
+actually the most significant time if
+you actually measure
+I love the comment yesterday about
+science not for me fundamentally if we
+are trying to do science one of the
+things we must do is follow the
+scientific method that means we have to
+measure we have to do experiments we
+can't just keep theorizing without
+measurement and that becomes really
+important and if you start measuring you
+start being surprised where real costs
+are where real time goes the interesting
+things that are going on so well kind of
+come back to that but what's interesting
+you feed into this is we look at queuing
+theory if I go to use any given resource
+and it's being used a lot the chances
+are I will end up having to wit I have
+to wait to do that I end up blocked and
+this blocking is what causes problems in
+our algorithms it also causes the
+unpredictability so for example if
+something takes one unit of time to do
+something and things are arriving at a
+rate of one every two units of time it's
+only 50% utilized so if you go to use
+that there's a 50% chance there's
+somebody already using the service so
+you'll have to queue so then that means
+your average response time at that stage
+will be 1.5 units of time and that's why
+we're kind of looking at around this for
+utilization house you increase
+utilization you go up this curve it's
+basic probability and what's going on
+this is 100 year old math back from
+Erlang so if we want our systems to be
+responsive one of the first things we
+must do is make sure utilization is
+relatively low if you're very highly
+utilized you will not be responsive can
+a little tip for anybody in the room who
+happens to be a project manager and if
+you want to have your team's run in a
+very high utilization they will not be
+responsive to your requests the same
+thing happens in the world of people
+we're all just in a system and these
+things they'll hold and still work so
+that's kind of one thing to be aware of
+so when we're talking about latency as
+far as I'm talking in this talk I'm
+talking at the time we'll be blocked
+will be weirding will be leading waiting
+for something to happen so with that
+context let's go into looking at locks
+and queues because
+we've got only spinning wheels the thing
+we want to do more than anything in
+concurrency I've been writing concurrent
+code now for over 25 years and I run
+away from shared mutable state like the
+plague and you need to get into that way
+of thinking so what's the best way to
+share things is when you've got a
+message pass you communicate that where
+to show your state rather than having
+the shared mutable state so you spend a
+lot of time dealing with queues but as I
+mentioned we can often spend more time
+in community queuing than we are
+actually spending in time in the queue
+itself and this is all about the evils
+of blocking and what goes on in our
+queue implementations themselves so
+let's look at what we get in there jetty
+care we've got the queue implementation
+and the two typical methods of people
+use are put in tack these are blocking
+API calls and as a result they have to
+use certain implementations under the
+cover what they mean that the basically
+boil down to is condition variable so
+right back to good old POSIX condition
+variables these will appear in Java as
+weird and notify or signal on a wit that
+under the cover so for example I go to
+the tag from a queue if there's nothing
+in the queue I get put asleep whenever
+something is offered to the cube later
+or put into the queue you must wake up
+that thread that has fallen asleep
+that requires condition variables to do
+that now let's go back to the science
+thing and look at measuring them what's
+involved so let's say I'm going to just
+boil it down to its essence I'm gonna
+use two condition variables one to do
+your paint and want to do a pong so
+think of like sonar ping pong that's how
+you get a response from something to
+just two simple things to work out
+what's going on and then I'm gonna
+record all of this in a histogram
+histograms are critically important here
+don't use averages averages just lie
+they hide everything that's interesting
+that's going on you've got to do a
+quantile distribution of this to see
+what's in there and what's happening so
+I'm gonna send a paint and get a
+response in a pong just between two
+threads over and over again and I'm
+gonna record this all in a histogram
+what does this look like when I do a
+contour distribution on this
+we end up like this whereby if you look
+along here up to 90-percent is all
+happening in around Etan a bit
+microseconds this is on a very well
+tuned fast machine but it microseconds
+just descend between two threads that is
+a load of CPU cycles a load of
+opportunity to have executed
+instructions on modern processors so
+that's just the time between two threats
+you see little pop quiz how long does it
+take to go between two machines on a
+good Network these days and the ideas
+came milliseconds
+keep pulling a lot lower less on the
+wire but let's say build user space the
+user space with a good Pengy
+network with kernel bypass technology
+we're looking at around 2 microseconds
+one we're after messaging that's five
+and a half micros thick full messaging
+stack run trip between two machines that
+is less than going between two threads
+were condition variables between
+machines with full stack so this is not
+an efficient way to do so but look what
+else is hardening we go eye to the
+higher percent house and it starts
+getting up into the tens of microseconds
+to signal between two threads to do
+stuff and the max in the histogram is
+over five milliseconds this is a serious
+problem in making our system skill and
+work in fact you tried to throw load
+through this you do not get that many
+events per second like a few million and
+it does not scale with numbers of course
+it's a fundamentally limiting thing so
+that's the thing they're talking about a
+measuring doubt on its own that's
+actually the really best case scenario
+that's a micro benchmark where the
+caches are hot the operating system code
+is hot nothing else is going on if you
+measure real-world applications you're
+lucky to get 50 microseconds on average
+for that one way or not even mind the
+round-trip so this is incredibly costly
+it's not a good way to signal between
+two
+rats so let's look at what other options
+do we got do we have any other FB i--'s
+that are better that are in there and
+then non-blocking air pies are a good
+thing to look at offer and pull being
+the two examples in this case what
+happens if I offer in pole between two
+threats well for reference you can go
+test those yourself one things I'm a
+great believer in the scientific method
+so you've got to put out your experiment
+you've got to highlight all the people
+independently verified codes all up on
+github I tested this with Java yet
+update six I'm running Ubuntu 1504 I'm
+running the in performance mode from the
+scaling governor and that's the
+processor I'm really not so this is
+actually a fairly slow process there not
+a really really fast processor so you
+get a feel for what's possible kind of
+typical not let's look at what is
+different we're gonna measure this so
+one way I want to do is I want to
+increase the number of producers I want
+to try it with one two three contended
+producers why am I not gonna do 500
+producers it's a quad-core machine you
+will only ever have three producers in
+any one point in time if you run 500
+threads you'll be measuring the
+scheduler and not the contention on the
+algorithm so you got to know what you're
+measuring what you're testing I want to
+also measure the mean and the 99
+percentile what if I stopped at the 99
+percentile rather than going to four
+nines five nines because beyond the 99
+percentile you typically find all the
+systemic pauses that stuff's all
+interesting but it's interesting for a
+different case so I want to look at the
+algorithmic interesting things that are
+going on now three implementations did
+you get inside the JDK and our baseline
+implementation so the baseline
+implementation is taking lamport's work
+from 1976 on circular buffers updated
+with some of the concepts on fast flow
+it gives the best latency I have seen of
+any queue implementation out there so I
+use that as the baseline so that's what
+you're targeting that's what the
+hardware can typically do at its best
+what the things look like above that so
+the baseline for sending one message to
+one thread and getting a response
+back again is a hundred and sixty-seven
+nanoseconds using lock-free algorithms
+in this way in fact that's a really
+awesome implementation it's not just
+locked free it's also weird free and
+that's it's incredibly predictable so if
+I go from the main to the 99% help it
+doesn't actually move that much it's a
+really nice elegant algorithm it's one
+of the perfect examples of why you want
+to go one to one rather than many to
+many or many to one or anything like
+that then I'm gonna look at a rev
+locking Q link blocking Q and concurrent
+link you that's what we get inside the
+JDK ours are typical options so that was
+the one case let's look at a different
+case here now and that's where I want to
+send a hundred messages and get a
+response why am i sending a hundred and
+get a response because real-world
+traffic comes in bursts it never comes
+nice and predictable also I want to
+measure contention because if I'm
+sending one getting a response one
+getting a response
+multiple threads do that the interleave
+so well and you don't get much
+contention when you burst in from
+multiple threads they will contend on
+the CM data in the same algorithm and so
+we have to deal with that case so now if
+things are looking very different our
+baseline still looks wonderful so that
+kind of shows you how good this sort of
+algorithm is at this but the other start
+feeling in fact look how bad it starts
+getting in the 99% huh and I'm not
+saying I'm sending a hundred and a key
+needs one of them I'm sending a hundred
+and getting one app back so I'm bursting
+its pipelined it should go really well
+our modern processors are superb with
+pipelined operations but that isn't good
+a hundred and eighty microseconds that
+is multiple round trips to another
+machine for what it should just be a
+pipeline burst not a good place to be
+also if you look at the JDK one of the
+things to take out the best
+implementation at the bottom here is
+concurrent link you and I'll use that as
+our baseline going forward against other
+implementations but there's some
+fundamental flaws here if you start
+using these systems how do you apply
+back pressure so say concurrently in Q
+is a link tooth that has got an
+unbounded size unbounded size Q's are a
+disaster waiting to happen they
+always grow unbounded producers and
+consumers get on violence and you get
+out of memory ours and your system
+crashes not a good place to be there
+sighs methods have locks around them so
+if you've got if you want to call the
+size and something I'm figuring theory
+we need to know the size of our queue
+the size ends are blocking it has a
+Heisenberg a fact on what's going on we
+can't measure flow rates there's nothing
+in the air P I that tells us the flow
+rate through the queue they generated
+garbage and they also not good with
+finite so they're kind of like almost an
+interesting academic exercise that have
+not really been tried in the real world
+I find in real-world applications I
+cannot use what comes with the API not
+because of performance because they
+don't have the features you actually
+require in a real-world application oh
+yeah and by the way if you call size
+method on concurrent link you it walks
+the the whole linked list it's not an
+order one operation pretty bad stuff so
+what alternatives are there what else is
+out there well what I want to do is
+first of all look at instant to grips
+one is inter thread FIFO so basically in
+the same memory process how do we share
+between two threads and one of the ones
+I can talk quite comfortably but is the
+disrupter since I control myself for
+having come up with it in the first
+place and how does this work well one of
+the things we want to do is get over the
+garbage problems so we don't want to
+Alec here all the time so the disruptor
+allocates a ring buffer of references it
+also pre allocates the objects in
+advance and you can use those objects
+over and over again and that gets us
+around a lot of the copying an
+allocation problem which is housed with
+the throughput how does the algorithm
+work it's quite simple really
+so you start off the producers have to
+claim a slot and so they will race and
+they'll update the claim sequence here
+so I'll I'll read it as value 0 I'll
+then do a compare and set to the value
+of 1
+if I succeed that slots mine if I feel I
+go around in a loop and I try that again
+so I have to do the spinning counselor
+on that now once I've claimed one I can
+van new slot one in here and I can
+update that object at that stage this is
+all nice and simple whenever I'm
+finished what do I do I update the
+cursor to say that up to slot one is now
+available on the other side this is very
+similar variation on the bakery
+algorithm from LAN port back again in
+the seventies we sort of move forward
+from that what does the producer do well
+the producer can read something out when
+they see the cursors move forward and
+they update the gearing sequence and so
+just think of this as head and heel of a
+queue and you move forward with this
+this is all done with just the memory
+ordering operations no need for locks on
+any of this and it works quite nice and
+it performs quite well but there's a
+kind of interesting thing is how do I
+deal with this setting the cursor if
+these things are all happening in parlo
+so what you want to do is you want to
+move forward the cursor whenever the
+cursor has got to be the valley before
+where you've claimed so you whit we have
+a blocking operation now whenever we put
+this algorithm together and we used it
+now max this actually worked really well
+because we always had more cores than we
+had threads that needed to run if you
+get into a world when you have got more
+threads and you get cores you end up
+with threads being swapped out and
+scheduled now what happens if one of
+those threads got swapped died after it
+claimed a sequence it will started
+working with the slot and it has not
+updated the cursor yet and it takes an
+interrupt and doesn't run again for
+maybe 90 milliseconds you end up with
+this thread busy spinning round here
+waiting for it using CPU and the CPU
+can't actually be allocated to the other
+one it's a real bad mistake we need in
+this algorithm as a general-purpose
+algorithm it was not good it had a real
+problem so how do we address this well
+know rather than using the cursor as the
+thing to say you're a complete we
+changed the idea that the cursor was the
+claim so you claim your sequence at this
+point you then work with the element
+that you've just claimed and when you're
+done we would update an available a rare
+and so the rasma up to the slots
+themselves going forward the read side
+is you just look at where available it's
+up to you work with it and then you
+update the gearing to say it's done and
+that where we can work
+so quite a simple change we basically
+use an extra memory to deal with the
+fact that we don't want to weird on the
+other things no the producers don't
+block each other they're no longer
+entangled with each other simple change
+to an algorithm what does that look like
+if we run it in a real world system so
+this is a distribution of all Layton
+sees measured in a system one of my
+clients had there's a financial trading
+system this was to measure the time of
+every single trade going through the
+system and put it on a scatter plot this
+is a log scale we're looking here at
+around 80 microseconds for this to run
+so financial trading systems are quite
+fast and there's a lot of them traffic
+and noise so this was the disruptor to
+when we moved to disruptor 3 this was
+the impact on the whole system boom see
+that that little change of going from
+the variable to the array because we
+were no longer blocking now between the
+producers made a huge difference to the
+characters in be and I also all of the
+other effects that I was able to work on
+started to be more pronounced they stood
+out on their own and we're able to work
+and so blocking algorithms are kind of
+interesting and a real problem so what
+if we just needed a cue so I just want
+to replace a cue and I'm not gonna use
+the disruptor because they see the
+disruptor as a cue is not really it's
+best used it's best use is to be used
+for coordinating a graph the
+dependencies many producers of consumers
+all organized into a graph would be this
+flowing through it it does a really good
+job of that
+that's much better for what it's
+designed for so let's take some of the
+concepts our flam port and fast flow
+again but introducing the ability to use
+couses to clean the tail and we'll move
+for the head independent so multi
+producer single consumer style cue very
+similar to the disruptor I'll update the
+tail with a cow's operation did that in
+a spinning
+I then put my object into the rare I
+don't need to say anything else to say
+I'm done because how do you know you're
+done the thing has appeared in the air
+air you use the array itself to signal
+completion if it's got an OLE element it
+hasn't yet been put in when the elements
+been put in you can use it so this is
+kind of nice as we've taken a step out
+of what the disruptors doing if you
+actually just want them as a cue
+what's the consumer do well looks at
+where the head is takes the element out
+setting it back to null and updates the
+head counter incredibly simple and I see
+the really fast really scalable all
+grooms are all incredibly simple they're
+not complex and how their work so what
+does this look like from a numbers
+perspective so we remember concurrent
+link you was the best case of what we
+get inside the JVM the figures are all
+as before it's like under very light
+contention what does the disrupter and
+the one-to-one concurrent queue look
+like it's kind of similar it's a bit
+better but kind of similar they're all
+kind of in the same ballpark notice that
+this is a lot better because there's a
+lot less steps in it there's a lot less
+cash missing steps especially in the
+happy path kiss but let's move on an odd
+load the loads the interesting bit lake
+and ramp the contention how does this
+start to behave under contention notice
+here contention and spinning cows loops
+spending cows loops or the grid
+equalizer
+all those three completely different
+algorithms but out the core they've got
+a spinning cows loop they all end up
+doing roughly the same thing it's kind
+of like one of those things in them like
+you can look at all the different things
+you can do for your health if you take
+up smoking it pretty much just
+neutralize it with everything else and
+spinning cows loops are a bit like that
+they'll fundamentally limited algorithm
+to a given point from a scalability
+perspective locks do similar things but
+at a much more scale so what kind of for
+under 50 micros at that stage what else
+can we do some people who've used the
+dr. Michel right but the disruptors got
+single producer methods and BOTS methods
+yes it does but I want to compare
+like-for-like and how it works so
+there's other things we could have done
+but I'm gonna leave that aside so let's
+say we want to look at how do I work
+across processes I work with multiple
+languages quite often I work with
+multiple VMs that I actually want to
+keep to moderate sizes so I don't get
+huge GC pauses because I can contain
+these how do I get these things to
+communicate really fast
+can I communicate accross process as
+quickly as I can within process what
+structures are available for this well
+one of the ones that we've got there is
+a disease in a ring buffer very simple
+ring buffer how does this work well
+you've got a very big shared memory file
+and it's gonna go around using it over
+and over again like a ring buffer how do
+I produce into it well I do a COS
+operation on the tail I claim some space
+I copy in the message I want to put into
+the ring buffer
+I put the header on at the header tells
+me it's complete how do i consume well I
+read it-- something tail and I move
+forward to the tail thought really
+simple simple for the call of actions
+between two threads it still does have a
+spinning cars operation on the tail to
+be able to do that and we can exchange
+between producers and consumers across
+processes as long as you've got memory
+ordering operations available to you you
+can do this well what's the header look
+like well very simple protocol for that
+is we say at the frame length the
+message type and then coded message
+itself that's all that's required when
+we write into the shared ring buffer and
+you write the freedom length last with
+the correct memory ordering operation
+then you know it's complete if you zero
+as you go you know that the message is
+not ready until they the length is
+actually set we usually do more than
+that we set the frame length first to be
+the negative value of its length so that
+you can detect if something crashed
+partway through doing something and you
+can then fix it up later
+because if producers died how do you
+prevent the whole system from becoming
+blocked at that stage you have the
+detect it fix it and move on but this
+zeroing out becomes a big cost zero you
+know it
+will slow down your algorithm because
+it's kind of faster than the latency
+side because you get through the cutest
+really quickly but after you've been
+serviced there's a cleanup operation the
+cleanup operation is to go through it in
+Xero alright the thing so I'm pointing
+out that this is can be good for latency
+but it's not so good for throughput
+compared to some of the alternatives now
+another thing I've been working on so
+when I was working on Aaron we wanted to
+achieve some interesting things where
+messaging between different machines but
+the real kind of crux of this is we
+wanted to build a CR DT the CR d tade
+that we can replicate to another machine
+where the messages all arrive out of
+order that may be delivered many times
+but I want to get the data structure to
+the CM state on another machine as it
+was on the source machine so we had to
+build this and actually we had to build
+this in a way that was concurrent to
+work on the same machine as well and
+it's actually turned out to be really
+interesting from an IPC perspective even
+though its original design was for
+working across machines as a C or D T so
+how does this one work well again it's
+just a big shared memory file you've got
+the concept of the tail note there's no
+head pointer in here you just add a
+message in you move the tail forward on
+a message move the tail that's breakfast
+dine you move forward the teal you
+copying the message you copy on the
+header that's very similar to the ring
+but for a concept C let me start
+discovering is evolution moves these
+things forward you don't tend to go
+forward in massive leaps you tend to
+have little leaps every now and again
+just the same as what happens in
+evolution so we worked forward like that
+you may start asking well do you do one
+big file that goes on forever this is
+where I've seen the fundamental mistake
+particularly and some of the academic
+approaches to this is people just take
+the big logical file that goes on
+forever but it doesn't consider the
+physical world and the physical world
+has got things like page faults page
+cache churn locking operations inside
+the page cache you would not do that
+that's a really bad way to go as one big
+file that goes on forever in fact you
+can lock up Linux to the point becomes
+unresponsive even to read on console
+it's pretty bad situation to be how do
+you address it well learn from other
+disciplines like I took my years
+backpacking as a grit where are fixing
+this problem
+what do you do when you view backpack
+you very quickly get to the stage where
+you watch one where one dry one that's
+the way you move you don't have much
+weird with you and did the same thing
+with your buffers so you rotate them
+around we've got an active a dirty and a
+clean and just going around reusing
+these over and over again so how do we
+deal with this cars operation that was
+the fundamental limiting thing I want to
+move forward and not be hit by this cars
+well if I'm going to move forward the
+tail I can use an interesting
+instruction now available and actually
+six called acts odd and since Java yet
+this is available inside the JVM to us
+no IV and intrinsic what does acts are
+do it does that basic spinning Cosley
+but it does it in hard work where it
+never has the entry leaving failure kiss
+so it can read a value it can update the
+value by Delta you've given it and give
+you the value back before all in a
+single hardware instruction so there's
+nine not that interleaving problem where
+I read another thread raids one ghost
+update the other one was updated and one
+fails and you have to go around that
+process again the whole thing happens in
+hard work in a single instruction so I
+do an X I'd I clean my space at this
+date so one threads done that there's a
+risk going on another thread has done an
+axe out at the same time I'm going to
+show the particularly hard case that we
+have the deal with because if you're
+just within the buffer normally that's
+not a problem and ring buffers can't use
+this technique because the hair can
+overrun the tail by using the rotating
+buffers we actually got an opportunity
+to use ax odd that you couldn't use else
+were so axe odds been used to move the
+tail forward the first message gets
+copied in just the same as it normally
+does the second message that was racing
+with the first message has moved heel
+beyond the end of the buffer notice the
+tail is now down here well it can work
+out if it was the one that tripped the
+Bopper like another threat we're racing
+as well moves axe are down further there
+the teal down further the one that
+tripped the end of the buffer now has a
+responsibility and how do you know
+you've tripped the buffer if the value
+you get before was within the range of
+the buffer but with you're down on top
+of it is outside of the ranger buffer
+simple mathematics you knew
+you've tripped and you don't need
+anybody else to tell you that it's just
+your responsibility under the protocol
+to rotate it so what you do is you fill
+in the buffer to finish it with a party
+and record you rotate which is just a
+simple ordered instruction to say what
+is the next a rare to be used and you
+copy the message that's before now we're
+doing pretty much the similar things we
+did with the ring buffer but we're doing
+them with some interesting
+characteristics these data structures
+now are effectively persistent for the
+time that the active and the dirty is
+staying around and alive and we can use
+this single instruction which is a weird
+freely instruction to do that and we
+move things forward
+how does it work for readers well it's
+even better than the single reader we
+can have as many readers as we want
+because it's a persistent data structure
+and all of these readers can read it
+without any locks they just walk forward
+reading the length field read the next
+line filled with the next line field
+whenever they reach zero the reach the
+end of the queue it's not simple really
+really simple what do we do about the
+zeroing problem because that has to be
+done will we do it on a background
+thread
+rather than make it the responsibility
+of the consumer we make it
+responsibility if we call the conductor
+in the system that zeros in the
+background now the throughput problem
+has been solved as well we've got the
+latency solved throughput and what's it
+look like for predictable latency well
+let's look at some figures so go back to
+the non contended case again sort of
+like just one message maybe in ramping
+up the three producers notice like in
+this case Aran IPC is a bit slower than
+the ring buffer why should it be slower
+with such a simple design in how it
+works well it's because it's putting a
+much more complicated header onto the
+object because this is actually the
+header that can be used to go onto the
+network as well so we could simplify it
+and use it in purely the IPC KS but
+we're using exactly the same code to use
+IPC as also shipping across the network
+so there's actually no difference in
+other two so let's ramp up the load
+that's look at it with larger bursts in
+size notice that the ring buffer has
+better than before we were fundamentally
+limited before we've gone from the 50 or
+and odd microseconds now down to 34 even
+under contention so the rain buffer is a
+nice step forward so kind of pop quiz
+here to the room that's using the
+spinning cars why is it better why can I
+actually go across processes faster and
+a greater throughput with more
+predictable latency than I can with in
+using those other things any idea as to
+what it would be no pinning in a these
+guesses
+nothing is complicated as that but
+there's a real nasty head and kiss no no
+nothing at that sort of level it's kind
+of interesting what's going on it's
+really simple I hadn't even heard of
+concept called false sharing more the
+evil performance killers two kisses are
+false sharing in the previous algorithms
+that don't exist in the ring buffer
+algorithm one is the dealer is now in
+lined into the array because the dealer
+ends up spacing the actual data out you
+don't get false sharing we're on the
+rare references you get false sharing
+between the threads trying to write that
+then with GC there's this evil thing
+called card marking so every reference
+you set in Java it marks a card on the
+heap so the garbage collector knows
+where to go and look this is off heap it
+doesn't involve the garbage collector
+card marking any of this so the ring
+buffer ends up being a lot better
+because of some pretty nasty unsilent
+performance killers that are in there
+and so when we look at like a lot of
+scaling up algorithms on the JVM we need
+to be looking at some things that don't
+impact some of these fundamental design
+problems that the JVM has for
+scalability and a concurrent sense so
+what about this spinning cows was it a
+major step forward by not having that by
+using Iran's ability to use lock ax art
+well if we look now at their contended
+kiss we're much better off like much
+better off that's a lot of interesting
+figures how does this look differently
+let's just graph it and make it so we
+start off with our link blocking Q and a
+Rabb locking Q and concurrent link you
+this is what we get in the JDK the kind
+of evolution through the disrupter and
+using the concurrent a rare q inspired
+by lamport's work then the ring buffer
+then air on that is what it's like when
+you have got contention hitting these
+things so if we want to scale up this is
+what starts the mater where are we
+spending our time what can we do to
+eliminate this contention and work
+around it kind of interestingly where
+would you use something like this so
+let's take a really simple example
+logging I don't know why our industry
+hasn't called
+Dauntless but logging is a messaging
+problem that's what it is yet the
+abominations we have in Java for loggers
+I'm sorry they're just disgusting
+the API is the design everything so do
+you think I get what slogging really
+useful for debugging you get a process
+crash not your process crisis in Java it
+writes to a buffer that whenever it
+reaches each cat writes that buffer down
+to desk so chances are that the thing
+that will tell you why your program was
+likely to crash is in that buffer that
+gets lost when it get crashes why is
+that not messaging out of process just
+somewhere where you can actually read
+and find out what's going on and the
+fact is that it's actually synchronous
+through the whole thing it's just insane
+so I think we should be doing lots of
+better things with logging and this is
+the algorithmic thing this is exactly
+problem we're dealing with so where can
+we go next what if we kind of learned
+along the way well the number of things
+that stood out so I'm working with some
+people and we're doing this in both Java
+and C++ at the same time I get really
+frustrated that every time I get a big
+algorithmic advance we get Java to beat
+C++ and in the C++ you just well I can
+do that and C++ what you've just done in
+Java even better and there's some
+fundamental things that are getting is
+so for example spin loops on this sort
+of stuff whenever we're doing it we end
+up with problems because our modern
+processors speculate their art of order
+speculation engines and what they'll do
+is they had a branch they'll guess where
+that branch is gonna go and then based
+upon that will go whizzing off in one
+direction or another with these spin
+loops they guess wrong and that has to
+be unwind it wastes a lot of energy and
+it wastes a lot of architectural state
+there is ways to address this like the
+pause instruction in acts 86 we can use
+that from C or C++ Java we have a
+proposal to add thread spend yield hint
+this I've seen drop in 20 nanoseconds
+off latency on these things and use a
+lot less energy and be much more
+cooperative across other threads and
+things like that the biggest things that
+me I keep seeing is the data dependent
+loads in Java Java loads everything
+through pointers and that's one thing
+our processors cannot deal well with
+they
+how not specularly it were the next
+loads gonna be whenever your data
+dependent on the previous load we need
+to get a round out we need to model
+aggregates on the heap and we need to be
+able to do stack allocation to do this
+well on the JVM object layer tis
+proposal to address that and valdi types
+is for the stack side so if we had those
+we would be much better off I find some
+interesting things with memory copying
+so for example within the CPU cache
+subsystem we should be able to copy at
+many tens of gigabytes per second tens
+of gigabytes like 50 to 80 gigabytes per
+second should not be a problem from C I
+can do that
+from Java I cannot because some of our
+copy routines in Java if you're not
+aligned doesn't use the right
+instructions in the latest processors
+and doesn't benefit from some of these
+copy techniques I've seen them drop down
+to sort of around to 2.5 gig per second
+copying between cores when it should be
+sort of paying 20 times that in some of
+its performance this is just things that
+need to be fixed
+how can you sort of fudge some of this
+in Java so turn on things like g1 GC it
+aligns all of our big arrays in the
+humungous region on page boundaries and
+you can see see style performance with
+Java for certain cases you can see that
+it's kind of okay in some cases and not
+in other cases needs to be fixed and
+then there's some rigid really
+fundamentally bad design and the ARP is
+that this is actually my biggest beef
+with most performance when I come to its
+API design whenever you design an air
+pea I wrong you really limit the
+implications or how things can be done
+internally
+so for example the queue interferes for
+offer and pol completes the concerns for
+is something available and is it empty
+those that sounds subtly different but
+it's actually really important so for
+example in a concurrent algorithm quite
+often something is not yet available
+because there's a block in action but
+then you end up blocking more threads
+because you've also conflated in there
+as you are you empty are are you full
+and as a result you block more threads
+and the whole thing just spirals down a
+whole we should not have used the normal
+collections api's for the concurrent
+stuff concurrent pro
+is fundamentally different than single
+threaded programming from the different
+concerns yet we can fellated those
+together because o it looks easier kind
+of looks and smells a bit the same it's
+not it's very very different so kind of
+quickly enclosing Ellison just recently
+announced that we're going to get the
+new axe one instances early next year
+we're talking to over a hundred V courts
+two terabytes of memory we're gonna have
+many spinning wheels in these boxes
+how we gonna communicate how are we
+gonna have our algorithms work together
+we need to start fundamentally thinking
+about this and we need to work out
+what's blocking what were the contention
+points how we going to scale up because
+our current approaches are not scaling
+up and they're not working where can you
+find some of the code for this there's
+benchmarks are all up on github along
+with the a groaner and our own projects
+that have all of the data structures
+that have been listed here and on that
+thank you very much and I think we're
+nearly out of time
+do we have any questions so when you're
+talking about the air on shared memory
+file thing earlier and you're saying you
+might have one producer that moves the
+tail pointer beyond the end of the file
+yes then that has responsibility for
+moving to a new file mm-hmm could that
+potentially stall and block all the
+other producers yes so that is a
+potential stall so the one that gets the
+responsibility if there's others are
+coming behind it and they're wanting to
+use that new file they've got a weird on
+that rotation happening so only things
+we've done is we put a lot of effort
+into making sure that that rotation is
+as cheap as possible in fact it's a it's
+a rare reference flip so it's an
+incredibly cheap operation to do there
+is always the possibility that the
+thread that's doing that takes an
+interrupt whilst that's actually
+happening so so from pure sense it's not
+perfect from a measured sense in real
+world tests it looks pretty good yeah
+you mentioned the intrinsic in Java rate
+forex ad did you just tell us a little
+bit more how do you yes so if you want
+to get a lot of atomic operations in
+Java the best recommended way to do that
+is to use the atomic so atomic in the
+Tomic long atomic reference or thought
+you've got the cows operations to get an
+art increment and get all of those sorts
+of things underneath your call I think
+called unsafe and this is all happening
+off heap so you can't use the standard
+built-in api's you can get out on see if
+directly using reflection and it's got a
+method called get a nod you can provide
+it the address that you're gonna do that
+operation on I would recommend you don't
+use that directly because of bounds
+checking and other things so they they
+are growing a library we provide we
+provide thing called unsafe buffer which
+does bounds checking and things in there
+and it will let you get at that so you
+can just construct it on see if buffer
+you can give it a map by buffer a normal
+5 buffer on a rail whatever and then you
+can perform those operations directly on
+that come Java 9 will hopefully have our
+handles which will let us do this as a
+first class thing but until then we have
+to be a little bit naughty questions
+thank you all</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

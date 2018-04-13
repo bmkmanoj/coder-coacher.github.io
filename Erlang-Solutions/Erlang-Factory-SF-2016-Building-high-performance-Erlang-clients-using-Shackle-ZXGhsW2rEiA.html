@@ -1,0 +1,745 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Erlang Factory SF 2016 - Building high performance Erlang clients using Shackle | Coder Coacher - Coaching Coders</title><meta content="Erlang Factory SF 2016 - Building high performance Erlang clients using Shackle - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Erlang Factory SF 2016 - Building high performance Erlang clients using Shackle</b></h2><h5 class="post__date">2016-03-11</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/ZXGhsW2rEiA" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so today I'm pretty happy to be
+presenting a shackle it's something I've
+been working on for the last year and
+basically like he said I work at a
+company called Adhir and our main
+product is a real-time bidding platform
+and and for those who don't know what
+that is basically it's to buy ads in
+real time on the web and the fact that
+it's real time there's time constraints
+so performance is very important and the
+load is massive so we have hundreds of
+thousand requests a second so
+performance is crucial for us so the
+problem here we're trying to solve
+building clients is basically a client
+to talk to a server so we have an
+application we want to talk to a service
+how can we make this as efficient as
+possible a service for shackle basically
+it's something that communicates over
+socket I can be a text protocol or
+binary and then it can be a synchronous
+or asynchronous protocol and so for
+example it could be Cassandra memcache d
+kefka HTTP to the goals when I started
+this project at four goals so the first
+one here's the reusability so a tad gear
+I've been maintaining six or seven
+different clients for different services
+that we talk to and whenever we'd find a
+performance bug or regression in one we
+have to fix all the other one so we came
+really complicated to deal with that so
+my first goal really was to rip out all
+the reusable parts and build a framework
+with that two other points speed and
+concurrency speed obviously is kind of
+the time the request takes concurrency
+is how many requests you can do at the
+same time and then finally safety and
+our system we try to not let it crash
+just because usually that code pad is
+slower
+normal code path the old might you might
+be logging you might be generating stack
+traces and if that happens when you're
+answering like twenty thousand requests
+a second and you're crashing 20,000
+times a second that affects performance
+quite a bit the other part of safety is
+more on the Prophet the protection of
+the vm itself since the the queues are
+unbounded we need some sort of back
+pressure so that we don't run out of
+memory so if the service slows down or
+there's an issue with the service we
+don't want to affect the rest of the
+system so I'm going to go through kind
+of the design process starting from the
+most naive implementation to the current
+implementation so really the the most
+basic thing you could do is just in your
+process when you want to do a call to
+service open a socket send your request
+receive and then close the socket and
+that's it that works if you have to do
+like five requests a second that's fine
+but obviously there's problems a lot of
+overhead doing the connection or opening
+the socket there's also can be set up
+overhead if for example your protocol
+needs to be initialized or you want to
+set default values and there's no
+connection limit so you can run out of
+fds and of memory so design to I guess
+this is kind of the basic Erlang 101 so
+instead of keeping your socket in your
+process well you have a server a gin
+server that keeps that socket in the
+state and therefore you don't have to
+reconnect and open every time this works
+but then how do you find your server so
+if you only have one connection it's
+fine you can just use a register name if
+you have multiple connections then you
+either need to know how to generate
+those names or you need to keep a list
+of all the pits available so
+the approach to this is to introduce
+another gin server which is a pool
+manager and this pool manager will track
+all the servers for you now the problem
+with this approach is now you're sending
+two messages per request and if your
+pool manager is slow you're adding
+latency so and also the the pool manager
+is basically a single point of
+contention if it blocks or anything all
+your requests will be affected so how
+can we solve this one solution is that
+instead of using a pool manager we just
+store a little bit of information ETS
+and from that information we generate
+the names of the servers so for instance
+if I had a pool that's called marina and
+I know there's four servers and the pool
+I can know that if I always use the same
+structure left there's four servers
+Maryna won maryna to Mir near three and
+I can auto generate those names and just
+send the messages directly to those
+gents servers ok so we've solved kind of
+the finding the server now we need to
+improve on concurrency so I didn't show
+the code for the gin server but the
+naive approach in gen server would be
+that basically you get handled call you
+send the request receive the request and
+reply directly the problem with that is
+obviously it's not really concurrent
+because it can only handle one request
+at a time so a trick you can do is
+actually not reply in the handle call so
+you send the request and Q who did the
+call in a queue that you keep in the
+state of the gin server and when you
+receive the data if you're an active
+mode you can queue out who did the
+initial call and just send the response
+directly so now we're not
+locking on actually receiving the
+response and we can do multiple requests
+per jen server at the same time so now
+this is our new design now it's
+concurrent so if we have what we can do
+as many requests as we want but do we f
+safety and in this case no because now
+since everything is a Singh we have no
+guarantees of any kind of back pressure
+so if the server slows down if anything
+happens in the system it's possible that
+you'll just thank you million messages
+run out of memory and the vm dice so the
+the solution to this is to use an ets
+table which we use to build a backlog so
+whenever we want to send a message to a
+server instead of just sending it
+directly we ask the ETS table by
+incrementing a counter and we make sure
+that we're not over the limit if we are
+over the limit then we fail fast and we
+just decide to reply that we're too busy
+right now ok so we fixed that problem
+now it's fairly safe but we have we can
+do better for speed gen server is great
+but there's a lot of functionalities
+that we're not using so we can actually
+just switch to using proc lib directly
+and we're going to be a little bit
+closer to the metal and the Q
+implementation from the standard lib is
+ok but switching it to like an ETS table
+is faster and also permits to do out of
+order asing protocols so the new design
+now that we have so whenever you're
+sending a message you call ETS check if
+the backlog is not full and then if it's
+not full you send the message the
+message will go to service comes back
+and back to our process
+and it's as efficient as we want and so
+we've attained basically our four goals
+from there I'm going to talk a little
+bit of the the architecture of shackle
+shackle is fairly simple so there's four
+core modules shackle pool shackle
+backlog server and Q so the shackle pool
+supports two different strategy for
+picking the clients random or
+round-robin round-robin is the default
+and again leverages ETS so there's no
+manager and there's no ETS contention
+since we're always just doing reads to
+that table and the pool itself is very
+low overheads almost constant time
+shekel backlog so the backlog protects
+from out of memory errors leverages ETS
+again no manager the way it's
+implemented it's always one backlog per
+server and it uses ETS update counter
+which is super fast and atomic and that
+has a special property that when we do
+the increment we actually get the value
+back so if we set the table to wipe
+right concurrency true we're actually
+always just doing right so we never
+block and we get the read for free so
+this is kind of to show how the backlog
+is implemented so we're using a trick
+here basically we're doing the the
+update ops at the bottom and we're doing
+two operation the first one we're
+incrementing the counter by zero and
+then increment in the counter by one but
+we limit the max value can only be as
+large as the backlog size and when we
+reach that value we set up the backlog
+sighs so what this does is basically
+when we do the increment if both values
+are the same it means that we weren't
+able to increment and that we reach
+the backlog limit if the two values are
+different then we were able to increment
+and we can actually send a message to
+our server so shackles server basically
+uses proc lib if you're not familiar
+proc lib is kind of the the behavior gen
+server implements and all the gin event
+and all that it gives you some nice
+things like tracing of the state and a
+supervision also the shackle server
+basically it's been optimized so that
+everything in the the hot loop as
+asynchronous nothing should block ever
+it should be as fast as possible it uses
+binary matching as much as possible I
+uses a list as much as possible if you
+can skip creating binaries you should
+and then is it's skinny in the sense
+that all the the extra work that we can
+do outside of the server isn't outside
+of the server so that again the hot code
+pad is as efficient as possible shackle
+q like I said earlier it's it's using an
+ETS table faster than the SD lib q
+module and the nice thing of using ETS
+is that the normal q is in order if we
+get messages out of order from the
+service we're screwed so this actually
+permits us to build clients for more
+asynchronous protocols like Cassandra
+and again there is no contention since
+there's always one producer and one
+consumer and it's always the same server
+so since it's that one server it's never
+fighting with anyone else to get access
+a for the locks on the keys now let's
+let's we're going to go over an example
+of actually building a client and so to
+build a client what you have to do is
+you need to implement the shackle client
+behavior the behavior is fairly simple
+there's an init a setup
+requests handle data and terminate and
+that's kind of what the life cycle of a
+client looks like when the client starts
+it calls in it and it will initiate the
+state of the client after that once the
+the socket is created you'll receive the
+socket and actually that's wrong but
+you'll receive the socket and set up and
+then set up you can set up your your
+client so let's say you're using
+Cassandra you want to set up the default
+key space that's where you would do it
+and finally we get to the good part so
+if a client wants to do a request you'll
+receive in handle requests this is where
+you're going to serialize your Erlang
+term to your protocol when you receive
+the answer back you will receive the
+data and handle data this is where you
+decode the data to the Erlang term to
+send back as a response to the the
+process and finally when the the client
+terminates if you're closing the pool
+you can clean up your state so the
+example we're going to use today is a
+simple arithmetic service so this
+service works over TCP port 8080 and
+there's a session setup and it supports
+two operations so addition and
+multiplication and so the setup is
+really simple you send text in it and
+caps and you receive response ok and
+then for the operations the operations
+are our binary so request ID which is a
+tiny int an operator and two operands
+and then the response is just the
+request ID and the results of the
+operation so we're going to go over the
+the five different callbacks for this
+product particular case so in it so like
+I said here it's to initiate or
+initialize the state in this case our
+state
+we don't need to do much because there's
+default values but so we have a buffer
+which is an empty binary when we start
+and a request counter that starts at
+zero and so if we do the setup so setup
+you receive the socket and the the state
+and when you do when you receive the
+socket is a it's set to active false so
+you can do a synchronous send receive so
+in this case what we do we do the we
+send in it if it succeeds then we do a
+receive we're expecting okay if we don't
+receive okay well in this case it's
+going to crash but their interior yeah
+that's not really good but it's a toy
+client so the you receive okay and if
+there's any kind of failure you can
+return error reason and it's going to
+shut down the client and try to
+reconnect with incremental back off
+annal requests so handle requests it
+receives the actual Erlang term for the
+request and the state so in this case
+it's a couple of operation and the two
+operands and we we pattern match out the
+request counter because we need the
+request counter to generate a request ID
+and so the request ID I'll go over those
+two methods ah in the next slides but
+basically we have a request ID and we
+generate the data and then what we
+return is okay the request ID the data
+and the updated state in this case what
+we use for the request ID is just a
+modulo left of the max that we can
+assign for the protocol one thing that
+you have to note is that the request ID
+needs to be unique for all requests
+inside the same client so in this case
+the protocol only allows up to 255 and
+therefore when we set up the backlog the
+maximum request we can set for that
+server is only 2 55 if we set it to like
+a thousand it's possible that will reuse
+the same ID and we're going to be
+confused in the queue it's going to
+overwrite the queue so protocol encoding
+for this is fairly easy so we have two
+operations add multiply add is using one
+multiply two and then the request ID
+which is generate the binary so request
+ID the opcode and the two operands and
+so that was it just to do the request
+we're like halfway done already to build
+a client handle data and old data you
+receive the data back and the state and
+the expected is that you send back ok
+and your response and the updated state
+so when we get the data we we pattern
+match also the buffer from the state
+it's possible that you'll receive data
+that it was too large for TCP packet so
+we'll be over multiple packets so you
+want to keep a buffer in your state so
+that you don't corrupt your data and
+then we call parse replies which is this
+method again since the protocol is so
+trivial all we have to do is loop around
+with a pattern match when it stops
+matching whatever is Retta remaining is
+basically your next your new buffer and
+in this case so we return the response
+is the request ID and a which is the
+response of the operation and a response
+is always a couple of the request ID
+that you assign and the the response you
+want to send back to the the collar and
+finally terminate if you have any kind
+of I don't know a timer or something in
+your state that you need to Klein up at
+then you can clean it up at this point
+so we've implemented the module that is
+our client and implements the behavior
+how do we actually start a pool so what
+you need to do is just call a shackle
+pool start you need to assign it a name
+which is in that Tom and then your
+clients which is your the module that
+implements this behavior and then
+there's 2 a 2 list of options you can
+send the first one is the client options
+so the client options these are the
+client options available so the IP or
+hostname where you want to connect the
+port the protocol protocol we support
+TCP and UDP and then there's a boolean
+for reconnection so do you want to
+reconnect on failure and if you do then
+there's a minimum and a maximum time to
+do the exponential back-off and finally
+the socket option so if you're using a
+text protocol you can not use binary if
+you're using binary then you can do any
+kind of tricks or optimization there for
+your own protocol and the the last list
+of options for the start is the actual
+pool options currently where we support
+is the backlog size so it can be a
+positive integer or infinity infinity
+was added in theory it's kind of against
+the safety pneus of this but if you're
+using UDP it's possible that you you're
+going to lose packets over the network
+and you're just going to end up with
+backlogs full that never empty out that
+way you if you use infinity and use kind
+of the asynchronous mode you won't be
+just blocking forever in busy mode and
+then the pool size and pool strategy
+pool strategy like I said earlier
+support two modes random and round robin
+so if we do run this command so the
+start what we see is that the setup was
+called
+we sent in it we received okay and then
+now we actually wanted to do the fun
+part we want to actually do in addition
+or multiplication so all you have to do
+is called shackle call the pool name and
+the actual operations you want to do so
+in this case it's just add in the two
+operon and it's the same thing for
+multiplication so if we do run the
+client we do add so you can see this was
+the first request of the client so the
+first byte is 0 because the request ID
+is 0 second byte is one because the the
+operation is in addition and then two
+operands 5 and 10 and the r you get the
+response with the same request ID 0 and
+then the the response of 15 and then
+again same thing here for the
+multiplication now we're request ID 1
+and the operation is 2 and then it's 2
+plus 6 or two times six and then the
+request ID one and we get to the 12 if
+you want to do a sink instead of calling
+a shackle call you can do shackle cast
+and it will remove the whole receive
+loop that call usually has so some tips
+and tricks so if you're building your
+own clients you should pattern match as
+much as possible it's efficient and also
+i think it's it's easier to read than
+big cases in cases so for maintaining
+ability and performance reason i had i
+suggest you use pattern match as much as
+possible using I alist as much as
+possible if you don't need to create a
+binary you'll save allocations so as
+much as possible try to be lazy and not
+create binaries another point is to keep
+your client lean and by that I mean in
+those callbacks if you can
+do the work outside of them try to do it
+so for instance some protocols they'll
+send you the size first so you don't
+really you don't need to decode the
+whole packet one is you know you have
+the whole packet you can send it back to
+the client and the client does the the
+decoding itself and that way your server
+will be able to handle more requests per
+second and if you need share state use
+an ETS table so for instance if you need
+a cache of some sort I suggest ETS and
+then again measure measure measure I've
+talked about this in previous talks but
+it's really important to measure
+whenever you make a change if you're
+Carrie if you want to be careful about
+performance it's impossible to just kind
+of guess what the the outcome of a
+change will be unless you measure so for
+this for shackle and all the clients
+I've built I've started implementing
+make target which is a make profile it
+uses F broth X which is a kind of F prof
+clone but that you can remove the sleep
+time and it does the conversion to to a
+format that you can read and cash grind
+if you if your OS doesn't support cash
+groin there's alternative there's a
+queue brandon k groin or k cash Brian
+and Q cash grain so this kind of the
+output when I run make profile that's
+what I get so i can get time for the
+whole application or per module it's
+very useful but you have to be careful
+and also measure actual time since the
+profiling if you were at lucas talk
+yesterday the the Erlang profiler
+actually has a well the Erlang tracer as
+a global lock so that every event has to
+go on the same queue so
+one thing I've noticed is that like if
+you force in lining in your module then
+you have less function calls and then
+like everything looks like it's
+magically faster but is just like less
+contention on the lock in nineteen it
+should be better but currently you need
+to take the numbers with a bit of a bit
+of a great sense a grain of salt yeah is
+that an expression in English ooh yeah
+alright and yeah so but this has been
+really useful I found some some
+performance issues between version 0.1
+and 0.2 that have improved one thing i
+did was in the in the 0.1 version there
+was an extra call back hold handle
+timing handle timing gave me information
+about the timing of the request and
+actually turns out after profiling that
+half the time of my requests were spent
+doing the timing stuff so really the
+overhead was way too big and it also
+made me realize that my my random
+strategy was slower than round robin
+round robin uses an ets counter that
+just updates the counter and wraps
+around the random was using ph 2 and the
+pig plus a timestamp and just doing that
+was kind of slow compared to
+incrementing a counter so i switched to
+that there's also i have a fork with an
+if to do the random which is actually
+faster than this but it's not merged yet
+maybe i'll merge it but i'm not
+convinced i want to introduce nificent
+this and finally after profiling i found
+out that the actual generation of the
+atoms of the name of the servers was
+slow i've tried finding like hacks
+around it but i couldn't find anything
+so
+there's a shackle compiler on the
+project that basically when you start a
+pool it uses the information of all the
+pools in ETS generates a module and so
+it's just I do a I call the pool name
+the the index of the server I want and
+it just returns me the item that was
+compiled in the module so to give an
+idea of a little bit of performance this
+is a graph for one day of memcache call
+during the day it gets busier so
+performance degrades a little bit but
+you can see that during the night it's
+about 200 microseconds and this includes
+network time which is about 120
+microseconds so it gives you an idea how
+a tune this is to do the actual memcache
+request and then usage currently there's
+two clients that are open source and
+fully functional used in production at
+add year so there's anchor which is a
+memcache decline and there's marina
+which is a cassandra 2.1 client and i'm
+working on two other clients that are
+also going to be open source boy which
+is a HTTP 1.1 client and flare which is
+a Kafka producer clients for the kafka
+producer the plan is to do kind of best
+effort at first and then work on more of
+the safety of not losing messages but
+again for our use case of sending
+hundreds of thousands of messages per
+second that's kind of what I'm going for
+first and then so this is a graph of the
+request we're doing per second using
+shackle right now adyar so peek we go
+around about 1.3 million requests per
+second and we avenged and vision this go
+of growing quite a bit in the next few
+months finally the future for a shackle
+currently there's no kind of support for
+if you
+want to do you talk to multi-node so you
+can start multiple pools but to load
+balance between those pools you need to
+implement it yourself that works but
+there's optimization you can do if you
+do it at the same time you start the
+pools so that you don't have to check
+twice which pool or twice the decision
+of which pool to take and then which
+client to take you can do it in one step
+and then I want to improve test coverage
+it's not that bad but it could be better
+and I started playing with property
+based test for it and hopefully I can
+get it fully tested and be confident for
+the future when I make changes so these
+are the links to all the projects I've
+talked about basically just go to my
+github everything is there and yeah
+that's it thanked you yet for sure there
+are any questions I plucked a little bit
+fast yeah
+repeat yeah so the question is basically
+have you thought of instead of generate
+or passing around I olas just passing
+the socket so that you don't pass the
+ILS and cause copy currently most of the
+IO lists are always generated in the
+server since it's like it would be most
+most of the aisle is generated in the
+handle requests and usually I do that
+work in the server itself so it's not
+that bad but no I haven't tried
+optimizing for coffee yet yeah so the
+advantage is basically oh so the
+question is and what are the advantage
+of using proc lib instead of gin server
+so it depends on your use case if if
+you're just doing couple operations per
+second and doesn't matter but for us
+like every cycle is kind of important so
+the gin server implements a lot of
+different features that are all in the
+hot code pad so when you're doing call
+your I don't know if you've looked at
+the code but it's there's a lot of
+different code Pat's a lot of complexity
+that we don't need in our case since
+we're kind of reimplemented that logic
+in the pool so for us it just makes more
+sense to go to something simpler and
+it's just a little bit more efficient in
+terms of number of cycles spent doing
+this
+that's a I haven't actually measured
+well I have in the past but I don't
+remember exactly the numbers it's
+probably not that much but I like to
+over optimize my stuff yes
+yeah so the question is can you
+elaborate on on how the naming is done
+for the servers so basically the problem
+we can look at some code the problem is
+that you cannot fer to register a name
+of a server it needs to be an add-on and
+because of that when like the
+information I have from the pool is just
+the base name and the index of the
+server I want to talk to so to generate
+the actual a Tom I have to do like well
+the base name plus like integer to list
+and then this list to a Tom and just
+doing that operation is fairly costly
+and so the the hack ish I've done is
+that if we look at the compiler a little
+bit basically I auto generate a module
+that's called a shackle pool util and
+its exports one method called server
+name and this server name the clauses is
+always the pool name are here the pool
+name and then the index and then the
+return is the actual server name and the
+server name its server at Tom and as you
+can see here this is the costly
+operation that I wanted to optimize out
+so instead of doing this every time
+there's a request now I compile this
+into a module and I can call it and I
+don't have to redo this operation does
+that answer your question partially
+so I actually I I registered the name to
+the server so I never do kind of where
+is the server I just send it directly
+and it uses the global or the process
+registry in the vm but I well there
+isn't like no solutions around it so I
+haven't thought about it to be honest
+but it may be been odd did you have that
+ok yeah but it's the same but it's not
+it's not faster it's nobody it's not
+like still whenever you convert it's the
+converting the list of a town that's
+expensive yet the the code checking the
+existent is the same code as creating
+like if you do list of atom or a list to
+existing at home it's exactly the same
+code bat it's just if it doesn't exist
+it exits I've looked at the code yeah
+but to finish answering your question
+that doesn't come out and profiling I
+would need to profile more with like
+system tap or something that I can get
+introspection nvm itself
+from my experience that part is fairly
+scalable but and that's kind of partly
+why i think it's fast in part because it
+only accepts at toms instead of like
+having a couple but it breaks other
+parts in the vm I've looked into maybe
+patching the vm but it's not the not
+something that can be done easily the
+pool size are actually fairly small
+since you can do a lot of operations
+concurrently so I'd say the memcache
+doing I don't know per server doing
+maybe twenty thousand requests a second
+probably has eight client with a limit
+of 248 backlog and that's enough to
+handle since the requests are so fast
+that doesn't really matter
+well if if your application is only
+doing kind of that then I guess whoa no
+I think that I don't think it actually
+we it you'd have to benchmark that but I
+don't do that the scheduler the airline
+schedule is really good so you don't
+need to kind of do that and especially
+you can't pin down processes to a
+scheduler so at the end of the day
+they're still going to travel around on
+different scheduler so I don't think it
+would make much of a difference
+yeah so currently no because we want to
+keep the connection as long as possible
+but right now i'm writing htp client
+which in normal use case you might not
+want to keep it always open so yeah that
+will be coming soon all right thank you
+everyone</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

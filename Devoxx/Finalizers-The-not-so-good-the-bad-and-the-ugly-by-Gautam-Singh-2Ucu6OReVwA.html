@@ -1,0 +1,362 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Finalizers - The not so good, the bad and the ugly by Gautam Singh | Coder Coacher - Coaching Coders</title><meta content="Finalizers - The not so good, the bad and the ugly by Gautam Singh - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Devoxx/">Devoxx</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Finalizers - The not so good, the bad and the ugly by Gautam Singh</b></h2><h5 class="post__date">2017-04-18</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/2Ucu6OReVwA" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so as I was working on the issue i
+looked at the tread done and then I saw
+something interesting what I saw was
+these bunch of threats waiting on the
+same object and among them was this
+finalizer thread and when I look at the
+stack trace what I saw was the
+application threads were actually
+waiting on finalizar class and it was
+actually initializing instantiating an
+object and during object instantiation
+it was doing something with respect to
+finalize your class and I had no clue
+what it is doing so I started
+researching about finalizes and I found
+quite a deal about finalized errs and
+i'm here to share that experience and
+hopefully be able to explain the
+performance implication of Pfizer's but
+before we continue with my story let's
+set some background first so what is
+finalizar finalizar is a class on object
+it's a class called finalized and it's a
+way for your application to tell garbage
+collector hey garbage collector before
+you reclaim my object please do this
+first and garbage collector calls that
+method for you the finalize method for
+you from a background thread which is
+qualified by the thread and it's usually
+used to do post-mortem cleanup so if you
+have like a file handler you want to
+relinquish after you are done with the
+object you can put it in finalizar
+finalize class and here's what happened
+when an object gets instantiated so
+first thing that Damien does is it
+checks whether the object is finalized
+above and the way HX is by looking at
+the class if it has overridden finalized
+method and if it finds out that the
+object is indeed finalized about it
+creates this new instance of type java
+dot languor traffic finalizer
+and associates this original reference
+as a reference and then where it does it
+registers this new class as a static
+variable in finalizer class and then
+your object plays an application
+lifecycle and once the object is done GC
+ron cey's okay this object is no more
+referred from anywhere else but is still
+referred from finalize the class in
+which case what it does is it adds the
+object to this queue and this queue is
+processed by this background thread and
+what it does is it picks up or an object
+from the thread call finalize method
+from the object and then be associated
+from finalizar class so next time GC
+dance sees okay object is no more
+referred from anywhere else and it's
+also not referred from finalizar class
+now I can kill it so it takes at least
+two GT cycle to reclaim a finalized able
+object and that is just one of the
+problem so coming back to our story when
+I look at the finalizer thread and
+finalize Ursula my lies the class in the
+stack trace I kind of started figuring
+whether this is my root cause and one
+thing I also noticed was we had
+finalized errs used heavily in our
+application there was a pattern where
+like finalizer were written all over the
+place but I wanted to get some numbers
+behind my hypothesis so what I did was I
+did a benchmark so I used a match for my
+benchmarking it's short for Java micro
+benchmark honest it's an awesome tool
+for benchmarking and I'm not going to
+cover my the source code for benchmark
+but it's available through my github
+repo so check it out and when I ran it
+on my system why found out was the
+average time per object creation was up
+to 7 times 2 600 times slow for
+finalizes than for non fine lasers and
+whatever where the sign was going it was
+mostly going in doing GC what I found
+out was the GC time for finalizer
+benchmark was 50 to 200 times more than
+non fine lasers and the allocation cost
+per object for finalized errs are worth
+three times more than non finalizer and
+so just imagine just by adding a minut
+method in your class could actually
+start costing you three times more for
+your object so it has a huge
+implications but when I found out these
+numbers i was kind of sure that this is
+my root cause but then the other
+challenge for me was to make this change
+and we had these 50 plus classes which
+has finite method overridden and all
+they were doing was like setting this
+member were you able to know most of the
+time it's it it's like somebody is on
+his deathbed and you are coming to claim
+his state it's cool so don't do that so
+what I did was I actually changed this
+one class which was heavily used and
+then I thought of running some load test
+so this was the baseline before my
+change when i ran the load test I
+captured the performance metrics and
+this is actually dinitrate that I used
+and what I saw was the garbage
+collection time was up this yellow part
+is was approximately five percent of the
+total execution time before my change
+and after my change guess what garbage
+collection didn't happen it happens but
+like it's minuscule so it's like hardly
+visible so that gives me confidence and
+I put this change in production and I'm
+glad to report that after we put the
+change in production we never have to
+restart the server
+in P cars so as we see finalizes are not
+only bad they can actually bring down
+your application performance to its
+knees so let's talk about the problem
+and Joshua boy in his book effective
+Java actually kind of condensed the
+problem in this simple sentence
+finalizes are unpredictable often
+dangerous and generally unnecessary so
+that object Reese erection is kind of
+the root of all evil with the finalized
+it because of this jbf has to handle
+finalize the Bell object differently and
+it is the fact that finalize the
+finalize method can accidentally or
+intentionally reset an object from dead
+like in this class we have this static
+reference and what finalizar is doing is
+giving this pointer to the static
+reference and making this object live
+and that can happen and JVM has to
+handle it and the way it handles it it
+runs TCC's finalizer is no more in use
+adds it to the queue call finalize
+method on the object and then GC happens
+again it checks ok finalize method
+method is called on the object and
+object is not resurrected so that's why
+it takes 2 GC cycle to claim these guys
+and then as we see in the benchmark it
+increases the allocation cost and not
+only allocation cost in terms of memory
+it also increases valuation cost in
+terms of CPU utilization because
+finalizar are when finalizes are created
+you have this new instance of Java dot
+length or trackback finalized are also
+getting created that increases your
+memory utilization and finalizes are
+actually called phylite method is called
+from the finalizer thread which is going
+to share
+resources with your application thread
+so if finalized the thread is doing too
+much then guess what your application
+thread will suffer and this is where
+things started getting ugly finalizes
+can cause more GC just by the fact that
+fine lasers are held up in memory longer
+at least 2 GC cycle and I when I say at
+least it could be 2 3 4 money so what
+happens is they can limit your
+allocation space and if you have limited
+allocation space that's what you'll have
+more frequent minor GCS and when you
+have these objects held up longer there
+is a possibility that these objects will
+get pushed to old gen if you are using
+generational garbage collector and most
+of us does so what will happen that you
+might hit a full GC and you would never
+ever want to have a full GC when users
+are accessing your system it can take
+pause of several seconds even several
+minutes sometimes and then there is no
+guarantee when finalizes will be called
+or it could recall at all as there is no
+guarantee in Game of Thrones who is
+going to survive the season or this so
+this is where things actually gets more
+ugly like what will happen is if you are
+doing any time sensitive operation in
+finalizer there is no guarantee if it
+will be called immediately means it
+might be called several second several
+minutes later as it's done
+asynchronously and also there is no
+guarantee which order they will be
+called so for example here what we have
+is we have this output stream wrapper
+which has a reference to a file output
+stream and when the parent object is
+going to be available for garbage
+collection the stream object is also
+going to be available for garbage
+collection and
+team also has finalised method so what
+will happen if screen finalize method is
+called first you'll come here stream is
+already closed you will get an exception
+and what happened if there is an
+exception for from finalizer it will
+ignore everything else so if you have
+anything else after that let's say if
+you have a native memory you want to dsl
+locate it won't be called it not even be
+reported like the with finalizer one of
+the problem other problem is it won't
+even reported in your log so if there is
+an exception it will be totally ignored
+and this could be your finalizer thread
+I'm blocking everyone else though
+finalizar thread are low priority thread
+like what I found out in our application
+that the Java a year for jboss the
+worker thread has priority of 5 and
+finalize the thread have priority of
+eight so finalize the thread are
+actually little higher priority than my
+vocal thread so these kind of things can
+happen if any object which has finalized
+method overridden is a multi-threaded
+object because my lighters are called
+from a separate thread and that's where
+not where they are created so you can
+have these concurrency issues and
+sometimes finalizes are called earlier
+than you think like here this code can
+be optimized by compiler to convert this
+dot stream into a single load and after
+this line this is not going to be in use
+and what will happen is if GC happen
+actually this object can get garbage
+collected and finalize method can be
+called and what will happen here it will
+blow up on you so these kind of things
+are can happen it won't happen very
+often but it will happen and what you
+can do is you can put a synchronization
+block around it in which case your
+stream finalize method will
+wait because this will have a lock on
+the stream object in which case you will
+be safe so what happened is a JIT
+compiler has several optimization that
+it does and one of the optimization it
+does is it can actually convert if you
+have multiple calls of the same object
+it can convert it to a single load and
+kind of cash it so this dot stream can
+be actually converted to a single load
+and then in this case this is actually
+not going to be used in the second line
+so it will directly use the cast object
+and call right on it and then finalizes
+are bad right they are terrible so why
+would you ever use it unfortunately
+there are certain scenarios where there
+is no better alternative and one is
+where you want to be allocate a non
+memory resource where it's hard to
+predict the life cycle of the object
+like if for instance object is created
+through a callback method from a
+framework you don't know when it will be
+call or when it will be de-allocated and
+where there is no time criticality means
+you never want to do a time sensitive
+operation finalize method and the other
+case is where you want to have a safety
+net if you have provided a explicit
+cleanup method for instance if you want
+to deallocate a native memory that you
+are using which is associated with your
+object and you have provided this
+cleanup method but client forget to call
+it in which case you have the safety net
+but it's very important to actually log
+that as an error so that the client will
+know that they forget to call it and
+they go and fix it now let's talk about
+some of the pitfalls that you can avoid
+with finalizer one is if you don't have
+to use it don't use it don't try to help
+GC like this
+and if there are other life cycle
+methods available use it like for
+servlet instead of having finalized you
+can pretty much use destroy method for
+that and provide explicit cleanup method
+if you have control over who is going to
+call and when they are going to create
+an object you can provide an explicit
+cleanup method and do your clean up
+there and tell your client to call that
+and if you are using finalizer it's a
+good idea to avoid heavy objects with
+finalizer what can you do you can do
+kind of Java a normal database
+normalization stuff so put bare minimum
+which is needed for finalized in your
+final I zabal class and everything else
+in a different class and then refer it
+back from the other class and finalize
+bowl objects are expensive so cash them
+or have a pool of them and we use if you
+can then these are some of the
+references that I followed and they are
+good weed I have the link to my github
+repo also I've put all the examples and
+some nice graph and chart with benchmark
+and to conclude finalizer themselves are
+not bad the way they are used underneath
+and the garbage collector the way it
+handles is what makes it bad and that
+had me thinking that we as a developer's
+has to work under the abstraction of
+abstraction created by languages by
+frame works by runtime and it's that
+makes is very important to sometimes
+look under the hood and see how things
+are done how frameworks are doing
+certain things it not only makes us a
+good developers it also helps us like
+tuned to system strength and award the
+weaknesses it doesn't mean it comes out
+naturally means for me the challenges
+the more I look I found out there there
+is more to look because so but I think
+like Han Solo from Return of the Jedi I
+think
+I'm getting better thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

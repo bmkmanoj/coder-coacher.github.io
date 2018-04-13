@@ -1,0 +1,995 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Think Outside the VM: Unobtrusive Performance Measurement by Julian Squires | Coder Coacher - Coaching Coders</title><meta content="Think Outside the VM: Unobtrusive Performance Measurement by Julian Squires - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Think Outside the VM: Unobtrusive Performance Measurement by Julian Squires</b></h2><h5 class="post__date">2016-09-29</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/xP2yzaYdjpo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so I'm going to talk about unobtrusive
+measurement let's see the first first
+disclaimer of several I think during
+this talk much of what I'm going to
+discuss is very Linux specific often x86
+64 specific it's not to say that these
+ideas aren't possible to port to other
+systems but I'm just not I'm going to
+address linux specific interfaces for
+the most part let's see so first of all
+let's talk about you know tools that we
+typically use inside the vm for getting
+some ideas about the performance of our
+of our systems so you're probably
+familiar with a frothy p flame and other
+things like this the thing about these
+are all built on the tracing facilities
+in Erlang and of course as kind of we've
+heard throughout the weekend you know
+the tracing facilities in the Erlang B M
+are great they're extremely flexible the
+problem is that you know beyond a
+certain point they are they aren't all
+that safe they are somewhat obtrusive
+like I guess I'll show basically for us
+profiling in production is hard you can
+see this is sort of like a typical
+machine in its in sidle state right it's
+like a load average of 50 and and so on
+and basically in a lot of ways it's it's
+really there isn't a lot of headroom and
+it turns out especially so the systems
+that I work on are dealing with you know
+tens of thousands of requests per second
+and they're in this kind of dynamic
+relationship with other systems so that
+if you slow down one node too much you
+know cuse build up and basically things
+things go haywire and then everything
+has a very very small latency window so
+and it turns out that for the most part
+it's very easy to blow one of these
+systems away by turning on tracing let
+alone some of the other mechanisms that
+are available and i should say the
+disclaimer of course with OTP 19 which i
+have not tested yet
+there are more facilities for doing
+tracing safely and like as Lucas Larson
+talked about and I'm really eager to
+explore some of those things the more
+that we can make nvm tracing safe I
+think you know the better it's going to
+be although i will say that well let's
+talk first about basically the idea that
+so if we're not going to trace in the vm
+sort of how far outside could we go and
+i wanted to mention this this great
+paper of zero overhead profiling via IM
+emanations which is really far out there
+but it you know is the idea that you
+could actually you can actually profile
+a system just by measuring the
+electromagnetic emanations of the
+hardware first our machines are in data
+centers so that's not really an option
+in the embedded world of course there's
+various hardware-assisted profiling
+approaches I mean the closest we have
+Intel server processors have a lot of
+really handy performance counters and
+things like processor trace launch plus
+branch record things like this which are
+useful but still not exactly what we're
+looking for so we know that we're going
+to have to cooperate with the operating
+system but it turns out that this is
+actually is actually quite useful so on
+uh under linux we have while we have
+many different interfaces actually only
+scratching the surface but there are
+many different operating system provided
+facilities for doing various kinds of
+inspection of processes and things like
+that so there's ptrace have trays system
+tap and / 5 n sore for that i'm going to
+talk about briefly soapy trace i think
+is really that the traditional approach
+and part of that is because it's
+portable pretty much every unix has some
+variation on this this api it's used by
+gdb estrace p stack many tools like this
+now the problem is pete race is that it
+actually stops processes when in order
+to interview p trace has to attach to
+that process which means stopping it
+which typically for for us and just you
+know takes down takes down a node in a
+matter of a few seconds because just
+introduces way too many interruptions
+especially it's really disastrous just
+trying to estrace a system call you're
+trying to estrace a system call what
+basically happens is for every system
+call your process stops at the estres
+process gets woken up estrace does some
+work then it wakes your process up again
+and this is this is really not fast even
+if you're only filtering to a few system
+calls so Pete race is pretty much
+unacceptable for us and actually this is
+it's interesting anyone who saw eric's
+10 mins talk yesterday gave a nice
+little gdb invocation to show the back
+traces and of course this is this is
+really nice but I can't do that on these
+systems because gdb will stop that
+process just for long enough to do the
+back traces but it turns out that
+actually is enough to set things a
+kilter so Pete races out and just a note
+about proc PID ma'am so proc PID mmm is
+a special file for each process which is
+actually the memory a file that
+represents the memory of the of that
+process the address spaces that process
+but you can't read from it without
+stopping the process so it's basically
+the same as as the ptrace situation
+linux did add p tracy's recently but it
+still doesn't alleviate this problem it
+allows you to do some ptrace operations
+but not actually the things that you're
+interested and alike especially getting
+the registers getting a stack things
+like that so slightly less obtrusive you
+have F trace which is a really nice
+facility for system call tracing and
+basically sort of loosely it operates by
+sort of every I guess every kernel call
+has like a an insertion point which I
+guess is probably an op sled that you
+can specify sort of what calls you're
+interested in and then it overwrites the
+knob sled just for those calls
+and collect some data and this is
+suddenly a lot safer than estrace and
+one thing which I'll also talk about
+certain near the end some possibilities
+for this but it's very useful for
+tracing and map calls which if you're
+trying to track down memory
+fragmentation issues the alligator stats
+from the vm itself are not the whole
+story so that's really interesting but
+we're interested in more user space
+stuff so the next thing and kind of the
+obvious thing and the thing that I tried
+to work with here was system tap and
+this I think maybe is the the second or
+third disclaimer which is of course
+probably some of you out there work with
+DTrace on other operating systems
+there's a continuous competition between
+these things but it seems evident that
+especially DTrace has whole system of
+you stack helpers and things like this
+which don't seem to really exist in
+system tap it's definitely not as safe
+as DTrace or lease it has been for me so
+the way system tap works you write in
+this little scripting language it
+translates that into see that gets
+compiled into a kernel module which gets
+inserted into the running system which
+obviously already is a bit sketchy for
+your production systems but then also so
+it has it has throttling it has some
+concepts of throttling but for me it
+didn't work so well and certainly wasn't
+confidence-inspiring the ease with which
+one can take down a system with it I
+understand DTrace is safer and can do
+all the same things so that's that's a
+possibility on other operating systems
+and yeah and you can you build a vm with
+dash with dynamic trace and either d
+trace or system tap nice thing about
+this is it inserts a bunch of probes the
+couple of useful probes like there's
+these GC probes which i think are
+probably the most useful of of the the
+probes that are provided you know you
+get some information about where gc's
+are starting and ending how much was
+reclaimed things like that and that's
+actually it's not too bad probing that
+stuff into
+terms of its overhead another one is
+useful and in lib runtime tools examples
+they have this memory one which like for
+process heap grow and shrink the that is
+like slightly more expensive that just
+gives you an idea of this is what like a
+system tab script looks like and and
+sort of some of the tools that I'm going
+to talk about later I probably could
+have implemented as system tap tools I
+just didn't have the confidence in it as
+a as a safe thing to use in production
+and also it is it is kind of complicated
+hopefully that's a situation that's
+going to improve over time and so
+finally the the lease of true civ sort
+of facility that we have access to is
+the percent facility in the linux kernel
+so yeah so originally and this is why
+you have similar facilities in for
+example in the bsd s for reading the
+hardware performance counters in you
+know various processors I'm specifically
+thinking about the the Intel family of
+modern server processors where they keep
+adding more and more interesting
+performance counter facilities but so
+the original goal of / fence user space
+access to to these facilities but it
+grew the ability to sample registers and
+stack which turns out to be incredibly
+handy because also it's designed to be
+really safe so there are all sorts of
+sort of self checks and balances in that
+code especially the code where it's
+doing sampling and you know and it will
+throttle itself and there's a nice
+little sort of system by which your user
+space program gets to know that you lost
+events because it was ronald and your
+sampling too fast for the system and so
+on and you know i've i've even you know
+i felt safe enough that I've you know
+really cranked up the frequency on
+sampling and still not not taken down a
+system yet so you know it had had / fits
+save me from myself
+so that that's a really that's like this
+is already a really nice aspect of this
+and it can it can sample quite a lot of
+things although what we'll notice is the
+facilities are basically designed around
+the perf tool which is probably what
+you're more familiar with user space
+tool that comes with the colonel that is
+the primary interface for this and it's
+just well yeah and so a lot of the
+facilities for example would be really
+nice perf is the ability to sample and
+map events so it would be really nice if
+we could actually you know use this
+instead of f trace for sampling em map
+calls specifically but it turns out that
+that entire facility only gives us M map
+sis calls for executable pages because
+it's only designed to allow the user
+space tool to look at new binaries as
+they get paged in and so there's a lot
+of things like that facilities that are
+almost really good for our general
+purpose and we'll see how we can bend
+some of them for our more dynamic
+language but it's mostly really designed
+around around that and even though it is
+fairly unobtrusive and scales back I
+should mention that does also have
+overhead Vince Weaver did this great
+write-up of you know and this is kind of
+inherent in any anything that we're
+going to have that is running at the
+operating system level basically because
+/ changes the cache behavior of your
+application because it touches memory in
+certain ways you just are never going to
+have exactly the same performance and
+cache behavior as you would have
+ordinarily so obviously for really
+really performance sensitive
+applications this is not not adequate
+but you know for most things I mean if
+you're already unless you're running a
+ticklish kernel and your processes are
+running an interrupted you probably
+already have the you know the colonel
+scheduler butting in periodically and a
+lot of these effects anyways so compared
+to any of the other facilities I
+mentioned the overhead is much lower and
+so before talking about some relying
+specific things I just wanted to say
+like even for Erlang the native tool
+that are just designed for really
+oriented towards profiling c-code are
+really handy for airline code too they
+still tell us a lot about what the vm is
+doing what your code is doing perf
+itself just you know has so many
+features and also like there are various
+offshoots this brent and greg has
+written lots of tools the perf tools and
+other things that use f trace and perf
+and system tap and these are really
+useful for kind of spying on your system
+and getting getting an idea of what's
+what's what's actually happening yeah
+something I should have mentioned is
+like this is the other reason to I think
+a core reason aside from unobtrusive
+pneus to occasionally think outside the
+VM and not just do measurements from
+inside the vm is that when you actually
+see the native workload you often get a
+better picture in nvm tools can often
+hide the true nature of what's happening
+on the system and it's only once you
+actually see you know so for example
+will actually look at so perf top is
+just a really convenient interface to
+perf that you know he's like top but
+it's actually showing us sort of what
+what what what what we're basically
+every time it's sampled what process was
+running what the program counter was
+with a symbol ideally if we if we have
+it and so like in this case we're
+looking at you know you're lying vm we
+can see we've got a bunch of nifs that
+are taking a fair bit of time so
+obviously and this is a common pattern
+you'll usually see if you're actually
+bound by bytecode evaluation then
+process main is going to be at the top
+always that's the core through being the
+evaluation loop and so that's also what
+we're really interested in if we want to
+characterize the Erlang workload but
+even that said they're still really
+interesting things here we can see like
+copy struct copy shallow Earth's garbage
+collect there's often like eq
+cmp are usually in here too these are
+often really interesting because they
+often tell us for example well probably
+have too many records that were
+modifying instead of you know you know
+in creating a lot of garbage especially
+we're probably garbage collecting too
+much if Earth's garbage collect is that
+high what else you often see the memory
+allocator functions especially find
+finding best-fit functions and things
+like that in this that can often give
+you an idea of do you actually need to
+for example resize the process heap when
+you're creating certain processes or you
+know there's a lot of a lot of useful
+ideas that can come up from looking at
+that another great visualization saris
+cut off a little that sort of comes out
+of I guess it was I guess it may have
+been invented by Brandon Greg but he
+certainly has been a great popularizer
+of it is this concept of flame graphs
+they have yeah I have an interactive one
+here see if we can see anything sorry
+it's cut off at the bottom but it's this
+visualization of call stack sometimes
+unfortunately missing a lot of symbols
+but basically which is this
+visualization of how different functions
+in the within the like over this period
+of time have have spent time and what's
+really nice is there's this great SVG
+visualization that is interactive where
+you can sort of dig into the stack frame
+and see you know what what was actually
+spending time this is a bunch more
+pretty one and we can actually see the
+other thing is so the other thing that
+is really good is this also enter mixes
+user land and kernel stack traces so
+like in this one we can see that we
+probably all this is actually in wreck
+fees that makes sense but very
+frequently you'll actually see for
+example the internet the ethernet card
+driver on top of one of these stacks you
+know processing soft I or cues or
+similar and yet so this is a great
+visualization Chris and his last present
+talked about the importance of graphs
+and visualizations I think the flame
+graph is one of my favorite like sort of
+quick ways to get an idea of how time is
+being spent especially what's nice is
+you can use perf record to record this
+over the course of like an hour on a
+system for example and it reveals really
+interesting things so yeah and for those
+native tools in general there's two
+people that I really recommend reading
+everything that they've written about
+this Brendan Greg I've mentioned already
+and it is his Linux performance page is
+great he also wrote a book on DTrace and
+he gives quite a lot of talks on sort of
+these subjects mostly from maybe more of
+an SRE ops point of view but I think
+that's a really useful point of view to
+adopt for actually figuring out what's
+happening with your allowing
+applications in production also guilt na
+just because he talks quite a lot about
+how to effectively measure latency I'm
+mostly not going to be talking about
+that here but I think it's so important
+almost every benchmark I've ever seen
+that involves latency has been wrong you
+know and he points out how this is and
+talks about coordinated a mission this
+is these are really important ideas
+actually that's another thing that came
+up in the previous talk was just if you
+have a single test worker coordinating
+everything you are basically going to
+create coordinated omission at a certain
+scale so anyway they is his blog and his
+talks can say him far more about this
+than I can and he's also produced or
+interacted with tool makers to improve
+the situation but so we will into the
+second half this is the biggest
+disclaimer so everything that I'm going
+to present from here on it's kind of a
+hack it's a useful hack it's a hack that
+works for me but you know II I think
+most of you will recognize that there
+are there is there's a tower of hacks
+involved here and so I think the big
+question is how can we get rolling stack
+traces intermixed with native ones right
+and usually when I propose this to
+people you know they
+basically say give me some condescending
+lecture about how Erlang is interpreted
+and so you know it doesn't live on the
+same stack blah blah blah and I'm not
+satisfied with answers like that so
+basically a sketch of how we can
+actually do this so perf ents allows us
+to sample registers in the stack we can
+unwind until we find process main which
+is our real problem we want to replace
+process main with whatever on the Erlang
+side it's actually executing and so we
+actually use Elfi tails for that it has
+you know dwarf unwinding which we'll
+talk about in a bit dwarf info gives us
+what registers correspond to things like
+the instruction pointer process and that
+already gives us some useful information
+we might also if we're living really
+dangerously walk the processes stack the
+way that ETP does so UTP is the emulator
+toolbox for pathologists I really highly
+recommend playing with this like this is
+a great great tool for debugging it's
+basically a set of gdb scripts that you
+can run the the vm under and they allow
+you to do things like print Erlang stack
+traces in gdb and it's for debugging
+nifs and things like that it's super
+super helpful but it also gives us the
+idea of how we could walk the stack so
+first tool that we have here that's
+really handy Linux has these syscalls
+process vm read VN write v they allow us
+to read an arbitrary processes memory
+without stopping it obviously this is
+unsafe obviously this third our race
+conditions here you can't trust anything
+that you're going to read from another
+processes memory if it's running in fact
+the memory mapping itself might
+dissipate does it disappear out from
+underneath us but the good thing is it's
+super unobtrusive it really has like
+very very little effect on the process
+as long as we're not reading a lot and
+so that's that's already really helpful
+and then of course all the dwarf
+information
+so you must compile the vm with like-
+ggd be ideally there's a bunch of flags
+that GCC or klein can can take that
+really help the information they omit
+this is also like don't worry about
+mixing this with optimization flags
+especially if you use split debug
+information there's really no
+performance penalty for having this
+debug information it just makes your
+life easier so should always do it some
+other problems worth though the
+libraries really aren't great even the
+elf utils libraries lib DW FL and so on
+really aren't good and you'll see the
+big tools that I've released for this
+have their own vendors version of Elfie
+tales with a few little hacks in ish
+hopefully the situation will improve
+compilers are inconsistent of what they
+owe me at a 10-8 what tell me it
+actually should be in it of course the
+problem is what they omit you know they
+and we'll see that now in a second so
+for example so one some information we
+get from dwarf information about local
+variables so here's a bit of the dwarf
+information from process main we can see
+and I will actually look at the process
+main source in a second but we can see
+see underscore p is current process
+that's the one we're really interested
+in but unlike so you can see Reds used
+we've got a location for it location is
+red reg 12 so it's in it's in the r12
+register that's great so we could always
+whenever we're in process main we know
+that if we read our 12 we can get the
+reductions used unfortunately for C
+underscore p we don't get that
+information although it turns out well
+we'll look at that code in a bit turns
+out that we actually can find the
+register just GCC decided not to tell us
+the other thing that's crucial is we get
+this unwind information basically the
+call frame information from dwarf so
+this allows us to you know if we so if
+we if when we're using / fence to sample
+if we happen to sample right when
+process main is executing great we'll
+have the registers we don't need the
+unwind information but a lot of times
+will actually be in say Earth's garbage
+collect or something like that and we'll
+want to unwind the stack until we hit
+process main and then we'd like to have
+the registers that were active in
+process main and so the cfi information
+allows us to do that you can sort of see
+is a quite an elaborate little virtual
+machine that dwarf has that that sort of
+gets evaluated in this case it's
+actually quite simple it's just like the
+register is this offset from the stack
+but often it's actually a sequence of
+this kind of byte code for the dwarf
+sort of kwasi virtual machine so anyway
+struct process we're quite interested in
+the process and what what we can get out
+of it a couple of important things that
+are useful here that we can also use for
+checking consistency of results that we
+get CP dice it is not so useful I is
+really useful as the program counter
+stop and and hand so s top and h and r
+are quite useful so basically the
+procedure for actually unwinding the
+Erlang stack is basically you start at
+the top of the stack and you go until H
+end which is the end of the heap looking
+for code pointers that's and it's just
+it's pretty easy from the tags to
+distinguish what's actually a a pointer
+and what isn't and so process main
+itself what's really helpful here is so
+as an extract of process main we see a
+couple of things that are actually sort
+of archaically defined register with the
+register key word in c one thing that's
+interesting about these is actually
+there's there's actually if defs in the
+in the year TS code that
+on sparc actually assign these two fixed
+registers which is probably probably a
+terrible idea probably trusting the
+compiler is better but it would actually
+have really helped us if we were running
+on spark but since we aren't but still
+it turns out that GCC invariably assigns
+all these things to registers anyway so
+reg I or yeah red I is the one that were
+most interested in because it's sort of
+the current bytecode address and if we
+get that at least we have some idea of
+what airline code was executing right
+now s top of course is handy because
+sort of is slightly possibly slightly
+more accurate than the process is as top
+and see underscore p the current process
+which also gets passed passed to the
+other functions that process main calls
+and that's really helpful because even
+that's something I'll comment on a bit
+later but like in general something
+that's useful is if your workload is is
+divided into many small processes that
+kind of do small focused work just even
+knowing what process was executing is
+actually really helpful and actually
+reductions used also gets put into a
+register which could be handy I have
+some ideas of how to use that better but
+right now I don't use it so we want to
+confirm sort of where since we don't
+have register for I or CP you want to
+confirm we can sort of different ways we
+can look at that when we look at this
+disassembly we see that oh you know it
+looks like when we do SWAT the swap in
+macro it looks like we're loading a
+bunch of things relative to our 13 and
+then doing an indirect jump through our
+bx so it's pretty likely that our 13 is
+the current process and RBX is the
+instruction and sort of we can confirm
+that sort of looking at a few other
+places and seeing is that consistent
+sort of throughout different places we
+look in in process main and at least in
+this case it is you can see is
+being assigned the return value of this
+and we can see our VX has passed as the
+second argument or si and our 13 CP is
+being passed as the first argument RDI
+the return value is being reassigned to
+RBX so we're pretty sure I is RBX it so
+this this is all we need to to actually
+do the to get quite a lot of useful
+information just from our perf sample
+now if we also read from the process
+memory so there's this whole concept of
+skid right in fact perf itself when you
+get a program counter value you aren't
+guaranteed to get the exact program
+counter value and so there's this
+concept of skid which is sort of how far
+PC could have moved between you know
+when some samples were taken and when
+you actually got this thing and there's
+sort of there's all this interesting
+stuff there's this peb stuff for getting
+exact instruction pointer values that
+like that level of skid is is compared
+to what we're about to do is nothing so
+if we actually here let me go back to ya
+so you know if we're we're sampling from
+the process in memory you know that the
+the skid could be much much worse well
+you know the this is the idea of how how
+costly out how how long how far away
+could the process have gone during the
+time between when we took the sample and
+when we're going to read from its memory
+so it could be a lot luckily the a bunch
+of the values that we get to allow us to
+check some consistency and especially as
+I say like if your workload is divided
+into many small processes often this
+information is still useful although
+probably you should discard samples that
+are older than a certain amount this is
+all part of by the way a bias that are
+sort of there are many sources of bias
+here so it's important to recognize that
+this sampling is not
+unbiased and I'll talk a bit about that
+after we get back to how we so the other
+thing is now we'd actually like to
+integrate this into perf the perfect
+tool itself so perf has support for
+certain Amik maps of symbols generated
+for just-in-time compilers and so for
+example when you when you use perf on
+java it's it's customary to run a perf
+map agent which basically lives in the
+Java VM and whenever code is generated
+it sort of spits out this map that
+basically is like a dress length and
+symbol and that's enough for especially
+in the case of Java these addresses show
+up on the native call chain anyway so it
+just looks perfect just looks in this
+file to look up symbols but we want we
+want to do the same thing for Erlang
+just that we can reuse all of perfs
+lookup facilities and then we only have
+to patch the only part of proof that we
+have to patch is the part that actually
+does the unwinding so that we can ensure
+that we swap a process main with our
+Erlang bytecode address and so we
+generate this perf map now this is
+somewhere where the vm could actually
+help us out but at the moment i did it
+the hard way so we can see in beam
+ranges basically this is where address
+ranges for all of the modules exist and
+then we have this the active code index
+also the staging code index it's like
+tells us which set of ranges are active
+right now so all we have to do is
+actually peak in that at the moment I do
+it out of process with process vm read v
+you could actually do this within the vm
+it would be much simpler but anyway that
+allows us to write out a perf map which
+then we can use and perf can use which
+is it's really handy and so for example
+and unfortunately it's bit cut off but
+you know this is like typical
+sampling output and you can see we have
+this intermixed with we have native
+calls like Earth's garbage collect and
+coffee shallow intermixed with like we
+can see timer now diff is actually
+really expensive for us I guess we do it
+all the time and this was one of the
+first surprises from this was like wow
+that timer now diff is actually a
+bytecode and does a bunch of does a
+bunch of math it would actually be way
+faster especially if we know we only
+care about small like 64 bit values of
+now diff to you know to have this as a
+as an F or a Biff but anyway this is
+sort of interesting so this is this is
+great and this is this is the output of
+a standalone tool that I wrote called
+rolling sample that does all this
+there's also Erlang p stack so this is
+the one that's a bit riskier well erling
+sample dash dash p stack basically does
+what the p stack tool does except that
+it also enter mixes Erlang stack traces
+this is the one where you you'll get a
+you can get all these tools you can get
+a skid estimate it'll kill us or to give
+you an idea of how what was the what was
+the the maximum possible this amount of
+time that could have elapsed between
+when you it got exact samples and when
+you got when you read from the process
+memory a lot of the times especially if
+you don't need the full stack traces the
+whole thing is relatively exact but in
+this case these are sort of more
+hazardous but it turns out that they're
+actually usually pretty coherent and I
+find this quite useful for getting an
+idea of what the schedulers are doing
+and you can also have it print out what
+the what sis call the idle schedulers
+are are working on we talked about that
+yeah so then integrating into perf is
+still not a still not have finished
+affair the I did release my
+modifications to perf as part of all
+this but they're still kind of a giant
+hack hopefully that that's that's
+something I'm going to be using much
+more regularly
+so I expect it will improve so I'm not
+sure if you can see yeah there's fewer
+lying symbols in there and then can
+actually filter just to relying symbols
+that's really handy too because this is
+kind of an overview of what the hottest
+sort of individual functions are and we
+can actually generate flame graphs using
+this and so on I just a comment about
+how you might use so if this kind of
+unobtrusive measurement is not accurate
+right I've mentioned there are all sorts
+of biases that are introduced perf
+itself how it samples it samples sort of
+when it's convenient not in not in a
+strictly unbiased way so we know that
+all this is quite biased so what's the
+use of this well the way that I like to
+do this kind of thing is establish well
+first of all I mean establish some key
+performance indicators that are what you
+actually care about you know request
+time bid requests per second timeouts
+things like this these are sort of the
+large scale things that you can you want
+to see these things improve and then you
+know basically the tools like like
+Erlang sample in this modified perf are
+really good for developing hypotheses
+about what you know what could be what
+could be improved in your code and then
+so I like to use this to generate
+hypotheses then in a development
+environment you know right much more
+honest accurate benchmarks and micro
+benchmarks that I think reflect the
+thing make improvements there and then
+bring them back to production and see if
+there's actually a correlation with
+these KPIs and so actually and just one
+note on this something that's really
+handy so sometimes really hard to
+optimize things so if you want to first
+test is this actually a thing that
+affects performance you know why not
+instead of optimizing it pesum eyes it
+this is kind of fun is you can actually
+slow it down don't slow it down too much
+or you'll take down the system just like
+I said but it will still like in many
+cases you can see okay if this thing is
+hot and I add just a little bit like a
+little delay a little bit of extra work
+to it yeah I see an
+just drop in this performance indicator
+that i'm looking at and this is a much
+faster way to test am I on the right
+track then trying to optimize something
+and hoping it works out right and I also
+wanted to mention cause as this amazing
+causal profiler I'm hoping someone will
+adapt this to or lying at some point
+right now it's not really possible
+because it's very pthread dependent but
+it uses this idea of intentionally
+introducing slow down to simulate
+optimization so it's really worth
+checking out of course last thing about
+KPIs board good hearts law you know when
+a measure becomes a target it ceases to
+be a good measure this is deeply true
+and like if you stick with the same KPIs
+without thinking about them sometimes
+you end up with bizarre viscerally
+optimized systems I also wanted to
+mention rigorous benchmarking in
+reasonable time and related papers like
+this is like almost everything that we
+do that this is you know enough material
+for another talk later so maybe I
+promised this talk at Erlang factory
+when I talked about debugging nifs maybe
+I'll talk about this at another
+conference at some point but just the
+way that we do a lot of benchmarking and
+the statistical techniques we use are
+pretty much completely bogus Calvera and
+Jones's papers like the one of the real
+foundations of a much more interesting
+way to do this a few other things just
+quickly there's also a blame mode where
+you can say like blame and then a native
+symbol like Earth's garbage collect and
+then it tells us well here are all the
+Erlang symbols that were most frequently
+seen in the stack when Earth's garbage
+collect was at the top of the stack for
+example and that's actually pretty
+helpful for a bunch of these things copy
+struct or its comp compound it's really
+nice for singing at least these may be
+victims they may not be the initiators
+but it's still very interesting like in
+this case you can see some Bert conf and
+other stuff was like ten times worse
+than anything else for triggering
+garbage collections so that's really
+indicative allocator stats is something
+that will be in but isn't isn't in the
+release right now recon is awesome
+Fred's tool recon but it is a bit heavy
+weight when you're trying to get the
+alligators
+that's constantly so it turns out we can
+also measure those unobtrusively and you
+can use f trace to help with this too
+yeah one last thing so we could also
+sample the erlang Sam is stack itself
+from perf it's really not designed to do
+this but and so this is this is a hack
+too far but of course perf does have a
+facility by which you can sample
+arbitrary regions of memory right the
+stack so it turns out what we can and I
+did experiment with this it does work
+you can inject new threads into the vm
+using an F and have them set their stack
+pointer to the address that you want to
+read from the and then get perf to
+sample the stack right so that's what's
+going on here but of course that's
+fairly insane so I'm hoping instead so
+DPF supporting the colonel is coming
+sort of all over things and this is sort
+of has the potential to really improve
+use cases like this so hacks like that
+will probably not be possible there's a
+bunch of things that I want to do
+improve the usability right now the
+tools as released are very brittle I'm
+sorry but they're they're just like
+they've only been used by me and they're
+really you know a fairly almost unusable
+state at the moment but hopefully
+they'll improve if people actually find
+a use for them I should mention cake of
+there's going to be cake of integration
+at some point k cub is a great coverage
+tool which instead of using compiler
+inserted profiling information like you
+don't have to compile with- PG instead
+it's sampling based so the goal is to
+actually use it to integrate it with
+perf it's and this other stuff so that
+you can get coverage in production
+continuous coverage in production cover
+continues coverage information in
+production unobtrusively so that's
+that's the goal there anyway this is
+what I wanted you know first of all
+thank my employer add gear for sort of
+providing the impetus for this all the
+excuses to do it and so on and yeah all
+of this is is on github and hopefully
+things will
+proved so please you know if you're
+interested contacted me contribute etc
+yeah and thanks for listening
+yeah yeah well that's the scary thing is
+when you add a delay and everything is
+faster it's terrifying but of course it
+usually indicates there's some kind of
+contention somewhere and or all sorts of
+things or maybe that the workload needs
+to be spaced differently there's like
+it's really interesting right right yes
+it's just to clarify in case that
+doesn't hurt the question is just like
+what about when adding a delay actually
+speeds things up and of course yeah this
+is often indicative that you need to
+batch messages the more things like that
+other questions writes the questions
+about microstate accounting a little bit
+and I'm really optimistic about it
+because again this is something that is
+much less obtrusive is much less skewed
+by problem like by like all the all the
+pure Erlang tools you know are often
+skewed by things that happen kind of
+especially if you have nifs that are
+kind of disrupting the actual function
+of the vm microstate accounting an OTP
+19 promises to be at least really
+helpful for some of these things but I
+haven't I haven't used it extensively so
+but that looks really good time for any
+more question sir one cushion any
+questions nope anyway come up to me
+afterwards if you're interested thanks
+very much thank you
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

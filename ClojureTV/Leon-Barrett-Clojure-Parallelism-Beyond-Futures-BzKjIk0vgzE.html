@@ -1,0 +1,688 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Leon Barrett - Clojure Parallelism Beyond Futures | Coder Coacher - Coaching Coders</title><meta content="Leon Barrett - Clojure Parallelism Beyond Futures - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/ClojureTV/">ClojureTV</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Leon Barrett - Clojure Parallelism Beyond Futures</b></h2><h5 class="post__date">2015-04-20</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/BzKjIk0vgzE" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hi I'm Leon and I'm here to present
+parallelism enclosure so for context I
+work at the climate corporation we're
+based in San Francisco we do we model
+weather and a model plants and we give
+advice to farmers and we do a lot of
+this enclosure for me I've been working
+at climate and building weather models
+enclosure for the past two and a half
+years and I'm here presenting because I
+wrote a parallelism library called clay
+pool so the main ideas are one closure
+has quite good support for parallelism
+everything's very nice however it helps
+to know how things work there are all
+parallelism is complex there are always
+things that can bite you and so knowing
+just how they're working will make
+everything go more smoothly
+also there are a whole bunch of tools
+that help pick with parallelism
+enclosure do much more advanced things
+than the built in I'm going to talk
+about some of those I'm going to spend
+more of my time on Claypool than on the
+others not because I think Claypool is
+necessarily better but because I wrote
+Claypool and I'll be more able to speak
+about it so you'll get more benefit from
+me talking about it as far as the
+structure goes I'm going to have a
+running example a little block of code
+that all will modify with with different
+parallelism tools so that we don't have
+to keep looking at new code I'll talk
+about how future works and how P map
+work those are the built-ins I'll talk
+about some of the drawbacks some of the
+minor frustrations I've had and I'll
+talk about the other libraries and tools
+I'll start off with relatively beginner
+stuff to make sure that we're all on the
+same page I assume most of you know that
+know all about it and that will make it
+easier to talk about the advanced stuff
+so the running example is some
+computation that we at the climate
+corporation do to help measure our
+models
+so we have suppose we have a time series
+of observed data and we have a time
+series of model output but the model
+output doesn't produce just a single
+variable it produces a distribution
+right a bunch of samples and we want to
+compare how good was our model given
+that data so we compare for each time
+step and compare the observe to our
+model and we do that with this CRPS
+function and I don't want to go into the
+details of how CRPS works
+so I'll just say we map this single CRPS
+function for each time step between the
+observed and the model output and then
+we take an average so we'll reduce by
+plus and then we'll scale by by the
+inverse of the number of data points to
+get an average and this is how we would
+measure the value of a model and so
+there are a couple things to notice here
+one there's a lot of work happening CRPS
+is kind of complicated and all that work
+is happening in the map second there's a
+m-- this is a Map Reduce that's common
+in closure because it's expressive and
+that's common outside of closure because
+it's an easy way to get parallelism in
+parallelism you want to be able to
+divide your work so it can be done
+simultaneously and map is a good a good
+way to divide that so you know that's
+why hadoop mapreduce Google MapReduce
+stuff like that he's the same pattern so
+I'll start with future so I've changed
+the example to insert a future there
+there are two pieces of work that are
+being done in this example one of them
+is the CRPS calculation but the other is
+that because our input may be a sequence
+we don't know its length a priori we
+have to actually go and count each one
+and that'll take some time so to save
+time let's do that in the background
+let's do that in parallel with a future
+then in our main thread we will map
+we'll do our normal computation and
+reduction and then we need to get the
+value out of that future so we do that
+with DRF or enclosure at is a read ohm
+reader macro for D ref and so
+it just rewrites into the function DRF
+and so this happens in the background
+what exactly I mean by the background
+I'll start by digging into future so as
+we saw in the last presentation closure
+is interesting to read and some of the
+good parts are that a you can just call
+source on something and see exactly how
+it works and also it's often quite
+concise and readable so future is
+actually the source of feature it's just
+a macro it
+it's a macro in the best style that is
+it does a very simple rewrite of your
+code it puts your code into a function
+so it can be called somewhere else and
+then it has a helper function do all the
+heavy lifting in that this case that
+helper function is future call so makes
+a function to do your work and then
+calls future call well what happens in
+future call it submits your function to
+a solo executor this is Java stuff and
+Java a it's not as easy to inspect and
+be just parallelism stuff is complicated
+on the inside and so I'm going to start
+stop examining the code itself and just
+talk about roughly what happens so I
+want to introduce threads you probably
+know all about threads but I'm going to
+to just get us on the same page so a
+thread is roughly something your
+computer could be doing a sequence of
+function calls and each CPU can work on
+one thread at once so in this example I
+show two CPU cores with four threads and
+each CPU core is working on one thing at
+a time
+well what decides what it works on what
+makes it change the operating system is
+responsible for that so every there's a
+little hardware timer every so often it
+goes off your thread is interrupted and
+operating system code jumps in and says
+ok what thread do we do now
+sometimes it chooses the same one but
+sometimes it'll choose a different
+thread
+often they'll switch for fairness you
+want all your threads to get to run none
+of them to starve for CPU and other
+reason threads might switch is that
+another reason threads might switch is
+that they might need the operating
+system to do work they might need
+something to happen that they can't do
+themselves for instance if they're
+reading from a disk or writing to a
+network interface they don't have access
+to that they they do that by making
+operating system call the operating
+system will say whoa you can't do
+anything now I'll get back to you when
+I'm finished another thing I wanted to
+mention here was the difference between
+concurrency and parallelism concurrency
+is when I more than one thing could
+conceivably or two things could be
+possibly reordered right you don't know
+which thread will run at any given time
+it could be threading or could be thread
+B and so those could be disordered
+parallelism is when more than one thing
+happens at once so you can get
+concurrency even on with only one core
+only one CPU parallelism requires more
+you can actually have parallelism
+without concurrency if you run multiple
+things simultaneously in lockstep like
+what your GPU does it runs a whole bunch
+of data computations and it knows
+exactly what's happening anytime here
+i'm concerned with parallelism i care
+about getting things done faster so i'm
+going to focus on that one so threads
+threads have a little bit of overhead
+they have overhead of two different
+types one of the types is memory each
+thread has to have a certain amount of
+memory allocated to its stack it needs
+to know what data is each function
+working on and what is this what is the
+sequence of function calls so that it
+can go back to each one when a function
+returns so we don't want to have too
+many threads or they'll use up all
+around also threads take a certain
+amount of time to start they take it's
+not a lot anymore it it was tens of
+microseconds was the word that was the
+benchmark I looked at but all the same
+you don't to be creating threads
+constantly
+so to amortize those costs there's a
+common a common pattern called a thread
+pool the idea is we'll recycle our
+threads when we need a new thread we'll
+see if we've got one just sitting around
+in our pool if so we'll use it if not
+then we'll get a new one then when we're
+done with it we'll put it back into that
+pool and if it's been sitting around for
+too long we'll just throw it out it's
+not being useful we want to save that
+memory so closure uses a single thread
+pool the agent thread pool it's shared
+for all futures and agents I don't want
+to talk about what agents are it's a
+little more than I have time for but
+basically all future is run in this
+thread pool it has nominally unlimited
+threads practically it actually has max
+in it will support max in threads but
+you will run out of memory long before
+you're out of integers all right it also
+has an idle thread lifetime of 60
+seconds if the threads are sitting
+around for more than 60 seconds
+they'll evaporate one interesting side
+effect of that is that these aren't
+demon threads so if your main function
+exits these threads are still running in
+the background and the JVM doesn't know
+that they're not doing anything
+important so your your program won't
+exit so you may have noticed if you just
+create have a really small main and you
+have a future and you do it rough it and
+it's all done and then you return your
+program doesn't exit this is what's
+going on the easy answer is just call
+system exit and you won't have any
+problems so future has a few limitations
+one is that it's not useful if your
+tasks are small compared to the overhead
+every time you use a future you're at
+least touching that thread pool and you
+D ref a future you have to put it back
+in the sorry you do you ref a future you
+have to get that value so it always
+looks at leat like at least a couple
+function calls and possibly tens of
+microseconds so if you have a super
+small task compared to the overhead like
+just an Inc the future isn't going to
+help also if you want to control the
+number of concurrent
+Fred's future will just let you create
+threads as many threads that you want so
+you would have to do that man you would
+have to control that manually the one
+that I mind the most I think is that if
+you expect exceptions torque normally
+they don't work normally in in future
+they will be re thrown as a Java util
+dot concurrent execution exception I'm
+sure there's a great reason for that but
+basically it means that futures are not
+transparent in closure you can't just
+throw it throw one in and expect things
+to work normally instead something funny
+will happen so that was future future is
+simple P map lets you do slightly more
+complex things pretty easily it's really
+just a parallel map it runs roughly the
+next end CPUs plus three things in the
+futures and as I mentioned it's lazy
+it's lazy so here in the example again
+one of the big pieces of work is we're
+doing this CRPS computation on each time
+step so let's split that up let's do
+that in parallel we'll just do a P map
+and we'll reduce reduce this in parallel
+so that'll have to wait - all that work
+is done and then we'll scale as normal
+of course of course P map here we are so
+where was I P map so again let's just go
+ahead and look at how P map works
+unfortunately it's not quite as simple
+but we're going to go through all of
+this anyway this is I didn't simplify
+this code this is the actual code so
+let's look at this so n is roughly the
+number of things we want to compute at a
+time we get the number of CPUs from the
+Java Runtime and we're going to add two
+because we want to run a couple more
+things just to keep our processors busy
+then we make this map of futures this
+represents the work we're going to do
+for each task we just create a future to
+do that task but remember that map is
+lazy this this doesn't actually create
+any of those features this doesn't start
+any work happening this is just a recipe
+for how we create those features once we
+get there step is complicated and I'll
+come back to it that's where all the
+work happens so what what do we actually
+do we call step with rets those futures
+and drop in rats so what is drop in rats
+well for starters it's lazy it doesn't
+actually force any evaluation
+immediately it's just going to drop them
+when it's when it's forced and this is a
+force ahead sequence we're going to use
+this to cause the next few futures to be
+evaluated so that they'll start running
+so that more work will be running then
+the wolf then the item and the lazy
+sequence we're looking at so step step
+takes two things one is a sequence of
+futures the second is this force ahead
+sequence which are just going to use to
+cause futures to start so P map is lazy
+so of course it returns a lazy sequence
+the first thing it does is when it's
+forced is it if that is it a call
+sequence on FS on the force ahead
+sequence that causes so seek
+if if a sequence is empty calling seek
+honor return nil so it has to check that
+if there's at least one thing so it'll
+cause the first thing in it to be
+evaluated so it will force the first
+element of the force ahead sequence
+which forces the first n plus 1 elements
+of the features so again so if at the
+begin so if we start with a task with 8
+tasks and say 2 CPUs so we're going to
+so n is 4 then we're going to start by
+forcing our force ahead sequence up to
+task 4 then we're going to dereference
+the first item so we're not going to to
+continue until we've gotten until that
+first item has completed processing and
+then we're just going to recur on the
+rest of both of those sequences right so
+we're going to use F the force ahead
+sequence to keep work in the pipeline so
+again with two CPUs the way that's going
+to look is we're going to have we're
+going to have the we're going to start
+two tasks going in future the early 5
+features started and that processor roll
+will count two of them when one is done
+we'll do this D ref and we'll continue
+on then every time a task is complete a
+processor will keep working on something
+else but if that first task doesn't
+return while we're still blocking on
+this D ref right we won't start any new
+tasks until that D or F completes so
+that's how P map works so again it's
+lazy it needs to be driven you have to
+do all or force it somehow it generates
+threads is needed right it just uses
+futures to do the work that means that
+if you have multiple simultaneous P maps
+like if you're feeding one P map into
+another P map or you are starting a P
+map in response to each user request in
+your service then you could have lots of
+threads started right that might be
+inefficient also I don't have time to
+talk about chunking too much but just be
+aware that chunk if you know about
+chunking you can imagine how
+forcing the sequence of futures could do
+something surprising if they're chunked
+and it runs roughly n CPUs plus three
+tasks as I showed in the little example
+a slow task can stall that so until that
+first task completes the ret no more
+will be started P map has again the
+limitation the same limitations of
+feature because it's using features
+internally so if your tasks are small
+it's not so helpful you want to control
+the number of threads it's not perfect
+and if you one expects then still it has
+the exception problem also if you really
+want to saturate the CPU well it's lazy
+and it can block on slow tasks so that
+might be hard and if you want to
+parallel reduce well it's P map not P
+reduce it's just not going to help you I
+also have a general caveat about
+parallelism and laziness which is that
+you have to be a little more careful I
+have seen code that looks roughly like
+this where say somebody creates a map
+and does that in the future and then is
+a little bit surprised when that when
+the work happens in series anyway and of
+course the reason is that no work
+actually happens when you create the map
+it's lazy similarly if you don't force a
+P map no work will even start so
+oftentimes you want to do all you need
+to force this work
+so that's the basics that's how
+parallelism works enclosure a couple
+nice tools I want to talk about some of
+the fancier tools I'm going to start
+with the one that most people know I
+think which is core async so core async
+uses CSP channels and co-routines it
+reads a lot like go because they come
+from a similar origin and the idea is
+that you have these Co routines which
+are like lightweight threads they do
+cooperative threading and they read and
+write from channels so the channel
+transfers data between co-routines
+the main advantage is that it makes it
+easier to do asynchronous processing
+oftentimes if you are so ASA the weight
+asynchronous functions usually work is
+you give them a task and a callback
+function when the task is done they'll
+call your callback function well if in
+your callback function you want to do
+something interesting like say make
+another asynchronous call with its own
+callback well very rapidly you have
+callbacks within callbacks it becomes
+hard to read core async helps flatten
+that out it lets it your program read
+linearly so it uses cooperative
+multi-threading which means that your Co
+routines are lighter weight than threads
+but they have to they have to work
+together so core async will switch
+between Co routines every time one inter
+interacts with a channel only at those
+times will it switch those are backed by
+some number of by some thread pool
+I believe it's 48 plus your number of
+CPUs and so each of those threads will
+be running one co-routine at a time and
+when it hits a channel it'll switch to
+it possibly switch to a different
+co-routine so because of that core async
+is mostly for concurrency and asynchrony
+not parallelism you don't want to block
+its threads because again the
+co-routines aren't threads if you block
+it
+work if you bought too many threads it
+won't be able to keep working so you
+don't want to say do long sequences of
+computation between interacting with
+channels and you don't want to do
+blocking i/o between interacting with
+channels however it's very easy to work
+on wait on other work and query sync
+will let you spin up worker threads to
+do some of those things you also can get
+parallelism using a sinks pipeline
+function which runs a transducer between
+two channels with parallelism n which
+means roughly it runs a pea map between
+two channels with a fixed amount of
+parallelism that you decide and that
+one's useful for CPU based parallelism
+if you want asynchronous parallelism you
+need pipeline async and if you want
+blocking i/o parallelism you need
+pipeline blocking so I don't find it
+maximally elegant but it certainly can
+do the things you need also exceptions
+will kill your co-routines if your ko
+routine is doing some work and then it's
+going to write to a channel but it
+encounters an exception first it will
+never write to that channel and that can
+mess up the flow of your asynchronous
+program so you have to be a bit careful
+with that so now I want to talk about
+the library I made which is claypoole so
+my motivation was basically the issues
+with pea map that I described I wanted I
+want to get I want to use parallelism to
+get as much work done as fast as
+possible with as few restrictions as
+possible and I want to control the
+amount of parallelism so for starters
+claypole provides a pea map that will
+use a thread pool so you can create your
+own thread pool office of a fixed size
+and more than one pea map can share that
+thread pool
+they will only create tasks they only
+create futures inside of that thread
+pool so that you won't explode the
+number of threads if you do multiple pea
+maps one one side effect is that you
+have to manage
+your thread pools yourself the JVM will
+not clean up thread pools for you alas
+instead you have to manage them so
+Claypool also comes with some tools for
+Auto managing thread pools one is that
+if you give a number to pee mat it will
+create a it will create a thread pool of
+that size and destroy it when done and
+also you can use a macro with shut down
+that will take that will clean up your
+thread pool when it's all done
+so clay pool is designed to help you get
+things done fast by default it's eager
+don't use on on an infinite sequence if
+you don't mean to do an infinite amount
+of work the output is an eagerly
+streaming sequence not a lazy sequence
+instead it's a sequence where as things
+already they become available but if you
+try to access something that's not
+complete it will block so the work is
+being done for you you don't have to
+force that sequence and it'll become
+available as soon as possible clean pool
+importantly from my tap tasks doesn't
+slow on slow tasks so for example just a
+really simple small example showing some
+variants in your tasks do all P map and
+sleep a random number from 1 to 10
+milliseconds if you're if you're doing
+that built-in pima average is 5.6
+milliseconds per task that's the average
+amount that's the average number of
+milliseconds per task plus a little
+overhead because sleep isn't sleeps
+timing isn't perfect claypoole p map
+does 5.6 milliseconds per task per
+thread the same but paralyzed
+however built-in p map is a little bit
+hindered by that variance and averages
+7.7 milliseconds per task because
+sometimes it waits on the slowest task
+well the fast asks get completed so
+Claypool has a number of simple nice
+things for instance you can chain
+sequences those streaming sequences data
+will stream through all of them you can
+share the same pool in your p maps or
+you can use different pools clip will
+also let
+you use all of the built-in all of the
+core parallelism functions such as
+future and p-values
+now when you just p-values but it exists
+so it's implanted all right with a with
+a thread pool and it will use futures in
+that thread pool also I don't I didn't
+know why you couldn't write parallel
+fors I often find for easier to read
+than a map and so you can write a
+parallel for with claypoole
+however only the body will happen in
+parallel parallel it was much easier to
+write that way so that so that the stuff
+in your bindings doesn't happen and it
+happens in serial people also has
+unordered functions available the idea
+is that with an unordered function is
+that you get your output as it's
+complete not in the order you gave it to
+it that's helpful for instance if you
+have some say network process and you
+want to get some data and start
+processing it as soon as possible that
+way you'll get that you'll get the first
+task immediately and can start handling
+that there are also lazy functions
+available they weren't my top priority
+but they can be better for a couple of
+reasons including they can be better for
+chaining tasks if you run a faster P map
+into a slower P map and they're both
+eager then a buffer will gradually grow
+between them using lazy P maps although
+they have that or you using lazy P maps
+prevents that although then your
+sequence can block on slow tasks so if
+you want to do it that way you
+absolutely can a few minor bonuses
+exceptions get re thrown correctly so
+for instance if you encounter an
+exception in your P map you'll get that
+same exact exception on the outside of
+it
+it also eliminates pema or Claypool
+eliminates chunking so again if you know
+what chunking is you don't have to worry
+about that
+and as a bonus that isn't the most
+highly used feature of claypoole you can
+have priorities on your tasks you have
+to create a separate priority thread
+pool but then you can give each task a
+priority and they'll be done in roughly
+that order it can only sort between sets
+of tasks that are already realized so
+for instance irrigates if it's getting a
+lazy sequence or a streaming sequence it
+will only run the highest available
+priority when it has that chance okay so
+that's Claypool so I've got a couple
+more libraries to talk about one is
+reducers so reducers is a closure core
+library it's gradually being replaced by
+transducers but transducers doesn't have
+parallelism so I'm going to talk about
+reducers again in our example we want to
+compute our CRPS and sumit so we're
+going to use reducers map and reducers
+fold reducers does give us a parallel
+reduce so reducers uses Javas fork/join
+pool for its parallelism which means
+it's really good for CPU bound
+operations if you want a number of
+threads not limited by your number of
+CPUs you can't get that but it does
+provide a parallel reduce very similarly
+there's a library Tessar Tessar again
+gives you parallel map and parallel
+reduce it avoids java's fork/join pool
+although it's cute apparently it
+performs a little worse so apparently
+fork/join pool doesn't give maximal
+performance so tester avoids it it's
+also designed to max out your cpu so the
+number of threads it uses will be
+limited by your CPU as the main bonus is
+that it's also distributable on hadoop
+you can send it off to hadoop relatively
+easily I mean you still have to give it
+like Hadoop configuration and Hadoop
+paths for input data and output data but
+that's because that's how Hadoop works
+it makes it about as easy as possible
+so those are the libraries I want to
+talk about
+in summary closure has built-in
+parallelism and it's quite nice
+there are futures threads from fret
+threads from that built in pool there's
+P map there are a few drawbacks that I
+talked about they're not too major but
+it's helpful to know what's going on
+there are a number of tools core async
+is designed for asynchronous processing
+and CPU loading claypoole which I wrote
+is designed to let you control very
+precisely the amount of parallelism in
+your program and to do work as fast as
+possible reducers is designed for again
+CPU loading and parallel reduce and
+Tesser also the peril reduce and Tudou
+p-- so thank you
+I should mention I'm Liana climate and
+the climate corporation is definitely
+hiring closure engineers so if you're
+interested contact me and thank you very
+much for hosting me any questions</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

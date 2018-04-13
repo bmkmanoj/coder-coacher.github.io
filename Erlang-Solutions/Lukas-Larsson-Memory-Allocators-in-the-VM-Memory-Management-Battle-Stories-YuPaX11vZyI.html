@@ -1,0 +1,772 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Lukas Larsson - Memory Allocators in the VM, Memory Management: Battle Stories | Coder Coacher - Coaching Coders</title><meta content="Lukas Larsson - Memory Allocators in the VM, Memory Management: Battle Stories - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Lukas Larsson - Memory Allocators in the VM, Memory Management: Battle Stories</b></h2><h5 class="post__date">2014-06-27</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/YuPaX11vZyI" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">okay so I'm going to talk about the how
+the language machine manages memory
+under the hood so to say not garbage
+collection not processes not message
+passing but how it allocates memory and
+how its managed and all the different
+things and a bit about why and the
+statistics available that you can use
+and I'm going to also go through a
+couple of case studies studies is wrong
+word but some some use cases where how
+you can tune the allocator strategies
+and settings and so on to make better
+use of the alligators normally the kinds
+of problems you where you want to tune
+them is there when you have
+fragmentation issues so you're not used
+entire memory so for those of you that
+don't know the a language machine has a
+plethora of different options and things
+that you can use to tune your memory
+allocation algorithms that are used the
+reason why we have a lot of different
+memory allocation algorithms and don't
+really and don't rely on the operating
+system is because in the normal one is
+relatively slow for like many many small
+allocations we will try to optimize dad
+and normally and we want to place the
+data in according to different
+strategies depending on the type of data
+so ETS objects for instance we want to
+place in a certain way because we know
+that they will live for a longer time
+and we also want to play sly coffee
+binaries in a certain way once place
+process heaps in a certain way so we
+want to be able to tune the alligators
+to behave differently depending on the
+type of data we also get very cross very
+fine-grained statistics for all of the
+different allocations so that we can
+examine assists and more closely to see
+okay so this is behaving weirdly for
+some reason we're using maybe 12
+gigabytes of memory but really what we
+the operating system is reporting 12
+gigabytes but we're really using when
+you type adding memory we only see like
+four or five megabytes of memory why is
+this try to identify the problem and see
+how we can address that and with the
+with multi-core and everything it
+becomes more these things that become a
+bit more important because we
+allocate things closer to the original
+source and control that so I'm going to
+start to go through some of the
+terminology that we use when we're
+talking about the memory alligators so
+we're going to talk about carriers and
+blocks what those are and some mobile
+and also about single block and multiple
+carriers we're going to talk on multiple
+allocation how that difference from
+single block allocations and what thread
+specific alligators are so let's start
+off with the basic concepts that we use
+when we talking about memory allocation
+then I learned not inadequate in the
+virtual machine so this is has really
+nothing to do with our language could be
+any virtual machine so we have a block
+of memory which is a continuous see
+address space of memory that starts at
+that pointer and then loss for X amount
+of bytes and this is something that the
+virtual machine can request from the
+alligator saying I want to process leap
+of 233 words then it just says I want
+this and then it uses its algorithm to
+figure that out for instance for an ETS
+table we do an ETS insert of a tuple of
+this size then the tuple itself is this
+should be about three words so three
+words of size and we insert that into
+the an ETS table there and a carrier is
+a compound structure that carries one or
+more blocks of piece of memory so around
+every block there's a carrier with a
+small header saying that when you want
+to return this carrier to the operating
+system you have to do use this kind of
+algorithm so depending on how it's a
+request from the operating system and
+normally the carriers are the units that
+are requested from the operating systems
+and unblocks a place within those
+carriers so that we can reduce the
+amount of sis calls that are made and as
+time goes on you insert more and more
+small blocks within this carrier so we
+get another block here and a big block
+there once deleted so you can see we're
+already starting to have some
+fragmentation issues here because we
+cannot fit any arbitrary size finger and
+then it might end up looking something
+like this so that's carriers and blocks
+in a nutshell
+so you have carriers that are carry the
+blocks that are used by the virtual
+machine now as I said here we can have
+one block or more within one and we
+distinguish these in the virtual machine
+saying that okay so we have either a
+carrier which can only carry one block
+of piece of memory something that's
+usually very big a continuous chunk of
+memory and we distinguish these from
+from carriers that can carry multiple
+blocks or something small like the small
+earth subjects that we saw an example of
+a big object this may be a fe binary
+something like this / default the
+definition of a large block is 512
+kilobytes so quite big so normally most
+of the things that you allocate would be
+will be placed in a multi book carrier
+but if you're for instance receiving
+data from a TCP channel and saying okay
+I'm going to receive one megabyte of
+video stream data at a time all of those
+will be placed in Singapore carries you
+can control how big you want them to be
+with this switch there plus m and then
+the type so if it's a binary or ETS or
+if it's all that you want to control and
+then saying Singapore carrier threshold
+and then a number in kilobytes normally
+when you have this you want to have
+quite most of your data in multiple
+carriers so depending on the size of the
+data this is one of the parameters that
+you might want to have a look at to not
+tuned in to make sure that you have a
+fair amount of data in the multiple
+carriers over there you can also control
+the size of the carrier so when you're
+adjusting to say for instance the normal
+size to believe the of multiple carriers
+they grow from two megabytes to eight
+megabytes / a life span of 10
+generations so the first one will be 2
+and then 10 a tenth closer to eight
+megabytes and so on and so on but if you
+adjust the threshold you want to also
+adjust the size of them so that you have
+a some kind of a relation between two
+with the different things
+and that's what I want to say about that
+okay so going on along the different
+allocator types that we have so there's
+a bunch of them there's the ones that
+you should recognize it's the heap
+allocator the binary allocator the
+driver allocator so that's anything
+that's allocated within a port not nifs
+but ports port programs linkedin drivers
+and the ets allocators we distinguish
+between these different types and
+there's also internal emulated ones
+that's the temporary short-lived
+standard lived and long-lived and
+there's also a fixed size alligator for
+things that are fixed size like the
+process control blocks of each process
+in a line more monitors or something
+like that so things that are fixed size
+we can allocate a lot better some
+examples of the different things that
+are not obvious so temporary we have
+like live 4a c function scope we have
+something like near the temporary root
+set for garbage collection when we're
+doing decoding or distribution messages
+that's kind of things is temporary the
+standard lived its links monitors and so
+on and short lives it's match
+specification so they live for some
+along his iterations or something like
+this function calls timers file
+descriptors and longest code atoms and
+so on fixed port control block process
+control book all of these are defined if
+you look in the OTP source code in Earl
+I looked at types everything is defined
+there so you can see what type of memory
+is this which category does it fit into
+which ones are available and so on you
+can also get information if you start
+your emulator with some specific flags
+that I think is M Capital m is when you
+get an instrumented emulator then you
+can see specifically within these
+different categories where you're using
+your memory so memories so if you have a
+you see when you do a long memory and
+you see you have a big system part you
+can break that system part into these
+different categories and see okay which
+ones are there they're not enabled
+by default because it's quite expensive
+to run in production so didn't want to
+tell more no ok so the next thing I want
+to talk about is the multi block
+alligators so single block is very easy
+so you don't have to have any
+arrangement strategy of a single block
+within a carrier because it's just you
+start at the beginning and you allocated
+there we have a bunch of different
+alligator strategies for the multi-block
+one's current count seems to be 767
+something like that and we seem to be
+adding at least one every major release
+almost and we have two different
+categories of once Oh of the month
+they're the ones that are block oriented
+so they are sorted on a cross carriers
+among the blocks in different ways so we
+have a best fit address order best fit
+and so on if you want to know how they
+work look up the wikipedia page they've
+quite describe done quite well the
+carrier rented ones are once that were
+introduced in was it are 16 b 01
+something like this and they first sort
+on carries and then sort on blocks in
+order to be able to easily take one
+carrier and migrate them between
+different scheduler interest instances
+and before that was not possible with
+the block or oriented once it's very
+hard to extract the blocks there's a
+specific carrier out of the block tree
+in fact we think it's so expensive we
+not we haven't implemented that
+algorithm at all but when you have them
+carry oriented you can just take a carry
+and carry it on to another scheduler so
+an example of what Abby's best fit la
+might look like you have two carriers
+here a blue and a red carrier where the
+blue and the red ones are the ones that
+are being used builds up with tree that
+looks something like this that's ordered
+by size so if we apply the sizes we have
+something like this we see the leftmost
+is the one that's the smallest chunk and
+then the biggest one is 21 on the
+rightmost side and these almost all of
+them are
+balance red black trees implemented in C
+so just to give you an understanding and
+then the other algorithms are variations
+on how you order these different things
+but it's basically at research to figure
+out which ones are and you can change
+depending on how you want them to be
+because some more more CPU intensive but
+make values of memory and some are less
+CPU interns different ways now when
+we're requesting carriers from the
+operating system we have two different
+ways of doing that we have what we call
+a segment alligator so the M cyclic it's
+on Linux it uses em map and def 0 so it
+not maps from def 0 well they're on
+Windows is uses virtual dialogue and on
+some other operating system we have some
+other techniques to map long segments of
+memory and these are usually a line
+segments of a 2 to 8 16 megabytes
+something like this syslog normally maps
+just too am a lock or a POSIX number
+line or something in that regard so it's
+more of a wii u then we use drb the
+alligators of the operating system
+because malaki in itself is at research
+off within blocks and so on so while Ms
+egg is much more simple and faster to
+use yeah some moving along a bit there
+so we're going to the basic memory
+architecture well if we put all of these
+pieces together so we will get an
+overview ER we have / scheduler we have
+something that looks like this so we
+have the different allocated types and
+then we have the MCG alligator so the
+one that's allocating the carriers at
+the bottom and this we have one of these
+parallel tracks for each scheduler so
+every schedule has its own one so it's a
+lock 3 algorithm so when a scheduler
+needs to allocate something it just
+requests there goes down takes the
+memory and returns it back up again
+there's no need for any
+looks at all which is very neat the
+small mailboxes there represent that of
+course memory can be sent between
+different schedulers so when we r d
+allocating something we're allocating
+something else gather one and the
+allocating it don't scheduler too we
+need to send a message back saying hey
+please deallocate this later so we do
+message passing in between the different
+schedulers in order to avoid having
+locks on the alligators in our 16 b 01
+we added a common pool as well so this
+is another area where you can request
+carriers when you want a new one
+schedulers can abandon their carriers if
+the carrier for instance has a
+utilization of about seventy percent
+sixty percent something like this I
+believe the default is sixty percent so
+if you have a carrier that the area is
+only allocated to sixty percent then it
+will abandon that carrier to this pool
+and then another scheduler can take that
+up take that carrier from that this pool
+and to as a separate side we also have a
+locked alligator that we use for
+allocations Tanya in a sink threads and
+non-managed threads so threads were we
+don't know we don't have a known states
+or non schedulers and these also have
+made boxes because the schedulers have
+to send back to the new zone and in i
+believe it was or 16 bo3 or something we
+added yet another layer here which is
+our own a map implementation which
+basically requests you can request a 300
+400 512 megabyte chunk of memory that
+the along virtual machine starts with
+this has proven useful in places where
+we have a virtual machine of some sort
+will be we have some kind of virtual
+machines that they are language machine
+is running on so i always like virtual
+box or something like this quite neat
+and also we've had some performance
+gains doing this as well when you have a
+very
+unfriendly TLB of the hardware but yep
+so quite neat and so you can use that as
+well if you want to looking at
+statistics hopefully I'm probably going
+a bit too fast but you can follow later
+I hope so looking at the different
+statistics so there's lots of lots of
+statistics that you can get out of the
+runtime system that's cleverly hidden
+within the Erlang system info allocator
+with different parts if you just type a
+lang system info alligator you get a
+list of all the allocated types that are
+enabled at the moment or available
+rather there are settings and what
+features are being used by ed emulator
+at the moment so you can just get an
+overview or what's happening if you
+delve deeper you do something like guy
+Lang system info allocator and then you
+say the type like for instance you could
+say NSA Garlock binary log ETS a look
+and so on you get a bunch of statistics
+about the different areas so you get a
+per instance so the instance here is
+like instant 0 is the locked instance
+instance one is scheduler one instance 2
+is scheduled to and so on so you get
+fine-grained statistics for the these
+different parts and for each of them you
+get the welder version the options the
+multi-block carrier statistics and the
+Singapore carrier statistics and the
+amount of calls that have been down to
+the different areas so for instance
+something like the multi-block coercing
+your block statistics will look
+something like this I will clean it up a
+bit so it looks basically this is the
+information that you get you get the
+current number of blocks the total block
+size then the current number of carriers
+and the current carrier size in bytes so
+it will end up if you put it more nicely
+we look back this we have 11 different
+parts there and we get current the
+maximum sends the last call of this of
+getting the statistics and the maximum
+for the system normally the current one
+is the one that's most
+useful to look at because the max
+especially if you're looking at one
+scheduler the max can give some
+information but if you're looking at
+across schedulers they can have peaked
+at different types times so if you have
+a peek on one scalar here and then
+another one later in time you will get a
+peak that might be more memory than your
+system has available and this kind of
+Statistics is available both for
+Singapore carriers and for multiple
+carriers so this is an example of a
+single book care of a multiple carrier
+we can see that because the number of
+blocks is much greater than the number
+of carriers if we look for on a single
+book carrier we can see that the carries
+and blocks they're the same size same
+num amount although the carrier size is
+a big bigger because we always align our
+carriers to certain size while the
+blocks are the size they are you can
+also get information about calls so for
+the binary allocator you can see how
+many binaries have been allocated how
+many vari- have been freed and how many
+binaries we've managed to reallocate or
+actually how many courses been to
+realloc and then we can also see how
+many carriers have been requested by
+from the subsystems under different one
+so we can see that this look we have 0
+pence a guard lock we have a lot which
+is a good thing we try to get as much as
+possible into ms take a look and we can
+see quite a few calls million so it's 28
+thousand million calls it's been up for
+a while can get some statistics about
+the carrier allocators so we can see the
+number of cache segments this is one of
+the good things about the MCG allocated
+as a cash wait caches segments for a
+certain time so when a carrier is freed
+from an alligator it's put into the
+cache there so we can get access to it
+very very quickly rather than going into
+the operating system so here we can see
+the cache segments the cache hits the
+number of segments have been allocated
+the sizes and
+and lots of different things the calls
+also okay so trying to make this more
+concrete rather than being abstract I
+will try to go through two different
+case studies or cases that I've done
+where we've tuned the memory allocators
+to work better one of the cases I call
+like to call the large binary example
+and we have a fragmentation example as
+well and these are real world products
+running live in the world that had
+memory issues and came to me and asked a
+what should i do and i pointed them and
+said try this and seems to work for them
+so the symptoms of the first one is that
+this person used estrace to see that hey
+there's a lot I know that there's this
+thing that the emulator does that it
+tries to remove the amount of cisco's
+that's being made in order to make it
+faster but I can see a lot of Malik's
+happening when not this money em maps
+that I thought were happening when I did
+it estrace on my virtual machine why is
+that so looking at the statistics we
+could see that there were about 321
+million calls to binary log we had off
+those calls we had 0.4 calls to 0.4
+million calls to MC garlic and 1.4
+million calls to suicide look so we have
+a discrepancy here seeing that ok so a
+lot more calls by the binary alligator
+was done through scissor lock and MC
+garlic and if we think back what I said
+before is that the we we used the MC
+garlic no Mele for allocating
+multi-block carriers while the systolic
+is normally used for allocating singable
+carriers so in this case we can see that
+the reason for him having discrepancy is
+because we
+a lot more singable carriers in the
+binaries in the binary alligator rather
+than having multiple carriers and we
+want to have it have about I don't know
+that I say this percent is about eighty
+percent something like this in multi
+brokers but it depends on the situation
+how you wanted to have really but I I
+think a healthy system should have at
+least eighty ninety percent something
+like this somewhere in that region and
+we can see that the average single book
+size was somewhere in the region of 1.68
+megabytes so this is well above the
+threshold that was talking about before
+when you switch between multi-block to
+single box so that was 512 kilobytes so
+this here we have identified the reason
+why a lot more mad locks were being done
+because we are locating Singapore
+carriers singapore carries normally end
+up as a sis call it suicide look and
+that ends up in malik so what should we
+do to fix this so the solution here was
+to look at okay so i know that we had a
+look at the actual application code and
+notice that okay so this is a video
+streaming service it does a anticipa--
+receive of two megabytes at a time
+almost all of their binaries are like
+that so they're so their users pattern
+was that they read two megabytes and
+then did some other stuff two megabytes
+and then just keep kept shuffling data
+through it so having setting these
+alligators to be above two megabytes we
+could fix the load so that we are
+allocating all of these into the
+multiple book carriers rather than
+having a singapore carrier and then
+putting all the algorithms there and
+then we get hopefully less fragmented
+and a lot less seuss calls being made
+and this works work quite well for him
+unfortunately he didn't see any really
+performance improvements as far as i
+know but he did see a decrease in
+fragmentation of his virtual memory
+space on the box so that's good so it
+was able to allocate more stuff before
+the old system had to say no more data
+to me
+the second case they're always working
+on was for a company called Heroku they
+did some they do logging of messages and
+this is from a previous alan user of the
+year I fredda Barrett was asking me
+what's happening here so he was noticing
+that when he did Allen memory total he
+got about seven gigabytes of memory
+allocated and he did a long blog post
+about what this is so you can read it on
+the web I think it's called down the
+rabbit hole something like this and top
+show that it was using about 15
+gigabytes almost twice as much memory
+was being used by the virtual machine
+rather than what's being reported
+internally and then at the at some times
+during the night he used to get an SMS
+saying about this slogan hear something
+like this because they have monitoring
+and he has on call so you got smss and
+it was quite upset about having to wake
+up in the middle of the night to figure
+out what was happening there so we were
+we took a look at the statistics for
+what his boundaries were allocated him
+so if we look here we can see that the
+total block size of the current was at
+about what is it 1.7 jigga bites while
+the total carrier size was at about
+seven gigabytes so we had a huge
+fragmentation mismatch here so we had
+lots of carriers allocated and we we
+noticed that I all of the different
+spaces in these calorie a locator in
+these carriers were not being used but
+we can see at the maximum top there that
+when the peak happened they were used
+utilizing about ninety-eight percent so
+what he the kind of scenario that he had
+was that you got some cluster of nodes
+went down lots of logging information
+went in and you created a spike in log
+binaries and then after some
+he had a bad job that took care of these
+and inserted lots of lots of stuff into
+ETS tables so he had a pike in binaries
+that were about seven gigabytes and then
+some of them were deallocated minaton
+all of them so almost zero of his
+carriers were allowed to be recycled
+into the system and then he had a spike
+in a different subsystem so yeah some
+more statistics that we got out from
+here we can see that the average block
+size is very very small of the different
+blocks so there's no point in adjusting
+the carrier threshold as such and we can
+see that the average carrier site is
+about the eight megabyte limit of
+multiple carriers if we take the block
+size and divide it by the carrier size
+we see that yeah about twenty-two
+percent of the blocks we're acting of
+the carrier's we're actually being used
+when we took the statistics rather than
+having 93% and this is bad if a spike
+happens in some other type or on of some
+sort but if a spike happens in a binary
+allocation again that area will just be
+refilled but there is no way for another
+type to use the binary carriers at the
+moment so what we ended up doing there
+was that we change the allocation
+strategy to be I believe the default is
+the best fit so we changed it to an
+address order best fit which means that
+we spend a bit more CPU cycles trying to
+figure out a better place to put it into
+the red black tree so that we get less
+fragmentation we also decided to shrink
+the maximum carrier size for the largest
+multiple carriers in order to see it so
+that we can get more carriers which may
+which might make their scenario be that
+they could d allocate more of these
+carriers because it's more likely that
+an entire one will be free that was the
+hope anyway and it seems to have been
+working he hasn't come back to me anyway
+and this was almost a year ago now I
+think and it seems to be have made their
+system more stable so going on will some
+of the new stuff have been added lately
+in the allocator so we at the auto
+beating were quite a bit with this
+because we have a customer that has very
+restricted memory space and they do lots
+of memory allocations so migration of
+carriers of the same type was added in
+our 16 b 01 it is now the default in 17
+dot 0 so when when you're switching
+between an hour 16 to a 17 keep that in
+mind because that's one of the changes
+that's been made seems to be working
+well for almost I would say everybody
+I've seen one case where it's been
+misbehaving so far but it's configurable
+and you can switch it off if you want to
+but it really helps in certain scenarios
+where you have varying traffic load in
+different times of the day so which is
+almost everybody has that scenario so
+it's quite good to have having this
+requires the carrier oriented allocation
+strategy which are a little bit less
+efficient and that's the problem that
+we've been seeing in one place than that
+it's not as efficient in allocating the
+supercarrier is the big block that I was
+talking about it was added you can see
+there in our 16 bo3 so allocating a big
+chunk of memory that startup very
+similar to how the JVM does hit startup
+i believe so we can just say that i want
+to you i want to start this work machine
+saying i should only it should start up
+with a pre-allocated area of seven
+gigabytes and then you can tell it if
+you want it to grow more than that or if
+you want to restrict it to only that
+size
+so yeah that was my talk about this so
+yeah hopefully you've gotten bit
+whatever understanding about how the
+memory allocation stuff works at least
+got enough information to know which
+questions to ask on the mailing list we
+get very few questions of these so when
+they happen I'm always very fast at
+answering them so yeah if anybody have
+any questions please come forward yeah
+so we showed quite a bit of statistics
+how to get them how to see them and you
+meant the only real thing that I can
+inspect in my system after your talk is
+when you see system allocation should be
+around ten twenty percent comparing to
+the massage a location that's very nice
+but I believe there's far more symptoms
+that you can check yes there are I've
+been trying to write the I know fred has
+done a tool together with me that's
+called recon what does a module called
+recon a lock that takes some of the
+common scenarios maybe two or three but
+I found that unfortunately every time I
+run into one of these problems it's a
+new one something different is happening
+in the system that we have anticipated
+or that hasn't happened before and it's
+almost always something oh yeah of
+course you have to and then you have to
+go under the hood and understand all of
+the different parts unfortunately so
+basically ask you ok there's four people
+in this room that knows this stuff so
+it's not just me well I don't know if
+they're in this room but they're in on
+the conference anyway we have a question
+over there
+hi you mentioned early in a talk about
+some misbehaving to your bees is that
+architecture specific or between
+generations the CPU is even it's a
+specific architecture that I've had the
+opportunity to work with just recently
+which is behaving strangely so it's a
+very architecture specific for that we
+haven't we have seen some other problems
+but not all that much because we're
+allocating quite big chunks of memory in
+the virtual machine which makes the seer
+be behave kind of nice anyway it's when
+you have the small fragments that you
+have problems so
+you
+you mentioned i think that the second
+last slide pick up something about yeah
+the carrier oriented was less efficient
+yep why because it has to search through
+more well what it does is that it first
+surges through the carriers and then
+searches through the blocks within that
+carrier so in order to while the normal
+one searches through the blocks from the
+beginning so there's more blocks to
+search through in the other one but
+searching through carrier and then
+searching through block makes it harder
+to find be a good piece for it to fit in
+so it's a combination of fragmentation
+and performance that's been balanced
+there I don't think we've found the
+perfect algorithm to do that yet but the
+one that we have now is works okay okay
+any more questions well Lucas is here so
+afterwards say can grab him when you get
+some okay thank
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

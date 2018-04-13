@@ -1,0 +1,1749 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Automated Tuning of the JVM with Bayesian Optimization | Coder Coacher - Coaching Coders</title><meta content="Automated Tuning of the JVM with Bayesian Optimization - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Automated Tuning of the JVM with Bayesian Optimization</b></h2><h5 class="post__date">2016-09-20</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/YhNl468S8CI" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hello everyone thank you for coming I
+know it's late in the day and you're
+probably tired from having listened to a
+number of conference sessions before
+this and apologize for you know having
+to give you this presentation towards
+the end of the day and I appreciate that
+you're here attending this talk what I'm
+not going to describe today is how we
+can do automated tuning of the JVM in
+particular and for that matter any any
+device using Bayesian optimization we've
+applied this to the JVM over the last
+couple of months at Twitter and here I'm
+going to describe some of our
+experiences and what we learned the
+presentation today is being done by
+Zhang Xiao Lu who's seated to my extreme
+right Jin Jia Yu was a intern at Twitter
+with JVM engineering when this work was
+done Alex will go to my right is with
+the advanced technology group based out
+of Twitter in Boston and I'm romkey
+Ramakrishna and I work with the JVM
+engineering group here at in Twitter at
+San Francisco the material that I'm
+going to that we are going to present
+here today was developed in concert with
+colleagues at Twitter Boston as well as
+Twitter San Francisco and what and the
+technical work for this specific portion
+of the project that we are going to be
+describing today was done in concept
+with a bunch of engineers here at with
+JVM engineering as well as site
+reliability engineering here in Twitter
+San Francisco so thanks to all of them
+for contributing to this work a couple
+of words about who we are jululu is a
+graduate student in Electrical and
+Computer Engineering pursuing his PhD at
+Purdue University and I've already told
+you about myself and Alex I want to
+start by setting up a bit of background
+for how this work came about as many of
+you might know Twitter is built out of
+micro services there are a lot of micro
+services that make up Twitter so when
+your tweet lands on Twitter property you
+are talking with a with a service that's
+facing the web that service will in turn
+handoff portions of the work that is
+that are required to service that tweet
+to other micro services and these micro
+services communicate with each other and
+in concert accomplish the work that that
+is needed in order to provide the
+overall service here I have a picture of
+all of the Micra services that make up
+Twitter at last count there were over a
+thousand micro services in the Twitter
+ecosystem each of these micro services
+could might itself is typically built
+out of several instances the number of
+instances might range for smaller micro
+services which are which have less load
+they might be made out of maybe ten to
+fifteen instances the larger micro
+services might be made out of hundreds
+or even thousands of instances it turns
+out that the total number of service
+instances which are basically you can
+think of service instances as processes
+they're there they're over a hundred
+thousand service instances in the system
+at any time these instances actually can
+range in size from single JVMs running
+with 1 gig heaps or some that run up to
+60 to 100 gigs of heap so they're
+they're the sizes of the processes could
+be huge I said JVM here but many of our
+our Mike reverses might be built out of
+non JVM proxies as well it just so
+happens that many of our microcircuits
+are written in either Java or Scala and
+as a result they're translated into java
+bytecodes which run on the JVM
+these JVMs are sheduled or these je
+viens or processes are scheduled using
+maces into a into one of several data
+centers these data centers might be made
+out of racks full of heterogeneous
+hardware as you upgrade Hardware the the
+there's at any time a mix of different
+kinds of hardware in the system and so
+any of these micro service instances
+might land on either an old hardware
+running a slow CPU or a newer piece of
+hardware running a faster CPU in
+addition to that each of these instances
+or even the CPUs and when we even the
+servers on which they are running might
+be built out of of out of hardware that
+has maybe faster discs or slower discs
+faster memory or slower memory and a
+faster CPU or a slower CPU so there's
+suffice it to say that there's a large
+plurality of performance across the
+entire data center and a microcircuits
+if we were to look at a performance
+stack at Twitter so that that gives you
+kind of the background of how we are
+approaching the problem supposing we
+were trying to to tune a you know one of
+the Micra services here how might we do
+it let's look at one particular micro
+service here on the left is mic service
+a and on the right is micro service B
+and these are two instances running in
+mesas containers on top of a single
+slave a single meso slave so they share
+the hardware and run in separate mesas
+containers now these containers
+themselves might run perhaps possibly
+other processes the Micra service runs
+on top of the JVM now if you look if you
+look at the performance of this of one
+instance of this micro service it could
+be influenced by Hardware the Kern
+the mrs. container characteristics of
+the mrs. container and how it's tuned
+the JVM the size of the JVM the
+parameter settings of the JVM and
+finally the parameter settings of the
+micro-service so the tuning problem here
+in order to optimize the micro-service
+would consist of tuning one of you know
+tuning many of these layers so there are
+multiple parameters that feed into the
+performance of the service gives you if
+you think of the scale of this problem
+you know you have thousands of service
+of micro services running on
+heterogeneous hardware and in a layered
+system there's there's parameters that
+that will dictate the performance of
+each layer of the stack and the
+performance of the composite is
+determined by by by the performance of
+there's the settings of the parameters
+underneath it let's for the moment just
+focus on one particular layer of that
+performance stack so let's take the JVM
+for instance I'm a JVM engineer I kind
+of understand the JVM a little bit more
+than the other layers if I look at the
+hotspot JVM it has hundreds of tunable
+knobs here's a listing of the top view
+if I do a grep on on the on the set of
+flags it turns out that in fact there's
+a total of about 800 different flags now
+not all of these are performance flags
+or influence performance but there's a
+lot of them there's probably over 250 or
+300 different flags that will in various
+ways affect the performance of the of
+the system so there's a large variety of
+parameters in the system some of them
+are performance some of them influence
+performance others don't for some of the
+parameters the influence and performance
+is is is large so small to small changes
+to that parameter might influence
+performance greatly some of them depend
+upon the hardware so this the optimal
+setting for that parameter might depend
+upon the underlying hardware so the
+underlying hardware would influence how
+you'd set in
+in the jvm some of the parameters are
+independent of each other and others
+depend upon each other so the setting of
+one knob might dictate how another knob
+gets set in order to extract optimal
+performance so basically if you think
+about trying to tune 250 parameters to
+get your system tuned optimally it's a
+it's a huge problems an intractable
+problem no human can attempt to do it
+and even for machines this would be
+impossible because the large number of
+company comm unit or the large
+combinatorics involved we can we can
+attempt to to solve this problem through
+through hand tuning but as you know as
+the previous slide showed even for one
+layer of the stack there's a there's a
+there's a combinatorial explosion and if
+you consider all of the other layers
+involved then the combinatorial
+explosion then it becomes basically a
+practically impossible problem to to
+solve in practice a few parameter
+parameters might be handled manually but
+performance tuning is time-consuming
+labor-intensive and error-prone if a
+human were to do these experiments
+typically you would take a single
+parameter run an experiment for a day or
+two learn something from it and then go
+on and review you know change this
+parameter and go on and try and try and
+see analyze how the performance is
+changing and then kind of go from there
+and try to see how performance changes
+now because of the fact that it's a
+time-consuming and labor-intensive and
+error-prone process it doesn't get done
+often in the data center and especially
+at the scale of thousands of
+microservices it's almost impossible for
+for someone to keep up with the with the
+with this performance tuning load as a
+result what happens is that when
+microservices startup for example they
+end up cargo kelting configurations so
+if there's a certain micro service
+that's using a certain set of parameters
+others will say hey maybe this works
+well because they've been using it I'm
+going to use the same set of parameters
+so this and and maybe they'll do a
+little bit of search around that cargo
+cult I'd you know barometer setting but
+not a whole lot of attention is
+typically paid to the in this problem
+even if we were to spend a lot of time
+now take take the case of a large
+Microsoft's let's say there's one
+particular micro service that dictates
+of that controls the performance of of
+Twitter we might end up spending a lot
+of time time trying to tune it and we
+might achieve something close to
+optimality but as soon as the JVM gets
+upgraded or the service gets upgraded
+that optimal setting is no longer
+optimal it's it's probably already
+becomes suboptimal in other words any
+any setting that we find is optimal is
+optimal only very transiently and very
+soon becomes suboptimal so our
+hypothesis is that most micro services
+operate below optimality because of the
+rate of upgrade of the service and its
+underlying stack as a preview of the
+results that we're going to be showing
+we picked one of the one of the largest
+Micra services that we operate and
+through applying machine learning we
+were able to extract about 80 percent
+improvement in its performance let me
+step back a little bit and talk about
+how performance tuning can be optimized
+as a as a formal that can be cast as a
+formal optimization problem so we have
+you know you can consider a function f
+which is our performance metric which we
+are trying to optimize and this is
+influenced by parameters x1 through xn
+which are defined over some some domain
+what we have to find is the setting of
+those parameters that maximizes F that
+is the performance metric that we are
+trying to optimize that's the
+unconstrained optimization problem in
+practice there are constraints on the
+system just as I noted earlier some
+parameter settings might influence
+others so for example if I were tuning
+the JVM I shouldn't shouldn't be able to
+set the new size larger than the heap
+size it would always have to be less
+than the heap size so that's a
+simple constraint on the parameters or I
+might say that the maximum generating
+threshold that I said for the garbage
+collector should lie between 0 and 15
+there could be more complicated more
+complex constraints on the parameters
+which in you know which influence how
+you can you can tune these parameters
+all of these are can be modeled in the
+optimization tool that we will be
+talking about there could also be in
+addition to the constraints on the
+parameters themselves they could be
+constraints on the behavior of the
+system so for example even if I'm
+optimizing some performance metric F
+which is a function of the parameters
+that I'm tuning I might have other
+further constraints on the behavior so
+for example I say that I want to
+maximize throughput but I want to
+maximize it subject to latency staying
+below 5 milliseconds for example the
+99th percentile of latency should stay
+below 5 milliseconds or I must I might
+say I'm willing to increase throughput
+just as long as there are no no errors
+so that might mean that I the responses
+sent are equal to the requests received
+so those are the kinds of constraints
+you might want to model but what makes
+things even more complicated is that the
+performance function f itself might be
+noisy and non stationary and why why
+would this happen this is the this is
+something that performance engineers see
+all the time in the picture that I put
+up before there were two different micro
+service instance services instances that
+were running in two different containers
+on the same host because of lack of you
+know perfect ice because we don't have
+perfect isolation they might be
+crosstalk between the containers so that
+whatever is running in your neighbor
+might influence your behavior this would
+manifest in the form of a noisy
+performance metric there might be
+seasonal or diurnal variations in the
+environment the load might vary
+throughout the day and so and what is
+optimal at one load level might not be a
+optimal performance setting at one load
+level may not be an optimal setting
+another load level and finally we in a
+user in in a virtualized data center
+usually you don't have control over the
+hardware where you going to be running
+and depending on the hardware we are
+where you're running the optimal setting
+of parameters might might wary so if you
+just look at the the metric the the
+performance metric as a function of the
+variables of the parameters you'll find
+that it's noisy because it's running an
+either one kind of hardware or a
+different kind of hardware and the value
+of the performance metric varies how
+about how might they are typical this
+basically says what a typical
+performance tuning strategy might look
+like we would find a suitable perform
+performance metric to optimize and this
+is something that the service owner will
+typically come up with will say hey I
+want to optimize these these these
+parameters and these performance metrics
+and he might start an experiment and
+then in the course of doing that he
+might realize that the performance
+metric he's defined doesn't capture all
+of his requirements and so there's a
+process of refining that performance
+metric until you find the right
+performance metric that that captures
+all of your all of the desired you know
+all of the performance what the
+performance envelope that you're trying
+to capture and then you might look at
+that and then you might look at the
+underlying system and say okay what are
+the knobs that I have here to tune and
+obviously for example looking at the JVM
+you can't you can't pick all of the
+knobs you pick a small subset depending
+upon what you think is sensitive the
+performance would be sensitive to and
+then you use an iterative strategy both
+collecting collecting data and perhaps
+refining these knobs further here's how
+it looks how it might look
+pictorially and we've got performance
+engineer sitting there measuring
+performance looking at the data
+analyzing it and picking a new set of
+parameters to test based upon the
+results obtained note that each of these
+experiments can be a fairly expensive
+experiment so I can't actually end up
+running thousands or millions of
+experiments and maybe mapping the entire
+optimization space and pick the
+the optimal setting I have limited
+amount of time and in that amount of
+time I should be able to reach an
+optimum I don't have infinite resources
+how might I make this faster maybe I
+have a black box tuning assistant so
+instead of my running the experiment
+evaluation the black box tuning
+assistant will suggest this is a set of
+parameters to try and then the system
+being tuned will then run but that's
+before with that set which we call an
+evaluation and based upon the results
+obtained the black box tuning assistant
+might analyze this look at the history
+of the results obtained so far and make
+a new suggestion and this is precisely
+what my colleague Alex is going to
+describe so we want to build a black box
+optimization assist black box
+optimization assistant in order to speed
+up the process of tuning particularly
+here at the JVM so at Twitter we've done
+this using a machine learning technique
+called Bayesian optimization and I'm
+going to tell you how this works a
+little bit
+it's a machine learning approach to
+black box optimization and what it is is
+a method to learn the cost function
+you're trying to optimize and I'll show
+you this pictorially and in a second and
+it does so iteratively and in practice
+it works quite efficiently and finds
+very good answers to tuning problems
+very quickly and we've found that it
+works very well on a wide variety of
+problems so here's kind of a cartoon
+setup so I'll show you this a
+one-dimensional tuning example it's on
+synthetic data but I'm actually going to
+show you our actual model that we run in
+production kind of digesting this
+experiment so let's say in this
+imaginary tuning problem there's an
+imaginary engineer that over the course
+of six months or so has tried three
+different parameter settings for a very
+large important micro service and each
+of these dots might have taken days or a
+week to get right so these are very
+expensive experiments and what this
+engineer is doing is she's tuning the
+parameter that affects performance
+in order to some parameter that you know
+we've actually got control over in order
+to increase performance right so the
+x-axis is something we have control over
+it might be a flag in the JVM and the
+y-axis is performance and we always want
+to be higher right so three here at the
+very top of this plot might be three
+million requests per second it might be
+three million new users three million
+dollars in revenue it doesn't matter
+it's just something that we want to make
+higher all right so that's kind of the
+set up so how do we pick the next best
+experiment to try it would be trivial in
+a world where we actually knew the cost
+function that these experiments were
+being drawn from however this dotted
+black line which is the true function is
+completely inaccessible to us in order
+to learn that whole function
+exhaustively would take an enormous
+amount of effort so we really can't hope
+to actually ever learn the true cost
+function but what we want to do is find
+that third bump there that maximum
+around three and so this is what we turn
+to Bayesian optimization for Bayesian
+optimization is a technique that will
+build the best model that it can with
+the data that it has available right so
+the blue line there is our models best
+guess of what the true objective
+function is and you'll notice that it
+doesn't match the true objective
+function very well yet right we only
+have three points and our goal will be
+to suggest new experiments to try in
+order to learn what's actually going on
+and the faded blue there is kind of the
+part that makes puts the Bayesian and
+Bayesian optimization that's a
+representation of the models uncertainty
+at any given point along that parameter
+right so we have the ability to predict
+what we think performance will be at any
+given point but we also have a measure
+of how confident or uncertain we are at
+that point as well so that's what being
+Bayesian is all about it's about
+quantifying your uncertainty and this
+turns out to be pretty critical for the
+performance of models like this in low
+data regimes so how do we actually pick
+the next point from this model so we
+have a model but we don't yet have a way
+of actually suggesting what to try next
+and whenever we're going to try to make
+a new suggestion we have to balance two
+competing desires
+the first one is exploitation and the
+second is exploration so when we exploit
+we try to pick a point that does as best
+as we can manage given the information
+we have now right so that might be a
+point in your negative two or something
+like that versus exploration where we
+try to learn as much as we can about the
+function in the hopes that eventually we
+do better all right so that might be a
+point on the far left or somewhere
+between you know zero and four so
+there's actually there's yeah so like we
+would want to explore the kind of fuzzy
+regions right so there's actually a way
+to balance these two things pretty
+naturally and it's an old idea from
+about the 70s and it's called expected
+improvement and I'll show you how we
+calculate that so you calculate expected
+improvement in the following way you
+take your best point and you slice off
+your probabilistic model so I've got
+probabilities all along here and I just
+slice them and then I sum them and when
+I sum that this is what I get down here
+in this red line is expected improvement
+right and it balances exploration and
+exploitation in the following way I can
+kind of give you an intuition for why it
+makes sense and that's that you are
+exploring but only in areas where you
+hope to actually get an improvement
+all right so you're by slicing off the
+probability of things that are better
+than your current best you're only
+looking at things that you think might
+be better than what you've already seen
+right and I can actually show you how
+this process of suggesting works where
+we'll just basically say oh you should
+try the point where the highest expected
+improvement so if we try that previous
+point we've got another one here it's
+changed both our model and our expected
+improvement and now we're actually doing
+Bayesian optimization now we're
+suggesting experiments for a service
+engineer to try and we'll try another
+one and another one and at this point
+we've basically learned as much as we
+want to know about this plateau from you
+know negative 1 to negative 4 and you'll
+see that our model spotlights have kind
+of turned towards two separate regions
+on either side of this this area where
+we know quite a bit so we'll try another
+point there we get a bit unlucky and
+that's a point to really to take note of
+is that when you're doing these kinds of
+tuning you have to be tolerant of bad
+suggestions just because there's no way
+of knowing what's going to happen ahead
+of time so you need to be able to kind
+of quit your experiment
+so that it's not catastrophic and with
+some knowledge here we've basically
+scooted what we care about over to the
+right or to the left we try one point on
+the left and that's enough to kind of
+shift our focus back here and we very
+quickly hone in on the global optimum
+right so that is what Bayesian
+optimization actually looks like this
+was a real model the kind of one that we
+run in production but running on some
+kind of fake data I did a
+one-dimensional example just so that I
+can put it on the screen but Bayesian
+optimization works in two dimensions or
+three dimensions we routinely tune
+problems that are two or three or four
+dozen parameters that have have that
+many parameters and it still works
+efficiently as romkey mentioned if
+you've got like a thousand parameters
+there's actually no method that you'll
+find that does that efficiently it's
+just statistically a very difficult
+thing to kind of search in so there are
+practical limitations but the advantage
+of using an automated tuner even one
+that doesn't kind of work in a thousand
+dimensions is that once you get past
+three or four parameters your visual
+system doesn't give you really good
+intuitions of what's actually going on
+anymore right you can maybe you do four
+dimensions if you add color to a three
+dimensional plot or something like that
+but after that we basically don't know
+what's going on and it might take
+actually ten years to gain enough
+intuition to work in six or seven
+dimensions maybe people can do that but
+as the dimensionality grows the
+comparative advantage of Bayesian
+optimization over humans also grows
+right up to a point where it's
+statistically kind of intractable so
+that's kind of the advantage of using an
+automated approach like this but what do
+we want it to look like in practice so
+this is kind of a service Forest Service
+it's like a meta service and we kept
+that in mind when building that and we
+wanted to make this extremely easy to
+use so that we introduced the minimal
+mental overhead to the engineers that
+are already worrying about reliability
+and correctness and then when they come
+to tune something we really don't want
+them to add a whole other technology to
+their brain space it really slows you
+down or they just simply won't use it
+it's too difficult so it had to be easy
+to use that means minimal coding that
+means multiple languages whatever people
+are writing in or if
+most comfortable in they have to be able
+to interact with this service in that
+language and also because of the time
+constraints of extremely expensive
+experiments you want to be able to run
+multiple concurrently right so if your
+experiment takes ten days and you can
+run ten in parallel you've just saved an
+enormous amount of time and so
+concurrency should basically be free so
+this is what the API looks like this is
+our Python API so you import wet lab
+this is just our internal name for the
+Bayesian optimization service and then
+you define an experiment set with a name
+so you can find it later and then you
+tell the Bayesian optimization service
+the specification of your problem and so
+here for value a I've got a float from
+zero to one we developed a float B is
+similar and value C goes from zero to
+ten but it's an int so we only suggest
+like zero one two on to ten and then
+value D is an enum type so we've got red
+blue and green and the difference
+internally is for our Bayesian
+optimization service integers we
+actually learn about the ordering like
+how the function will change in an
+ordered way whereas enums we throw away
+the ordering so that we don't kind of
+confuse red blue green for zero one two
+and then this is basically the entirety
+of the API for interacting with the
+service you say please suggest me a
+suggestion when you get back as a
+dictionary where the keys are value a B
+C and D and the values are numbers in
+between these bounds or include you know
+inclusive of those options and then this
+tests my service function here is
+something that the service engineers
+have already written it's a performance
+testing suite that I'm just going to
+assume exists and it can take a
+configuration and then run their whole
+performance testing suite and then
+they've defined and thought carefully
+about the single number that they think
+constitutes performance of their service
+and here I'm just calling it service
+throughput and then once this is run and
+this single line might take hours days
+weeks cost thousands or tens of
+thousands of dollars to run right this
+might be extremely expensive then you
+say hey Bayesian optimization service
+with this suggestion you gave me I did
+this well and then this whole thing can
+be in a for loop if you want to run ten
+of these on one node or you can run this
+concurrently you could have 10 copies of
+this
+running concurrently on the same note or
+on separate notes and this concurrency
+is supported by the the kind of design
+of the service as we have it so all of
+our clients talk to a web server that
+through some middleware populates queue
+of suggestions that you asked for the
+queue is drained by an auto scaling
+group of workers that actually implement
+the machine learning numeric code that
+we have right so asynchronous a
+synchronicity from the perspective of
+the clients is basically free so
+Bayesian optimization there is actually
+pretty expensive to run in terms of
+compute time compared to other
+alternative approaches so you're not
+going to hit this end point and get a
+thousand suggestions per second you
+might have to wait a couple seconds or
+in the case of like 50 dimensions and
+then 500 previous results you might
+actually wait a couple minutes right so
+Bayesian optimizations really shines in
+the condition where your experiments are
+so expensive that you don't mind waiting
+a minute for a really really good
+suggestion so that's kind of the regime
+that we're in and Bayesian optimization
+isn't really the only technology that
+you can use to make suggestions like
+this it turns out that if you just
+systematize the process of tuning as in
+this kind of a system random search is
+actually not that bad which is really
+surprising and people actually write
+papers about this kind of in the field
+of machine learning but if you are gonna
+do anything
+investing in systematizing the tuning
+process will get you you know almost
+half the way there but doing random
+search for the actual suggestion engine
+is a pretty good place to start
+especially for high dimensional problems
+in fact you can prove that our you can I
+guess show or Intuit strongly that for
+like thousands of dimensions kind of in
+the limit you're basically just as good
+as random search right but in this
+regime of like five to fifty dimensions
+you maybe want some smarts and there's
+some other alternative approaches here's
+a couple listed reinforcement learning
+random forests pars and trees these are
+kind of technologies to be aware of
+we prefer Bayes off because it's robust
+we have a really robust code base that
+does this it's extensible and what I
+mean is the mathematics behind Bayesian
+optimization allow for the addition of
+new features so romkey mentioned
+optimizing with constraints this was
+something that was actually pretty
+natural to add on the mathematical side
+to the system and in fact our Bayesian
+optimization system has been refined
+slowly starting just from a purely
+continuous case adding features as we
+found them
+it's just been very natural to do this
+using the kind of setup that I've
+mentioned here but most importantly it's
+really battle tested at Twitter we've
+used this on a lot of real world high
+impact problems we've helped tune the
+spam and abuse detection models we're
+not the only people trying to make this
+better but we've kind of done a similar
+flavor of what I've talked to now
+all deep learning at Twitter and this is
+kind of a growing segment of
+technologies that we're investing in go
+through Bayesian optimization tuning
+before they go into production it's kind
+of just a part of the workflow at this
+point we've seen a really big boost in
+user engaged there's a particular
+recommendation feature on vine that seen
+a really big boost of user engagement
+through just tuning the knobs on the
+algorithm right they didn't write a new
+algorithm just tuned it we've seen a
+pretty dramatic cost reduction in an
+extremely large to do batch processing
+job we could probably have a whole talk
+on on this this is being used in the
+revenue award and then what we're here
+to talk to you about today is tuning JVM
+performance so I'll turn it over to John
+Chiang so thanks Alex
+so based on the introduction from Ramsey
+and Alex we are going to tune a group of
+JVM parameter to achieve the best
+performance so here's a parameter
+parameter list that we are using in our
+system the there are around five to ten
+comment coming tune the parameter plus a
+bunch of others based on caste as
+Instinct up to make the number of
+parameter to around a 30 so to tune even
+more parameters one have to peer read it
+periodically walks through the parameter
+set and at each at each level or each
+module that is being tuned
+runs them better in proteins and use
+some strategy to iteratively walk
+through the block of parameter so
+because PS optim service we are using
+cannot handle effectively handle more
+than 30 dimension at a time so as
+mentioned in previous slides also there
+may be a lot of parameters that will
+take affect the service performance a
+typical strategy is to divide the
+problem and the optimized for given a
+layer so here these are layers that may
+of interest to a particular tunings
+exercise so you may see the lower layers
+is shared by upper layer so that means
+if we want to tune the kernel a
+parameter we had to take all the macro
+service into consideration in the
+project we did during the summer we only
+constrain ourselves on the JVM parameter
+but in the future we we want to add more
+parameters from the service kernel and
+even hardware so we decided to kick the
+hair of our average from a very simple
+jbadventure mecanim disrespect gbb 2015
+so it will provide us with several very
+important insight including the effect
+effect of platform heterogeneity through
+the system performance the value of
+optic optimal and the stepping up
+issuance package will be to the stress
+tester for for the peak performance
+so with those experiments and our repair
+we decided to switch back to our
+original problem
+nimda as a tuning the JVM parameter to
+optimize the performance of our
+production Metro service so the macro
+service which we picked up
+manages the access to the real Twitter
+user you are related at eater so it is a
+it is a core service to the treated
+right and the read and this is a
+population of time line so the reason we
+choose this service is that it doesn't
+undergo frequent the redeploys and it
+has a large number of a service instance
+so here's a local for the mysterious a
+macro service and about that evaluation
+environment since our adventure goes
+through a
+tuning approach to your production
+rushing of a macro service with this
+attitude King experiments in your so
+called staging environment the staging
+environment will receive real production
+requests although these requests are
+read-only and we set the performance
+metric as RPS over the GC cost which is
+requests per second over the time spent
+on GC so this is the result of the
+discussion which is a macro service
+owner he spent extensive extensive
+effort on choosing this metric so his
+more professional then has we just use
+it and the responsible agencies
+indirectly refer presented by the GC
+cost so here's the structure of our
+tuning system just take a look at the
+macro macro service block we have five
+shots in total for every time we only to
+experiment with shadow zero and which we
+said is a shadow one two three four as a
+baseline so due to the limitation of
+Aurora schedule and the digital version
+we are using in theater we can notice PC
+fair a certain platform to launch the
+shadow zero so we have to restart with
+the multiple times together to get a
+matching platform you early we start
+from getting suggestions from the PS opt
+service and our JVM CUNY Service will
+tune will channel your view JVM
+configuration and upload the chooses
+first our service so after this we will
+check what kind of a baseline do we have
+so here we have four for baseline
+running on three different platforms
+so given economy is given the platform
+and then we keep stopped and restarted
+shot zebra to get a matching platform so
+here we find the Charlotte zebra is
+running on the same platform as
+Shraddha one and the shadow fall we let
+them run for fix that you're reaching
+and then recheck to the baseline so when
+we find that during the test there's a
+shadow one is restarted by a robot
+scheduler so it's invalid eventually we
+only get one valid a baseline which is
+too short a number for
+and after that we try to get a
+performance score from our availability
+service get their score and computable
+ratio and return back to the lab areas
+of the service to start a new iteration
+so here's the product a real performance
+score be sure over the iterations that
+the higher the better you may find our
+peers up there always try to give a good
+suggestions mean well it also to try to
+extend each throw dollar space to learn
+more information so the black line here
+means the shadow zebra performs to the
+same as a baseline so any points below
+these black lines is a better
+suggestions our service can tolerate a
+very better suggestions so overall you
+can find we are getting better and
+better result so how good is it let me
+show you in the following slides so here
+we just repeat the past the result in
+this figure so in this figure the pool
+and present a shuttle shuttle zeros
+running with obvious
+tune the parameter and in the yellow
+lines tuna by Twitter engineer so you
+may find the blue not always perform
+petra's and the paste than the baseline
+according to our performance metric the
+strategy were performance 80 percentage
+better than the baseline if you can
+remember the performance red metric is
+our PS over the GC cost is there any
+improvement from the RPS
+let's take a look so here you get it
+during the test period the RPS they are
+almost the same for the shadows I ran as
+a baseline so that means all the
+performance benefit comes from the lower
+GC cost actually the average tuning
+system can reduce the GC cost by 45
+percentage so how do we get this because
+of the PS optimization service of course
+and because of the Twitter
+infrastructure and the smart engineer of
+course and even more so we spend this
+spinner
+mad I mean we spend a lot of effort
+the viewer I mean engineering details so
+the first one we we we make sure every
+time we make you the apples to apples
+comparison so there are more than 50
+different platforms in Twitter so every
+time we restarted a shorter 0 to find a
+match platform so this is very important
+that your data get a good I mean
+together good tune result and second why
+is the system service could cost fewer
+sometimes it will timeout
+they could've returned empty content and
+even cost some exceptions we have to
+handle all these details and is the most
+terrible ones sometimes or the Aurora
+scheduler will try to interrupt the
+instance for example the shortage rush
+are the one shadow to stress free if we
+find the experience is interrupted by
+Aurora we have to rear-end again and the
+last one is a syndication service could
+be timeout so this is designed by
+authentication team we can change this
+but we have did you visit here that here
+are some steps we hope we can do in the
+future
+the first one is we want to we want to
+do some concurrent evaluations and we
+want to do it I mean to choose a longer
+experiment that Eurasian
+so a longer duration will makes the
+system more robust robust the choose the
+noise and the changes in the in the
+system input but it will also make the
+experiment a much more expensive so
+that's that's just why which with payers
+orbiter because it can get the optimal
+with much fewer iterations and we also
+want to design different the experiment
+set for every hardware platform and
+terminate some very process very process
+lessons before it goes to the end and we
+also wanted to do the stress test that
+you validate some optimal configurations
+and extend the free market for America
+to arbitrarily macro service so at last
+we also need to clean up with the
+authentication problem and the repeat
+some better
+api's
+Thank You ginger thanks for that nice
+description of the work he carried out
+over his internship this past summer and
+I'm going to share with you some lessons
+that we learned so focusing on the
+optimal result that he was displaying in
+in the previous few slides if you recall
+we had put up a it's put up a set of
+maybe seven parameters and then there
+dozens more we'd actually experimented
+with something like forty different jvm
+options what did the how did the optimal
+compare against the baseline and what
+did we learn from it obviously any
+lessons from here don't translate a you
+know you can't take specificity of these
+settings that we have here and expect
+that it'll work in any arbitrary
+micro-service this is specific there are
+there there are things about this micro
+Service which might not translate well
+to another one and in fact you would
+there would be some that might translate
+others might not so you have to you know
+take these results with that caveat in
+mind so one of the things we found was
+that for example the new generation size
+now in Twitter as you might have may
+have seen from previous talks from my
+colleague to any parenthesis at earlier
+Java ones etc the Twitter we run with
+very large Eden's
+and relatively small old generation
+sizes because there's little state in
+the Microverse instance it turns out
+that Bayesian optimization actually
+found that and it came up with similar
+new generation sizes no surprises there
+the surprises only that a machine was
+actually able to figure that out it
+found that the general thresholds and
+the and the survivor space sizing that
+was done manually may not have been the
+most optimal and there's a lesson here
+the this service was probably optimized
+a year year and a half two years ago and
+no one came back to look at it there's
+an optimization within within a couple
+of days was able to find that that was a
+suboptimal setting and shift
+to a more optimal setting and therein
+lies the power of this that we can
+actually this is amenable to automation
+which which will continuously optimize
+your system and be able to as even
+though the system changes the layers of
+software get upgraded the hardware gets
+upgraded it will still be able to
+readjust the service settings so that it
+it's always operating optimally it found
+the third bullet over there it found
+that the prefetch read interval that GC
+scanning uses in order to prefetch like
+a cache lines ahead because it's going
+to be scanning those it found it that
+was too small now this might be very
+specific to the sizes of objects that we
+are using here and what what GC happens
+to be scanning but it found that for
+this particular service and on this
+particular hardware the that intervals
+that size was the prefetch interval size
+was too small and it said we should use
+a larger setting and this sped up GCS as
+well there's a very infrequently talked
+about allocate allocation filter in the
+old generation so when we're promoting
+objects into the old generation the old
+generation allocator is is asked to
+allocate an object of an arbitrary size
+and there's a certain filter that looks
+at the incoming request the allocation
+size stream and it decides that it needs
+to pre-populate caches so that they have
+the right amount of right data of the
+right sizes objects to the right size
+and there are certain filter parameters
+that that are looking at this and
+smoothing it out in time and figuring
+out what that the sizes of those cash
+cash cash is should be and it turns out
+that the default setting of those cash
+those filter parameters were suboptimal
+and this is something that no one tunes
+I mean I'm a GC engineer I actually put
+in those filter parameters I never tuned
+them and it turns out that in fact
+there's a there there are settings which
+are you know which which can be found
+automatically which are which work much
+better somewhat surprising to us was
+that the GC number of GC threads that
+that we should run with for this service
+is larger than what we might think of
+setting and this is I think specific to
+the
+environment in which we are running in
+which we have somewhat underused course
+so that we can actually run more GC
+threads then are available then the
+number of course that that are available
+to the container and finally we found
+that there's a compilation size
+threshold that that that that is that is
+used for by the JIT to do in lining so
+if the the amount of in lining that we
+do results in a very large method then
+the at some point the in liner will stop
+and say okay I don't want to inline more
+because the resulting or method might
+become too large it turns out that in
+this case that that threshold setting
+was perhaps too low and by having a
+larger set larger compilations I
+compilation method compilation size
+threshold it turns out that you can
+inline more and as a result of that you
+can reduce you can escape analysis will
+find more opportunities for stack
+allocation and as a result of that your
+allocation rate will in fact come down
+so your GC the the frequency with which
+you need to GC would come down and
+that's another thing that contributed to
+better GC numbers overall what can we
+say about the performance gains we
+reduce the GC overhead well but the GC
+overhead was not very large to start
+with maybe it was one to two percent
+that's not a great game but what it
+resulted in it was that the tail
+response latency shrunk drastically it
+became half of what it was before so
+looking at the 99th percentile for
+example 99.99% I'll it became much lower
+than the service level guarantees that
+this service was providing in other
+words now we can drive much higher load
+through that single service instance
+without hitting the thresholds the pain
+threshold what that means is that you
+can now run fewer instances to take the
+same amount of load and that translates
+into bottom-line savings operational
+costs are lower you need to have fewer
+servers serving the same amount of load
+what if we could do something like this
+continuously on all of the services that
+exist in Twitter we think there's great
+promise in this that we could extract a
+lot of savings through a
+this program systematically and
+continuously through our infrastructure
+there were a lot of lessons that we
+learned I'm going to quit you know skip
+through this in the interests of time
+the choice of performance function is
+something which you have to kind of do
+and gain gain experience from but we
+believe that most of the service owners
+out there have already put much thought
+into it and so it is usually a small
+matter for you to to use existing SLS as
+the performance metric that you're going
+to optimize the choice of parameters to
+tune you would have to go and look and
+talk with perhaps you know experts at
+each of the layers in order to figure
+what forget that figure out what
+parameters to tune but these are
+one-time costs that you pay once you've
+got that going that program going
+the continuous optimization can then be
+done in the background by a machine you
+have to what as Jintao I mentioned we
+have to protect against noise in the
+data center there's lots there are lots
+of as we noted there are lots of ways in
+which results can be noisy and for
+Bayesian optimization to work well the
+less noise there's an optimization to be
+honest actually is able to deal with
+noise but if we the less noise even make
+they're not the the performance metric
+the faster it will converge with fewer
+iterations to an optimum and so we found
+that for example it was worthwhile
+making taking longer duration
+experiments in other words more costly
+experiments to make the performance
+metric less noisy and thus be able to
+actually converge much faster to an
+optimum result I'll skip over things
+like long-range effects of their
+questions we can deal with them at that
+point and finally the point I wanna
+stress is that the amount of you know
+this work was actually done by General
+in in a couple of months that's because
+the microservices architecture already
+provides most of the hooks into which we
+can hook in there are lots of existing
+monitors and alarms alerts so that we
+can terminate for example sub-optimal
+suggestions that might be made by
+Bayesian optimization
+there's enough resiliency and redundancy
+built into the micro services framework
+so that one or two or three instances
+might be running sub-optimally without
+affecting the performance of the
+ensemble as a whole and without
+affecting SFA's there's extensive
+telemetry into which you can tap into so
+that you can have complicated
+performance metrics and performance
+functions you can oh you know as as you
+refine your performance metric you can
+tap into lots of existing telemetry and
+and make your optimization process much
+more effective and much more efficient
+and of course so basically I want to end
+this talk by saying that continuous
+inexpensive automated optimization of
+micro for micro of the micro services is
+possible and in fact we believe it's
+inevitable because no human our team of
+humans can deal with the scale of this
+problem it's huge and based on
+optimization because it can find an
+optimum through through experiments that
+can be potentially costly but very few
+such experiments be able to find an
+optimum holds great promise and being
+the tool to leverage when doing this and
+finally for those of you who are kind of
+who've been looking at this and thinking
+maybe this is going to happen what I
+want to stress is that the upfront costs
+of getting something like this working
+in the data center is actually quite low
+because much of the infrastructure
+already exists we just have to tap into
+that infrastructure and and there are
+you know some lessons to keep in mind in
+terms of noise etc which will make this
+work efficiently and continuously and
+that's what we hope to do in the future
+thank you
+questions is the mics on right this is
+on I'll repeat so just repeat the
+question would you ask it right yeah so
+actually as I mentioned right to repeat
+the question first oh yes right so the
+question was how's the JDK team at
+Twitter there's Twitter has a dedicated
+team of JDK engineers has it looked at
+these results now it turns out that in
+fact I'm with the JDK JVM engineering
+team so the JDK team is the JVM
+engineering team and this was an effort
+by that team and one of the reasons we
+actually did this is because we found
+that the scale of the problem is immense
+and a team small team of engineers can
+tune the JVM perhaps for you know one or
+two or three micro-services but with a
+thousand micro services you cannot hope
+to get an optimum that works across them
+you can perhaps do serve it for a small
+number of parameters but to make
+something find something that's optimal
+across the across the range is
+impossible so and have we have we looked
+at the result yeah in fact we were
+actually one of the things that we found
+it you know when people come to us and
+say tune this microcell verse for us we
+tune it for them and they go and make
+use of those parameters we pick maybe
+five or ten or twelve parameters that we
+are familiar with and which we know that
+you know performance is typically
+sensitive to we never go and look at the
+200 other parameters that are there
+which have been forgotten and lying
+dusty in the attic and with Bayesian
+optimization we could actually you know
+there's an optimize when we were talking
+with Aleks we said how many parameters
+can you deal with and he says oh about
+30 or 40 so we found about 10 then we
+said we have to be neat we can
+another 20 parameters so we went and
+just picked some you know not at random
+but you know with some thought and it
+turned out that we were very surprised
+as I was trying to you know show in my
+talk we're very surprised about how you
+know Bayesian optimization actually was
+able to find optimal settings for these
+parameters and so yeah we are very happy
+with this I can answer the machine
+learning side of it so so then we try
+this out so the I mentioned in the talk
+that just writing a system or building a
+system that keeps track of and
+systematizes tuning is really a huge
+first step and then adding random search
+to make your suggestions it's a
+perfectly fine place to start especially
+if the dimensionality of your problem is
+large and if you can tolerate failures
+so once you've done that and you've kind
+of you're unhappy with random search
+because it's random then there's a lot
+of options out there the service that we
+have internally was is like I guess
+three or four generations past something
+that's open source called spearmint I
+don't understand fully the licensing
+implications and if you can just plug
+that into your system but it does exist
+and then I think there's another piece
+of software called or there's a company
+there's a couple companies out there
+that will do this for you if you just
+search for like hyper parameter tuning
+but spearmint open-source and I think
+there's links on that github page thank
+you
+it was life so as John Chow indicated in
+his talk in a section of the talk it was
+in a staging environment which means
+that this is not this is not running
+production it's it's not the production
+servers if you will it's another set of
+servers but they receive traffic from
+production loads basically yes and the
+only thing was that because the incoming
+traffic might actually update state in
+this in the service which which would
+happen with write requests for example
+to the service the write requests were
+not were not tapped only the read
+requests came in so that's what we
+called out read so this was dark tree
+traffic in a staging environment but as
+we indicated this was because we were
+trying to learn about how this works we
+are now gathering enough confidence that
+we should be able in fact given all of
+the characteristics of you know fault
+tolerance and so forth and resiliency
+that I talked about we think the right
+way to do it is in fact to run it on
+production instances for example the
+right traffic might actually change the
+optimum something that was found to be
+optimum optimal for only read traffic
+may not be optimal for write traffic and
+so the eventual goal is in fact to run
+it in production so you have this
+background thing kind of churning away
+and finding Optima it's going to get
+some suboptimal suggestions but
+eventually find will find the optimum
+and so you want your service to be to be
+resilient to such suboptimal performance
+occasionally yes
+right so the first question I'll
+actually mention the questions and
+answer them one after the other so the
+first question was was the collector the
+garbage collector type right was the
+garbage collector type fixed for this
+experiment yes so it turns out that in
+fact we use the same garbage even though
+we mentioned that as one of the
+parameters that one cartoon we picked
+the the garbage collector that the
+service was already using this was the
+concurrent mark-and-sweep garbage
+collector now in theory you can actually
+make that another because Basin
+optimization allows you you know any say
+you know numerated parameters you could
+have enumerated types you could have the
+garbage collector as a parameter to the
+experiment we haven't tried to see
+whether or not you know so there are
+various ways of doing this the thing is
+that if you change the if the if you
+make the garbage collector one of the
+parameters it'll it'll take you probably
+longer to get up to you know an optimum
+setting but yeah it is it might turn out
+that maybe the G one there are certain
+settings with G one which might work
+better than with CMS I so I read this
+part of code so I can understand I can
+answer this question actually our code
+already supported to switch between T
+for the DC collector characters we
+already support of this feature but of
+it we just haven't implement having to
+try it yes yeah and one of the things is
+that there are there are lots of
+parameters and depending on how you pick
+them you you can throw a lot of them
+into the mix but it really depends if
+you throw too many then your convergence
+to an optimum would be slowed down
+because you need many more points right
+I mean think of the optimization surface
+that that one garbage collector presents
+versus another garbage collector it's
+two different there they could be
+radically different and to learn that
+Bayesian optimization might take a
+little longer so if if if the
+performance engineer has some idea as to
+where the optimum might lie it might
+make sense to fix that but sometimes
+performance engineering a gut instinct
+may not
+be that good in which case maybe you
+want you know occasionally to allow much
+more latitude in the choice of
+parameters and let the system let me as
+an optimization find you the optimum the
+second question was about whether or not
+we've used this for throughput oriented
+process now it turns out that in fact
+this what we were the Micra service we
+were showing you isn't is both
+throughput and latency sensitive right I
+mean in some sense by pulling in the
+latency we managed to be able to push
+more throughput through through you know
+more load through a service so I think
+the two are kind of related and and yes
+you can apply it to either and it
+depends upon how you you you encode your
+performance metric yes you and that's
+what that's what the performance
+engineer would have to do he'd have to
+choose a specific performance metric and
+the shape of that will determine and you
+can have a combination of performance
+metric a composite performance metric
+possibly and I've forgotten the third
+question that you yeah so this so we
+weren't paying attention to whether or
+not you know as this experiment was
+running all you know the service was
+being upgraded the GRE was being
+upgraded all of this was our experiment
+was oblivious to it and so at some point
+so it so you have a system that's kind
+of shifting underneath and it's
+eventually finding you an optimum and
+that might be suboptimal because of
+changes in the in in in in the layers
+underneath one of the reasons for
+picking a staging environment is because
+we were doing research and we wanted
+things to kind of stay constant and fall
+for the particular data that was
+presented we didn't upgrade the JRE it
+was done with one it is possible that
+with another JRE the optimal settings
+might change okay let's have one in the
+back over there
+yes
+right so that that's a good that's a
+that's a real concern so the question is
+how do you deal with you know peak loads
+loads that might never manifest in the
+measurement intervals ever during your
+testing or you know you might you might
+be doing a measurement at a point where
+there was high
+you know stress peak loads and those
+might make your performance metrics kind
+poor right and so you so you might end
+up actually going in with periods with
+settings that you measure in periods
+when loads are low for example how do
+you know that that's an optimum and yes
+and that that's what jinsha was showing
+in his slide where after having gotten a
+bunch of Optima you could have a stage
+where you stress test them to find that
+all whether or not all of them will
+withstand the stress loads that you
+expect the system to withstand and so
+that would be a longer experiment it
+might even be a synthetic experiment
+where you subject synthetic load on your
+system so yeah all of that will have to
+be part of the DevOps workflow should
+this be you know brought to bear in in
+production environments question
+yes yeah so the question is as a result
+of the lessons learned from this
+experiment are there changes to default
+settings that we can contribute back to
+the open JDK that's a good question
+however we have to remember that this
+this is one data point one micro service
+on which we collected this data what we
+hope to do is run this across all of our
+micro services and maybe in the greatest
+common factor if you will of all of
+these settings that we get maybe there's
+some you know some set of settings
+that's common across all of them and
+that would be something that we would
+want to give back what I wanted to
+stress here is that each of these micro
+services might have a different set of
+optimal parameters and this deals with
+that plurality but yes if we find that
+you know there's some theme that's
+recurring over and over again that's
+something that we might want to
+contribute back to open JDK and that's
+something that Oracle might want to do
+it as well you know Oracle has its cloud
+thing it might run this over across a
+lot of instances and find that it turns
+out that certain defaults are outdated
+and they need to be updated this is
+something that used to be done manually
+many years ago and now something like
+this can be done automated so yes that's
+a good way of looking at this as well
+let's have you
+well the dream actually so the question
+is can this kind of performance
+optimization be part of the regular
+deployment pipeline that's a good
+question we have only very you know this
+was a research project and we we have
+initial data that gives us much more
+confidence that in fact it can be done
+in practice now before we started this
+I'm a JVM engineer I didn't know
+anything about machine learning and
+looking at the scale of the problem I
+would have thought that machine learning
+would never be able to you know give us
+results that are good enough to put into
+production I was very surprised but how
+about how good and how quickly found the
+Optima and if we put enough filters in
+the deployment pipeline to catch you
+know basically the thing is it's
+important to design the experiment
+sufficiently well that you will not be
+caught in you know you want to make sure
+that the Optima that you find are
+sufficiently robust they don't lie and
+you know if you look at your performance
+surface there are no slight tiny spikes
+in the performance surface that you have
+hit and if you've done that then what
+happens is some small change in in in
+the environment can actually topple you
+from that performance peak do it to an
+abyss and you want to avoid that and so
+the but you know I think more research
+needs to be done to see you know how to
+get more confidence in in the kinds of
+parameter settings that you have and
+stress testing is a good way of actually
+finding that so I expect that there'll
+be you know in a deployment pipeline
+there will be based on optimization
+coming up with a set of
+Optima and then something else filtering
+out the bad ones and picking the right
+ones based upon further tests just like
+in QA and then and at the end of all of
+that you actually have a set of golden
+parameters that you can put into into
+production at least that's our hope yes
+so the question is how frequently did
+the optimal value change and how
+frequently did you put it in production
+this was a research project we don't
+have it running in production so yeah
+these are things that we hope to learn
+as we progress further into the project
+okay I think let's see what time is a
+636 okay I think that'll be the last
+question go ahead please
+okay I'll there are two questions and
+I'll take the second question first so
+the first the second question was you
+mentioned that there were a lot of
+parameters and you limited yourself to a
+smaller number yes we did and that's
+because Basin optimization remember that
+this the the size of the problem grows
+exponentially with the number of
+parameters there's an optimization does
+very well in controlling that
+combinatorial explosion I'll let Alex
+actually describe to you the limitations
+because of which you have to limit
+yourself to about 30 to 40 parameters at
+a time because they the optimization
+engine in order to make it suggestion
+has to do calculations which tend to
+slow down yeah it's it's kind of I guess
+the the strongest answer to that
+question of the limit of the number of
+parameters is an empirical one is we've
+just found that above 50 things take a
+long time so you can still you can it
+still works it just takes each
+suggestion takes progressively longer
+and actually converging so the number of
+iterations you have to run this takes a
+lot longer and you can do really well if
+you just cut outs if you do a little bit
+of thinking and you cut out stuff you
+don't think it's related or you try to
+combine things and interesting ways but
+it's it's always an empirical question
+so you could have 30 parameters in 29 of
+them could be junk and there could be
+one that matters and things will
+converge actually very very quickly and
+if you have 50 and there's one that's
+good same thing right so this is just
+what we've seen in practice basically
+and then the second question the first
+question that is which I'm on answering
+second was about the number of parallel
+GC threads so the so I don't know how
+many people over here know about
+missiles maces containers maybe you've
+used them so it's I I believe the
+increased number of GC threads that that
+that that Basin optimisation suggested
+is based upon basically the operating
+environment in this case so
+mrs. containers take a certain you can
+you basically can suggest that you
+require a certain number of CPUs okay so
+what missiles does it is it schedules
+you for time quanta of 100 milliseconds
+each on those many CPUs so if you it'll
+look at your how much time your
+processors take how much CPU time your
+processors taken in that 100 millisecond
+interval if it takes more than 100 times
+the number of CPUs you requested then
+your process will get throttled now if
+your GCS are extremely fast and your
+service doesn't impose a lot of load on
+on the system then for example let's say
+that your GC takes 10 milliseconds I can
+actually run and let's say that the
+system is that your service is not doing
+any work or doing very little work in
+the rest of the time so I can for the
+those 10 milliseconds I can run 100
+threads right and still appear as though
+I have stayed within the quota because
+it is less than 100 100 times n for n
+CPUs in this case it turned out that we
+could run twice as many as many GC
+threads as they were CPUs available and
+that's because each GC was dining Li
+fast was was you know less than 5
+milliseconds and so you you never got
+throttled as a result of that so I think
+it's it's specific to the environment
+and it is possible that if if there were
+higher load in the system then the this
+result would not hold and so these are
+the kinds of things that you have to
+kind of look at when you get yet the
+optimal settings from base an
+optimization that's kind of a feature of
+base optics that it will exploit
+absolutely everything that it has
+available to it and that includes if
+your performance metric doesn't Inc like
+there's a question if your performance
+metric doesn't include something that
+matters to you
+Bayes optimal effectively cheat right so
+it'll find a way to make that number as
+high as possible by surprising and
+frustrating you so you really have to be
+very careful about how you define
+performance and then you might have to
+be very careful about learning about why
+exactly your settings are good just
+because it only wants to make your
+performance higher it doesn't care about
+anything else
+so thank you very much and and we are
+around here for another couple of
+minutes in case you couldn't get time to
+ask your questions so feel free to come
+up and talk</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

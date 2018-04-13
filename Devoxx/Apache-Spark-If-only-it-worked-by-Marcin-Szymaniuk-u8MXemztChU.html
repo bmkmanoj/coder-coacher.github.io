@@ -1,0 +1,599 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Apache Spark? If only it worked. by Marcin Szymaniuk | Coder Coacher - Coaching Coders</title><meta content="Apache Spark? If only it worked. by Marcin Szymaniuk - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Devoxx/">Devoxx</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Apache Spark? If only it worked. by Marcin Szymaniuk</b></h2><h5 class="post__date">2016-11-08</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/u8MXemztChU" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hi guys my name is marching I'm data
+engineer and consultant at Tantus data
+previously I've been working for
+companies like Spotify through color and
+most recently Apple the title of this
+talk is Apache spark if only it worked
+and it might sound a little bit
+provocative but but let me explain
+so quite some time ago when I was
+working with my first spark application
+I was looking for solution for my
+problems and I found this blog post
+explain my data calm and the title of
+the post was spark should be better than
+MapReduce if only it worked so the
+author of this post was giving some
+advices about spark and how to make it
+make it better but he was also
+complaining quite a lot about how hard
+it is to make spark reliably and how
+hard it is to make basically work and
+honestly at that time I felt exactly the
+same but but fortunately quite a lot has
+changed since then so I've learned quite
+a lot and spark has significantly
+improved so during this talk and I'm not
+going to like put you off from spark I'm
+going to share my lesson learned so it
+will be easier for you so during during
+this talk I'll start with execution
+model so that will be our foundation to
+understand spark and and reason about
+various problems and then we'll go
+through a bunch of very common problems
+you can face while running spark so
+we'll have a look at how to size
+executors we'll have a look at what skew
+data is and how to sort it out we'll
+have a look at locality I'll introduce
+you to spark caching and there will be a
+few words about debugging tools and
+running spark locally and testing spark
+and at the end there will be kind of a
+competition or a draw so yes stay tuned
+so as
+see there is a lot of information
+squeezed in so those of you who are
+working with spark should get some hints
+and those of you who are not who are
+planning to work - who are planning to
+work with spark they'll get an overview
+of what to expect how many of you are
+working with spark not that many
+so spark is general engine for
+distributed data processing it provides
+an API for very various languages it has
+streaming module it has machine learning
+library and and sequel support and so on
+but for today talk we're just gonna
+focus on on the core distributed data
+processing engine so let's start with
+execution model first spark interior
+introduces an RDD it stands for
+resilient distributed data set and
+basically it's an API which lets you
+think about let's you feel that you're
+working with local collection but
+darhk's all data is distributed into
+partition and spread across the cluster
+so what SPARC does when when it's
+running the program it's actually it
+actually pipelines operations until they
+can be done on one partition and until
+they they can be done in separation and
+it's quite it is quite nice optimization
+because it lets spark to do bunch of
+operations in memory but but eventually
+you need to you need to exchange data
+between partition so group such a group
+of pipelines operations is called state
+and then when you want to exchange the
+data so for instance when you want to do
+a group by key you want to pull all the
+same keys into into one place and such
+an operation is called shuffle and this
+is what you usually want to watch out
+for because it involves disk it involves
+network so a lot of i/o it's it's
+expensive basically and your application
+most likely consists of multiple stage
+and multiple shuffles so far I was just
+saying spurred us this and that but the
+actual execution unit in spark is task
+and task consists of two things the
+instruction of what to do with data so
+your code and the data itself so for
+instance a block in HDFS and if you have
+a look at the picture I showed you
+before each stage consists of multiple
+independent tasks each tasks each task
+get gets run in in JVM called executor
+you control how large the executor will
+be so you control how many CPU you want
+to give to it and how much hit memory
+and depending on how many CPU you give
+to it there will be as many tasks run at
+a time in the executor and at a time
+part is very important because because
+when executor is done with running a
+task it just picks up another one so so
+so basically executor is long-living JVM
+and and and it has certain consequences
+each executor is orchestrated by single
+single driver process so we know about
+tasks we know about executors and you
+want to submit your code so the question
+is how large you want your executors to
+be and you have various options you can
+start from like very very small
+executors with with one CPU and a little
+bit of memory on the other edge is
+develop very large one we which is
+taking most of the node resources and
+you can choose virtually anything in
+between the actual answer really depends
+on your workload but I'll give you some
+some things to keep in mind and some
+hints about it so let's start from from
+the verse
+the very small ones are I say just fine
+but in some cases they might be not
+optimal because spark can benefit from
+running multiple tasks in the same JVM
+so for instance there are broke
+broadcast variables which are copied to
+every single JVM and if you have a lot
+of small ones you end up with a lot of
+copies of the same data but in general
+small ones are kind of kind of safe the
+very large ones on the other hand I've
+experienced a lot of problems with with
+them because because very large ones
+means a very large heap space and I
+observed a lot of garbage collection
+problems with them so I would say if you
+are not sure I start with one up to four
+CPUs and and then see if you if you want
+to do something more complex something
+more advanced before we go a bit further
+with sizing executors
+I want to introduce you to spark memory
+model I mentioned the hidden memory you
+control that but the heap memory is
+split into three areas one is for
+caching the other one is for
+intermediate buffers use doing shuffle
+and the last one is for for user program
+and up until spark 1.5 you could control
+them explicitly so for instance if you
+knew that you are not cashing anything
+you could set the cache to the caching
+carrier to zero and save some hip-hip
+space from one point six park tries to
+balance it automatically but if you if
+you feel that you know what you're doing
+you can still you can still control them
+you can still use the legacy options and
+there is one more one one more area
+which is outside of outside of heap this
+is memory overhead and this is used for
+instance for yarn if you run in running
+spark in yarn containers this is used
+for container related overhead but also
+if you are using libraries we
+our writing of hip with the right
+writing of hip data that word of hip
+data goes so you should keep the memory
+overhead in mind especially if you use
+of hip data but also you should keep
+that in mind if you if you doing your
+calculation of let's say how many
+executors who can fit in in your node
+it's not enough just to take the hip
+memory into account you have to take
+take into account both some other hints
+are keep some resources for your
+operating system if you are using yarn
+hopefully your admin took care of that
+but but if not make sure you are not too
+greedy because it's just not gonna work
+if you are not sure about about what's
+going on how much man were you you you
+are using you can always play with spark
+cash an RDD and then spark you I will
+tell you how much memory dar didi is
+taking if you have a job which if you
+have a single job which sometimes is
+taking very large input and sometimes
+very small you can also play with
+something called dynamic resource
+allocation and the idea is quite simple
+so it starts with small with small
+number of executives and it increases it
+while that job progresses so and and
+then then it can kill executives which
+are which are idle so now I want to kind
+of assume that we we have our code we
+are ready to submit submitted to the
+cluster and mention a few and I want to
+mention a few problems which you will
+probably face if you're running a spark
+for the first time but before we do that
+we really need to zoom in a little bit
+into shuffle because that's the root of
+most of spark problems so this is for
+what shuffle look
+like when a task is about to finish it
+prepares data for shuffles so it splits
+data into buckets so each bucket is
+responsible for certain keys those
+buckets get stored into local disk so
+they are ready to be picked up by by
+another stage by tasking another stage
+and then all the red buckets from local
+disks can go to the same place and so on
+so this is what it looks like in theory
+in the perfect scenario but this is what
+it might look like in practice so task
+one is a little bit heavier and then the
+keys are not really evenly spread and
+everything explodes and one of the
+reasons for for for the explosion for
+for the failure is that spark has a
+limitation of two gigabytes for buffers
+which are used during shuffle and the
+reason for this limitation is basically
+implementation detail but but this is
+something we we should be aware of and
+we should well we should handle somehow
+so it's very likely that when you're
+running spark for the first time you can
+see either the 2gig too big problem or
+some timeouts or some heap related
+problems or maybe this cryptic executor
+lost failure message which doesn't tell
+you much at least at first glance so one
+of the one of the so I'll actually show
+you now what to watch out for in in the
+spark UI so spark UI is quite is quite
+nice it tells you it shows you quite a
+lot of various information but one of
+the very important one is your execution
+plan this is what it looks like but some
+others are tasks specific task specific
+information so
+for each task you get some some stats so
+what you definitely wanna pay attention
+for is a task which is tasks which are
+failing you want to pay attention to
+overall duration of your tasks and
+garbage collection time so you want this
+time to be not too large we want them to
+be perfect if those times are spread
+evenly and and and yeah those those are
+if there are two large dere indicator of
+something wrong going on with your with
+your job the other very important thing
+to keep an eye on is shuffle related
+stats so how much data is being produced
+or consumed during shuffle and again you
+want it to be not too large and and
+perfect it would would it would be
+perfect to have it evenly spread but if
+you if you go if you run SPARC is very
+very often that you see one of these
+problems and the very first thing to to
+check is if your tasks are not
+processing too much data and if you
+suspect that your tasks are processing
+too much data the easy solution would be
+to increase the level of peril so you
+have you you create more tasks so each
+task you want to at least you expect
+that it will be processing less data and
+and that should be the easy solution and
+you control level of parallelism by
+passing number of partitions parameter
+to any method which is triggering
+shuffle like group by key or you can
+trigger a kind of artificial shot or
+artificial shuffle by calling three
+partitions so that artificial shuffle
+will be somewhere in the middle of your
+stage the other easy solution would be
+to increase your memory
+it might help but of course that doesn't
+you cannot do it for us
+and it doesn't scale but sometimes just
+increasing level of parallelism is not
+enough sometimes you deal with skew data
+problems and that means some of your
+keys are just much more common than the
+other ones so so even though you have a
+lot of tasks some of most of them are
+doing nothing there is one task which is
+processing half of your cluster data and
+it just it just cannot keep up so the
+Virgin Erick way to solve skew data
+problem is by adding salt to your keys
+so basically you want to add some junk
+to to your keys so in this case we have
+foo which is well often and we split
+that into two buckets so these buckets
+can be processed in in separation and
+then you probably want to merge the
+results so the details might depend on
+on what exactly you are doing but but
+this technique is this technique you can
+use very often and it's really powerful
+other thing you could check and you
+probably want to check if you are not
+happy about your spark spark job
+performance is locality so the concept
+of locality is very simple basically you
+want to you want to run a task reading
+data on the same machine the data is so
+if you're running xgf s block from node
+one you want the task to be run there so
+this this concept has been borrowed from
+from Hadoop if you want to check a
+locality you again go to go to your your
+spark UI and if you see a lot of a lot
+of locality which is lower than done not
+local you might want to try to improve
+that and you improve that by creating
+basically using more executors
+increasing number of executors
+and when you increase number of
+executors there will be basically much
+higher chance that there is an executor
+which is free and ready to pick up a
+task in expected locality level you
+could also play with spark locality
+white parameter and it's a hint to spark
+for how long it should wait for an
+opportunity to run a job with expected
+locality level and after that time it
+just gives up so this parameter can be
+used for enforcing locality or giving up
+locality entirely but in most cases the
+three seconds value the default value is
+is good enough and for small jobs which
+are not reading that much data probably
+you don't want to pay too much attention
+to locality I mentioned RDD so far but I
+haven't told you very important thing
+about already yet so rdd's gets lazily
+evaluated so what that means is that if
+you instruct spark to reach some data
+and then you apply an operation like
+filter or map or flat map nothing will
+really happen on the cluster something
+will happen on the cluster only if you
+call an action so actual example of
+action is saving to disk then then it
+will calculate everything at the time
+but there is a caveat here if you're
+reusing an RDD some the calculation of
+the RDD will happen twice or multiple
+times depending on how many times you're
+using it and that might worry you but
+it's not it's not really that bad
+depending on the situation so in some
+situation you just can live with the
+facts something will be calculated twice
+but if you are not happy about it you
+can use spark caching so spark lets you
+crash your data in memory spark spark
+lets you cause you're already in memory
+and and every time you can see
+a branch in your execution plan every
+time you reuse in our ddeok and you
+should basically ask yourself if you
+want to catch the data or you don't care
+that much if you are not sure about my
+American consumption you can check how
+much are these car star duties are
+taking in memory and it's very important
+to know it because if you have a few
+rdd's and all of them you want to cache
+you have no way to pin an RDD to memory
+you can you have no way to set a
+priority on an RDD so it might be that
+by caching an RDD which is not that
+expensive to calculate you lose and you
+evict an RDD which is already in memory
+and it was very expensive to calculate
+so it's very important to know what your
+caching and how much how much memory is
+taking if you are running out of memory
+but you still want to save your
+computation results you can cast to disk
+you can cast to this replication factor
+you can cache you can do checkpointing
+which is basically caching to HDFS
+but those operations are very expensive
+and and I would recommend to to be
+careful with them
+last comment about caching is that when
+you planning your caching strategy is
+for remembering that the shuffle data
+the colorful buckets get stored on local
+disks so they can be reused later so the
+recomputation doesn't necessarily start
+from scratch it will start from the last
+shuffle quick the mean into join it's
+basically that the join is based on
+what's going on with shuffle so you pull
+all again all the red buckets from two
+stages into one place and you join them
+together I'm showing you this picture
+only because it's very similar to the
+group by shuffle I showed you before and
+that's that similarity can be can be
+used by spark so basically if you are
+nice to spark and if you
+certain operations certain hints it will
+it will actually optimize your job so in
+this query plan we have a two group buys
+we apply a map function to each of them
+and we join the result together but if
+we are using the same number of
+partitions for each group by and if we
+tell spark that that we are not
+modifying keys and we do that by calling
+map volumes values instead of map spark
+can change this execution plan into that
+one
+so both group bys are happening in the
+same task the map values is is executed
+in memory and the join is executed in
+memory as well
+so we had five stages and for shuffles
+now we have only two shuffles so
+avoiding two surfaces is usually very
+very big improvement
+so basically be nice to spark and and it
+will be nice to you another way to
+improve your shuffles and when I say
+improve shuffle means avoid shuffle
+usually is using broadcast variable so
+this is type of variable which gets
+copied to every single executor so
+imagine you are joining two rdd's one an
+RDD one is very large one RDD two is is
+tiny so instead of doing shuffle join
+you can broadcast the RDD to so it's in
+memory of every single executor and then
+you can join to each partition of RDD
+one in memory so you don't need shuffle
+at all
+you don't especially you don't need to
+shuffle the the large or DD one so just
+some recap of optimizing shuffles
+control number of partitions use map
+values if you don't if you are not
+modifying keys use broadcast variables
+filter before the shuffle not after
+after the shuttle that's quite obvious
+avoid group by key so so far so far I
+was showing you group by key quite a few
+times but but I was doing I was doing
+that only because I assumed most of you
+are familiar with the concept reduce by
+key is much better it doesn't
+optimization in terms of what's getting
+send doing shuffles so the optimization
+is kind of similar to what combiner in
+not in MapReduce does few words about
+debugging tools spark UI is your main
+debugging tool and you can get a lot of
+information from there you just know you
+just have to know what what to look for
+it's worth looking at your AGI phase
+monitoring tools so if you have ganglia
+or an assistant like that it will tell
+you what's going on with your cluster
+with your CPUs with your operating
+systems while you running your heavy job
+make sure you aggregate your logs so if
+you are running on the yarn you can just
+enable turn log aggregation on and all
+the logs from all the containers from
+all the clusters will end up in the same
+location in HDFS and it's very
+convenient and make sure you you enable
+logging by default things you find
+commonly useful so for me it's just
+there is no question I want to have
+garbage collection logs enabled by
+default and it's it's very handy you can
+also run spark
+you can also spark run run spark locally
+and it's super handy when you dealing
+with certain problems like memory bug
+like garbage collection problem you want
+to know what's going on on your hip and
+so on it's just easier to reproduce it
+locally and since you can run spark
+locally you can also test it locally
+very easily and and and you should just
+do it
+I wanted to show you a demo but I don't
+really have a time for that but instead
+I created a challenge so that might be
+or that might be your very first spark
+application the use case for the
+challenge is that we want to reach the
+SV file and we want to output certain
+fields of the CSV file together with
+randomly generated uu IDs and on this
+link you you have the solution for that
+problem and it works the only problem is
+that you observed that when you increase
+in a number of CTP CPUs per executor you
+actually don't see any and performance
+improvement so the challenge is to fix
+that you get full description on the
+link so some some summary I would really
+I cannot stress more that you should
+test test your spark application and
+it's not only about quality it's also
+about how fast you can iterate so if you
+if you testing your code you you
+basically iterating much faster you
+don't wait for resources you don't
+really wait for the job until the job
+finishes on on the cluster and just to
+just see that you have some silly bug
+you you just do it locally and test it
+locally and and you iterate much much
+faster you are probably not the only
+user of the clusters so make sure your
+optimizations are not really affecting
+the other users too much so you are not
+too greedy when it gets to how much
+memory you get and and so on and make
+sure you know what you optimizing for so
+if you optimizing for for resource
+consumption or if you are optimizing for
+wall clock time this is like this is not
+only against just be be pragmatic about
+it you're probably working in a team and
+there are developers there are analytics
+there are some people who want to run
+sequel commands from time to time make
+sure you
+you've come up with some best practices
+and share them across the team make sure
+also that you review what's going on on
+your cluster to spot to spot bottlenecks
+and the last comment is somehow related
+to to the title of this talk so spark
+actually works you just have to know
+what you are doing you just have to
+understand what's going on under the
+hood but but the more you know the the
+nicer it is to work with spark so yeah
+we have some time for for questions if
+there are any can you repeat so when the
+input is hard for you most likely are
+reading from from HDFS so it's basically
+HDFS partitioning oh sorry so the
+question was how sparked does
+partitioning when it's reading the data
+when it's running a hive query so when
+you when you running a hive query when
+you're reading data from HDFS Park does
+the the default HDFS partitioning so
+data in HDFS is stored in into blocks
+like 128 on Meg's or something like that
+so so spark reached the data block by
+block so each blocks each block means a
+task so there will be a task created for
+each block in HDFS
+no not really
+we can take it offline yeah anyone else
+all right thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

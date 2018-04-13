@@ -1,0 +1,1420 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2016: “Bringing Clang and C++ to GPUs: An Open-Source, CUDA-Compatible GPU C++ Compiler&quot; | Coder Coacher - Coaching Coders</title><meta content="CppCon 2016: “Bringing Clang and C++ to GPUs: An Open-Source, CUDA-Compatible GPU C++ Compiler&quot; - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2016: “Bringing Clang and C++ to GPUs: An Open-Source, CUDA-Compatible GPU C++ Compiler&quot;</b></h2><h5 class="post__date">2016-10-05</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/KHa-OSrZPGo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">all righty cool well so welcome again my
+name is Justin the bar
+I'm from Google and I work on CUDA
+compilers so that's what we're going to
+talk about today I have a thesis for
+this talk CUDA is a low-level language
+and to prove this to you what I want to
+do is show you some CUDA code and kind
+of argue that if you want to write at
+least this particular algorithm but
+probably a lot of algorithms that you
+care about on a GPU you're going to want
+to write them in a low-level language
+and CUDA is a low-level language but
+before I can actually show you this
+programming language and argue this I
+need to actually sort of explain to you
+what GPU hardware looks like the issue
+is I can't show you the code until you
+understand what the hardware looks like
+because CUDA is a low-level language so
+that's kind of going to be the the
+framework for the talk first we're going
+to build up a model for what a GPU looks
+like then we're going to write some code
+and we'll think about that and then
+finally we'll talk about why I'm excited
+that open source clang can compile CUDA
+code today you can go download TIFF and
+build it yourself and compile it and
+ignore the rest of this talk if you want
+to do that okay so so let's get started
+I have a couple caveats about this model
+that we're going to build for a GPU copy
+out number one is that I'm a software
+guy and so this is just going to be a
+model for how the hardware works and
+number two in this model I'm going to be
+using kind of different terminology than
+and video uses for describing their GPUs
+so be aware all right so this I hope you
+guys can see this awesome is a modern
+CPU this is a Haswell CPU this is a from
+2004 2014 22 nanometers 22 nanometers
+and 18 cores and I claim that this CPU
+has some design tensions the CPU is
+trying to do two different things well
+number one the CPU is trying to do the
+following thing well I have one core
+with say one thread running on it and
+what I want to get is the fastest
+performance from that one thread I want
+to get through that threads business
+whatever it is as quickly as possible
+number two what this chip is trying to
+do well is
+have maybe 36 threads running two
+threads running on each core because I
+have hyper threading and I'm doing stuff
+on all of them and I don't care how
+quickly any one thread finishes but I
+care about how quickly this whole set of
+threads completes their task whatever it
+is and I claim that there's actually an
+inherent tension between these two goals
+and one way that you can see that is
+that when I fully load the CPU and I'm
+running all 18 cores at 100% it actually
+decreases the clock speed so that this
+chip doesn't melt but if I only am
+running one core and maybe one thread it
+increases the clock speed so that that
+one thread runs more quickly right so
+even on the CPU we have this design
+tension and we have things to kind of
+trade off between these two things what
+we're going to imagine doing is
+transforming this CPU into a modern GPU
+and the main difference like in
+philosophy is that on the GPU we don't
+have this design tension we're only
+designing for one of these two things
+and we're designing for the second thing
+which is I have a highly dated parallel
+program I'm going to spawn a gazillion
+threads and I don't care how long any
+one of those threads takes to complete
+all I care about is how long does it
+take for my whole program which we're
+going to call it kernel but this whole
+like data processing step to complete
+for all the threads to complete okay and
+the assumption is we're just going to
+have a bazillion threads running at any
+given time so the way that we're going
+to go about kind of designing our GPU
+and again this is just like the software
+guys model for how the hardware actually
+works is we want to shove kind of as
+much compute as possible into a given
+space of silicon so we're going to take
+our 650 square millimeters of this chip
+and try and put a lot more compute on it
+so the first thing that I notice being
+like again a software guy looking at
+this thing looking at this die shot is
+all of the area's spent on cache so
+that's this area here this chip has some
+absurd amount of cache I think it's 45
+Meg's of last level cache so on our GPU
+the first thing I'm going to do is just
+substantially reduce this we're going to
+go from like roughly 50 Meg's to roughly
+five Meg's maybe 45 to 4 or something
+like that now
+it's up to me to kind of justify to you
+that this is a good thing but notice
+that it definitely gets us more compute
+just because I can put more cores on
+here I could put roughly 50% more cores
+on this chip just by reducing the cache
+significantly now obviously I get 50%
+more cores but I don't necessarily get
+50% more performance so it's up to me to
+kind of explain the things that we do on
+this chip to kind of improve the
+performance beyond that that's going to
+be our first optimization we get rid of
+a lot of the cache so now kind of I need
+to focus on the cores themselves and
+again we're going to just kind of modify
+these cores until they look less like
+CPU cores and more like GPU cores so
+again it's just kind of a study in
+contrasts on make sure this is on page
+on a CPU the first thing that like kind
+of my overall goal is going to be to
+simplify the design of the course so
+that they get smaller and I can just put
+more of them on the chip okay so the
+first piece of like complexity that I
+notice on a CPU and I'm thinking about
+this is that a CPU has both scalar and
+vector instructions so like a modern CPU
+from Intel you can do like a Dax EAX or
+you have some vector instruction
+operating on vector registers right so
+the CPU is a has scalar and vector
+instructions but on a GPU our assumption
+is that we're doing highly data parallel
+computations and that's all we care
+about so I can actually simplify this
+greatly on my GPU my ISA is only going
+to have vector instructions and I should
+say this applies to like the NVIDIA GPUs
+I learned today doesn't apply entirely
+to AMD GPUs but CUDA runs on NVIDIA GPU
+so that's that's kind of what I'm
+focusing on okay so already we've kind
+of like have the size of our instruction
+set that was easy all right so I want to
+think a little bit more about the
+instruction set when I think about like
+especially a legacy desktop CPU like an
+x86 CPU it's less I think of it as a CPU
+and more like an x86 compiler I give an
+x86 assembly and then it really
+understands this assembly at a deep
+level it translates the assembly into
+micro code and then optimizes the micro
+it understands for example but if I say
+X or e ax e ax that I'm zeroing out the
+register and there's hardware in there
+to understand that and to like not
+actually do the XOR and to you know that
+affects our register file and all kinds
+of complicated stuff but the price of
+that is that I have really complicated
+decode logic on my cpu so here I've got
+this like backwards-compatible is a so
+that I can run code that was compiled
+you know in 1980 on a chip that was made
+in 2016 and it's complicated and I'm
+obviously constantly adding new
+instructions to my to my ISA and I
+basically had to support them forever so
+that's that's a kind of a cost that we
+pay on the die for ever with the CPU and
+it kind of keeps increasing so wouldn't
+it be nice if I could design a chip
+where every time I make a new
+architecture I change the ISA I change
+completely change the instructions
+that's actually what we do on the GPU we
+have a non forwards forwards and
+backwards compatible each time we come
+up with a new GPU we change the
+instruction set architecture of the of
+the GPU there's an obvious problem with
+this right which is that if I'm in the
+business of selling GPUs and I go to you
+and say like I have this awesome new GPU
+but in order to actually run anything on
+it you have to recompile all of your
+code you might be less inclined to give
+me some of your money in exchange for
+this GPU that I've just manufactured so
+we'd like to solve this problem while
+still like reaping the advantages of
+having a non forwards and non backwards
+compatible Isan or GPU so the way that
+we do this is by using literally the
+only trick that we have in the book as
+software developers and that introduced
+a new level of indirection so let me
+show you how that works
+so we've right as the software developer
+writing for the GPU we write CUDA code
+and I'll show you some CUDA code later
+in this talk but it's an extension on
+top of C++ and then you take the SCOOTER
+code and you run it through a compiler
+you can run it through and videos
+compiler MVCC or now you can also run it
+through playing if you want these
+compilers don't emit machine code
+instead
+they met this high level assembly code
+called PTX and this stands for parallel
+thread execution ice aptX is a high
+level assembly code because it's missing
+a lot of the things that the machine
+code actually needs for example PTX has
+unlimited registers virtual registers
+and the register allocation is saved
+kind of for later in the process
+similarly PTX is actually missing some
+instructions that the hardware needs in
+order to actually run your program so
+great so we have this PT X and this is
+like the forwards and backwards
+compatible is a that we target there's
+like a book describing what PT x does
+and you could even write this by hand if
+you want to then we take the PT X and we
+run it through PT x a s this is n videos
+closed-source optimizing assembler I'm
+going to translate the translates the
+high-level assembly into machine code
+the machine code is called SAS I haven't
+found a canonical description of what
+this stands for but the best guess I
+found on the Internet is shader assembly
+I don't know and PT XA s can compile to
+SAS for all the different architectures
+that it knows about right so when I buy
+a new chip I just have to upgrade my PT
+XA s and then i can recompile my
+existing PT x to SAS for the new chip
+then when we like actually package up
+our program here's how this works
+clang and nvcc will take all of this the
+PT x and the SAS and package it into the
+host binary and when you go to run the
+program it will look and see like do you
+have any sass for this binary for this
+GP that you have in your machine if so
+I'll run that if not I'll take the PT X
+and actually compile it on the fly using
+the GPU driver and it's you know the GPU
+drivers got a copy at this guy okay so
+this is good from a compiler developers
+point of view because it means that
+every time Nvidia releases a new GPU
+architecture we don't have to write a
+new back-end in LVM reclaim but it's
+also kind of bad from a GPU from a
+compiler developers point of view
+because PT XA s is an optimizing
+assembler and it will do things like
+loop unrolling and I as the compiler
+developer probably would like prefer to
+be in full control of like whether my
+loops get enrolled and if they do get
+enrolled how much they get enrolled
+similarly when I'm writing clang and I'm
+omitting PTX I have no idea what the
+final register allocation is going to be
+and like knowing that would probably
+influence for example how I might inline
+functions but I have only very crude
+control over the decisions that PTX a.s
+makes so I can say like don't unroll
+this loop or I can say things like don't
+inline this function but that's kind of
+all I've got
+so that's the trade-off but we don't
+have a ton of choice some people have
+tried to reverse-engineer sass but
+that's not what we do in clang and
+that's not what nbcc does either
+we just submit the PTX and we live with
+this trade-off that was made kind of for
+us okay so that's how we get away with
+changing the is a on on each new
+architecture and that is again like a
+simplification to our GPU poor cool so
+then like you know a CPU a modern CPU
+does all kinds of like crazy stuff to
+improve the single-threaded performance
+of your code so you know some like key
+words that you might know is like the
+CPU does out-of-order execution it does
+register renaming it does really
+complicated branch prediction it does
+really complicated prefetching because
+we really want our data to be there so
+when we use it if the data isn't there
+it's like going to be very expensive for
+us because their cores just sitting
+around doing nothing and the CPU is like
+highly superscalar meaning the CPU tries
+to do many different things all at the
+same time like I think these new skylake
+CPUs have like seven ports on them so
+they can do seven different things with
+some constraints at a time and these are
+all like you know important
+optimizations for a CPU to get maximum
+single-threaded performance on them but
+they also cause a lot of complexity on
+our die and so they make our cores
+bigger and again we want to shove as
+much compute as possible on onto our GPU
+none of these things are executing
+execution units right so we take all of
+them and we either get rid of them or
+simplify them so like the GPUs the
+modern GPUs that I'm looking at they
+have some limited out of order execution
+but it's not
+thing like CPU it's just like you give
+me two instructions I will try and
+execute them at the same time if they
+are not dependent on each other they
+don't do any register renaming as far as
+I know they have simpler branch
+prediction simpler prefetching actually
+probably no prefetching at all and
+although they're superscalar again it's
+to a much more limited degree than a cpu
+so let's just say all simpler all right
+and again this just lets us make our
+course smaller and put more of them onto
+the day so so far we've designed a GPU
+that has a lot more cores than a CPU the
+top-of-the-line GP 100g PU from Nvidia
+has got 60 cores on it in the same area
+as that has well chip that we were
+looking at that has 18 cores on it but
+on the other hand this quote-unquote CPU
+or GPU whatever hybrid thing that we've
+developed also sucks and the reason it
+sucks is because all of these
+optimizations here the cache and like
+out of order execution and so on they
+were there for a reason
+and by getting rid of them like not only
+did we hurt our single threaded
+performance which we don't care about
+but like we got three times more cores
+but we hurt a lot more 3x in performance
+so like so far we haven't want anything
+we've just designed kind of a bad CPU so
+we need to do something different and
+this is where kind of the one piece of
+additional design complexity in the GPUs
+comes in on a CPU you probably make sure
+among all right on the CPU you probably
+have hyper threading if you have an
+Intel CPU it means you can run two
+threads at the same time on a core if
+you have like a power CPU I understand
+they go up to eight with some like
+limited performance right and these two
+threads that are running on the core
+share resources and it means that if one
+thread is blocked waiting on memory or
+whatever the other thread can still run
+and a GPU we also have hyper threading
+but we have hyper threading up to 64
+threads per core
+and what this means is that I don't feel
+the pain from losing a lot of these
+optimizations or from losing the cash in
+particular because if I have one thread
+that is blocked on memory and like it's
+probably likely to be blocked often when
+it goes to memory because I have much
+less cash on my GPU that's fine because
+I have 63 other threads running I could
+just pick one of them and hopefully some
+of them have like arithmetic to do and
+and I can run that arithmetic so this is
+the major like addition to complexity on
+the GPUs but we only get to do this this
+is only sensible because we have this
+assumption that we have a gazillion
+threads all running in parallel on the
+GPU and again like that's not our
+assumption when we're designing a CPU so
+the fact that I wrote less than or equal
+to here should worry a little bit so I
+want to dig into that this is kind of
+the first place where we as software
+engineers need to be kind of pretty
+aware of the hardware architecture so on
+a CPU you have some number of registers
+in the ISA so like on x86 64 you have 16
+registers available to you but I claim
+that these registers like as you use
+them you're just kind of they're just
+kind of a working set quote/unquote
+registers by which I mean if you have
+some like whole program and you need 17
+registers like that's not a big deal you
+just push one register onto the stack
+and when you need again you pop it off
+the stack and that's cheap because your
+stack lives in l1 memory and like maybe
+it gets pushed down to l2 memory or
+something right but like you're not
+going to main memory to service your
+stack but on a GPU remember I
+substantially reduce the size of the
+caches and I also substantially increase
+the number of threads that are running
+at any one time so the amount of cash
+available per thread is much smaller and
+that means that if I choose to go to the
+stack I can do it it's going to work but
+I'm probably going to memory every time
+I push and pop and that's going to be
+pretty expensive so on the CPU like
+we're happy with our quote unquote 16
+registers because we can just push and
+pop on the stack and that's not a big
+deal on the GPU were much more concerned
+about going to the stack so we have a
+trade-off that's presented to us by the
+hardware if we have some program that
+needs in total more than 32 registers so
+this
+happens let's say it's equal at 32
+registers per Cora I guess it should i /
+thread if i have some program that needs
+less than or equal to 32 registers then
+I can fit 64 threads on the core if I
+need more registers than that I could go
+to the stack and that's one option
+that's fine
+alternatively I can use more registers
+and the hardware is happy to let me do
+that but the downside is I get fewer
+threads per core so this means that as a
+programmer like you need to be aware of
+this because writing kind of simpler
+smaller programs with more threads is
+probably going to be more efficient on
+the GPU than writing more complicated
+programs with fewer threads because the
+simpler programs get higher occupancy we
+can then better hide the latency of
+expensive operations on the GPU so this
+is kind of the first way that writing
+for GPUs is like inherently I would say
+a low-level proposition if you care
+about getting performance alright so
+that's all I want to talk about well -
+so to conclude kind of this thing about
+the the GPUs the kind of nuts and bolts
+of it is that if you look at a the
+biggest and baddest Intel CPU I could
+find is this equivalent of this Haswell
+chip but the the newer architecture the
+Broadwell chip 18 cores if you just sit
+spinning doing fuse multiply adds like
+the whole time you get like 900
+gigaflops per second this GP 100 GPU
+that Nvidia is just come out with the
+equivalent number is 10 teraflops per
+second and that's on a die that's the
+same size so that's how we're able to
+kind of fit in roughly a 10x compute on
+the same amount of die but like as you
+can see they're trade-offs and only sort
+of works for certain kinds of
+applications all right so now I want to
+start a sort of segue into thinking
+about how we write code for this one of
+the sort of weird things about writing
+code for the GPU is that the assumption
+is you've got a gazillion threads all
+running at the same time we need to
+impose some kind of organization onto
+these threads otherwise it's going to be
+kind of mind-blowing to get them to do
+anything coherent so the sort of
+hardware
+and programming language cooperate to
+impose structure upon the threads and I
+need to explain that to you before it
+can actually show you any code so
+actually like before I even explained
+this to you I need to unfortunately
+change a little bit of the terminology
+that I've been using so so far I've been
+talking about threads as the things that
+run on the CPU and let we're going to
+rename these Hardware threads so these
+are threads that are always running in a
+Sindhi fashion at every clock cycle they
+do 32 things at a time because that's
+the width of our Sindhi unit on the GPU
+it's 32 but when we actually write code
+the terminology that Nvidia uses and
+that I think sort of makes sense or at
+least it's hard to change in the
+presentation is that the individual what
+we call a thread is actually a single
+lane in the cinder unit so to be
+concrete about this like when I write
+int X equals 5 in my CUDA code we say
+that like this is a single thread
+running into X equals 5 what's actually
+happening is there's some sim deregister
+with 32 elements and I'm putting 5 in
+each of them yeah so we're going to call
+this thing that is like the unit of
+execution that like is running the code
+that we've written a quote-unquote
+software threat or maybe just a threat
+and we're going to call the thing that
+like is actually happening at the
+hardware a quote unquote Hardware thread
+or an Nvidia's terminology they call it
+a warp this name comes from weaving
+which was the original parallel threaded
+technology ok so how do we like organize
+these threads and the warps and so on
+into something coherent to actually do
+something useful so we have up here at
+the top of the hierarchy threads and we
+said we have 32 threads and a warp again
+this thing we can think software thread
+this thing we can think hardware thread
+we organized the warps into what we call
+blocks a block is a group of warps that
+always runs on the same core it can be
+in the is a just specifies it's up to 32
+warps in
+Lock and then we organized the blocks
+into what we call the grid the grid
+excuse me is the the full set of all the
+threads that are cooperating to do
+whatever computation we're interested in
+on the GPU we can think of that as sort
+of like the whole program and there can
+be a lot of blocks in the grid it's
+something like 2 to the 20 it sort of
+depends on the shape of the grid and
+then we'll talk about that a little bit
+but for our purposes we're just going to
+say this is infinity ok so each thread
+knows its position in the in its block
+and in its grid so what do I mean by
+that when you launch the kernel when you
+launch your program on the GPU you
+specify first the block dimensions which
+is three dimensions but I'm just going
+to draw - so this is block size X and
+this is BS Y and there's a BS z - yeah
+and a thread knows its position inside
+of the block in terms of x y and z and
+then similarly when I launch the kernel
+I also tell it how many blocks and I
+tell it the shape of the grid and a
+thread can also query this number which
+is the block index XYZ so each thread
+has associated with it 6 indices and the
+shape of these two things is specified
+by me on the CPU when I start running
+code on the GPU and we can query these
+things from the from the thread and sew
+the thread uses us to kind of figure out
+what data I am I supposed to be
+processing it at this moment ok cool
+so I think with this we can actually
+start writing some code so let me let's
+do that so the algorithm I want to show
+you today is what we call a full
+reduction kernel and so what this is is
+we're going to take just a list of
+integers and we're going to add them all
+up and normally if you were writing this
+code and say again or thrust or any of
+these other kind of libraries you would
+probably write this as a templated
+function and so it wouldn't be a list of
+integers would be a list of t's and you
+would also template on the reduction
+function
+so instead of just doing addition you
+would be able to do addition or
+multiplication or take the min or take
+the max or something like that but we're
+just going to kind of simplify it and do
+addition so the way I'm going to
+structure this algorithm is first each
+thread is going to add up four elements
+from the array so it's going to kind of
+figure out what four elements that's
+responsible for load them all into
+memory and then add them up and then
+within the warp remember that's the
+hardware thread we're going to do what
+we would call in Tsim deal and a
+horizontal add we're going to add up all
+the values that we've accumulated in the
+warp and then we're going to do the same
+thing in the block
+remember the block is the set of warps
+that are all running on the same GPU
+core and then finally we're going to do
+that kind of across the grid across all
+the threads that were running on the GPU
+so we'll get to see all layers of this
+thread hierarchy in this code okay cool
+so let's let's write this we use the
+underscore underscore global attribute
+to say that the function we're about to
+write is a kernel function and the
+kernel functions are functions that we
+can invoke from the CPU to start a
+computation on the GPU kernel functions
+always return void and we'll call this
+full reduce and now the arguments it
+takes are pretty simple we have a
+pointer of intz we have a size T N and
+we have a int star out cool all right so
+first thing we have to do is declare our
+sum to 0 and remember that in the
+hardware some is actually a vector
+register of width 32 and I've just
+initialized all of them to 0 and now I
+also need to figure out like where do I
+start okay so to figure out like which
+elements this particular thread is
+interested in using these two add up
+together I need to consult the thread
+index and block index and
+remember those kind of interlocking
+squares that I drew
+so I'll write this and then we can kind
+of think about what it means
+okay so this four comes from the fact
+that each thread is processing four
+elements and then basically I'm ignoring
+thread index y&amp;amp;z and block index dot y&amp;amp;z
+because when I launch this kernel I will
+always set the the size of the
+dimensions of the block and the
+dimensions of the grid to be one in the
+y&amp;amp;z element so I'm kind of I'm
+envisioning my input as a single
+dimensional array so I'm also going to
+set these guys to be a single
+dimensional array and if you think about
+it a little bit this kind of figures out
+where I start inside of this single
+dimensional array this this expression
+okay so now it's pretty simple we just
+write a loop
+so start plus four but we also have to
+make sure that we're still in range is
+less than n I plus plus okay so now I
+could just do something like this plus
+equals in sub I and again it should
+point out that this is what we call in
+Cindy world a gather mode meaning I have
+some base pointer in and then I remember
+is a vector of 32 indices that are all
+different and I'm loading so I'm loading
+32 different addresses into this
+temporary array that I'm then going to
+add to some the GPU hardware has support
+for recognizing if I'm doing a
+consecutive load of 32 consecutive
+addresses it also has support for
+noticing if I'm doing a strided load in
+this case I'm doing a nice strided load
+of four tints and it will make those
+fast it is like perfectly happy to run
+your code if you like about 32 different
+values for I are 32 random addresses
+that will work but it will be slower
+than if they're nice and strided so as
+the programmer if I want to get good
+speed out of my program like I need to
+be aware of of that rule and kind of I
+want to make sure that this is either
+consecutive or strided okay so I could
+write it like this and that would be
+fine but probably a better way to write
+it would be as follows
+so here we're using the ldg intrinsic LD
+G stands for load global but probably a
+better name would be load invariant or
+load read-only so load this is a special
+load operation that we can use on the
+GPU that works only if the memory that
+we're loading never changes during the
+lifetime of the kernel so we're not
+writing to in so we can use LD g and LD
+g is often faster never in my experience
+slower than a regular load
+we as the compiler like we would like to
+replace regular loads with LD GS and in
+some cases we can but you notice that
+it's difficult for us as the compiler
+writer to change this first load into
+the second thing because in order to do
+that I would have to prove that in and
+out don't alias because I am going to
+write two out so if you mark in with
+double underscore restrict then we will
+in this case replace it with LD G but
+it's kind of ugly and there are a lot of
+cases that we can't do this in so this
+is kind of an unfortunate thing we're
+sort of working on it but for the moment
+this is what you got all right so now at
+this point I have 32 quote-unquote
+threads 32 software threads with 32 sums
+of four elements from from the input and
+now again we want to do kind of a
+horizontal add across all these guys so
+let me show you one way to do this I'll
+write the code and then I'll explain
+what it does we're going to use another
+intrinsic this time shuffle down
+okay so what what the heck does this do
+I could also write this as a loop but I
+think it's clear to write it unrolled
+the shuffle down intrinsic is you can
+think of it as a shift of one of these
+sim D registers so again some is
+implicitly this register of 32 different
+values here's index 16 in sum when I do
+shuffle down some 16 I take this guy and
+I move the top half to the bottom half
+and then the top half just becomes
+undefined and then I add that to the
+existing sum so after I do this first
+line the first 16 threads in the warp
+each have the sums from two threads and
+then the remaining 16 threads and the
+work I'll just have garbage for their
+sum and then I repeat this four more
+times and at the end I have a vector
+where element zero of the vector has the
+sum from everything in the work and
+every other element of the vectors just
+undefined okay so this is kind of an
+efficient way to do to transfer data
+between threads inside of the work all
+right cool and like if I wrote this as a
+loop I could make use of the warp size I
+think it's a macro even but I could make
+use of this thing and sort of like
+unroll it and then I would be kind of
+like more agnostic to the 32 thing but
+believe you me when you see a lot of
+CUDA code like a lot of it just kind of
+assumes that the warp size is 32 threads
+all right okay cool so now let's let's
+continue we have this sum from from all
+the warp and now we need to kind of
+combine all the different warps in our
+block into a single sum so I'll show you
+one way to do it there a couple of
+different ways we could do this we're
+going to do this using what's called
+shared memory and shared memory
+shared memory is memory that lives
+inside of the GPU core itself
+and it can be accessed by threads inside
+of the same block accessing shared
+memory is a lot cheaper than going to
+global memory which is the RAM that
+lives on the GPU itself
+I can't initialize the shared memory I
+can't say shared something equals zero
+that's not allowed by the language so
+the first thing I have to do is put zero
+into this thing so here's one way I can
+do that oh by the way this thing is not
+a vector this is just one INT okay if I
+didn't have shared it would be a vector
+but because I have shared it's just one
+into living somewhere in memory okay so
+now every thread is going to write zero
+into this thing and then I'm going to
+call another intrinsic sync threads is a
+barrier it waits until all warps inside
+of this block reach this location there
+is no synchronization intrinsic that
+says wait until all warps in the grid
+reach this location we can only
+synchronize within the block within that
+set of threads that's running on one GPU
+core there's a practical reason for this
+which is that the assumption is I've
+launched a gazillion threads I cannot
+have them all running at the same time I
+have to wait until some of these threads
+have completed before it can start
+running the rest of them so asking me to
+sync across everything globally would
+just not be feasible that instruction
+doesn't exist if I want to do it the
+only way I've seen people successfully
+do it is they launch two kernels and
+those two kernels will run in series
+okay great so now at this point shared
+sum is equal to zero I could have just
+like had some if statement here that you
+know check my thread index and then we
+had one thread run into shared some you
+would have to benchmark it and see if it
+matters in my experience it doesn't
+really matter all right so we we know
+how the zero shared something now we
+need to write into it cool so what we do
+is we check if our thread index we want
+to check if we our warp zero because
+remember it's only warp zero that has a
+valid value for the sum everybody else
+is undefined
+so to check whether we're oh we do that
+and now what I want to right here is
+shared some plus equals some but I can't
+do that that would be a race condition
+because I have multiple threads all
+accessing this variable at once so
+instead I have to do an atomic operation
+I think it takes a pointer
+cool so now we're good
+and then we sink again so at this point
+after we sink shared some contains the
+sum from the whole block from all the
+threads that are running on the one GPU
+core so when you see this if statement
+may be like it annoys you a little bit
+it annoys me a little bit and the reason
+is because this whole time have been
+saying that like every time we execute
+an instruction is actually at the
+hardware executing in a sim d fashion
+but here only one of the threads is
+doing this only one of the threads in
+the warp is doing this and every other
+thread is doing what I don't know so how
+does this work when this works basically
+with combination with the cooperation of
+the hardware and the compiler and in
+particular with the PTX assembler
+compiler that thing that takes our
+high-level assembly and converse it into
+the machine code for the GPU so at a
+high level the way that this works is
+that the NVIDIA GPU and I learned today
+that the AMD GPUs do this more
+explicitly but the NVIDIA GPU implicitly
+when it encounters a conditional branch
+there's hardware support to do the
+following if all the threads in that
+warp take the same direction on the
+conditional branch we just go there
+wherever that is but in this case that's
+not true one of the threads in the warp
+is going in here and the other feds in
+the warp are going down here right so in
+this case we have what we call a
+divergent branch and what the hardware
+does at this point is it pushes a mask
+onto a stack that the hardware itself
+maintains and this mask says only thread
+0 and the warp is currently active and
+then it actually runs the code inside of
+here and then it keeps running until it
+encounters an instruction inserted by
+the PTX assembler that says ok you
+should you've sort of reached the end of
+this scope whatever it is go back invert
+the mask and then do whatever that other
+set of threads is going to do so then it
+will go back invert the mask and then it
+will say AHA I don't take this if branch
+I just kind of go down and then it keeps
+running until it encounters an
+instruction insert
+by the PTX assembly that says okay now
+we've reconverge and then it kind of
+pops off from the that stack and goes
+back to whatever it used to be so
+cooperation between the PTX assembler
+and the hardware but as the compiler
+writers we have nothing to do with this
+so you notice that like the way I
+described it it would be perfectly legal
+like if I had two if statements if a and
+then I have if B it would be perfectly
+legal for the PTX assembler not to
+reconverge until after if B and that
+would mean that sort of I have maybe for
+X as many or I guess twice as many
+divergent states here because I like
+I'll go in here and then all the threads
+that go into if a I keep running them
+and then I you know check if how many of
+them go into if B and then I have to pop
+off and then I you know so I have twice
+as much stuff that I would have to do if
+in contrast to Rican verging here and
+then we converging here I don't have to
+reconverge here
+that's up to PTX assembler whether or
+not it wants to do that there is one
+place where I do have to reconverge
+though and that's when I run a sync
+threads because it would be really
+really bad if you know we go in here and
+then we activate only thread zero and
+then we go in here then we run sync
+threads and thread zero is still the
+only one that's active we read for
+everybody else to get here and then we
+keep running with only thread zero
+active that's not you know it's not
+going to end well for us the PTX
+assembler is like responsible therefore
+for understanding the control flow of
+our programs and for understanding where
+we have instructions that force
+reconvergence and we've actually seen
+bugs where like if we write sufficiently
+convoluted control flow we can confuse
+the PTX assembler and it will not
+reconverge by right here and then you
+will just have bugs that cause you to
+tear your hair out for a month take it
+from me that's just kind of what we deal
+with right now as GPU programmers okay
+by the way I should mention I think I
+forgot to mention this that like the
+machine code the SAS code is a closed
+source is a so like if you want to
+compile to it you have to reverse
+engineer it to it
+so like the best that we're doing
+sort of like reading the output from the
+tools that NVIDIA has given us to kind
+of like sort of understand what's
+happening on the GPU but it's is
+challenging okay cool
+so all right to recap at this point
+shared sum is the sum from everything
+inside of the block and now we just have
+one less thing we have to do which is
+add in two out and that's that's pretty
+easy so we just say we can now pick any
+thread inside of the block but I'll just
+pick a thread zero inside of the block
+and we just do an atomic add in two out
+that's it we're done
+so the reason I picked this is because
+the reason I picked this example is
+because kind of every step along the way
+we are constantly thinking about what
+the hardware is doing and what the shape
+of the hardware is and I claim that in
+pretty much every high-performance CUDA
+thing that I've ever seen looks very
+similar to this is very specific to the
+shape of the hardware and even if this
+we're running on like an AMD GPU which
+is in many ways very similar it's not
+going to work because the warp size is
+different and like the shared memory
+semantics are slightly different and so
+on but on the other hand I claim that if
+you just spent a gazillion dollars on a
+bunch of GPUs you probably want to write
+in a language like this and the reason
+is that like nobody says I just spent a
+gazillion dollars on GPUs I now don't
+care about performance the whole reason
+you bought these GPUs was to get them to
+run fast and like I claimed that you
+either need an incredibly smart compiler
+of the likes that I've never seen or you
+need a programming language like this in
+order to eke out all the performance
+from your GPU and similarly like this
+code is not going to run unlike a DSP or
+an FPGA right that's like a silly thing
+to suggest I don't think this is so bad
+and the reason I don't think it's so bad
+is that the code that you're running on
+the GPU by its nature is hot code and
+you don't have a lot of hot code in your
+program so asking me to re-implement my
+hot code for a different architecture is
+probably not the end of the world that's
+my claim anyway alright so now I want to
+switch gears and talk about compiling
+for CUDA and clang and lob em so why am
+i excited that we can now compile CUDA
+code in clang and LVM I kind of have two
+reasons for this
+number one is sort of related to the
+front end to language itself and number
+two is related to the back end to the
+optimizations you can get out of LVM so
+from the front end I mean like let me
+let me preface this by saying like I'm
+not here to throw rotten vegetables on
+MVCC like that's a good compiler but
+we're also happy about our compiler so
+all right so let's on the front end like
+what you get from Klain is you get an
+actual bulletproof C++ compiler what
+this means is that you get things like
+very attic template support you get
+things like C++ 14 support proper
+context for support all that stuff just
+works today just download it from tip
+compiled with it you also get things
+like oh and I should say that like this
+matters to you because not just because
+like you're like well that's fine I just
+won't write my CUDA code using C++ 14
+and then it will just be fine with MVC
+see I don't really care but the problem
+is that the way CUDA is sort of designed
+you combine your host code your CPU code
+and your device code often the same
+files or at least you include some of
+your host headers in the file that has
+your GPU code so that means that like
+selectively at least some of the headers
+from your code have to be compatible
+with this compiler that doesn't support
+all the C++ features that you know and
+love okay unless you're using clay and
+then just works so similarly like the I
+would I would say that like the you get
+other advantages from class
+like we're known for having fast
+compilation klein compiles CUDA code
+about twice as fast as NBCC we're also
+known for having good error messages you
+kind of get that for free right also
+this kind of philosophy of sort of like
+being bulletproof applies to some of the
+things that the compiler gives you so
+for example SCD math our STD math passes
+lib c++ --is test suite in contrast like
+if you're compiling with NBCC and you do
+something like STD colon colon sign
+f-zero it's going to say like i don't
+know how it's going to say this function
+sign F doesn't exist and if you say well
+I take off the F it says there's no STD
+sign that takes an int and that's like
+not standards-compliant clang just works
+and that's it's awesome similarly I'm
+working on patches that will make a city
+complex just work properly on clang they
+sort of work right now with MVCC if
+you're very cautious about how you use
+them but what I hear from people who've
+tried to use this as they get into
+situations where their code will work at
+o2 and will crash at zero because at
+zero the complex functions don't get in
+line and then it doesn't work with nvcc
+so we're not going to have that problem
+with clay so that's why you might be
+excited about it on the front end on the
+back end I think the things to be
+excited about being able to use LOV em
+to compile your GPU code is that you can
+take the code that's important to you
+and optimize it and see where the
+compiler is failing and then fix the
+compiler so let me give you two examples
+of that in the GPU CPC paper this is
+from some Googlers this is kind of the
+predecessor to CUDA support and clang in
+this paper they talked about an
+optimization of replacing 64-bit integer
+divides with 32-bit
+divides so what they did was they check
+it both of the operands to a 64-bit
+integer divided are fit inside of 32
+bits and if so they do a 32 bit divide
+and if not they do a 64 bit divide this
+was a huge optimization I don't know why
+I don't know what code was doing this
+but this like one really big on some of
+their benchmarks and it was like a four
+line patch to LLVM because the thing to
+do this already existed for atom
+processors and so is literally like take
+this pass for atom processors and now
+run it on the GPU and you get like your
+benchmarks run twice as fast okay and
+like our 64-bit divides interesting to
+you I don't know because I don't know
+what your code looks like but they were
+interesting to us and so like I claimed
+that you can apply the same principle to
+to your code so let me just give you
+another example we worked with some
+people from AMD to implement this
+optimization called a load store
+vectorizer but I think LSW might be a
+better name load store Weidner the GPUs
+have instructions that will load
+consecutive addresses into multiple
+registers at once like arm has similar
+instructions and so we added an
+optimization pass to LLVM that will very
+aggressively widen loads and stores were
+possible and what was really cool about
+this is that I didn't have to do the
+work some guy from AMD did the work for
+me and it just works for it for NVIDIA
+GPUs as well and this was again like a
+2x improvement on some of our benchmarks
+so I think this is really the promise of
+being able to use LVM for compiling GPUs
+so like I said all this stuff is
+open-source it's actually being
+developed in the open it's not just like
+code drop throw some code over the wall
+style open source if you want to play
+around with it you can Google CUDA clang
+and the first hit is I think a set of
+instructions that I wrote if they don't
+work for you maybe send me an email or
+even better send me a patch I'm here for
+the rest of the conference just one
+final note like
+we've been talking they're a bunch of
+talks at this conference about like
+accelerators and GPUs and heterogeneous
+programming and like this is really hot
+right now and we're thinking a lot about
+it but when you think about it as like
+members of the standards committee or as
+like thought leaders in C++ like I urge
+you to think about how you can make
+something that exposes the low-level
+interface of the hardware because as
+accelerators become more important like
+the whole reason we have accelerators is
+to accelerate our programs to make them
+run faster and I don't want us a C++ to
+like get into a situation where we have
+these awesome accelerators and we have a
+language that kind of does not follow
+C++ a zero cost principle yeah so I
+think CUDA does follow that principle
+and I've heard some presentations this
+week that I think also sort of followed
+that principle and so I'm happy with
+that so I think we have about 10 minutes
+left for questions thank you guys very
+much yes awesome so the question is does
+CUDA cling also have the limitation of
+not being able to pass classes to
+virtual functions to device code and the
+answer is yes it's sort of a hardware
+limitation and the reason is that the
+PTX assembler needs to be able to
+statically analyze your control flow in
+order to figure out where to insert
+those instructions that say reconverge
+here and as soon as you have indirect
+branches you can't do that so as a
+result we don't the the PTX assembly
+language doesn't even let us do indirect
+jumps so virtual function calls are just
+straight up
+so the question is do we lose some
+optimizations by not being able to tell
+how many registers we're going to use
+the answer is yes but also compared to
+what so there are no compilers that
+compile directly to sass so how badly we
+get hurt by that is unclear to me the
+one thing I'll say is that Nvidia does
+ship pre-compiled sass blobs to do
+certain linear algebra and deep deep
+learning stuff and there are some of
+those that we've been able to beat with
+like our CUDA code but there are others
+that we have not been able to touch for
+example their matrix multiply and the
+assumption is that the sass that they've
+given us is hand optimized and we're
+never going to be able to touch that
+unless we have a SAS compiler yes and so
+would you rather that Nvidia released
+this PTX off open-source would you
+rather that all of this is implemented
+in clang and NVIDIA just releases some
+sort of is a specification so I don't
+have to repeat your question because you
+said it I'm like I'm not sure what I
+would rather have I'd have to think
+about it although my instinct is like I
+would rather that like the current way
+that we do things where we emit this
+sort of we emit essentially an
+intermediate representation we met PTX
+like I think that that I would prefer to
+have full control and side of LOV and
+reclaim as opposed to continuing to
+release this this this intermediate
+language and the reason is that like it
+would be certainly better if I could see
+the source code of the PTX assembler so
+I could have some understanding of what
+it's trying to do but on the other hand
+I still don't control what it's doing
+right I can just understand what it's
+doing and so we've had situations where
+like we make uninteresting changes to
+our to the generated code and it
+actually has big changes in the sass
+that gets generated for example it
+causes the PTX assembler to choose to
+unroll a loop or choose not to unroll a
+loop and at the moment I have no idea
+why it's choosing to do that but even if
+I did know why it was choosing to do
+that because I could read the source
+code like that's still a lot of work for
+me to do
+so yeah I think I would prefer for it
+all just kind of to be in the compiled
+well you mentioned that you were working
+with someone from AMD yeah so is this
+going to be part of their HSA compiler
+or are these orthogonal projects I
+really don't know but I can put you in
+touch with the person who does know yeah
+thanks uh what does this compare to uh
+if you compare this to GCC
+if you're running on unit like a Linux
+based or UNIX based platform do you mean
+GCC for like compiling for GPUs yeah ok
+GCC doesn't compile for GPUs so there's
+no comparison i I've kind of a dumb
+question perhaps um among the hardware
+bits in a standard CPU or like task
+state management do we have that in how
+does this work you mentioned a couple of
+kernels it got me thinking what's a
+kernel and does one process on your
+machine just kind of occupy this
+hardware or is it part of task switching
+so so yes you can have multiple kernels
+running so what does a kernel first of
+all kernel is like matrix multiply it's
+like a single unit of compute and on in
+the program model I didn't show you the
+host code to actually launch the kernels
+but if you go to your Google CUDA clang
+we have an example showing you the host
+code to launch it you basically specify
+what we call a GPU stream and then you
+launch kernels on that stream and they
+run in series so you can say matrix
+multiply and then you know subtract 12
+from all my elements and it will do one
+thing and then the other thing and those
+two things are kernels and then to your
+specific question about like
+task-switching yes you can run multiple
+kernels concurrently on the GPU just
+from different streams and you can have
+multiple processes touching the GPU to
+it is happy to do that I don't really
+know the details I haven't tried to do
+that but it does work yes
+sorry can you speak up a little so the
+question is is this orthogonal to open
+and P yes and no the CUDA language is
+definitely orthogonal to open MP like as
+you can see it's a lot more complicated
+than just pragmas or it's a lot
+different than that I should say on the
+other hand like open MP I think has an
+MVP TX backend like a back end targeting
+the same intermediate programming
+language that we target so a lot of the
+optimizations that we write for env PTX
+should work just as well for open MP
+so the question is is the long term view
+for this compiler to take some standard
+call like sed accumulate and then just
+like do analysis to figure out how to
+run the sed accumulate code on the
+device and then just kind of like make
+that work or is it something different I
+would say right now we're not planning
+to do that instead we're kind of
+planning to let you write code in this
+low-level language and make it run fast
+and then if somebody wants to implement
+s to D accumulate and I just went to a
+talk yesterday about this with CUDA like
+knock yourself out and their languages
+are there like libraries out there right
+now that support this we support thrust
+which is Nvidia's language or library I
+should say that that does that but kind
+of my feeling about it is that we I'm
+not sure that the compiler can do a good
+job about that so for example like given
+the naive host code loop for the
+function I showed just adding up a list
+of integers it's not clear to me how to
+get a compiler to output the code that I
+wrote down so before PGI got bought by
+Nvidia there they have a product I think
+it still exists where you can get CUDA
+to x86 so now that you have a full CUDA
+front-end have serve ever been technical
+discussion about having a different
+back-end to admit different sim D vector
+instructions that aren't Nvidia specific
+yes there's been we've talked about that
+I don't think we've had a ton of
+movement on that and that's just because
+that's not something that our customers
+are coming to us asking for but
+especially with avx-512 before that it
+would like even with avx2 it's sort of
+dicey to do that in an efficient way but
+with avx-512
+i think it's sort of clear how to do
+that in an efficient way we just haven't
+done it but it should be totally
+possible I have a question perhaps is
+something you have run across and you
+have some ideas on how to micro
+benchmark it so the context is basically
+what you said about the warp divergence
+problem when you have those branches and
+you have different warps attitude in
+different branches and to my knowledge
+currently Nvidia graphic cards do some
+kind of dynamic presentation when we
+have this vast selection and different
+threads from different warps connected
+to different computer boards and I know
+that
+the recent cards have some kind of smart
+prioritization of those flexing their
+warps so it's not just necessarily going
+to be one after another after another
+and the my question is how do you figure
+out what that is because it's not
+exactly that you meant at and it may be
+this something you have rather a trust
+when you are trying to optimize the code
+you generate to have some methodology to
+benchmark those pencil well
+reverse-engineer then what what you say
+is is news to me I'd never actually
+heard of that I was under the impression
+at least for the cards that I looked at
+that like it always executed one side of
+the branch and then the other side of
+the branch and that was that was fixed
+we can little fly but basically that you
+were still cut is the warp divergence
+problem and dynamic predication and that
+should be that the first several hits
+but okay okay yeah we should talk I find
+out that you guys got anything else okay
+well thanks a lot for coming
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

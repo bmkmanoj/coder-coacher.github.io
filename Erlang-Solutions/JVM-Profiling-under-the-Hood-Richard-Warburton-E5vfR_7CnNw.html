@@ -1,0 +1,1103 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>JVM Profiling under the Hood - Richard Warburton | Coder Coacher - Coaching Coders</title><meta content="JVM Profiling under the Hood - Richard Warburton - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>JVM Profiling under the Hood - Richard Warburton</b></h2><h5 class="post__date">2015-11-23</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/E5vfR_7CnNw" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">fantastic I'm gonna let yourself
+introduce actually oh cool brilliant hi
+my name is Richard I'm gonna be talking
+about JVM profiling under the hood what
+that means is we're going to be having a
+look at a few of the kind of problems
+you might encounter when you're
+profiling applications and some of the
+kind of workarounds and how profile is
+actually work and talk a little bit
+about measurement bias but before we
+kind of go deep diving into technology
+does anyone remember okay there wasn't
+that recently but not that long ago we
+had a new millennium right I know right
+on you guys but I'm not that old this
+was my first new millennium and at the
+time the new millennium we were naming
+everything millennium there's Millennium
+Dome millennium bug or sorts of stuff
+and we actually in London had this
+millennium footbridge built as anything
+remember what the problem was with the
+Millennium footbridge horizontal
+resonance yes it wobbles it's the
+problem and does anyone remember why
+despite all this technology we ended up
+building a bridge that wobbled
+yes well in simple terms they were
+modeling the idea that people were
+walking on the bridge but they didn't
+take account of the fact that actually
+there's some correlation between the way
+people walk so there was a slight
+modeling error between the way they are
+understand the data and they ended up
+having to redesign some of the
+structural engineer on the bridge and
+add on a whole load more vertical
+supports it's not solely directly to do
+with profiling but just keep that idea
+in the back of your head they had to
+redesign a whole bunch of stuff do you -
+just a slight modeling mistake a very
+very subtle problem okay so what about
+the structure this talk first of all
+I'll talk a little bit about why we
+might want to profile to begin with then
+I'm going to talk about different
+problems or biases that you might
+encounter when profiling and different
+problems problems with profiling
+techniques problems with profiling
+methodologies then we'll look under the
+hood about how profilers work how we can
+solve some of those problems and then
+we'll bring some those threads together
+okay so from time to time this kind of
+thing happens in terms of our software
+application right we have some kind of
+bottleneck and we want to find where the
+root cause of that bottleneck is and
+here it's pretty obvious what the root
+cause of the bottleneck for our traffic
+jam is it's this massive bus right in
+the middle of the jam but if we're
+looking about software we might have a
+relatively complicated system hundreds
+of thousands of lines of code maybe
+millions of lines of code it's not so
+obvious where the actual problem lies
+and step one for many people when
+looking a performance problem is this
+guy go and randomly guess at what the
+cause of the software problem is in
+question also people have a kind of
+habit of going well it's this technology
+we're using that technology slow or they
+have a habit of going we've seen
+performance problems before the last
+time I encountered a performance problem
+it was like this performance tuning by
+folklore what I actually would like
+people do a lot more of is take
+measurements about their application
+data and use that data measurement to be
+a little bit more scientific a little
+bit more rigorous so you've got a
+performance problem where is that
+problem that's a hypothesis to evaluate
+take measurements on CPU metrics all
+sorts of things eventually we want to
+find out where this application problem
+lies in terms of our code and that's
+where profiling comes in
+you might also engage in some
+exploratory profiling so it's a common
+thing that people do to never profile
+their application at all outside of
+performance bottlenecks and that gives
+you this kind of weird situation when
+you do actually get a performance
+bottleneck
+what's it meant to look like when things
+are running smoothly what's going on
+there so it's also helpful to do a bit
+of exploratory profiling before you hit
+a bottleneck so you have some kind of
+mental context for how your system back
+can behave it's also incredibly useful
+for finding weird bugs the number of
+times I've done some bit of profiling
+and gone wait why is that actually
+spending time there it shouldn't be
+doing that at all
+and it turns out the profiling can
+actually be quite a good way of finding
+bugs as well
+I want to conference earlier this year
+also in London called DevOps UK and
+there was a guy there who gave a great
+talk called sergey krutsenko is one of
+the oracle performance engineering team
+and Sergey had this long talk you had
+this cold kind of series of things using
+related matrix optimizations and he got
+to the end of the talk and he he drilled
+down he looked at CPU cache profiling
+measurements all the sort of things and
+he said performance is easy all you need
+to know is everything about your
+software application JVM hardware and
+everything else I'm not going to be
+talking about everything today I'm just
+going to kind of narrow the scope a
+little bit and talk about one type of
+thing execution profiling is what I'm
+gonna be talking about execution
+profiling is answering the question of
+where in my code is my application
+spending time it can't tell you why it's
+there it can't tell you perhaps actually
+it should be spending time there it
+can't tell you whether it's necessarily
+spending time in a method because it's
+doing something stupid or or maybe sure
+that shit's inherent it's just telling
+you where in your code
+it's your application spending time and
+in fact this is not the only cause of
+performance problems right so this is a
+slide
+conveniently stolen from the zero
+turnaround who did a massive survey of
+people
+looking what kind of performance
+problems people had loads people have
+problems with database queries or GC
+logs or locking and i/o this massive fat
+red blob over here is inefficient
+application code this type of problem is
+the kind of problem that we're going to
+be really useful for spotting with
+execution profiling so I don't to claim
+I'm solving everything just some things
+okay so you said a bit about why we
+might want to profile and why we would
+what kind of problems we might be able
+to solve with execution profiling let's
+take a look at and what the actual
+problems are with profiling profiling is
+you know I send it out to be this this
+honest empirical investigation right
+we'll do some profiling we'll find out
+where the problem is and the ill
+everything will be good but the reality
+is a lot muddier and murkier so there
+are multiple different types of
+execution profilers that we can think
+are in terms of firstly there's
+instrumentation based profilers
+instrumentation based profilers take a
+method and they're adding a little time
+at the beginning and a little time at
+the end and they'll subtract the time
+they've taken at the end from the
+beginning and they'll say all right this
+is how long method call was and then
+they'll lock it somewhere okay nice and
+simple
+the problem with instrumentation
+instrumenting profilers is they tend to
+have a huge huge observer effect on the
+application that you're profiling they
+can often skew the measurement of and
+the application terms how long it takes
+you know you can easily get a twofold
+threefold even tenfold sometimes
+slowdown from using an instrumentation
+based base profiler and if you have
+effects in terms of your application
+which are timing related like back offs
+and queues and things like that you can
+have enough observer effect to
+completely ruin the applications
+behavior that you're monitoring so I'm
+not saying don't use instrumenting
+profilers but it's not really the focus
+of this talk and it's not really the
+focus this talk primarily because
+they're the skew that that observer bias
+has on the application itself what I
+will be talking about is sampling
+profilers so sampling profilers come
+along and you say your application is
+running you've got some threads we're
+going to pause those threads we're going
+to do a dump and we're going to look
+I want each of those threads was doing
+we're gonna look at the stack trace
+there we're going to aggregate those
+stack traces and we're going to
+visualize the results you so if you've
+got some application which is maybe some
+web server sitting there running a big
+loop at the bottom it's calling into
+some controller so they here handle a
+web request it's reading some kind of
+person object out of a database or a
+file store and it's instantiating some
+person then it's going to take that
+model that it's picked up and put it
+into a some view code where it's
+generated some HTML that is application
+time and periodically it's going to come
+along and interrupt the thread in some
+respect and sample what it's doing at
+that point in time you'll notice that we
+have these little little kind of
+question mark guys all over this slide
+as well those are things where the
+application could have been doing
+something where we have absolutely no
+idea because they were in between
+samples and they'll be also a little bit
+of a cause of bias as we'll see as his
+talk goes on so the idea here is as I
+say we sample this programmer interval
+we build up a distribution of time that
+we spend in methods so if you see that
+if you sample and you see that same
+method a lot you know that that's the
+hot spot inside your application but
+this relies on a bunch of assumptions
+about the way our application works for
+start in some sense we're trying to
+assume that this sampling process is
+random because if there's a bias in the
+sampling process that means we're more
+likely to see certain types of methods
+and less likely to see other types of
+methods something can look like it's a
+hot spot and a big bottleneck where
+natural fact we didn't spend much time
+there or vice-versa and we also have
+these problems that we're talking about
+sample time the distribution
+approximating the genuine time spent
+distribution so the first kind of
+problem that people might have with
+sampling profilers is just plain out
+they don't have enough samples that
+they've collected in order to get a good
+enough picture of their application one
+approach to that is to drop the sampling
+intervals for that so perhaps a more
+reasonable approach if you're kind of
+profiling in a development cycle or an
+isolated situation if you're trying to
+do more kind of continuous profiling or
+profiling in production the only real
+solution here is patience you need to
+wait a bit longer
+to collect those samples but you might
+find that if you extend that period long
+enough you'll begin to guess what gets
+what's known as periodicity bias well
+this is the idea that we repeatedly
+profile the application at a certain
+point in time and we end up seeing the
+same thing because that's something
+which the application is doing the
+sampling period accidentally correlates
+with some actual common regular
+occurrence inside our application if
+you're doing kind of regular development
+level profiling where you might sample
+every few milliseconds this is quite
+unlikely to happen but this is the kind
+of thing where if you do more kind of
+production profiling where your profile
+wants a minute or once an hour or
+something luck and try and build up a
+picture over a long period of time and
+people sometimes do this in production
+so they don't have a particular large
+overhead of sampling then you can often
+hit this periodicity bias so one
+approach that it's the shortened
+interval and as I say works fine in
+development but you can still increase
+your observer effect and you can slow
+down your system if you're doing genuine
+production profiling so another approach
+in this situation is to start to
+randomize the interval at which you take
+your profiling samples and that means
+you aren't sampling on a constant period
+another approach that problem that
+people have is that sampling is an
+inexpensive operation actually stopping
+those threads and doing something can be
+quite an expensive operation
+one approach is to switch sampling
+method we'll talk about other sampling
+methods and something method in a sec
+another approach is just say look it
+kind of sucks but maybe we're doing in
+development it might not be the end of
+the world and obviously there is also
+that longer sampling interval with the
+kind of caveat of periodicity bias that
+I talked about earlier well what about
+the methods itself the sampling methods
+can have a bias so what does that look
+like well let's look
+out some code here so this is some code
+from spec JVM 2008 so spec JVM 2008 it's
+got an open source benchmark that JVM
+vendors used to say look our JVM is
+really really fast
+trust us go on its gave it gives us a
+big number on this benchmark but it's
+actually quite a good benchmark in many
+respects it's peer reviewed it's put out
+by like quite well-respected spec
+organization it does a lot of things
+quite well people look at the benchmark
+they evaluate it it's the kind of thing
+which you might want to profile if you
+wanted to investigates the kind of thing
+where you might say this is the kind of
+thing where our profiler should work so
+this is a one component in the benchmark
+a successive over relaxation benchmark
+so it's basically solving a system of
+linear equations and I think the actual
+overall algorithm was briefly outlined
+in the keynote this morning interesting
+enough so the body of the method has
+this big block of execute code I don't
+want you to worry about what it's
+actually doing here but suffice to say
+it's doing some maths and this is where
+the actual benchmark gets run and
+surrounding the execute method is this
+other methods called measure SOR okay so
+measure SOR is a method that calls the
+benchmark and actually times its
+execution okay so let's run this
+benchmark and then
+and actually profile it using J visual
+VM using its sampling profiler this is
+where the small screen resolution begins
+to doom us a little bit now what's
+actually going on here
+well the execute method was meant to be
+the actual benchmark method that we see
+in our application and we'd expect if
+the spec organisation has written a good
+benchmark that the wrapper method this
+measure SOR was very unlikely to crop up
+and we'd expect itself time in profiling
+to be incredibly low when we profile it
+with J visual VM we find that it
+believes that nearly 63 percent of time
+was spent in this measure sor method it
+doesn't even think that the execute
+method was ever called so there are two
+possible reasons why this is the case
+number one spec could have done just a
+really bad job with a benchmark and
+maybe the dick compiler just optimized
+the way the entire benchmark at runtime
+that's the thing that can happen with
+benchmarks another thing that could have
+happened is maybe this profiler is not
+actually being as honest as it claims it
+is with respect to where we've spend
+application time
+so given this section the talk is called
+lies damned lies and statistical
+profiling you can probably figure out
+which one is the actual answer here
+before I go on I just like to mention
+explain why that is I just like to
+mention that this problem we're going to
+be talking about isn't just an issue
+that's limited to one profiler this is
+another survey talking about how
+frequently people use different
+profilers and this guy this guy this guy
+that guy and that guy all have this same
+underlying problem because they use the
+official API for profiling which is
+where this sample bias is coming from
+lord knows what the problems are on the
+custom in-house tools that people have
+developed but that's another that's
+another matter so how do people profile
+with the JVM well there's a thing called
+the JVM TI which is
+the interface for writing profilers and
+debuggers and tooling stuff and it's got
+a method in there called get call trace
+and get call trace sits there and blocks
+and what it does is it tries to stop the
+entire JVM collect a load of information
+about the stack traces and then return
+it back to the profiler okay that
+process of trying to stop all the
+threads has a very large impact on the
+application so it can be an expensive
+sampling method and the only samples are
+what's known as safe points so what's a
+safe point well it turns out there JVMs
+need to stop your code in order to do a
+whole bunch of different things one of
+the things they need to do is garbage
+collect another thing they need to do is
+they often optimize locks under the hood
+so they replace different forms of locks
+by other forms of locks a bunch of other
+clean up work and internal data
+structure work that JVMs do under the
+hood at safe points and another thing
+that they have to do at safe points is
+collect the first stack traces so if you
+have a safe point at some point in time
+which are represented by these nice
+green lines you'll get a profile at that
+point in time if it happens that other
+parts of your application don't have a
+safe point in maybe you aren't actually
+going to collect the stack traces at
+that point in time so what's actually
+going on with safe points JVM threads
+periodically poll a page and say give me
+some data they periodically pull this
+flag and at some point in time one
+thread flips that flag and says guys
+stop what you're doing
+enter a state point we want to do some
+VM operation call into this other code
+now when it happens in terms of your
+application depends upon a bunch of
+different factors modern JVMs have a
+kind of adaptive optimization system as
+probably they're just in time compiler
+where they interpret code for a while
+profile it whilst interpreting it and
+then successively JIT compile it so if
+you're running in the interpreter mode
+between every two byte code instructions
+in your application
+it'll do a safepoint poll if you're in
+the compilers c1 and c2 you'll get it on
+the back edge of an uncounted loop so
+when you've got a loop you're kind of
+going around and back edge when you're
+about to pop up to the top and an
+uncounted loop what does that mean it's
+a kind of fuzzy heuristic so if you have
+a certain type you know a lot of common
+loops have this common pattern we go for
+I equals 0 I less than some constant I
+plus plus that's what we call a counted
+loop in kind of compiler terminology
+we're going to say that the the loop
+condition relies on a comparison between
+a loop dependent variable that's a
+variable that increases by a constant
+amount each loop against some kind of
+constant which is known at a compile
+time so that's a counter loop so the JVM
+says safe points are expensive will
+optimize away safe points at the top of
+counted loops turns out that hey guess
+what lots of performance critical code
+has counted loops in even worse some
+dastardly people myself included have
+also recognized that this is a potential
+optimization you can perform and it's
+possible to simulate an infinite loop
+and convince the compiler it's counted
+by starting at 0 incrementing by 2 and
+then saying less than integer dot max a
+value because that's an odd number so it
+just kind of skips over flows and loops
+round so you can do that kind of trick
+with the uncounted loop and cause your
+application to never never hit a safe
+point in an infinite loop also method
+exit and entry now a method exit and
+entry sounds like a really good one
+right we've got lots of method exits and
+entries especially if we're writing
+these nice small readable usable
+functions but unfortunately as part of
+the optimization system the JVM will
+also inline functions because function
+calls have a cost associated with them
+and consequently they will remove some
+of the safe points at that point in time
+so inlining can have an effect upon
+where save points happen as well
+there's also a safe point on a J&amp;amp;I core
+so that's cool into native code from JVM
+code but only when it executes exits so
+that means if you've got a thread
+that's sitting there in native code for
+ages as it's running there's no safe
+points during that entire period of time
+don't worry gets worse so there's time
+to safe point so that's the time it
+takes your application to actually reach
+a safe point so we've talked about some
+of the factors that can slow that down
+by default by the way if you're ever
+looking at GC logs time to safe point is
+not included in GC logs even though they
+need to reach a safe point to GC it so
+you need to pass that app that flag to a
+hot spot JVM to print out that time as
+well so what happens here all of our
+threads come along we have this flag set
+where it's a safe point at this point in
+time and at some point in time they have
+to wait until they all get to this
+common safe point this global safe point
+that happens across all threads in order
+to collect the stack traces yeah this
+safe point can be delayed by as I say
+very large methods long running counted
+loops
+it can also be delayed by anything else
+so if one of the threads in your
+application has a page fault or some OS
+level pause if a thread gets suspended
+or pulled off a CPU it can't hit it safe
+point unless it's actually scheduled on
+the CPU and it can't collect the stack
+traces until it's hit a schedule into
+until we've hit a safe point but it gets
+worse because even though we have all
+the threads hitting a safe point which
+you might think that means you can pull
+the stack traces for all the threads
+what actually happens is when the
+profiling API tries to read a thread it
+reads one thread sorry it calls to the
+safe point it reads the data out of one
+thread and then it continues and then it
+calls for a safe point reads for another
+thread and then continues so if you say
+get me get me that cool trace give me
+all those stack traces that means you
+need to have a safe point per the number
+of threads on your application and all
+these pours effects can get multiplied
+now at this point in time I hope you're
+a wee bit disappointed as disappointed
+as somebody who
+orders the English dessert classic
+sticky toffee pudding and was
+unfortunately presented with the fusion
+cuisine gastronomic failure sticky
+toffee roulade what's that that's
+nothing
+okay so let's see if we can do a better
+job shall we let's switch to a different
+profiler and run the same benchmark it's
+gonna take a little bit of time so the
+idea is that we've got all these
+problems related to biases in sampling
+and they are related really to that
+sampling methodology so if you can take
+a different sampling methodology we can
+get more accurate information that's
+really the alternative programming
+language conference aspect of this talks
+come in the alternative here is that we
+pick a different sampling methodology
+when this benchmark finishes lovely so
+here's a different profiler
+it's a wee bit ugly and whilst that
+profile was going on it dumped out a log
+under the hood of a file that's
+represented the execution run that we
+did now text is a bit small we might not
+be able to see it at the back but
+conveniently at the top it's got the
+execute method of the SOR benchmark
+taking up ninety three point one percent
+of the time so this is actually I
+believe an accurate measurement so
+conclusion reached the spec guy was
+didn't do a bad job but our other
+profiler ignored a method which was 93
+percent of the applications run time due
+to its profile bias okay I know what
+you're thinking now why the heck did
+they were serve a roulade why didn't
+they just serve the sticky toffee
+pudding
+no how does this actual work what's the
+difference in terms of the
+implementation between a more accurate
+profiler and the J visual VM approach
+which was not so strong well it turns
+out there's not only a get call trace
+method there's also something called
+async get call trace
+so this is a kind of an unsupported
+undocumented API that's living in JVM
+code but conveniently it's likely to
+live in JVM code for quite a while
+actually because it's they actually the
+profiling mechanism used by a product
+called Oracle Solaris performance studio
+which despite the name was not written
+by Oracle and doesn't only run on
+Solaris so that's glorious there was an
+open source prototype of some code put
+out there on the 18 get call trace front
+by a guy from Google called Jeremy
+Manson which the profiler in question I
+just showed is kind of an adapted
+version of so async get call trace is a
+way of saying right I've got this thread
+stops just give me the stat traces of my
+the information what the stack give me
+all the data back from that from that
+method call the question is how are we
+going to run the async get core trace
+without having this big global safe
+point mechanism well it turns out the
+operating systems have had something
+called a sig prof signal in them for
+donkey's years this is vintage profiling
+great stuff tried interested tried and
+tested techniques so you've probably
+heard of like sig int or sig kill for
+shutting down processes you can also get
+your OS to send you the sig prof
+interrupt on a periodic timer okay so
+it's managed by your operating system
+and it what it says so the CPU is
+generate an interrupt on that CPU core I
+know which thread is associated with
+that core it's registered an interrupt
+handler for that interrupt and it will
+allow you to register a callback to then
+be called associated with that interrupt
+handler now it's used by the profile I
+just showed a second go which is honest
+profiler and it's also used by a few
+other profiles which I'll talk about a
+little bit later yes so how does this
+kind of mechanism go on well our timer
+thread the OS is periodically called
+signal and what happens is as I say
+there's an interrupt fired the
+os has registered an interrupt handler
+with that interrupts that can then call
+into our code so we can register a
+handler with it we can then call async
+get call trace for the that we're on and
+then we can send that data off somewhere
+else to be processed okay so how does
+that work well there are certain
+limitations on what code you can run
+inside an operating system managed
+signal handler you might think oh that
+doesn't really tell at the end of the
+world but you can't calm a lock you
+can't lock anything and you obviously
+can't write to a file you probably
+wouldn't want to anyway because you're
+actually interrupting the application
+code whilst doing that but you basically
+can't do any of the stuff that you
+really want to do it's like writing
+kernel drivers or no that's just just
+terrible so our OS timer thread is going
+to call some signal handlers on these
+threads to be run and they need to just
+take that data and copy it somewhere so
+in our case and in fact in pretty much
+anyone who's using this is case they
+will have a lock free buffer so I've
+just got a simple lock lock free ring
+buffer multiple producers one consumer
+data gets copied into there and then we
+can have another thread which processes
+that rain buffer says what's that magic
+number that corresponds to that methods
+we'll look at the method name and all
+this other useful information that you
+need dump it into a log file and then
+our log file can either be read on the
+fly by another process or read off line
+by another process so pretty simple
+approach but there's a number of
+limitations to this firstly it only
+profiles running threads so we'll have a
+look at that in a second the accuracy of
+line information is also limited by
+reality so well what I mean by reality
+I'll explain that in a second as well
+unfortunately it only reports Java
+threads frames and threads so if you're
+profiling native code it can say you're
+in native code but doesn't have the
+debug information to say this is the
+blob of native code you're actually
+calling and it also needs to look at the
+debug information during call so it's
+still not completely free it's faster
+it's better but it's not perfect okay so
+all right mean by line number accuracy
+this is actually a bug that
+much all profilers suffer from when
+you're at a point in time or do you know
+is the program counter for that point in
+time and that program counter isn't
+quite as simple as just executing one
+instruction at a time modern CPUs
+superscalar execute multiple
+instructions in parallel which of those
+executions do you associate that time
+information to when you do a sample who
+knows it's called skid
+no one's it's like an unsolved problem
+this area there's there's always some
+skid difference the reality is that
+you're usually close enough to your
+point to get there but yeah profile
+program counters within some skid
+distance also you need to be a little
+bit careful so you need to add that
+command-line option when using the
+profiler documented to say actually
+generate all the information the debug
+information associated with byte codes
+because otherwise the JVM won't generate
+him from a debug information that's not
+at safe points because it doesn't need
+it normally okay so that's the limits of
+line number accuracy the other thing is
+let's treating dogs lie so the blocking
+get call trace API call sampled all the
+threads even the threads which were
+sleeping so this is something we didn't
+actually want because it meant that we'd
+be waking up sleeping threads and having
+more observer bias more impact but it
+does mean that suppose you've got an
+application which spends most of its
+time sleeping so here's another visual
+vm sample so I've just got a very simple
+application that just sits there in a
+loop and it's sleeping if I profile this
+with so this is actually Java Mission
+Control which is another profiler but
+uses the same mechanism under the hood
+that I've just described only for
+samples as you can see on the right hand
+side so not enough samples draw a strong
+conclusion off and it doesn't know about
+the sleeping bit at all it's just not
+visible because it couldn't sample when
+it was sleeping so you have to bear that
+in mind as well the question is then
+we've got all this quite complicated
+mechanics right we've got lock for your
+in buffers we've got threads all this
+stuff why would you actually trust the
+results and why would you trust with
+this
+filing mechanisms more accurate I think
+this is a great case where open source
+is a really useful tool when you're
+thinking about measurement tools and
+measurement biases so let me just give
+you an example of a bug which I would
+never have spotted on my own in a
+million years and someone else who was
+reviewing the code externally spotted
+for me
+so you remember earlier on I said you
+couldn't call certain types of methods
+when you're in that signal handler you
+allocate memory can hold locks another
+thing you can't call is mem copy which
+is a bit annoying actually because you
+want to copy the block of memory so
+somewhere else so I wrote very dumb
+simple don't actually care but it works
+fine mem copy function just fix a
+pointer reinterpret Cassatt copies the
+stuff over and Blatz it's right that's
+not mem copy that's mem set sets all the
+data back to zero because I I want to
+reset some buffer okay so I've got the
+mem set there what is going to happen
+when the compiler GCC comes along and
+optimizes mence my my safe mem set
+function it does this so R di and RSI
+are UNIX calling conventions for where
+we get command-line parameters so this
+is basically saying get me the length of
+the array that I've passed in and pop it
+into the RDX register compare it against
+our di and if it's zero jump to here so
+what that says is basically if you try P
+and then lot of data just returned we
+don't need to do anything
+can you read what that says jump to mem
+set it turns out the GCC goes ahead and
+tries to optimize your safe reset
+function just to use mem set why is this
+well loads of people NIH their own mem
+set for all sorts of daft reasons it'll
+do the same thing if you try and write a
+fake mem copy function as well most of
+the time it's just a bad idea and it
+doesn't know that this code is only
+gonna be running a signal handler and
+it's not safe to call mem set so it's
+doing like a completely rational thing
+without any domain knowledge so
+compilers are they our friend or are
+they our fiend who knows but yeah the
+point was that bug was
+reported by a guy called Rajiv signal
+I've never met I don't know him
+report an excellent bug report also
+reported a bug related to the lock-free
+ring buffer a number of bugs have come
+in pointing out very very detailed
+subtleties around race conditions around
+startup weather things will don't work
+on different platforms and most
+importantly while having open source
+tooling you can actually understand the
+profiling methodology and the sampling
+mechanism and it's possible to actually
+understand what's going on under the
+hood with these profiles you can see
+where the biases are you can know what
+what information to trust and what not
+to trust as I say it's open source the
+code is there thanks to a bunch of other
+people have helped nits ins great
+contributor and Google enduring amounts
+and for the original contribution but it
+is a bit rough around the edges and it's
+not the only solution to accurate
+profiling on the JVM so I also want to
+talk about a few other things which have
+nice profiling characteristics firstly
+there's native profiling tools so your
+CPU has the ability to measure certain
+hardware level instructions that happen
+hardware performance event counters and
+you can read off the registers where it
+dumps those information so you can say
+how many instructions have we executed
+how many cache misses do we had you can
+correlate application performance with
+hardware performance it's very useful if
+you're trying to do more low-level
+optimizations
+perf is the Linux profiling tool and
+there's some people who have brought out
+this Java perf mapper agent
+so that's like a Java profiling agent
+hooks up to perf and use it the perf
+tool as I say perf suffers from skid
+that that factor about the instruction
+level perhaps a little bit more than
+some of the other things but it does
+work very effectively it's integrated
+into gmh which is a Java benchmarking
+tool all sorts of things and the perf
+mapper agents getting more mature as
+well so that's another completely open
+source free tool that provides accurate
+profiling information there are some
+things which perf is worse at a good
+example is perf can't profile any code
+in the interpreter because there's no
+generated code for it to associate the
+instructions with so it's also not a
+panacea
+but it's another interesting one there's
+Java Mission Control Java Mission
+Control is an excellent profiler for
+development is built into the JVM you
+need to use the kind of Oracle
+proprietor JVM it's free for development
+but it costs you some obscene in order
+to amount of money in production you
+know Oracle what can you do but Java
+mission control under the hood doesn't
+use the async yet called call itself but
+it uses a very similar mechanism it uses
+sig prof based profiling it copies all
+at station to ring buffer the overall
+design mechanism and implementation is
+very similar so it's very very good for
+this kind of stuff as well and a lot
+more mature and tested except it might
+well sake fault the first time you run
+it on Linux but that's another issue
+there's a lot or a studio which is
+another tool it's free no one knows
+about it its UI is terrible but it is
+actually very accurate again uses async
+get call trace and it's the tool that
+originated the use of a single trace so
+again very useful kind of tool wear and
+quick hands up anyone using Azul zing
+JVM at all no ok not a zing audience
+right alternative JVM key value add for
+them is that they've got a low pause GC
+but it also has a very good profile
+called shared vision or Zee vision never
+know how you meant to pronounce this but
+Zee vision also has accurate sampling
+techniques as well again different
+mechanism because it's a different a
+different JVM but it's got that similar
+kind of sig prof based profiling pulling
+off into a ring buffer same overall
+architecture very useful so now
+hopefully you're as happy as someone
+who's realized their sticky toffee or
+lard still has loads of the sticky
+toffee stuff on top which is what you
+wanted and has a load of double cream
+next to it anyway so it's all fine cool
+so let's just wrap up and draw a few
+conclusions about what we've talked
+about we said the profiles themselves
+have inherent biases associated with
+their profiling methodologies the
+default out of the box solution for JVM
+applications
+discovers Java Scala closure Kotlin
+salon what have you name it
+is not accurate and Eve
+if you think you can get away with
+things by writing like small readable
+code the JIT compiler will come along
+and inline your methods if they're a
+hotspot quite possibly and remove your
+safe points and do all sorts of things
+we've looked at a couple of different
+alternative profiling methodologies
+focused on one big one and shown how
+they can solve this problem I demoed an
+application where 93% of the runtime
+disappeared in the profiler but we could
+still see it in other profilers that's
+right good but there's also much broader
+takeaway here which is don't blindly
+trust measurement tooling if someone's
+given you kind of a measuring device or
+a a profile a bit execution profile or a
+memory profiler think about the way it
+works under the hood I've seen people
+use things like memory profilers and
+overestimate their application
+allocation rates by literally ten
+thousandfold because the memory profiler
+itself disables optimizations that
+remove allocations there's all sorts of
+things in tooling which give you biases
+to their their collection mechanism okay
+don't blindly trust it and that goes
+along with the idea of even if you're
+not using open source tools try and
+figure out what they're doing under the
+hood actually test them probe them and
+poke them see what's going on there but
+if you can do it the open source doesn't
+they have an implementation review and
+you can see how JVM and tools work you
+can often talk to people about this kind
+of stuff as well so that's that's
+fantastic
+but yeah key point is regardless of
+whether it's open source or not actually
+test those measuring instruments
+actually prod them and poke them and see
+how they work and see what their biases
+are okay that's the end the talk thank
+you very much for this thing I'll give
+you an opportunity to ask some questions
+in a second as well as doing development
+on this and a load of commercial work I
+also do some training courses in-person
+training course around functional
+programming in Java which I've also
+written a book on I also have some
+online courses on Pluralsight and my
+blog perhaps a little bit more
+interesting for the specific audience
+because it has some more interesting
+articles of a kind of deep dive nature
+that's me on Twitter as well so I hope
+you guys enjoyed the talk and if
+anyone's got any questions now is a
+great time to ask them
+absolutely I think if you've got the
+time to have a look at it it's often
+worth having a look at something like
+Jay visual VM as well you I wouldn't say
+as well as multiple profiles it's worth
+approaching the problem from different
+directions execution profiles aren't the
+only thing which gives us information
+around runtime behavior there's a lot of
+metric information a lot of tooling in
+the APN space as well things like that
+which are also provide valuable insights
+and also things like memory profilers
+can help as well so that's good so when
+you say that the profiler won't be able
+to capture threads that are sleeping is
+that actually in like state sleeping so
+if I'm waiting on a database query and
+the thread is simply waiting am I able
+to profile that or it won't profile it
+if the OS thread is in the OS sleeping
+state so if you're doing like a busy
+wait hmm you're okay and the transition
+from busy wait to sleeping is like some
+sort of internal implementation detail
+that I so ok so what happens I'm pretty
+sure you'll find is is you're if you
+capture in the method call bit where
+you're approaching hitting the OS code
+you'll get it because you're still in
+JVM code in your application so you can
+work once you're down into actually in a
+sleeping State you doomed so but like so
+concretely if I'm like waiting on a
+countdown latch because I'm waiting for
+some you know response to come back from
+the network would that be captured by
+your profiler or not it won't appear in
+your samples okay
+the honest profiler and production I
+think probably the biggest thing to be
+aware of there's a bunch of C code in
+there and don't think that many people
+are using it yet so if you find a bug
+please do report it but it's not in any
+way as extensively tested or used all
+that kind of thing or some of the other
+tooling certainly I think probably a
+better starting point for doing more
+accurate profiling something like Java
+Mission Control but it obviously that
+costs and production so if only use
+honest profiler production please do I
+do know some people have used it but be
+aware you're bleeding edge kind of thing
+thank you very much</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

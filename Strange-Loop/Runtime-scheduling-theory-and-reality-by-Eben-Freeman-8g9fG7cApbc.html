@@ -1,0 +1,897 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>&quot;Runtime scheduling: theory and reality&quot; by Eben Freeman | Coder Coacher - Coaching Coders</title><meta content="&quot;Runtime scheduling: theory and reality&quot; by Eben Freeman - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Strange-Loop/">Strange Loop</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>&quot;Runtime scheduling: theory and reality&quot; by Eben Freeman</b></h2><h5 class="post__date">2016-09-18</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/8g9fG7cApbc" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">all right hi everybody can everyone hear
+me okay see hey I'm Evan this is my
+first strange Luke it's amazing why are
+we talking about scheduling well if you
+read serious documentation by serious
+people building high-performance systems
+you can find a variety of statements
+along these lines suggesting vaguely
+disquieting way that scheduling overhead
+can negatively impact the performance of
+highly concurrent programs so you can
+find this in engine X you can find this
+in my sequel Docs and you can find
+statements to the effect that thread
+context switching is somehow
+intrinsically expensive but these
+statements are not quantified or
+justified in this documentation which is
+fine because that's not their job but as
+a performance engineer this makes me
+kind of uneasy so scheduling which for
+the purposes of this talk means
+multiplexing a lot of tasks on to a few
+cores a few processors a priori is kind
+of a black box like you can write a lot
+of concurrent code without needing to
+worry deeply about the internals of the
+Linux kernel scheduler or the runtime
+scheduler if you are using a language
+that has its own concurrency primitives
+so it's this black box and the claim is
+that it can potentially negatively
+affect our programs performance so this
+is not good I don't like black boxes
+that make things slower in mysterious
+ways so there's a pretty natural set of
+questions that we can ask about this the
+scheduling business so how expensive is
+a context switch intrinsically when the
+go language authors say it's slow what
+what do they mean can we measure it or
+do we just have to take their word that
+it's slow and how does the Linux kernel
+scheduler work anyways when you switch
+from one chrome tab to the next or spawn
+a new thread what's going on under the
+hood and what about user space
+schedulers so languages like go and
+Erlang in Haskell have their own
+concurrency primitives that are sort of
+like operating system threads but not
+actually operating systems threads so
+those are scheduled by the language
+runtime how does that work is it somehow
+fundamentally different are there common
+design patterns that all these scheduler
+implementations follow and do they make
+different trade-offs do they target
+different performance use cases and how
+do they do so so that's what I like to
+explore in this talk by doing a few like
+pretty basic experiments and a little
+bit of experimentation and source diving
+so to start off let's talk about
+scheduling in kernel-space
+I'd like to start this discussion by
+talking about how we can actually
+estimate kernel context switch cost so
+you have a processor it runs Linux I'm
+only going to talk about Linux in this
+presentation sorry but if you're
+initially running task a on a core like
+a chrome tab and then you switch to task
+B which is something else I don't know
+it's a slog whatever there's some
+intrinsic costs to that operation and
+measuring the duration of a context
+switch is probably the first heuristic
+we can establish for how much
+concurrency can our system support if
+the context switch takes 10 microseconds
+we'll never be able to run more than a
+hundred thousand threads on a core
+because we will spend all of our time
+context switching so maybe it's okay if
+context switching accounts for some
+reasonably significant part of our
+effective workload and highly concurrent
+scenarios but it's probably not okay if
+that's all that we're doing so there's a
+classical approach to estimating the
+intrinsic direct cost of a context
+switch it's playing ping-pong we'll set
+up a scenario where we do a bunch of
+context switches and as little other
+work as we can so for example you start
+a thread thread a you start a thread
+thread B you connect them with two pipes
+when you have thread a right to thread B
+over one pipe thread B will wait and
+read it then write back over the other
+pipe thread a will wait and so on so
+that so what has to happen is that you
+end up switching back and forth between
+these threads effectively as quickly as
+the operating system can do it makes
+sense so in C the implementation of such
+a worker thread might look something
+like this
+now I can't really write see I try it
+doesn't work fortunately I don't have to
+this is actually a built-in benchmark in
+the Linux kernel source tree you can run
+it with perf bench Skype and you can
+pass - T to say two threads now two
+processes it doesn't really matter so
+you can try that out on my laptop it
+takes about four and a half seconds to
+do a million pipe operations what does
+that mean so it tells us four point four
+nine microseconds per operation and that
+gives us an upper bound on the direct
+cost of a thread context switch that
+upper bound is actually 2.25
+microseconds because what the authors of
+this benchmark are calling an op is a
+read and done it right so there are two
+context which is if you think about it
+it makes sense promise cool so that's
+pretty good heuristic is that our final
+answer
+no so you can't actually trust a
+benchmark if you just run it and don't
+undertake at least some minimal effort
+to analyze it while it's running there
+will be no more dead poetry in this talk
+I promise but there's a serious point
+here which is that we're running a bunch
+sorry
+oh I have no idea it's a two gigahertz
+processor you can do the math great so
+sorry the question was how many
+instructions does that correspond to and
+that's two microseconds divided by two
+gigahertz I don't know a bunch so that's
+ranking right so so we have this
+benchmark that's that's doing thread
+ping-pong and we have a mental model of
+what it's doing it's running for it a
+and then executing a context switch and
+then running thread B and then running
+thread a so how well does this map to
+reality well we can find out with a tool
+called perf sket what's perfect good
+it's another purse of command perf is a
+lot of sub commands what persica does is
+it records scheduler events and then can
+show you an output a timeline of context
+switches wakeup latency etc seems like
+something that might be applicable to a
+discussion about scheduling so you're on
+perf schedule cord over our benchmark
+and get basically a dump of everything
+that happens in the scheduler while we
+were running this this is really dense
+but we can highlight one thing we're
+switching from something called skid
+pipe okay that that sounds good
+to something called the swapper up
+what's the swapper it's basically what
+the kernel runs when idling so that
+doesn't really map to this mental model
+very well what's going on so I ran this
+on my laptop my laptop is recently
+modern it has multiple cores the
+scheduler sees thread a is doing a bunch
+of work thread B is doing a bunch of
+work okay I'm gonna put thread a on this
+one core and thread B over on this other
+core but that introduces a net slow down
+into this benchmark because every single
+write to a pipe and then read from it
+introduces a cross core wake up and it
+turns out that that actually adds some
+overhead to this benchmark I'm partly
+because waking up from the idle State
+a little bit more expensive than the
+direct contact switch and partly because
+the cross-court communication degrades
+cache performance so let's turn the
+benchmark slightly differently I depend
+all the tests to core zero it's twice as
+fast all right
+active benchmarking so you didn't just
+go at the first result we saw we used a
+tool to analyze the internals of the
+benchmark verified that we were running
+a benchmark which X for the
+correspondent reasonably well to our
+mental model of what it is suing and now
+I have a more plausible number so we've
+learned something the direct cost of a
+thread context which is around one
+microsecond on this machine with lots of
+caveats sorry you have the question yes
+these are two threads in the same
+process numbers are slightly different
+in this benchmark if you switch between
+two processes and two threads the
+question was about whether this is a
+thread context switch or a process
+context switch in this talk we will
+mostly be talking about thread context
+switches in a highly multi-threaded
+single process program from the
+perspective of the Linux kernel there's
+not that much difference there are
+slight variations in the numbers that
+you get does that does that make sense
+cool so so you're on perf bench that
+pipe - t-that - team at run - threads
+not run - processes but they get
+different pits so so we have a number
+and we have some metal lessons
+benchmarking is tricky we can't just run
+random experiments we need some level of
+introspection into the scheduler and for
+that it's helpful to have some idea of
+how the scheduler actually works so
+let's talk about the internals of the
+Linux kernel scheduler so you know up
+here it has to do two things
+it has to preempt misbehaving tasks and
+it has to prioritize important tasks
+all right we can do this I so can't
+write C but we'll try so keep a list of
+running tasks and whenever we want to
+schedule will iterate through that list
+pick the task with the lowest count down
+to run next and then for each other
+runnable test test will decrement the
+count down
+counting down higher priority tasks
+faster so over several iterations high
+priority tasks will effectively move to
+the front of the line then if there's an
+X test that we should switch to well
+switch to it this is actually how the
+Linux kernel scheduler worked in 1995
+all right it was 75 lines of code not 15
+I cut out some stuff about timers but
+still not that complicated
+today it's a lot in our lair in addition
+to preemption and prioritization the
+Linux kernel is expected to support a
+notion of fairness it's effective it's
+expected to scale to multi-core machines
+it's it should be power efficient it
+should support resource constraints like
+C groups so you can run your fancy-pants
+docker containers or whatever and so on
+and so forth and as a result it's a lot
+bigger but there are a few salient
+design principles that we can highlight
+in the current implementation of the
+Linux kernel scheduler it's called the
+completely fair scheduler there are
+other scheduling policies in the kernel
+like real time and FIFO we're not going
+to talk about those this is the default
+probably what's happening if you're
+running a concurrent program in the
+Linux kernel so in general scheduling
+happens on a curb port on a purikura
+basis and we'll talk about inter CPU
+load balancing later why is this it's
+because a single global data structure
+that's frequently read and updated tends
+to introduce contention and severely
+degrade cache performance so this allows
+the kernel to scheduler to scale well to
+64 128 core machines now on each core we
+maintain a run queue of runnable tasks
+which isn't actually a queue or it's
+sort of a queue it's a red-black tree
+the
+ordered by task view runtime what the
+runtime is virtual around time which is
+effectively real task runtime / task
+wait
+so high priority tasks have their view
+runtimes scaled down as tests run they
+accumulate if you you're on time
+whenever it's time to execute a task
+switch the scheduler simply pulls the
+leftmost task off the rank you and runs
+it next concurrently preempted or new or
+woken tasks go on to the run queue
+before they can be rescheduled so the
+run queue is effectively a timeline of
+future tasks execution and tasks are
+guaranteed a fair allocation of runtime
+what do I mean by that
+okay so if you look at this line here
+the middle line we ran tests a which
+started out with a low V runtime then
+switch back to task C but we can see
+that task a still has lower V runtimes
+and task E so it will run before task E
+and what this means is that over time
+each task gets a fair share of processor
+time which is not true if you apply a
+simple scheduling policy like FIFO or
+LIFO or you just round-robin through
+through all the tasks so it's reasonable
+to ask what actually prompts a task
+switch to things pretty much the running
+test blocks and explicitly calls into
+the scheduler hey I'm going to have to
+wait for something colonel you can
+schedule a me off and run something else
+or the running task is forcibly
+preempted because it exhausted its
+schedule in quantum this is sort of an
+intricate and cooled answer I'd like to
+talk a little bit about how preemption
+works unsurprisingly it's driven by a
+hardware timer every so many
+milliseconds timer goes off interrupt
+handler interrupt handler routes this
+timer to schedule our code which checks
+if it's time to reschedule the current
+task
+prompting directly from this handler
+could cause funny stuff to happen if we
+were in a nested kernel control path
+where we were already handling some sort
+of other interrupts so instead the
+interrupt handler instead of directly
+switching tasks sets a flag in the tasks
+thread info struct signaling that
+rescheduling is due to happen hey this
+flag is set then when it's safe to
+switch contexts on the irq exit path we
+check that flag and if we need to we do
+whatever cleanup work and then call
+schedule schedule is unsurprisingly the
+course scheduler function it DQ's the
+next test to run in queues the
+preemptory one swaps out their processor
+processor state registers and what have
+you does whatever clean up it needs to
+and then starts running the next task a
+little intricate generally works cool so
+thus far we have a scheduler that
+supports preemption prioritization and
+fairness let's talk a bit about how its
+scales to many core systems so like I
+mentioned per process run queues limit
+contention and and cache thrashing but
+they can lead to a severely unbalanced
+test distribution so in this picture
+core zero has a bunch of tasks core one
+only has one core one is underutilized
+so each core periodically does a simple
+load balancing procedure but fair
+balancing is tricky say task C has
+higher weight meaning higher priority
+than tasks a B and D if we just looked
+at the run queue length o thread core
+has a bunch of tasks core one only has
+one okay I'm going to move some tests
+from core zero to core one then we would
+unfairly deprive the high priority task
+of its do run time we could try
+balancing based on total task weight so
+all right core zero has each each test
+is weight time there are three of them
+it has weight 30 core one has one really
+high priority test with weight 100 but
+if the high priority test frequently
+sleeps this ends up being really
+efficient because core one could idle
+for long periods of time instead the
+kernel does something or like
+balancing uses a load metric based on a
+combination of task weight and CPU
+utilization to ensure that high priority
+tasks get their fair share of time but
+cores are efficiently utilized even in
+the presence of processes that
+frequently sleep wake up to wake up
+so at this point you might be thinking
+it's kind of complicated I have more
+questions how am I going to answer them
+like what about the power efficiency
+stuff that you talked about and I'm
+actually going to dive into in this talk
+so you could listen to some bozo blather
+on and believe what he says you could
+stare really hard at the source code and
+try and figure it out or and I recommend
+this approach use F trace the function
+tracer this is the coolest thing how
+many people here have heard of F trace
+alright so that's cool
+so f trace is this amazing technology it
+dynamically traces all almost all
+function entry and return points in the
+kernel so when disabled it has almost
+zero overhead you turn it on it has
+overhead obviously it has overhead but
+you can see a call graph of every single
+function that if the kernel is calling
+that's amazing
+it's a Linux tool it's kind of gnarly to
+use you mount this debug filesystem and
+then you put cat some stuff to it but
+you can read about it on the internet
+it's not too hard to figure out and you
+can answer questions like what's the
+code path through the scheduler look
+like alright we call schedule and then
+we do a bunch of stuff or what happens
+when you call read on a pipe well you
+could grep through the source code and
+try and find pipe read or you could just
+write a little program that reads from a
+pipe run F trace all right it's it's
+doing some stuff and eventually
+scheduling makes sense so my
+recommendation for diving deep into the
+internals of the Linux kernel schedule
+are really the Linux kernel at all is
+use F trace to build a function call
+graph and figure out what's actually
+happening on your system way easier than
+trying to do it in your head with the
+northa source tree pretty cool so the
+completely fair scheduler its performant
+scalable robe
+traceable and if story new let's switch
+gears and talk about scheduling in
+userspace
+so there are good reasons why some
+language runtimes don't simply have fall
+back to native operating system threads
+and instead offer you different
+concurrency primitives these are
+languages like go Erlang Haskell others
+you might want to target different
+performance characteristics let's say
+you want concurrency constructs in your
+program and you want 10 million FM you
+can't have 10 million threads we already
+saw that because the context switch
+takes 1 microsecond you just be context
+switching you might want to decouple
+concurrency from memory usage once
+severe limitation of operating system
+threads is that stack size is fixed at
+creation time and in practice this tends
+to be the bottleneck to creating lots
+and lots of threads before context
+switching you have a million threads
+each one has a megabyte of stack space
+alright you need a terabyte of memory
+that's expensive and you might want to
+support manage memory runtimes by
+integrating the scheduler with the
+garbage collector but we won't really
+talk about this in this talk but it is a
+legitimate use case this is part of how
+go achieves very low latency garbage
+collection times so so language runtimes
+implement their own schedulers on top of
+the operating system baseline are these
+schedulers fundamentally different from
+the kernel scheduler do they share
+significant design patterns let's take a
+look I want to look at two languages
+when is go the other is Erlang so let's
+talk about go and go how many people
+here of program dingo ok cool good
+number so and go code runs and go
+routines which are sort of like threads
+ostensibly more lightweight and managed
+by the language runtime they're supposed
+to be very cheap to create and dispose
+of go routines are multiplexed onto OS
+threads in a process called m2n
+scheduling so you
+have relatively through relatively few
+operating system threads at any point
+and a whole lot of go routines and the
+language runtime takes care of managing
+it for you so the claim is that
+rescheduling agar routine is much
+cheaper than rescheduling a thread so
+what you've done if an unkind again mean
+by much cheaper
+does anybody have a guess how you could
+find out yeah ping pong so we can do
+this and go go has a concurrency
+primitives called a channel that lets
+you send data between guru teams it's
+kind of like a pipe so this is a crude
+heuristic we're not going to deep dive
+into this benchmark but we can write a
+simple go program that spawns to worker
+threads with channels between them and
+plays ping pong back and forth run it
+alright point to microseconds per switch
+that's way faster they were right that's
+not surprising there Donovan and
+Kernighan so what's the go scheduler
+doing let's take a look so you go
+runtime state is basically described by
+three data structures there's an M which
+represents an operating system thread a
+G and which represents a go routine and
+a P which represents general context for
+executing go code each P contains a
+queue of runnable go routines so so far
+this is not that different from Linux we
+have some data structure per core and it
+has a run queue if things are going to
+run next in a context switch time the
+next go routine is pulled off the run
+queue and run so on an end core machine
+we end up with up to n threads
+concurrently executing go code still not
+that different however there's no
+regularly scheduled interpeduncular
+balancing instead goo routines which
+were preempted or blocked insist calls
+go on to a special global run Q and a P
+which becomes idle can steal work from
+another P all right these go routines
+are mine now
+finally a separate system on thread
+implements pee handoff if an M blocks an
+assist call what do I mean by that all
+right we're running go code the go code
+is green and then it executes SAS this
+call it's going to read a ginormous file
+from disk and then it blocks in the SIS
+call this disclosed yellow what happens
+all the other and go routines that were
+scheduled to run on that thread are now
+blocked by this one go routine that's no
+good
+so this is mine thread periodically
+checks if this bad situation is
+occurring if it does it possibly
+allocates a new thread with a new M
+structure takes the P that was priorly
+associated to m1 and says ok all these
+go routines are now going to run on this
+new thread pretty cool the system on
+thread also checks for long running go
+routines that need to be preempted
+pretty plausible
+however because preemption needs to play
+nicely with the garbage collector
+preemption can only happen at go
+function entry so tight loops if you
+just do a for loop forever can
+potentially block arbitrarily this is a
+bit hazardous swing go context switches
+are fast by virtue of implementation
+simplicity and not merely because
+they're avoiding the round trip into
+kernel space this is a design choice we
+can support lots of concurrent go
+routines like millions but we can't
+assign them priorities we don't have
+strong preemption guarantees and to
+illustrate the practical effect of this
+design decision I'd like to contrast
+this implementation with Erlang Erlang
+is also a language ostensibly designed
+for highly concurrent programming in
+early and concurrency primitives are
+called processes but actually have
+nothing to do with operating systems
+processes except for the fact that they
+do not share memory processors
+communicate exclusively via asynchronous
+message passing
+so unlike go and see our link code is
+actually compiled
+by code and executed by a virtual
+machine it's sort of like the JVM or C
+Python or Ruby this architecture enables
+a simple preemption mechanism which is
+neither timer based like the Linux
+kernel nor watcher based like go it uses
+the notion of a reduction budget so
+every Earling process when it is
+scheduled gets a reduction count which
+by default is about two thousand and
+everything you do is going to cost you
+reductions calling a function decrement
+the reduction budget send a message to
+another process same thing I Oh garbage
+collection and once you use up your
+reduction budget you get preempted this
+is so simple that we can actually see it
+in encode so the beam emulator source
+code the Erlang virtual machine source
+code is in C the core of emulator is
+this gnarly 3700 line switch statement
+it's got hella defines and go twos but
+this is what matters if we want to call
+a function the next byte code
+instruction is going to say call a
+function so we set the continuation
+pointer advance the instruction pointer
+to point to the next thing next byte
+code instruction that we're going to
+execute and then call a macro called
+dispatch what does dispatch do it
+dispatches if we still have reductions
+in our budget we're going to decrement
+the reduction counter and go through the
+emulator loop for the next instruction
+go back to the top of the switch
+statement but if we're out of reductions
+we're going to context switch so let's
+take a moment to think through the
+implications of this design so we knew
+we have a reduction call a reduction
+budget of about 2000 reductions and each
+function call is going to cost us one of
+those
+how long do functions take not very long
+normally this means we could be calling
+into the scheduler at sub a millisecond
+intervals scheduling is highly granular
+what are the consequences the maximum
+throughput of our program is going to be
+affected if we just want to do lots and
+lots of number crunching it's going to
+be somewhat slower and
+in a language like go but on the other
+hands the preemption latency is highly
+predictable it doesn't depend on the
+scheduling of a separate operating
+system thread or the prompt handling of
+a timer
+why does this matter let's try an
+experiment this is a small go program
+first we're going to spawn a bunch of
+busy tight loops to saturate all the
+cores on our machine I did this on my
+laptop my laptop is four cars then we're
+going to sleep for some predetermined
+interval and measure how long we
+actually slept versus how long we
+expected to sleep this is a crude
+estimate of the effective preemption
+latency that our program is seeing when
+the CPU is saturated by work does that
+make sense so this is not a rigorous
+benchmark I mean obviously you could
+raise a lot of objections
+yes I'm sorry thank you you should do
+code review for me yes so so the jitter
+is how long you actually slept versus
+how long you expected to sleep and if
+you run it you get a latency
+distribution like this preemption
+latency varies from sub millisecond to
+up to 40 milliseconds it's compare this
+with an implementation in Erlang it's
+actually a lick sir
+so elixir is a language that runs on the
+Erlang VM its syntax is more Ruby like
+so it doesn't make my brain hurt and if
+you haven't read Erlang it probably
+makes sense so we spawned a bunch of
+busy tight loops to saturate the course
+we sleep for some targeted amount and
+then we measure how long we actually
+slept for and use the difference between
+that and our sleep target is an estimate
+of preemption latency what does that
+look like looks like this nearly
+consistent sub-millisecond preemption
+latency that's the difference
+early trades some throughput for highly
+predictable latency go does the opposite
+yes
+that's an excellent question the
+question was whether it's significant
+that the NGO functioning was calling
+time that now and the elixir function
+was bumping at counter you sir are an
+amazing reader of code on slides yeah if
+it's not significant the reason we're
+calling time debt now and go is because
+we need a Ingo in our tight loop we
+actually need a function we actually
+need to execute a function call because
+if we just did for like increment the
+counter we wouldn't call the scheduler
+we totally dead lock it like like you
+mentioned so it's it's not actually
+significant I'm done I was like the
+worst the first thing I thought of but
+that's a great point so thank you for
+bearing with me through this little
+exercise maybe we've learned something I
+certainly did scalable scheduling not
+that mysterious all the implementations
+that we saw saw us share some patterns
+they use independent run queues with
+periodic load balancing to scale well
+across multiprocessor systems they
+preempted safe points to prevent rogue
+code from bringing things to a halt but
+they make different design decisions the
+Linux kernel scheduler gives you a very
+granular priority system you can nice
+your process to all sorts of different
+things the go scheduler is very simple
+no priorities at all and you can trade
+latency predictability versus baseline
+overhead coding go in general we'll run
+a little bit faster than code in Erlang
+because you are not paying this fairly
+constant overhead costs for granular
+scheduling but you may suffer greater
+variance in latency in certain scenarios
+and there are other trade-offs but these
+are maybe the most salient that's all I
+have thank you very much I would love to
+take questions
+yes
+right that's a good question so the
+question was what's the distinction
+between context switching between native
+threads and between green threads so it
+depends a little bit on the language
+runtime so when you in the linux kernel
+and you switch between threads you do
+need to save their registers in some
+other thread State and switch that out
+before for the next thing you're going
+to execute because go code compiles to
+native function calls the contact the
+actual mechanics of the contacts which
+are fairly similar use you save the
+registers of the function you are in and
+then switch to the next function in in
+in a VM language like Erlang like the
+actual registers on the machine are the
+registers of the of the VM and and not
+of the of your Erlang functions so so
+that's sort of fundamentally different
+but the actual mechanics are like quite
+intrinsic and I can't really do justice
+to them so I encourage you to use
+something like F trace to you can sort
+of pick apart the individual steps of
+the context switch but it's it's like
+quite hard to justify this
+quantitatively but my opinion and it's
+only an opinion is that the register
+saving is a relatively small part of the
+overall intrinsic cost of a context
+switch and most of it is attributable to
+the general complexity of of the
+scheduler machinery
+that is my opinion
+but I don't have like don't don't take
+that as truth because I can't really
+give you a concise way that you could go
+and prove this for yourself I mean a go
+context which still takes 200
+microseconds which is you know still
+equivalent to a good a good chunk of
+work yeah so the question was about
+cache utilization which is you give in
+general something that's quite difficult
+to analyze convincingly but but my claim
+is if your guru teens have a big working
+set and you switch from go routine a to
+go routine be like you're still going to
+see cash penalties and if your threads
+have a big working set and you switch
+from thread a to switch thread B you'll
+see big cash penalties like no matter
+what the scheduler is doing but if the
+working set is small that is not
+necessarily the case so does that make
+sense
+go any other questions in the back
+mhm
+so the question was the reduction budget
+is mm if you change that a number what
+happens that's an excellent question so
+what I would say to that is two things
+so chain so changing the the reduction
+budget changes the granularity obviously
+if you double it you will see preemption
+latencies on the order of two
+milliseconds not one millisecond but it
+doesn't change the predictability part
+of the reason why there's a lot of
+variance and go is because the
+preemption is driven by a separate
+operating system thread so preemption
+latency is beholden to that operating
+system thread being scheduled by the
+operating system scheduled by the
+operating system and there's hundreds of
+milliseconds or not sorry not hundreds
+of milliseconds but a few milliseconds
+of latency variants there so it's
+absolutely a like a sliding spectrum of
+granularity versus preemption latency
+does that make sense yes
+yeah I'm honestly not entirely sure why
+go light works like this but you can
+call something like scheduled x' to
+explicitly yield like pretty much every
+runtime has a construct like that that
+allows you to explicitly yields in a
+tight loop yes
+thank you very much so for I'm posterity
+SiC the first comment was that in Erlang
+if you basically call in to C extensions
+the reduction count doesn't go down
+unless you explicitly decrement it so it
+is totally possible still to effectively
+break the scheduler by calling C I mean
+that sort of makes sense and the second
+was about the paper that appeared a few
+months ago called the Linux kernel
+scheduler a decade of wasted cores that
+paper was the catalysis for me proposing
+this top to strangely but here's here's
+what I think about it I'm not a systems
+researcher so maybe I'm not really doing
+it justice there are two parts to this
+to that paper one is where they sort of
+describe the general architecture of the
+Linux CFS scheduler especially on
+multi-core systems and I think it's a
+fantastic exposition as for their claims
+about wasted cores it seems to me like
+the bugs that they found apply to
+scheduling on Numa architectures with
+lots of course like 64 core machines and
+the the like regression cases that they
+mentioned in that paper were things like
+like running a ruby web server and also
+compiling the Linux kernel or something
+like that we're close that I personally
+couldn't quite identify with real
+workloads and I think I think like like
+the paper is cool but if it had
+represented a real improvement they
+should have like posted it on the L KML
+and like their patches should be in the
+Linux kernel as far as I know like right
+now they're not that could have changed
+and like they they built some tools to
+analyze scheduler performance but I
+rather would have seen them leverage
+more general purpose tools in the kernel
+infrastructure like F tracer or perfs
+good because like they they built their
+own but you need a custom kernel and I'm
+not hitting on the authors of the ad
+paper but I think the like the things
+that they found were relatively
+special-purpose regressions and their
+broader point that it's kind of a gnarly
+piece of of code like obviously sans
+it's like pretty complicated does that
+seem reasonable cool I think we're out
+of time but please come talk to me if
+you think</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

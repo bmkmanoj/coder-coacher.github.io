@@ -1,0 +1,1235 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Shenandoah: The Garbage Collector That Could by Aleksey Shipilev | Coder Coacher - Coaching Coders</title><meta content="Shenandoah: The Garbage Collector That Could by Aleksey Shipilev - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Devoxx/">Devoxx</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Shenandoah: The Garbage Collector That Could by Aleksey Shipilev</b></h2><h5 class="post__date">2017-11-09</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/VCeHkcwfF9Q" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hi and welcome this is the session about
+garbage collection and particular in one
+garbage collection collector algorithm
+that we are developing at Red Hat so
+this talk is pretty dense content wise
+so I'll try to speak fast if that's a
+problem don't be alarmed if you lose the
+thread just wait until the next session
+sorry
+until the next section and it will be
+alright after that again for some time
+alright so safe harbors this is the only
+slide in partly Russian I learn Russian
+well it's still voluntary it's basically
+said that whatever I say here might be
+lies so if you try to depend on this in
+your production systems then please hire
+the professionals that will tell you
+what exactly is wrong with these slides
+okay and the second thought is that this
+talk is interesting in itself but if you
+want to have deeper understanding about
+GCS you have to read this book it might
+appear in any other digital that what is
+being explained is something very not've
+and everything is rewritten from scratch
+etc etc but in reality most of the GC is
+reused the ideas from this book shannond
+or included so there is that overview
+why in the hell do we need another GC
+how many GC is out there in open JDK and
+Oracle JDK 4 ok so if we try to look at
+them we will start with something simple
+like serial and parallel disease those
+disease are generational they are
+schematically can be described like this
+our young collection is the copying
+collection old collection is mark and
+compact
+they are orange on this slides to
+signify that they are happening during
+stop the world meaning that the entire
+GC is stopped the world regardless of
+where it sees its young or old so if I
+want to do some parts concurrently what
+collect up do I use
+CMS CMS does all GC concurrently
+it has concurrent mark and concurrent
+sweep but the concurrent in the
+concurrent mark-sweep the only relates
+to the OGC the young GC is still pretty
+much cutting stop the world collector
+and the trouble with concurrent sweep is
+that it keeps the object in place which
+means eventually you will fragment the
+old generation which you will have to
+deal with most people do it with tuning
+not try not to promote as much or do
+some other magic
+if CMS does not fit the bill what do I
+do
+j1j one on this picture looks like a
+step back because it has more orange
+parts the green parts are concurrent
+parts but the virtue of g1 is that that
+collector is regionalised so it can
+control the poses by selecting carefully
+how many regions you would collect so
+even though it does concurrent mark and
+stop the world compact the duration of
+that contact is adjustable and it still
+does young GC is pretty much like any
+other collector in openjdk sunandha on
+this picture looks like this it does
+most things concurrently it does
+concurrent compact which means it which
+combines kind at the best of two worlds
+it's concurrent like CMS and thus
+compact like j1 why don't other GCS do
+that I hope it will be clear after this
+talk so before we go into the deep dive
+into watching on door ears let's do the
+first basic thing Shannon Doe is the
+original eyes GC
+if you are familiar with g1 you will
+find many similarities between the two
+the hip division the handling of
+humongous regions is similar to j1 it
+also collects the garbage first region
+thirst in contrast to j1 it's not
+generational by default there is no
+young and old separation even
+temporarily in the default mode etc if
+we look if you'd like to look at the GC
+cycle
+that happens in Shenandoah it does three
+major phases and they go like this so
+suppose you have the application and it
+allocates something in the hip the blue
+things are what applications had
+allocated and at some point you see
+decides that the memory is running out
+and it's time to do the GC so the first
+major phase in the GC cycle is
+concurrent mark and concurrent mark has
+two pauses before and after it we will
+talk about it about why but at the end
+of concurrent mark we know which regions
+contain a life objects and how much of
+those greenish progress bars or roughly
+the depiction of how much how many
+objects are live there so after the mark
+we can actually say what regions are the
+targets for the collection we can say we
+can mark these regions with this
+yellowish bars there say that this
+regions form so-called collection set we
+said that we are collecting right now
+and the second phase comes in which has
+concurrent evacuation which takes this
+collection set and evacuates all the
+live things from their interest into the
+new region thus compacting it after this
+stage is over you might think that GC is
+over but no you have also to update all
+the heap references to the object that
+you have moved to not to point to the
+collection set anymore but rather to the
+new object locations and that face is
+also concurrent it has two smaller poses
+as well and if you run a usual java
+application after that you will recycle
+the collection set you can allocate
+there if you write the usual java app
+hundred gigabyte heap mydesktop has that
+much memory so I can do it and you put
+80 gigabytes of live data in this heap
+and this is the gist log that you will
+have and these are deposits the poses
+are still there is not completely
+concurrent but the poses themselves are
+very very small compared to the to the
+length of the
+concurrent phases so sub-millisecond
+poses anyone in Java
+who is squeezin for that yes now we will
+tell what it costs us right so to
+understand that we have to understand
+how Jesus work and to understand how
+shenandoah works it's important to
+understand how they stop the world
+collectors work so the first thing
+before you do any GC you have to figure
+out what is garbage and to figure out
+what is garbage you have to know whether
+there are references to the object and
+there are three basic approaches there
+first very basic ignores the problem and
+say that everything is reachable if you
+know what epsilon GC is it's what it
+does it says we don't collect at all
+everything is reachable at all times we
+can do mark and something we can say
+that you know we know this is the set of
+implicitly reachable objects you know
+what those objects are right
+for example static field stacks etc and
+treat everything else is garbage you
+have to be marked everything alive and
+reference counting when we say you know
+we will get a counter attached to the
+each object and when that counter goes
+to zero that means no references to the
+objects and we can treat it as garbage
+if you look at this you can actually
+think that reference counting is
+actually more of the GC than mark
+because it identifies the garbage
+directly and the mark is kinda does that
+by exclusion so whenever everyone anyone
+says that reference counting is not the
+GC algorithm well it's more than garbage
+garbage collection algorithms Denmark
+okay so let's dive into the mark turns
+out we can do this walk through the
+graph if we assign colors to the object
+in Dijkstra assigned three colors come
+up with a three color abstraction you
+have to be pretty depressed person I
+think if you are asked to select to
+choose three colors for coloring and it
+shows white black and gray but here is
+the classical arrangement white objects
+are the objects that we had not yet
+visited
+black objects these the objects that we
+have visited and all the outbound
+references are scanned and gray is
+something in the middle so in other
+words concurrent mark is the thing that
+turns white into gray and gray into
+black so let's do the example to see how
+it works so we have this top the world
+mark and we have this object graph and
+the white circles are the objects and we
+have the route set which is the black
+square which is implicitly reachable and
+in the pointers are kind of the
+references between those objects when
+the application is stopped everything is
+perfect we just saw us scan from the
+route set color is black everything
+reachable from black is gray now
+everything ray is black grey black grey
+black and this wave sweeps through the
+graph and marks everything reachable
+marks everything black all garbage is
+white and we can recycle it period the
+GC is completed when you do the
+concurrent mark you get problems because
+applications not only write to the heap
+but they actually actively mutate the
+reachability graph within the cube for
+this some textbooks called applications
+mutaters from the standpoint of GC so
+how do you how does it get problematic
+if we come to the same example but now
+we assume that application does
+something so we have arrived to this
+second grey objects there and we were
+trying to scan the link to the right
+from that but at the same time
+application destroyed the link to the
+white object there and if it just
+destroyed it we would be fine it would
+be garbage then but it could also insert
+the reference to that white object to
+some black object that we will not visit
+anymore because the wavefront kind of
+moved on from that and there is another
+case which is subtly different but you
+can think about it the same you can also
+destroy the reference to divide object
+and insert it into some and insert the
+reference to some transitively reachable
+white object into the black object so if
+you complete the mark in
+this case you will realize that there
+are two objects which are now reachable
+but you're marking algorithm says they
+are white you're just reclaiming their
+space and thus corrupting the heap there
+is there are two classical ways to deal
+with this some of them are tracking
+assertions some of them are tracking
+destructions and j1 and Shenandoah does
+the algorithms that is called say TB
+which works like this which says ok we
+know that destructive rights are bad so
+why don't we track them so on and on
+every right we try to see if we have
+destroyed the link to the particular
+part of the graph that we might have to
+walk we just recorded in this
+abstraction we just mark those objects
+gray and continue the scan from there
+and also if you if you have new objects
+we can also color them black or or gray
+depending on the algorithm and thus
+complete the mark even though the new
+pointers are there so if you compare
+this graph with the graph that you had
+under sub the world mark you will notice
+an odd thing that this graph is actually
+the superset of the graph that you had
+in the stop the world so you have marked
+everything that was reachable at the
+start of the collection because
+everything untouched you just walk
+through any destructive right that
+happened during the mark you walked it
+anyway because say to be did it for you
+and this is why say to be is called say
+to be it's the algorithm that is called
+snapshot at the beginning and it marks
+everything reachable at mark start D
+travels with this of course is that it
+overestimate Livni's everything that you
+have allocated in concurrent mark is
+implicitly alive any destructions that
+happen during concurrent mark are still
+treated by GCS effective but what does
+it mean to intercept writes that means
+the runtime should insert some
+instructions around the actual hip
+frights to intercept that and those
+blocks of code are usually called
+barriers to greater confusion
+because these are GC barriers not the
+memory ordering barriers so for say DB
+the barrier is called say TB barrier and
+as far as most high-performance things
+go they usually have the fast path the
+optimistic path and the slow path the
+pessimistic path so the fast path for
+say TB barrier says basically this if we
+have the store in the heap on the off
+chance it is a destructive store we have
+to check if we are during concurrent
+mark if we are then we jump to the slow
+path if we are not we just follow
+through and the slow path looks like
+this it would be very dump to go to
+runtime on every single hip right the
+overheads would be too too high and this
+is why every thread has the buffer where
+it stores the the addresses that are
+there coming from the say tbe buffer and
+when this buffer overfill it just puts
+the whole buffer to the vm to process
+and from this logic you understand why
+they are two pauses in concurrent mark
+first of all those poses are needed to
+resolve the races against the mutator it
+would be very sad to arm these ATD
+barriers and then realize that the
+applications had already passed through
+that barriers and did the destructive
+right also you want to probably color
+the roots of black but this is not a
+requirement you have to arm the sitibi
+barriers for the final mark you want to
+drain those say TB buffers now because
+threads have might have lingering
+buffers there and finish work from that
+because you might have white objects in
+those say to be things that you have to
+process and so these two things are the
+most heavyweight parts in the pose if
+you look at that you will realize that
+these poses are not actually dependent
+on the heap size rather they are mostly
+dependent on the route set size and the
+you would call the how active the
+application is even though it's rarely a
+problem so if you have this ADV barrier
+now which before every single reference
+store
+what do you think the performance
+overhead of the safety barrier is who is
+for 10 percent throughput tribute 20
+percent forty five one zero if you look
+at the workloads if you have the suite
+of benchmarks you will realize that even
+the first half of say TB which has like
+three instructions before each store
+costs you so you can have the our heads
+of around three percent just because of
+this eighty B and this drives us to the
+first observation that throughput wise a
+well-engineered stop the world GC would
+be it the well-engineered concurrent GC
+because there are these barriers there
+if you have the budget of 10 percent
+throughput our head for your concurrent
+GC and you already spent 3 percent on
+the faster for say TB you have already
+lost you Kevin you haven't started doing
+anything you're already off to the races
+and the second thing that the barrier
+costs are visible even if there is no GC
+cycles happening so if your GC lock is
+empty it doesn't mean your GC our head
+is zero because the barriers are still
+there so concurrent mark is easy enough
+g1 does it seem else does it you know
+does it concurrent copy is not so much
+to understand what's the problem with
+the concurrent copy let's first see what
+is the stop the world version of the
+concurrent of the copy so suppose we
+have the object it has the header has
+three fields it has references from
+somewhere from in the hip and we need to
+move it to the new locations of the
+world does the simple thing it says you
+know we stopped the application so that
+it could not mutate or observe any
+transient state then we do the copy of
+the object then we store the reference
+to the new object somewhere in the old
+object so that we know how they are
+connected and then we walk through the
+heap we discover the reference that's
+pointed points to the alt copy we know
+through the forwarding pointer well the
+actual copy is we gradually rewrite all
+the references to the new object at that
+point all the objects is not needed stop
+the world can be relieved
+we are done with concurrent copy it gets
+interesting because application is now
+writing into the objects that we are
+trying to copy so what do you do then
+before you understand understand what to
+do then let's see the failure scenario
+what could go wrong and the problem is
+while object is being moved there are
+two copies of the same logical object
+and both of these copies are reachable
+which means that the first threat could
+write in in one field of the other one
+copy and another threat could write into
+the field of the other copy so suppose
+did this happened so which copy do you
+think is correct who is for the left one
+it's a legit threat it didn't it did all
+legitimately who is for the right copy
+who is for both of course in GMM is
+kinda hard on us here a it does not
+allow us to lose rights so both of these
+copies are correct and now you're faced
+with the weird problem of merging them
+and hopefully you will do that without
+violating GMM which is another problem
+in itself and if you look at this you
+will understand that the problem is that
+those copies are of the same rank there
+is no way to distinguish which one of
+those copies is actual and there is no
+central knowledge on central location
+which can tell you which copy is actual
+and basically this is the problem of
+object versioning and to understand how
+shenandoah works it's important to
+understand how would you solve the same
+problem in Java if you have the Java
+object that is imitated by multiple
+threads and you want to have the LOC
+three updates there he'll probably do
+something like this you will do the
+atomic reference and then if you want to
+write to that object you will do you
+know get the old copy get the old object
+do the copy of it update the copy and
+try to install this new kotti as the
+actual version and that atomic reference
+would act is the adviser that will
+always point to the most actual copy of
+the object
+wrote this code at least once yeah I
+mean it's the usual pattern in the
+concurrent programming there so from
+there it's natural to apply the same
+principle to GC and that's what Brooks
+did it said okay why don't we provide
+the atomicity of object version change
+by additional indirection instead of
+doing separate object we just attach a
+forwarding pointer at every object at
+all times and it will tell us where the
+actual copy of the object lies so when
+we have that it's very easy to construct
+the copying code so on first step we
+just copy the object initialize the
+forwarding pointer to itself and at that
+point we have the copy of the object but
+nobody knows about that copy anymore yet
+no thread could write into it
+it's just our local copy and then we do
+the compare and set on the forwarding
+pointer
+thus installing the new version of this
+object and this is the major trick that
+gives us the lock free and race fee
+evacuation of the objects after we did
+that we can just gradually rewrite the
+references to the rest of the heap and
+even if the thread comes and tries to
+write to the object by construction it
+has to do the reference through the
+forwarding pointer first to discover the
+actual copy of the object and right
+there and that's about it
+after all the references have been
+updated the from space copy is not
+needed anymore we can recycle it and
+there we go we have managed to move the
+object while the concurrent writes
+happened to it without races so how do
+you enforce that invariant of course if
+you if you want to enforce this to space
+invariant that rights are only happening
+to the actual copy you need the right
+barrier that intercepts the rights and
+the reference is through the forwarding
+pointer but it might be more complicated
+than that
+so for fast path the right barrier looks
+similar to the say TB barrier right it
+has it checks that if we are if at this
+interesting GC phase when we are about
+to evacuate the objects that we then we
+jump into the slow path
+if we are not we just do this tour and
+we are good so that slow path I wouldn't
+bother you with assembly it's kinda hard
+so absurdly cold instead it's eerily
+similar to what you will do in Java and
+what we did in Java example we say that
+if you want to write value to object
+that the particular offset we just say
+okay before we do that let's check that
+we are in the needed configurations of
+invocation is enabled and we are in this
+GC phase the object that we are trying
+to write to is in the to space and it's
+not have been yet copied so that means
+that the forwarding pointer it still
+points to itself if we trying to write
+to that object that means we have to
+evacuate at first because we can only
+write to the actual actual to space copy
+so how do we do that the same way we
+will do this in Java we copy the object
+we update the copy and try to install it
+the simplification here is that if we
+have failed this case that means someone
+else had managed to evacuate the object
+before us and all we need to do is the
+reference through the forwarding pointer
+discover the actual copy and right there
+and it's by definition would be in the
+two space G see if equation code is
+similar like that but it doesn't have to
+write into the fields now so with only
+goes linearly through the heap and says
+you know if the object is in the
+collection set is the regions that are
+destined for a recreation and it's not
+have been yet copied so the forward
+imported still points to myself I copy
+and try to install it if my cast fails
+there we don't care because that means
+that the applications write barrier had
+already copied this thing and it nicely
+terminates because there is the finite
+number of objects in the collection set
+so we will reach up the end of the
+algorithm there so what do you think the
+other head of this right barriers on the
+applications are who is for 20 percent
+ten percent five three one there's no
+overhead no no takers
+huh okay so on the real world
+applications there are our heads not
+that much on some applications there are
+you know overheads up to ten percent but
+those are very pathological cases in
+most of the cases you managed to get the
+overhead quite low because the first
+task is really fast so the observations
+shenandoah needs write better soon all
+the stores if you store the integer into
+the object you still might need to copy
+the object after the collection set
+before doing so if you do metadata
+manipulation on the object say you are
+locking on the objects you have to do
+write barrier and do debugging on the to
+space copy if you compute identity hash
+code and thus modify the header of the
+object it's still a store you have to do
+the write barrier but the filters that
+you do and the write barriers are pretty
+much effective so we have estimated that
+I won in the million I guess right
+barriers actually hit the slow path in
+the real applications the flip side of
+this story is read there is now you want
+to your applications to read from the
+actual copy or do you actually it's not
+a strong invariant memory model by the
+way allows you in some cases read from
+the stale coffee and so you can play
+tricks on that but to do this before
+each feed you have to do reference
+through the forwarding pointer right to
+get the actual copy there and so read
+barrier looks like this if you have the
+heap read that reads at the given offset
+you just before it you just do the
+dereference through the forwarding
+pointer and it it does cost you a bit
+it's just a single instruction but it
+does so if you just run this simple
+benchmark that does nothing but reading
+from the heap and then all paths you
+have accumulated three read barriers you
+will have an additional l1 lot and on
+most hardware it will be pretty well
+executed so we will waste a single cycle
+per read barrier and
+single instruction there so what do you
+think the uppercut on the real
+applications of this read barriers are
+who is for thirty percent twenty ten
+five three come on a simple instruction
+one all right
+it goes like this and the observation
+that you can you can get from from these
+things and looking at the workloads is
+that with barriers up cheap but there
+are lots of them and this is why any GC
+that makes read barriers heavier say by
+employing colored pointers or something
+like that it's probably running into the
+problems performs problems there you
+cannot make grid bear as much heavier
+because you will make your application
+go slower and the observed overhead
+really really depends on how well you're
+able to optimize the barriers there for
+instance how well you're able to pull
+out the read barriers off to the hot
+loops for instance if you don't you're
+gonna have at that time so if you are
+doing high-performance GC you have to
+assume that you will be doing the high
+performance compiler work as well around
+the one third of our - against upstream
+I guess is the compiler optimizations
+all right should not do a specific
+trouble now that we have two copies of
+the same object how does the reference
+equality work the machines the jaebeum's
+right now they just say okay if user
+wants to compare a CMP you know
+reference comparison between two
+references we just compare the machine
+pointers but fortune and oh it's not
+true anymore because in some cases
+machine portents are not equal because
+they are pointing to the different
+copies of the same object which means
+that you have to do additional things to
+make it work right and if you analyze
+this you'll realize that if you compare
+the machine pointers and those pointers
+are not equal that means the objects are
+not equal and you are done
+if the pointers are not equal there are
+cases it could be a false positive
+it could be the you know from copy and
+to copy of the same object so the
+easiest way to deal with that is just
+perform the read barriers on both
+operands which will inevitably point to
+the single space and compare again what
+do you think is the our head of this
+thing on the real applications 20% 10 5
+3 2 all right
+turns out only a few applications
+actually hit get hit on that but when
+they do you have the performance
+throughput overhead and the observation
+from that is that full-fledged
+comparisons are rare in Java you are
+mostly comparing with with what with now
+you've mostly comparing with now in this
+particular case with better is not
+needed if the pointer does not equal now
+that regardless of what copy of object
+I've I'm referencing it's still true and
+there is also a problem with the
+reference cases which also kind of do
+reference comparison but the barriers
+there is much more complicated than just
+simple a CMP the saving grace there is
+that when you hit the compare instead
+slow path when comparing set fails you
+usually have larger problems the DGC
+barrier you have to retry you have to
+allocate something it goes there so in
+total if you just count the various ever
+had the throughput our head for such a
+collector would be in the realm of 1 to
+20% and that's the cost that you pay for
+diminished pauses but the observations
+about this is this scheme does not
+really require anything special from the
+hardware or a operation system it's pure
+so it's pure software you don't need
+kernel patches to for it to work right
+you don't need special kernels you don't
+need special operation systems or
+special hardware it just works
+and the throughput here what our
+adapters are reporting is mostly
+acceptable for them because they are
+paying the latency for it
+if you and this is the latency
+throughput trade-off again if you don't
+need low latency don't bother and you
+stop the world or semi concurrent you
+see you will get better throughput out
+of it by show of hands who knows about
+generational hypothesis all right
+know that much so there are two types of
+generational hypothesis first is the
+weak hypothesis which says the most
+objects die young if you draw it and the
+x-axis is age and the y axis is dying
+probability it will probably go like
+this it is this hypothesis is true in
+many many languages not only Java
+basically in the most languages out
+there and there is this stronger variant
+of this it says that the older of the
+object the less chance it has to die
+it's stronger because it's more more
+encompassing it includes the
+generational hypothesis in itself do you
+know the counter examples for the strong
+hypothesis
+can you guess can you guess the workload
+of that you know does not feel this
+strong hypothesis caching in memory si
+el are you like caches are trying
+country example of this they will have
+the ik you can see like this the old
+there would be some amount of child
+mortality in these objects but it will
+also dereference the oldest objects
+there and this is a very inconvenient or
+quote for the simple generational GCSE
+because once you once your cache is not
+full and it starts to full it works as
+the generation via generational workload
+because some objects die young indeed
+some of the temporaries the objects that
+have promoted I'll just keep kept
+referenced by cache everything is fine
+but then cache gets full and because
+it's a cache it has the multi-gigabyte
+life data set there it starts to reclaim
+the objects that were there the oldest
+probably does it suddenly stopped being
+you know generational workload there so
+how do you do the simplest al are you
+implementation in Java just for the
+giggles how do you test the GC Hines
+knows this answer yeah you basically
+have linked hash map and say you know
+there is the protected method which says
+should I remove my eldest entry and you
+just say you know if you are too fat
+then do it and this is the simplest ever
+you implementation in Java if we do that
+test and we do the very boring config we
+do Shannon do what you see Shannon to
+adjudicate and forest we do a simple
+desktop with the 100 gigabytes of RAM
+and we have the decent fit right on the
+e cache and we try to drag through the
+cache some amount of data say a terabyte
+of data and we want to vary a free
+variable in that experiment and the
+natural free variable in this experiment
+is the size of the cache which which
+roughly correlates with the size of life
+data that you have in the heap and by
+varying this lever you can actually
+expose interesting GC behaviors there so
+if you do this experiment you will have
+something like this the yellow lines are
+kind of the distributions it should be
+violent plot but the graph would be very
+very messy and the black dot is the
+average even though average is the death
+composite metric for this it still has
+some meaning here notice that the y axis
+is logarithmic which means that the line
+here is the second 10 milliseconds sorry
+hunky no seconds 10 milliseconds etc and
+you can might notice that Shannon do is
+there in the sub millisecond range see
+him as somewhere in the middle between
+parallel and Shenandoah and g1 does its
+own stuff there
+I wouldn't explain that without my
+lawyer present I wouldn't talk about J 1
+without my lawyer present yeah I mean
+something is wrong there obviously the
+details hmm maybe Kirk knows better I
+know
+all right so if you look you're not my
+lawyer I'm not talking to you so this
+thing is the absence of stop the world
+oh gee see this is the thing that CMS
+that's right so parallel does everything
+stop the world and this is why the
+pauses are high
+Shenandoah does everything stopped
+everything concurrently so this is
+difference is the absence of the stop
+the world young do you see that is
+present in same as and thus it can
+achieve the pause is there on the wide
+range of life datasets but what about
+these this kind of look does not look
+right and if you talk to the GCC guys
+about this and say you know I have a
+problem and my GC runs into the rest of
+the world events every so often because
+I have 90% occupancy in the heap the GC
+guys would tell you well don't do that
+just give yourself larger heap and
+everything will just work itself out
+from there but also be slightly wary
+when anyone shows you these graphs
+because you don't know what the
+throughput is it would be easy to have
+low pauses if you do the million times
+less work right so here are the
+throughput charts it's not really a flip
+chart is the operation time it's the
+time that you spent doing this workload
+and in this particular example we'll see
+Mazen sorry parallel and Shenandoah has
+the same operation time lower the better
+CMS is kinda closely there what g'wan
+does is interesting and if you count if
+you look at the GC pause time as the
+percent of the total run time run time
+you will notice that you Nando is there
+at the at the bottom at the zeroes there
+until the heap gets too crowded
+fortunate also operate well okay we will
+talk about this not well thing a little
+bit and the major assumption that all
+concurrency
+is half is that concurrent GCS have to
+collect faster than applications
+allocate memory or in other words
+applications should always see if there
+is available memory in practice this is
+frequently true in practice there's
+usually a lot of free space in the heap
+GC threads are high high priority and so
+they run faster than application threads
+and applications are not only doing the
+allocations they also do some real work
+which lets us do our stuff but if you do
+the industry grade GC you have to care
+about this unhappy path - and what can
+you do you understand that concurrent GC
+needs this breathing room to succeed and
+all your work is then centered around
+that so things that help is the
+aggressive Kip expansion you have to
+prefer to take more memory when the
+alternative to stop the world event and
+while we are talking about footprint and
+this is the part of the day you
+shouldn't do a story that triggers I
+think most of the folks is that there is
+non-negligible footprint our head for
+shenandoah the forwarding pointer that
+you have to have for every single object
+at all times adds up to the other hats
+and it costs you on 64-bit vm like 8
+bytes per object because you store the
+uncompressed pointer there the saving
+grace for you is that that folding
+pointer is allocated in Java heap which
+means you can plan for it more
+accurately it's not some of heap data
+structure which size you cannot predict
+and it's up on your memory from the
+native parts you have to marking bitmaps
+it it's an open question whether you can
+dispense with just one every bitmap kind
+of coarsely it describes the heap
+describes what objects are marked in
+heap and it takes around 1/64 of the
+heap there so if you say Yoshi Nando's
+you see xmx hundred gigabytes that
+usually means that around 1995 gigabytes
+are accessible to Java objects there
+meaning you can't Ram this much of the
+usual Java objects that you can cram
+with other collectors and if you look at
+the residents at size for the Java
+protein process and you will try to see
+that you will see that the RSS for that
+kind of heap is one hundred and three
+gigabytes because no three gigabytes are
+basically marking bitmaps and forwarding
+pointers are accounted into the Java
+heap which simplifies deployment but all
+of that is completely dwarfed by the way
+the GC GC is sized the heap and
+illustrate that point I have the micro
+service example micro services are cool
+right so wide fly swarm rest HTTP
+example which you feed with the HTTP
+requests there it's instructive to look
+at the kind of time evolution of this
+workload when it performs different
+phases so once you start the application
+it does some initial allocations and
+right there you can see that show Nandu
+is kind of already higher than every
+other collector and this is why other
+collectors have teared some young jeezy
+poses there already and didn't it just
+prefer to expand the heap rather than
+doing the GC cycle but after you hit the
+idle phase the RSS fortunato actually
+fall down because shenandoah can a
+synchronously uncommit parts of the heap
+and also the periodic disease which
+we'll talk about a bit later and under
+the load you might see probably the same
+the same kind of graph right on the Lord
+every GC should decide whether to start
+UC or expand the heap different GC is
+decided differently Shinano just blankly
+say you know we will expand the heap
+until we can j1 is kinda in the middle
+if you will change the x MS in X mix
+values g1 would kind of stabilize at
+different levels trying to guess where
+it would stabilize is the adventurer on
+its own after it the application is idle
+you can do this you can
+uncommit parts of the heap
+and the critical realization that you
+have once you have a concurrent GC is
+that in open JDK most of the GC is the
+GC events are allocation triggered
+meaning that it will start to see after
+a particular amount of garbage have been
+allocated objects having allocated
+probably most of that garbage and so if
+your application stopped abruptly before
+you reach that allocation threshold that
+means your hip is now full of garbage
+that you cannot collect because you
+barely not there for the Jesus cycle now
+you can do a periodic GC but if you have
+the step the world GC that means you are
+risking the actual large pauses for the
+application if you have a concurrent you
+see you can actually do the periodic GC
+right so in this graph for example this
+is the first time commit of the memory
+the first and commit of the memory that
+we don't need the second one is the
+periodic GC which knocks out the
+floating garbage that was left around
+there and so it it falls there to the
+bottom right and so this is basic
+position on those mo we will take all
+the memory when we need it
+if you tell us X MX 8 gigabytes we will
+use all 8 gigabytes when we need it but
+we will also give it back when we don't
+and we will how will provide you with
+the tuning options of periodic disease
+and uncommit device that can help you to
+tune it up the second thing that you can
+do in GC is the immediate garbage
+shortcuts and you understand how it
+works
+it's instructed to see the sum of these
+cycles so for instance we have the
+hungry gigabyte heap you marked it but
+you realize that everything in that hip
+is dead because it's the young GC
+workload and the market is fast that way
+because it only visits deliah life
+objects then you realize that in some of
+the regions that you have you now have
+no alive objects whatsoever you don't
+need to process those regions anymore
+you just recycle them right away and
+after you recycle you realize that you
+have reclaimed like 95% of
+all heap and you just shortcut because
+why bother continuing the cycle you have
+already have the biggest bang there
+amusingly on many workloads that are not
+having too much things in the old
+generation this greatly approximate the
+generational young GC because it's very
+very very fast knocks out the space very
+efficiently partial collections the
+central dogma for partial collections in
+the Jesus theory is that you want to get
+overall average post times lower by
+segregating the heap by some property
+the usual property is object age and
+when you do the separation by age you
+get a generational GC the pesky little
+detail about this is that it requires
+the collecting the sub heap requires
+knowing all the incoming pointers to
+that hip otherwise you corrupt the hip
+and different Jesus does the differently
+if you have the serial or parallel it
+has two regions separated sorry keep
+separate in two generations and how do
+you track the pointers you have the card
+table which spans the old generations
+when you do the store you say okay if
+that's the pointer from old to young I
+have to flip the card in the card table
+saying that that part of the old is
+dirty and then after when I collect the
+young generation I have to scan that
+small part of all generation looking for
+the incoming pointers and looking for
+the places where I have to fix up after
+the young collection happened g'wan does
+it a little bit differently
+it has remembered set what car table is
+technically the part of the remember
+sets and if you do the same trick as in
+parallel so you have the car table and
+flip the dirty card there and say that
+you know when you collect something you
+have to track which part of the heap are
+dirty it doesn't say anything about that
+particular region specifically it says
+that some area of the heap is dirty and
+so there is another thing that is more
+fine-grained remember sets that that are
+basically telling you for each
+particular regions which dirty parts of
+the heap you have to scan
+so in this example if I collect the
+first region I have to also look into
+that dirty part of the fourth region
+there now the trouble with that is that
+remember sets in G one could get pretty
+large Christian tells the anecdote that
+when the first hood I did for G 1 they
+executed it on some application and they
+realized that remember sets are actually
+greater than the Java heap itself which
+is not cool for the GC and the most of
+the engineering work in G 1 was focused
+on getting the remember set sizes under
+control and they are succeeded with it
+but there are peculiarities for instance
+you can make G 1 generational you can
+say that some regions are young you
+designate them as young and you can then
+collect them all at once that means you
+do not have to track the references
+between those regions and that's
+probably where the most rights are
+happening anyway but there is trouble if
+you do a very large young-chan that
+means you're your lowest pause goes up
+because you have to collect all these
+young regions at once you cannot collect
+every single of them and if you yes if
+you have a very narrow young there the
+remember set footprint kills you when
+you have concurrent GC is the things
+kind of change because you can make a
+coarse grain court table like in Perl
+there but for each particular region so
+if I have this store I can actually say
+that you know for this particular first
+region I know that the incoming pointer
+ours for sorry from the forth region and
+so when I collect the first region I
+have to scan through the 4th one when I
+have the concurrent GC I can afford to
+do this it's not the poles it's frankly
+I would not scan the whole heap so this
+is that and this is basically you know
+the trade off basically about GC
+efficiency so we are trading the full
+concurrent mark of the entire heap do
+you know knowing something about the
+heap through this connection
+and do these the simple one and this is
+the partial collection the special case
+of this collection is generational even
+though it should not even though
+generational you can do more advanced
+things some observations maintaining
+this connectivity data means more
+barriers every generational GC has
+barriers that maintain in this cart
+table or something else and that means
+that you have to make sure that
+increased GC efficiency covers that
+through put our head in our shinato
+example we identified that not all of
+the workflows are doing that in many
+more clothes it's cheaper to do the full
+GC scan instead of doing this partial
+thing and so it's optional you can turn
+it off turn it on it is opt in at in
+current code so you don't have to pay
+for partial collections when they don't
+help and also advanced things are
+possible there in conclusion in the
+single picture Universal GC does not
+exist
+you have either low latency or high
+throughput or long memory footprint you
+can kind of get low latency in high
+throughput if you use say epsilon right
+but you have to plan for the terabytes
+of heap then so if you want to do more
+work concurrently with the application
+that means you have to coordinate with
+the application which means more
+barriers which means throughput our hats
+so for your application you have to
+decide which you see you want to use or
+whether it's your current deceased you
+know before that in paragraphs no GC
+could detect what read trade-offs you're
+after either this latency or throughput
+you have to tell yourself stop the world
+GCS would beat other disease
+inefficiency through advice so if you
+have this workload and parallel is
+probably your choice concurrent mark
+solves the first part of the puzzle
+concurrent Marc and g1 is already ready
+for this you can use it it works fine if
+you want the ultimate latency numbers
+then you have to solve copy in compact
+this is version and or comes in
+in conclusion releases we have this wiki
+page which lists
+all the things that you need to know
+about Shenandoah we can't develop for
+GDK 10 but we also maintain the back
+ports to GT nine and eight you and tk8
+you ships in rail 7.4 and floor 24 and
+derivatives from rel which includes
+Santos quite amusingly Oracle Linux
+Amazon Linux etc or you can just if you
+want to live dangerously you can just
+use nightly developing builds bug
+reports are appreciated success stories
+are appreciated failure stories are
+appreciated even more so try to use it
+it's there it's runnable if you run
+Fedora on your laptop you can probably
+run it right now
+that's all for now thank you questions
+right yes Dirk
+do you have a question or can you do the
+question and then you can do the
+observation hey then why is a young
+variable sorry the young generational
+pastime tied to the size of young Jen
+because I have to collect the young Jen
+from the start but the weak generational
+hypothesis the amount of live data in
+young will be constant well yes the time
+and the cost of the collection is now
+dominated by yeah if you believe in
+generational hypothesis that's true but
+you can make a mistake and then you have
+trouble you can't have the workload and
+you will have the workload and there are
+workers in which you allocate what you
+think is young objects but then you
+retain all of them and yeah I believe
+that what you're saying is generally
+true this is the way that GC is actually
+exploited to generate some hypotheses
+the trouble is it's not always true okay
+yeah this one 69 this one no 16 okay
+yeah oh okay
+the slides would be posted oh come on
+all right questions more questions yeah
+if you want very low latency it makes
+sense to use both button like the
+disruptor and shondo or one exclude the
+other and if so in which case you have
+it one thing does not exclude the other
+if you have the garbage free application
+then you're probably not having a GC
+collection problem in which case the
+choice of getting GC is probably the
+choice of GC barriers and which place do
+CLE enough you are probably better off
+to stop the world GC or no GC at all for
+that matter but that's an exception
+rather than the rule most applications
+do allocate and do have and do need
+collection every once in a while so at
+that point it's better to have that
+collection concurrent rather than stop
+the world so it doesn't surprise you no
+no no dude it in mic yeah and and that's
+the last question unfortunately yeah
+does it compare to GC we don't know
+there is no code for GC yet there is no
+no yeah it does exist but it's not an
+open source we cannot see it so let's
+see what it does when it's here so there
+was no comparison at the moment there is
+no comparison at the moment yes and it
+would not be I guess in the upcoming few
+months until we both people and both
+teams kind of see what's there in both
+cc's we didn't compare a support for a
+multitude of reasons if you want do it
+and let us know all right that's it
+thank you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

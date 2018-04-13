@@ -1,0 +1,1427 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Developers’ Introduction to HotSpot Internals | Coder Coacher - Coaching Coders</title><meta content="Developers’ Introduction to HotSpot Internals - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Developers’ Introduction to HotSpot Internals</b></h2><h5 class="post__date">2015-06-08</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/MTTszlLGtt4" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">this morning we're gonna talk about hot
+spot internals and this is this
+obsession is intended to be for a kind
+of a Java developer who has a very loose
+sense of what the JVM does and would
+like to know sort of scratch the surface
+a little bit more get a roadmap
+high-level view and then my hope is that
+that you'll proceed from here and go out
+and find out more about the JVM so you
+can program better so my name is Paul
+Newman
+I'm from Oracle I'm here to help all
+right so some preliminaries then in
+order to make sure that we're all sort
+of on the same page we're gonna go
+through a very brief review of the JVM
+model by JVM model I mean what the JVM
+specification says a JVM is supposed to
+do and then we'll go into how hotspot
+actually implements that model we'll go
+through some of the internals and and
+then we're gonna connect that with a
+couple of very common code patterns that
+you guys have seen like every day of
+your life and show how an understanding
+of the JVM could lead to a different
+approach to those code patterns and and
+maybe affect the way that you code and
+then finally we're gonna touch on
+actually just one I hope to put another
+one up there but I ended up cutting it
+out so we're gonna go through one code
+pattern that actually uh is important
+but weand ifferent JVMs because the
+specification leaves some ambiguity as
+to how a JVM implementer is allowed to
+do things and so certain code patterns
+can actually fit right into that gap
+where where the specification is
+okay so my name is Paul Newman I'm a JVM
+sustaining engineer which means when
+when hotspot or je rocket crashes and
+you guys pick up all the bits and ship
+them off to Oracle I'm the guy on the
+other side of the fence who goes through
+it with the tweezers and tries to figure
+out what in the heck happened there's a
+there's a team of Oh probably about a
+dozen of us that work on the work on
+various
+JVMs most of my career has actually been
+in telecommunications so I have
+experience in Java also have experience
+and system level programming and when I
+came to work for Oracle those two things
+came together and it's been really
+interesting as I mentioned earlier the
+the hope is that this is an overview of
+JVM internals for people who normally
+program in Java and it just have a very
+loose sense of what the JVM is and how
+it works and we're going to focus on
+what we call the runtime aspects so
+inside Oracle we think we think of the
+JVM is sort of three big pieces there's
+there's garbage collectors
+there's compilers and then there's this
+basically everything else which is
+called the runtime and to think of it
+very loosely if it's like it's sort of
+like a container for your Java program
+so it provides services for an executing
+Java program it actually gives it cycles
+and interprets the byte codes so that's
+what we call the runtime and once again
+my hope is that you'll come out of this
+with at least a top-level understanding
+of how the JVM works inside and that
+might even embolden you to do something
+as crazy as going out and looking at
+hotspot code for example crazy I know
+all right
+so JVM model so JVM model as I as I said
+is specified by the JVM specification
+I'll give you the URL for that at the
+end of the presentation some of you may
+even have seen it or looked at it before
+it's fairly detailed but basically this
+is how we think of just very extremely
+high-level this is held the JVM works
+we take source files which are in some
+language usually Java
+often Java feed them through a compiler
+and we end up with these things called
+class files and class files are what the
+JVM actually consumes so when you
+startup Java and give it that that name
+and the class path that's where it
+searches for the first class file or jar
+file and then goes ahead and Melissa no
+class files of course can be bundled
+into things called jar files but
+basically it's the class file that the
+JVM cares about so inside a Java source
+file there's a whole bunch of stuff as
+you guys know you do this every day
+there are class or interface definitions
+and as part of those there are also
+those classes or interfaces can either
+implement or extend other interfaces so
+there's references to those there are
+field definitions there are method
+definitions inside method definitions
+there's the logic that actually makes
+the method go there are references to
+other classes and then finally there are
+constants string and numerical constants
+which which have to be captured and all
+of that stuff gets encoded into this
+class file of packed binary format which
+is specified very clearly in the JVM
+specification so and as you probably are
+aware a single Java source file can
+actually generate several class files if
+you have inner classes and and defined
+interfaces inside your definition so but
+there's there's a very clear mapping
+between the language constructs that we
+program in and the actual artifacts that
+end up in this in this binary class file
+and they're given here and these are the
+actual names of them from the from the
+JVM specification so the implemented or
+extended interfaces are in a section
+called
+interface or interfaces then there's
+field information method information the
+method logic gets compiled down into
+byte codes which I'm hoping most do you
+know what that is but so bite codes are
+these codes that the JVM executes and
+sort of doesn't one at a time there's a
+whole slew of them that do different
+things we'll go into that a little more
+a little bit later and then there's this
+large blob of things called the constant
+pool which encapsulate all the
+references to extra
+classes external mess methods as as well
+as the constants that you have in your
+program because trying to smash smush
+down the bytecode as compact as possible
+so you don't want rather large
+references or strings hanging out in the
+bytecode so they all get put in a common
+place called the constant pool so when
+the tabi m is instructed either by
+command line or by something that
+happens in your program to load up a
+class file this is what it does and this
+is actually you guys would guess this
+right you you're pulling in a binary
+file you want to sort of encapsulate
+that into some sort of data structures
+and that's exactly what it does so
+there's a class file gets pulled into a
+class structure we captured the
+interfaces that are implemented captured
+the fields and methods that are defined
+of course capture the byte codes that
+we're going to want to execute and all
+that stuff sits in I've put in it as far
+as the JVM is JVM specification is
+concerned and as far as the JVM model is
+concerned a JVM implementer can put them
+in whatever format is most convenient
+and we put them in in C++ objects and
+and manage him okay so when a class is
+loaded there's actually more to it than
+just loading up the or sucking in the
+binary class file there's actually
+multiple steps to making the class ready
+to to be used and to be executed so the
+first part is what we've just talked
+about is loading which is parsing that
+binary data into the internal data
+structures then we go through a process
+called verification and this is done
+differently by each by every JVM butbut
+hotspot actually steps through the
+bytecode to ensure a whole bunch of
+different things but it's to make sure
+that it's a well-structured program so
+that for example you don't have stack
+under flows that you're calling other
+methods with the appropriate types and
+the appropriate quantity of parameters
+and all of that is to make sure that the
+JVM operates correctly without the
+bytecode actually causing it to crash if
+it fails verification then you
+that JVM throws an error and fails next
+step then is linking where again classes
+will have references to ektu other
+classes to other fields and to other
+methods and so the JVM has to actually
+look and see well have I actually loaded
+those things already and if so rather
+than keeping a symbolic reference to to
+that particular other entity I'm going
+to resolve that right now and put in a
+direct pointer so that when I get around
+to execution of anything in this class I
+can implement I can access it very very
+quickly
+well get we'll get into that a little
+bit more later in how hotspot and when
+hotspot does that and then finally the
+last step is you run the static
+initializers and then the class is ready
+to go okay and a key word here is
+atomically that JVM specification says
+that class initializers must be run
+atomically so if multiple threads all
+suddenly decide that they want the same
+class to be loaded on that initializer
+as you would guess there's only run once
+and that actually is a handy thing as as
+we'll see in one of the examples okay a
+java application is a collection of Java
+threads and a Java thread is defined by
+the specification as a series of Java
+frames
+Java frame is a method invocation so
+normally we start out with the
+invocation of the main method that's
+where our application starts and then as
+additional methods are invoked than the
+stack deepens and shortens as its
+necessary as methods are invoked in
+return
+each of these Java frames has some data
+that's captured in it somehow is keeping
+data the current method the current
+class the current class is needed
+because at different points that
+white-coat is going to refer to things
+in the constant pool and you're going to
+need to actually find that constant pool
+through the through the class construct
+and of course the essentially bytecode
+index or index of the next byte code
+that's the equivalent of a PC counter in
+our program counter and
+in normal assembly language Java is a
+stack-based model so operands are placed
+on a stack operations are done on stack
+very much like forth or if you've ever
+looked at Pascal or some of these other
+models but it's a pretty common pretty
+common model and as we're invoking
+methods parameters to put to a method or
+also push pushed onto the stack and then
+a new method is invoked in those
+parameters are pulled off the stack in
+that way when a method is invoked the
+parameters are kept in a separate array
+this parameters and locals array and
+normally parameters and local variables
+are kept in this same array with with a
+single index range that refers to all of
+them so when you invoke an instance
+method for example the reference to the
+target object this the thing that we
+normally refer to as this is actually
+parameter number zero or local number
+zero so bytecode can always find this by
+just saying load parameter zero and
+that's this
+all right so let's just take a real real
+simple example we run into the new byte
+code and this is this is the byte code
+that creates an instance of an object
+and the only parameter the only thing
+that the new byte code really needs to
+know is well what is the class of the
+new object that we want to create so
+here on the Left shows this this new
+byte code and it's followed by a sixty
+to two additional bytes which form an
+INT a index into the constant pool and
+you actually have to go through a couple
+of directions to the constant pool but
+ultimately you end up with a string
+which represents the name of the class a
+little more cut a little more
+complicated example so when we're
+actually referencing or accessing a
+field again we have a byte code followed
+by a 16-bit constant pool index we go
+through the constant pool and there's
+actually like six entries in the
+constant pool we end up navigating
+through but you end up with three
+different strings the class name the
+name of the field we want to access and
+the field descriptor which is a very
+concise version concise way of
+describing exactly what type that field
+is whether it's a primitive datatype or
+some other class or or anything like
+that
+so again this is I mean this is just a
+quick summary I hope of what the
+specification says that JVM is supposed
+to do
+method invocation there's three three of
+the most common I won't go into invoke
+dynamic that's that's a a little deeper
+than we need to go for this but invoking
+static or invoking virtual which is
+invoking an instance method or invoking
+an interface those are three different
+byte codes and this is basically how
+they work is very similar to the way
+that a field is referred you have a byte
+code followed by a 16-bit index into the
+constant pool you end up with three
+strings and the JVM has to figure out
+what to do from there the JVM
+specification is actually pretty loose
+about what a heap is and how its
+implemented so the heap as you hopefully
+are aware is the place where all client
+class instances and Java arrays are kept
+so it's a big chunk of memory and the
+JVM specification allows the JVM to
+manage the heap whoever makes the most
+sense yes the method descriptor is
+actually a string but the constant pool
+can have can have numerical constants in
+it as well so so your integer constants
+when you set set a local variable to
+some integer constant or something like
+that
+that would also be in the constant
+okay so so the heap again is where all
+the objects are kept it's created on JVM
+startup it's shared among all Java
+threads so it's this big this big bucket
+of objects may be expanded or contracted
+as needed some of you are probably
+familiar with messing around with the X
+M s and X M X parameters on that command
+line and then the JVM aspect is is
+amazingly silent on how memory is
+managed from that point it basically
+says JVM has to reclaim unused objects
+somehow some way and that's where
+garbage collecting comes in and like I
+said we won't go into that too deeply
+but the spec says the JVM has to do it
+and then finally just one other thing
+worth mentioning and it's simply because
+this can be a stumbling block or a tough
+point in programming which is this whole
+this whole synchronization or
+concurrency management in Java and
+that's done with this synchronized
+keyword so when we program was
+synchronized it actually invokes these
+things called locks or monitors and this
+is how that translates into what the JVM
+understands so when you define a
+synchronized method that's shown here on
+the left it's exactly equivalent to
+what's shown in the middle which is a
+method with a synchronized block
+synchronized on the object this so a
+synchronization always has to have an
+object target if you synchronize a
+static method it actually synchronizes
+on the class object for that static
+method so a synchronization on an
+instance on an instance method actually
+translates into these byte codes shown
+here on the right
+haloed zero is the one that I mentioned
+a few minutes ago with that actually
+loads parameter number zero on to the
+stack you call monitor enter which which
+basically tells the JVM only let one
+thread past month past monitor enter on
+this particular object until that object
+is released so then we go through
+whatever byte codes are necessary to do
+the do the something that this method
+does and then once again we load this
+and
+and invoke monitor exit so that's how
+synchronization is translated from our
+Java program into what the JVM sees okay
+make sense all right so let's let's take
+a look at how a hotspot does some of
+that this is that that same diagram we
+had just a few minutes ago and these are
+these are the actual structure names
+that hotspot uses to stash away the
+information that's inside the class
+files and if so if you ever get
+adventure adventurous enough to start
+lurking into a pilot spot code you could
+actually look up some of these and see
+what the different elements are that are
+in there it's actually quite interesting
+and it's neat to see how they all sort
+of string together and if you get really
+brave you could actually run hot spot
+under a debugger and start following
+some of these links around and looking
+at how your code is actually being
+interpreted by the by the JVM
+class preparation we talked about just a
+few minutes ago
+so the JVM actually gives a great deal
+of latitude as to how classes how and
+when classes are loaded and in fact one
+one option when you start a program is a
+completely static blinking and loading
+of all the classes so as you invoke your
+main class the JVM could look at all
+your external references to other
+classes load all those classes and do
+that recursively and get everything all
+loaded up before it even executes spike
+code number one that is that is a valid
+JVM execution according to the JVM spec
+of course hotspot and I don't think any
+other chip any other JVM does that for
+several reasons one you'd like to have
+some flexibility in class loading and
+second of course is you want to reduce
+startup times that you get to executing
+bytecode as quickly as possible so
+hotspot is no exception
+it loads classes as they're needed as
+they're called for by parts of the
+program and then linking that process of
+resolving where those three strings
+doing the lookup to find the class and
+find the find a method of the proper
+type that's done on demand so the first
+time your your program actually executes
+some method in another class that's when
+that linking is that's what the
+resolution of that link is done and then
+that resolution is there for the rest of
+the execution
+okay so just a real quick look at how
+objects are laid out and in hot spot so
+here we we actually showed two different
+classes two different instance classes
+one is a subclass of the other the
+superclass defines a field called a
+subclass defines two additional fields B
+and C and the way hotspot does this is
+very similar to if you've ever looked at
+the way C++ lays out objects a
+superclass format is basically a prefix
+of any subclass formats that may be a
+little too many words to say a very
+simple thing so that any instances of
+the superclass in this case would would
+consist of just the object header and
+field a and instances of the subclass
+would contain all three fields as well
+as an object header and the obvious
+benefit of that is the JVM doesn't need
+to know whether it's looking at an
+instance of the superclass or the
+subclass to find field a it always ends
+up at the same offset which in this
+example is offset hey eight bytes past
+the beginning of the object so that
+comes in real handy when we're doing
+things like compiling code or compiling
+bytecode into native code because now
+the JVM can just when it gets a pointer
+to an object just goes straight to the
+ops offset that it knows the field does
+that pull the value out of there doesn't
+even have to figure out what classes
+okay
+okay so so let's take a quick example of
+this on the left side of this slide
+there's two constant pool references to
+a couple of fields one of them is
+resolved one of them is not resolved the
+one on top has this is a reference that
+has not been resolved yet and it has
+these three strings that that we
+mentioned earlier so there's a string
+that says we're trying to access Class A
+the string that says the name of the
+field that we're trying to go for which
+is field one and there's a descriptor in
+this case a capital letter I which
+simply means is it it's an integer field
+so hot spot then has to go through the
+system dictionary find the proper object
+for Class A and having found Class A
+then find the field descriptor that
+describes the the field that we're
+looking at in this case field one and
+these are these are string compares so
+they're relatively expensive operations
+they're in turn strings so having found
+that it can then look up in the in the
+data structure what the offset of that
+field is and can then link it so that
+leads us to the second example on the
+bottom here's a field reference that has
+actually been resolved whether we no
+longer need to do any of these lookups
+we know exactly what the offset is of
+the field that we're looking at in this
+case it's a it's a reference to Class B
+field two which is shown here as a
+subclass of Class A and has an offset of
+12 in order to get through it so having
+resolved that we now we now have stashed
+away you know sort of a cache if you
+will what the offset is of that field so
+as we hit references in the bike go to
+that particular field we know exactly
+where it is in the object
+okay what about method dispatching how
+does it how does that work so again on
+the left we have two different
+references one resolved one not and and
+these are two at this we're invoking a
+static method here so the bytecode we've
+just hit is invoke static the top one
+again has has a constant pool reference
+which has the three strings in it that
+we talked about before in this case the
+descriptor for this method says that
+it's a method that takes no parameters
+and returns void so we then have to go
+through this lookup find class a and
+instant
+inside class a we're then going to start
+looking looking for the method that has
+the proper name and the proper
+descriptor having found that we can then
+stash away the pointer directly to that
+method so that in future future
+invocations of the method we can go
+directly to it rather than actually
+having to go through this look over
+again so that's what that's for a static
+method which are there you know
+basically once once you've found it
+you're good
+instance methods are a little more
+complicated and the and the problem here
+is that you know we like to we like to
+use instance methods which do different
+things for classes and subclasses and
+their subclasses so when we're given a
+particular object to invoke an instance
+method on we have to be a little more
+careful you can't just go straight to
+the method so here we have once again on
+the left are resolved in an unresolved
+reference and so what we need to do here
+oh and there's actually two so two
+classes defined here class B is a
+subclass of class a and each class has a
+thing called a V table a virtual table
+which contains pointers to all of the
+instance methods that that particular
+class defines in this example Class A
+and Class B share method 1.soak lesbi
+has not overridden method one
+however Class B does override method two
+so it has its own pointer at slot number
+two of the v table for method two and
+then class B has also added another
+method 3 which clase does not share so
+when we're when we find a reference to
+to method 2
+the thing that the JVM has to resolve
+all the way to is an index in this in
+this V table so having done that having
+resolved that by looking up Class B and
+in this case sorry the resolved one in
+Class A and method two we discovered
+that that's it v table index two now
+whenever the JVM encounters an
+invocation of method two it knows that
+it simply needs to look at V table slot
+number two in the class of the target
+object so you take the target object
+find its class find the V table look in
+slot number two and execute that
+whatever it is so if it's the super
+class or the subclass or any further
+subclass of that we always know that
+method two appears in slot two of the V
+table yes
+it's it's actually put in a very
+convenient place it's actually tacked on
+to the end of the class definition
+object so so that way we don't have to
+follow another pointer we're always
+trying to save pointer fetches so you
+get a target object follow the pointer
+so there's one pointer reference to the
+class object and at the very end of the
+class object is the v-- table for that
+for that class so simply by an offset
+off the pointer we can find the v--
+table find the index and now we've
+actually got our way to the method yes
+it's not stored in the classroom yes
+it's computed at runtime
+as part of the class loading process
+correct okay makes sense because it's
+gonna get weird on the next one
+all right so interfaces alright so
+interfaces are a little more complicated
+because Java allows you to define as
+many interfaces or as few interfaces for
+a given class as you want and the fact
+that a given class implements an
+interface is no guarantee that its
+superclass implements an interface in
+fact in general it doesn't have to so
+there's a little more work that's
+involved because there might be a
+smattering of interface is defined by a
+given class and so when an operation is
+invoked on an object it kind of got to
+figure out well does it even implement
+that interface and if so where is it
+so the bookkeeping some just a little
+more complicated so in this case again
+on the Left we have an unresolved
+reference and a resolved reference the
+unresolved reference is to interface a
+method one and so the first thing that
+we have to do in order to resolve this
+is find interface a so there's a class
+definition for interface a we look at
+method one and we find out what its
+first we find a pointer to interfere
+that class object that's one thing that
+we have to stash away and then the
+second thing we have to stash away is
+the v table slot number four that's been
+defined for method one so in the resolve
+reference below here we see that
+interface B method 4 we've actually
+looked that up every instance of every
+class that implements interface B is
+going to have method 4 in the interface
+BV table slot number 2 yeah that's
+actually complicated sorry so so at
+runtime now we we're given an object on
+the top of the stack and and there's a
+bytecode that says ok we want to we want
+to invoke interface B method 4 on that
+object so the first thing we do is
+follow the reference from that object to
+its class object having found the class
+object we go through this thing called
+an eye table which is a very short table
+of all the interfaces that that class
+implements and searching through the eye
+table we determine whether or not that
+that particular class the class
+the target object again whether that
+class implements interface beef in this
+case it does we follow the pointer to a
+V table another V table very similar to
+the one that we just looked at for for
+instance invocation and in that in that
+V table then there's a then there are
+the pointers to all of the methods that
+that are defined for that interface so
+in this case looking at the resolved
+reference here we scanned on the target
+ID table sequentially find interface B
+find the V table for interface B find
+slot number two and there's our method
+so it's a little more expensive than
+than invoking an ordinary interface
+method and that will actually talk about
+in in the discussion later on okay yes
+sorting it out
+yes yep you know the compiler even when
+the method gets compiled it knows how to
+traverse this whole thing yes I'm very
+sorry I'm supposed to repeat these guys
+he asked if the compiler goes through
+the same process for when it compiles
+code for finding interface methods and
+the answer is yes as regardless of
+whether it's interpreted or compiled
+this is the process to go through to
+find the method for an interface method
+invocations and and similarly an
+instance method invocation goes through
+the same process whether compiled or
+interpreted as we saw on the last slide
+developer I think of it the interface
+almost is sitting on top when I
+implement an interface almost like that
+I can see that structure explaining us
+being an interface of the table the
+classes that implemented the mother
+became
+okay did everybody hear that
+okay so there's yeah all right um I
+think it is just you know there's so you
+said V table I table and the V table
+that's that's actually not correct so
+there so this this previous slide is for
+the invocation of an instance method
+okay so this is not an interface method
+it's an instance method so we're
+actually going directly to a class that
+defines this method and so we know where
+to find it in the V table the interface
+is a little trickier because class can
+define whatever or implement whatever
+interfaces it wants to so we have to
+find that first having fun on that then
+we find the V table for it and go from
+there that that target ID table is the
+AI table that's held and defined for the
+class of the target object so fallen so
+we'll go through this so we've got a
+target object we're invoking method
+method for interface B method for on
+this target object whatever it is so
+first thing we do is find the class for
+that object that class has an eye table
+for all of the interfaces which contains
+all of the interfaces that have
+temperaments scan down that eye table to
+find that particular interface that
+we're looking for in this case interface
+B follow a pointer again so this is our
+third actually second pointer traversals
+the act the eye table is actually tacked
+on to the class structure as well so we
+know exactly where to find that so we
+find the eye table scan down and find
+the pointer to V table and then find the
+right index in the V table and we found
+method for a lot of nodding yes
+multiple classes can can implant
+interface a or B
+yes well each class can implement that
+method however it chooses so each
+I'm sorry I'm feeling oblique here I
+don't understand
+right yes the class of the object the
+target object right yes
+why does it have to go through all these
+levels of indirection right yes yes okay
+good question
+and and the answer is in general when
+the JVM is given an object and a method
+to invoke on that particularly an
+interface method in this example it
+doesn't know the class of the object and
+therefore doesn't know what method and
+even if this even at the same call site
+the same point in the in the program you
+can get different object types in there
+in fact you expect to so so not knowing
+what the target what the type of the
+target object is says that we have to go
+through this to find the class of the
+target object does it actually implement
+that interface if not we throw an error
+exception if it does then we have to
+find out exactly how that class is
+defined that or how it has implemented
+that method okay it seems like a lot of
+work and actually the language Java
+really started necessitates that there's
+not an easy way around it yes
+that's correct yes that good observation
+thank you I should have said that
+everybody hear that so so interfaces are
+stored in hot spot just the same as
+classes are we just you know take a bit
+that says this at interface and not a
+class and and then there are definitions
+of the methods as well but they have no
+byte codes in them
+so correct yes I'm sorry it's not though
+the jvm specification doesn't say how we
+how you have to store them in fact if we
+wanted to we could store them into
+independent structures but in practice
+we found that there's so much in common
+between a class object and an interface
+object it makes sense to simply use them
+good observation I've done some very
+informal benchmarking on my own and it
+turns out to be something like around 7%
+execution time difference where like I
+said this is very informal so don't
+don't quote me on this please um so if
+an instance invocation takes X then
+about 7% more to do an an equivalent
+interface method invocation that's
+that's after right the benchmarking that
+I did I made sure all that everything
+was resolved and we were all warmed up
+and everything was was in place and that
+was just the raw invocation overhead of
+going through the I table finding the
+interface finding the B table and going
+from there
+yes
+you have to live with it for the rest of
+the program these the data structures
+because of the nature of the language
+and because of the unknowns of what this
+a given object on the top of the stack
+what class it is you still have to
+traverse so yeah yes
+interesting point he brought up the
+point where in the in the case where
+there's only a single class and
+therefore only a single method in the
+entire JVM J rocket the other JVM that I
+work on actually does recognize that
+particular optimization if there's only
+one implementation of an interface
+method or an or an abstract method in
+the JVM then it will actually do a
+static linking to it and that's much
+faster it's not it's not in hot spot but
+hot spot does something else which which
+can make this faster as well we'll get
+into that in just a second so you guys
+are on the right track thank you all
+right
+okay so so again I'm not going to go
+deeply into into garbage collection
+there's tons of literature on it and
+there's also a whole bunch more sessions
+that you guys can go to to find out
+about other garbage collectors but this
+is just a very simple summary of how
+it's garbage collector works and all of
+hot spot garbage collectors use this
+basic technique to one extent or another
+that's called tracing garbage collection
+you start out from a set of roots a set
+of references that we that we know have
+to be live and then you basically
+recursively tribute Traverse to all the
+objects that that are referred that are
+referred to transitively by those roots
+anything not referred to at some point
+or another is declared to be garbage and
+in those and is then collected so in
+this case the the the blue objects are
+live objects so we have to keep those
+around and the pink red orange whatever
+that is objects are no longer reference
+to those can be collected so the roots
+the things that we know that we have to
+keep alive are are things that are
+referred to in thread stacks for example
+in low
+variables static variables in a class
+can also refer to objects so those have
+to be kept alive J&amp;amp;I handles we haven't
+talked at all about native interface but
+basically native code can also grab a
+reference to an object and ask the JVM
+to keep that alive for it because native
+code might want to manipulate objects
+and they certainly wouldn't want them
+disappearing right in the middle of what
+it's doing and then modified areas I
+simply have on here to reference the
+fact that sometimes in fact almost all
+of hotspots garbage collectors divide
+the heap into different generations and
+so references are tracked from one
+generation to another and so those can
+become roots as well a reference from an
+older object generation to a new object
+generation okay
+so again not going to go into that too
+deeply that's okay and then basically
+execution is done by either interpreters
+or compiled code interpreter is very
+obvious it does what you would expect it
+it loops around through fetches the next
+byte code executes sitt than it repeats
+in hot spot the hot spot implements are
+an interpreter called a template
+interpreter which actually generates
+little snippets they call it snippets of
+native code for each byte code type and
+it actually links them together so the
+hotspot interpreter has it as an
+interpreter is actually quite efficient
+because it it basically jumps from one
+code snippet to the next to the next to
+the next as it encounters byte codes in
+the program so it's not going to go too
+deeply into that but that's that's an
+interesting part as well compiler
+hotspot has two compilers one is the JIT
+compiler the other one is the server
+compiler and basically very very simply
+has the responsibility for a converting
+entire methods into the native code
+which execution is much faster we can
+also
+utilize some optimizations to do things
+to the code it turns out that bytecode
+or the byte code that the JVM sees is
+very similar to text text programming
+language code that an ordinary compiler
+a C++ or C compiler or any other
+compiler would would encounter so all
+that all those same optimization
+techniques that you're able to use on
+other programming languages hotspot is
+able to use on byte code with some
+exceptions in that just a moment in that
+byte code I can't have go twos in it and
+stuff like that so it's not always it's
+not always well-structured in most cases
+it is if you're using normal normal Java
+code than the than the byte codes that
+the compiler encounters are well
+structured they've got the right you
+know sort of conditional structures and
+loop structures and so on built into
+them but yes
+specification permission to do tail
+tail sorry Taylor so that instead of
+making
+organizing way that the structure groups
+if you make
+aha I that may be true I haven't seen
+that I'll have to look for it but thank
+you
+okay all right and then so then the
+compiler of course tries to yes one more
+question
+so hot spot is called hot spot for for a
+reason and it basically tracks the
+number of invocations and number of
+times that you go around a particular
+loop and is it there's a threshold that
+you can actually set from the command
+line to tell you how many times around a
+loop or invocations of a method as soon
+as you go beyond that threshold and then
+hotspot says okay this is a hot method
+or a hot block we need to compile this
+in a native code and it will then and
+queue a compiler request to get that
+compiled now a compiler request
+particularly for the server compiler
+which implements a lot of these
+optimizations can take a fair amount of
+time so even while the compiler is
+working we can still be interpreting
+that method or that block and then
+finally when it's done then all new
+invocations will start dispatching to
+their to the native code rather than to
+the interpreted code
+not not all methods get compiled that's
+correct
+as a he us if it happens every time it
+doesn't effort correct yeah now the
+threshold can be can be set as low or
+high as you like and in fact there's
+command-line options to completely turn
+off compilation or there's also a -
+capital X Co MP which says compile every
+single method including methods in the
+JDK and that that of course lengthens
+your startup time quite a bit because it
+has to compile all the methods in the
+JDK before it even execute so the first
+piece of the application currently yes
+you're gonna quote me on that aren't you
+yes so what's the question
+yes that is possible to do that and in
+some cases that that makes perfect sense
+between interpreted and and compiled
+it's highly very variable it's in most
+cases it's at least an order of
+magnitude between interpreted code or
+factor of ten between interpreting code
+and compiled code compiled code is much
+much faster it's just but again it it
+depends on what the code is actually
+doing it depends on what optimizations
+we can actually apply can we can we pull
+invariants out of loops can we unroll
+loops and make them make them just run
+sequentially the compiler tries all that
+stuff so
+yes yep correct and an hotspot is is
+adopting some of that technology girl
+sorry that the comment was that a rocket
+could actually recompile code and
+applied new optimizations of it as it
+discovers a new environment and hotspot
+is is getting that capability JDK a to
+think is going to have tiered
+compilation in it so there will actually
+be your code will start out interpreted
+after it reaches a threshold will do a
+JIT compiler which is a very quick
+compile and then then it will actually
+instrument that code find out what it
+can do about it and then do it much more
+optimized compiled on it if it feels it
+needs to yeah it's a question back there
+just because the codes compiled hotspot
+still has to go through the interface
+that's correct correct yep yep yeah very
+true all right we're running out of time
+here okay that's that's a good point
+all right so synchronization we talked
+about sort of the tail end of the of the
+discussion of the JVM specification I'm
+not going to go through this whole thing
+but basically this is a diagram of how
+locks work in hot spot in hot spot a
+lock on an object can be one of three
+types there's a biased lock which is
+based on the observation that in most
+applications most locks are in fact
+reacquired by the same thread that just
+released it some of you are nodding
+again you know about biased lock okay so
+basically hot spot takes advantage of
+that and when a when a thread releases a
+lock at least for the first few times it
+will say okay yeah I'm gonna release
+this lock but not really I'm I'm gonna
+mark a little bookkeeping thing here and
+say that this thread still owns this
+lock and so when that thread comes back
+to reacquire the lock as it probably
+will then it's a very very simple very
+cheap operation to say oh yeah okay
+you've got the lock go for it but if the
+lock turns out to be intended if if hot
+spot discovers that in fact multiple
+threads are acquiring that lock in
+different sequence then it will convert
+it to something that's called a thin
+lock and a thin lock is sort of a very
+cheap and dirty spinning lock with with
+read-modify-write instruction in there
+so the kind of mutual exclusion code
+which is very quick and very cheap but
+if multiple threads are contending for
+the same lock then ultimately you end up
+wasting a lot of CPU time spinning on
+that lock so if that if hot spot
+discovers that that's the case then
+eventually it goes through a process
+called lock inflation and then it says
+okay there's too many threads that are
+all hitting the same lock I'm gonna have
+to let the operating system sort that
+out
+so it'll revert to for example a POSIX
+threads mutex or something like that so
+it'll say to the operating system okay
+every time we're gonna do this lock
+we've got to come through with the OS to
+start it off and that way you can
+conserve the CPU time okay makes sense
+but the overall point of this slide is
+that that I hope you get is that even in
+hotspot and even with with thin locks
+blocks are relatively expensive so it's
+use synchronized in your code with with
+caution if you have multiple threads
+hitting a synchronized block a lot you
+can have a very severe performance
+impact okay all right so we're just
+gonna go through a very very few code
+patterns I do apologize my original
+intent in this part of the talk was to
+take some of the design patents therein
+that are from the Gang of Four book that
+most of us are probably familiar with
+and trace those all the way down into
+how they would be implemented in hotspot
+and what what the internal data
+structures would look like and that
+turned out to be just in a possible task
+that would have we'd have been here for
+several hours so I've abstract good
+things down quite a bit I've got one of
+one of the code patterns a singleton
+we'll talk about in a little detail and
+then we'll talk about this this
+phenomenon that we've actually been
+touching on at various points here which
+is the difference between method
+invocation for instances and method
+invocations for for interfaces because
+all if you if you look at those design
+patterns almost all of them use
+polymorphism in one place or another and
+so we're gonna kind of touch on how
+hotspot deals with polymorphism and what
+the expenses of that are but okay so
+alright
+very simple mmm singleton it's very very
+common code pattern you want you define
+a class you only want exactly one of
+those to ever be created or
+be referenced and reasons for that are
+varied you've got some global state or
+something in that object you want
+everything in the system to refer to the
+same object and manipulate the same
+state so so that's typically the reason
+that that's done this is a very common
+pattern that I've seen in code and you
+guys probably have as well and you
+protect the constructor you've got an
+internal variable for the single
+instance that we're going to create and
+then there's a method to access the that
+single instance and inside the method if
+it hasn't been created yet we go ahead
+and create it and then we return the one
+that we have right wrong okay so so
+everybody probably knows this issue
+right if multiple threads hit this thing
+particularly at startup time then you
+could create multiples of these in
+unintentionally and several threads have
+references to different objects and then
+you've got trouble so a forgive the word
+naive answer to this would be well okay
+so what we need to do is synchronize
+this this accessor method that allows us
+to get to this singleton object well for
+the reasons that we just talked about
+synchronous synchronized is very
+expensive so if this global object is
+being accessed by multiple threads many
+times this can be a very severe
+performance strain so you don't want to
+do this and this is the right way to do
+it so now having an understanding of the
+JVM specification and the fact that
+static initializers are atomically run
+and run only once we know that that's
+the right way to implement a singleton
+created as soon as the as soon as the
+class has initialized and it's ready and
+now we have a very very fast accessor
+method which doesn't have to go through
+any locking or anything like that
+okay so there's there's an example I
+think of how understanding a little
+better if all the the JVM works can help
+you to optimize your code
+okay uh while we're running out of time
+okay polymorphism so polymorphism is a
+technique that we use frequently where a
+given method invoked on a on an object
+can produce different behaviors
+depending on what type of object that is
+and as we've talked about that's
+basically instance method overriding so
+we have we have a class and then sub may
+be a graphics class some subclass
+overrides a draw method or a rotate
+method or something like that those are
+sort of the canonical examples and so
+that's that's one instance of
+polymorphism another is we have an
+abstract class which defines which says
+all all my subclasses have to implement
+this method in whatever way is
+appropriate for them and so each of
+these other classes another class and
+yet another class override the the in
+fact implement the abstract method
+that's defined by the abstract
+superclass so those are two two examples
+of instance method polymorphism so how
+does hotspot deal with that okay so when
+we get into and this is a very very much
+pseudocode but so inside hotspot we hid
+in an invoke virtual bytecode or we're
+invoking a virtually and compiled code
+and we have at our disposal the object
+that's been given to us the target
+object and we also know where we are in
+the code so we have some data around
+what we call the call site this is where
+the method invocation is actually being
+done from so the first thing we do is we
+determine the class of the of the target
+object and hotspot maintains essentially
+a single entry cache for every call site
+so it basically says I'm going to look
+at the previous previous class that I
+encountered from this call side flat
+unless I made I invoke this method on an
+object what was the class of that object
+if it turns out to be the same one as
+the one that I'm encountering well then
+I know that I should invoke the same
+method as I did last time so I'll just
+go ahead and use my
+this entry that I've stashed away here
+for this call site however if it's not
+the same class if we're actually
+implementing some sort of polymorphic
+operation and we have a completely
+different implementation of this method
+then we have to go through this V table
+lookup that we went through before so
+it's a much more expensive operation
+than simply pulling me pulling the value
+out of the cache and moving for that
+okay and then of course we saved the
+entry for the next time through and and
+invoke the entry whatever the entry
+point is all right so so how does that
+work for polymorphism implemented
+through interface methods so here we
+have an interface and interface which
+defines a method that all implementers
+are all implementers need to implement
+so here's a class in another class each
+of them has an independent
+implementation of a method and so what
+does hotspot do with that so this is a
+little bit more complicated but once
+again we have a single entry call site
+cash for every call site so we're at the
+same place of this interface method
+invocation we've stashed away what the
+previous what the class of the previous
+object that that was the last time it
+came through here came through here the
+class of the target object and if it's
+the same class we know that we should
+invoke the same method that we did last
+time so we just go ahead and do that if
+it's not then we have to go through this
+process that we described some moments
+ago where we have to iterate through the
+eye table for the class of the target
+object find the appropriate interface
+find the D table for that interface and
+then find the slot for that particular V
+table and then we found the method okay
+so this is a little bit more expensive
+operation than than the instance method
+invocation okay so so in hotspot that
+tells you that polymorphism if you're
+actually actually encountering real
+polymorphism which I'm
+turned here realized polymorphism
+actually has a cost to it if you're in
+the same section of code if you're
+hitting objects of different types then
+each time that happens we're gonna do it
+we're gonna have a cache miss if you
+will and we're gonna have to do that
+lookup operation for the class of the
+object that we've just done so that's
+gonna have a performance impact if you
+have a whole bunch of different object
+types in the same call site there's
+there's there's a cost of that however
+unrealized polymorphism if if from the
+given call site we always see objects of
+the same type that means we're always
+going to get cache hits we're always
+going to find the same method it's a
+much more efficient dispatch okay so I'm
+not sure how how you use that and how
+you structure your your applications but
+it's it's worth knowing that in general
+interface polymorphism is is more
+expensive than instance method
+polymorphism okay wow we're out of time
+all right very quickly here okay so this
+is this is an example of a none portable
+code pattern I mentioned that the JVM
+specification actually has several areas
+where things are left up to the
+discretion of the JVM implementer and
+here's here's one example so hot spot as
+I mentioned actually resolves linkages
+to external classes and external methods
+as their as their hit on demand
+essentially not all JVMs do that in fact
+J rocket will actually resolve those
+methods went the first time in it will
+resolve those references excuse me the
+first time it tries to compile a method
+so here we have a method that actually
+changes the class loader structure as
+part of its function here we have a
+method actually retrieves its class
+loader adds a new arc new URL a new
+place to search for for class files in
+jar files and then tries to tries to
+invoke an operation on now a newly
+reachable class by virtue of this
+classloader modification that's just
+happening in hotspot this works fine not
+a problem because because this class
+load is not actually this class
+resolution isn't actually done until we
+attempt to reference the class and J
+rocket this class resolution here is
+actually done when we try to compile
+this method the method hasn't even been
+invoked yet
+so therefore this this class loader
+modification hasn't even happened so J
+rocket we'll take a look at this it'll
+look for newly reachable class and say
+been through all my class loaders I
+don't find it it'll throw a class though
+not found exception both of those are
+valid according to the JVM specification
+so this is code that's really not
+portable between for example hotspot and
+jerry' yes question
+I mean we wouldn't find new in the
+reachable class so in order to compile
+this in order to compile us you you
+would have to have new directory URL as
+part of the class path in the
+compilation correct yep yes that's a
+corner case I'm not exactly sure the
+answer to that I suspect that hotspot
+will still attempt to resolve this on
+demand you're saying put a loop in here
+the force compilation yeah
+I suspect hotspot was still it would
+resolve it when it encounters it even
+though it's compiler code but I'd have
+to test that thank you good question all
+right gang I'm sorry we're out of time I
+have to wrap this up here's here's a
+blank summary there it is all right so
+so my point in all of this and I hope
+you'll hope you'll take it for what it's
+worth is that having some level of
+understanding of how the JVM works and
+all hotspot implements things can help
+you write better code help you write
+more performant code so I encourage you
+to learn more about the JVM and you know
+like I said maybe it goes so far as to
+as to take a look at hotspots source
+code hotspots adapt adaptive reacts to
+the actual runtime circumstances that it
+sees so for example that polymorphism
+example where one particular run of an
+application you may actually see
+polymorphic behavior multiple different
+object types in the exact same call
+sites and then a different different run
+at the exact same application you'll see
+the same object types and it'll perform
+much better and if you go how can this
+be
+there's there's your answer anyways
+hotspots lazy this is the pointer to the
+jvm specification itself and I encourage
+you to take a look out here on the open
+JDK wiki there's a section for hotspot
+and there's a whole bunch of neat little
+articles that are in there written about
+different algorithms you want you'll
+find out about these method dispatches
+and more information about different
+aspects of hotspot as well so and out
+carefully benchmark that almost goes
+without saying but anyways I hope this
+is helpful to you guys and I hope you
+found it interesting and I hope you have
+a great day
+enjoy Java walk</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

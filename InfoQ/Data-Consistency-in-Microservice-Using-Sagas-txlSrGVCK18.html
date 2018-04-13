@@ -1,0 +1,1073 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Data Consistency in Microservice Using Sagas | Coder Coacher - Coaching Coders</title><meta content="Data Consistency in Microservice Using Sagas - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/InfoQ/">InfoQ</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Data Consistency in Microservice Using Sagas</b></h2><h5 class="post__date">2018-04-03</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/txlSrGVCK18" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so there's a certain irony that the
+chairs have just arrived for the panel
+that kind of illustrates some of the
+inherent challenges in a micro service
+architecture where I'm messages arrive
+late so welcome to my talk on on
+maintaining data consistency in a micro
+service architecture which sort of
+follows on quite nicely from Randy's
+talk where he you know provided a good
+overview of the challenges that you're
+faced dealing with data in in a micro
+service architecture and it really turns
+out that you know dealing with code
+splitting that up is that's the easy
+part dealing with the data which now
+gets distributed amongst a set of
+databases that ends up being the real
+challenge and so as Randi Illustrated
+you know there's problems with querying
+and there's patterns for that API
+composition and CQRS
+and then there's also problems with
+maintaining data consistency so that's
+what I'm going to talk about and then as
+Randy mentioned I'm going to describe a
+pattern for maintaining consistency in a
+micro service architecture known as a
+saga it turns out it's kind of
+challenging you know this is one of the
+downsides of using the micro service
+architecture is ensuring data
+consistency but you know in a lot of
+cases it's a good idea but before I talk
+about that a little bit about me if you
+don't know me then you know I got my
+start in programming 30 odd years ago
+building Lisp systems so runtimes
+compilers tools and and etc you know
+eventually programmed in Java wrote the
+book pojos in action which was all about
+spring and hibernate which you know 13
+odd years ago were revolutionising
+Enterprise Java development and then ice
+then back in 2007 started tinkering
+around with this really obscure service
+known as ec2 from an online bookstore
+kinda we know how that turned out well I
+got so excited by the concept of being
+able to provision servers with with
+api's that I created the original
+Cloud Foundry so that was a Java pass
+for deploying you know Tomcat war-war
+files on ec2 sprint up a bunch of ec2
+instances and then that was acquired by
+SpringSource back in 2009 right before
+it was acquired by vmware so I ended up
+spending a bunch of four and a half
+years of SpringSource VMware and then
+part of pivotal when we were sort of
+somewhat ejected out and in to create
+pivotal but that was a while ago now and
+so for the past four years I've been
+pretty much focused on the micro service
+architecture which actually grew out of
+my experiences building the first cloud
+foundry that was a a monolith and we had
+issues with that even though we were
+only a two-person team and then you know
+that prompted my interest in micro
+services and and there was a lot of
+synergy between that and and the new
+Cloud Foundry that I was sort of
+involved with evangelizing so I just
+kind of carried on and so I've just been
+past four and a half years doing
+consulting and training around the micro
+service architecture also have a startup
+creating a platform that's built or that
+were creating a platform for developing
+event-driven business applications and
+the motivation really is to solve this
+distributed data management challenges
+and then I also had forgotten how
+traumatic it was writing a book so I'm
+doing it again
+and it really is traumatic but I'm
+almost I'm getting close to being done
+hopefully and you can get an early
+access version of that from manning and
+then if you want to know more go to
+learn micro services dot IO so that will
+point you to a whole bunch of resources
+including micro services dot IO that's a
+collection of patterns that I think many
+of you have visited ok so the agenda is
+going to talk about why acid is not an
+option at least between services within
+a service you can certainly use acid
+transactions just not between them
+easily talk about the saga pattern and
+you know introduce the idea talk about
+some of the challenges and then I'm
+going to describe some implement
+Haitian issues like how do you how do
+you make sagas go and then how do the
+services that participate in a saga
+communicate so that's the idea so you
+know we're gonna begin with the
+obligatory summary of what the Micra
+service architecture is so it's an
+architectural style that structures an
+application as a set of loosely coupled
+services so instead of building a big
+monolith that's sort of difficult to
+deploy or develop and deploy you build a
+set of small applications or services
+that are loosely coupled and the whole
+point of doing this really is to enable
+the continuous delivery or specifically
+the continuous development of large
+complex applications and the micro
+service our architecture supports that
+in two ways first it gives you the
+testability and the deploy ability you
+need in order to do continuous delivery
+and deployment you know the services are
+individually easier to test they can be
+deployed independently so that's good
+and also this architecture supports the
+notion of having small autonomous teams
+you know you have a small team they own
+one or more services and they they have
+all of the skills in order to go from
+requirements into production and if
+they're with service with this
+architecture they can do that without
+coordinating with any other teams except
+when teams have to agree on API is
+because their services need to
+communicate so that that to me is the
+essence of the micro service
+architecture so when you apply that to
+say sort of it I got this fake
+application and online store you end up
+with a system that looks like this you
+got a bunch of services each service has
+its own database as you're going to see
+thats essential for loose coupling
+they're fronted by an api gateway say
+that provides a uniform interface
+basically a facade into the set of
+services and they're consumed by various
+clients so what I'm really going to
+focus on is this whole notion of having
+private data and I just want to stress
+that
+you know having a private what I'm
+calling a database doesn't mean a
+private database server you're not now
+giving 10x as much money to Larry
+Ellison for all that for extra Oracle
+licenses they can still be sharing the
+same database server they're just going
+to have their own database schema so
+it's isolated private you know
+encapsulated data that's the key point
+and that's really important to insure
+loose coupling because if services
+access one another's data or one
+another's tables that would that would
+get in the way of development if I'm
+working on the order service and I
+wanted to change the order order schema
+and it was being accessed by the
+customer service and 15 other teams that
+means I'd have to arrange 15 other
+meetings to schedule that schema change
+that gets in the way of continuous
+delivery and deployment so by each
+service having its own private and
+capsulated data that's only accessible
+indirectly through that services API we
+ensure that we're free to change
+effectively the implementation details
+of our service without any coordination
+so that that's the motivation so in this
+example customer service has the cuss
+order so the customer service has the
+customer database the order sir and the
+order service has the order database and
+they communicate by our api's could be
+rest but as you're going to see that
+it's in fact going to be messaging but
+that then creates problems how do we
+maintain data consistency you know this
+is the problem how do we implement
+transactions that now span services and
+this is really important in order to
+enforce invariants so in the case of
+this example with orders and customers
+customers have a credit limit and we
+must enforce this credit limit at all
+times otherwise we've sort of violated
+some important business rule in a
+monolithic system that's super easy you
+begin a transaction you find the
+existing orders you find the credit
+do some calculation if there's
+sufficient credit create a new order
+commit the transaction and if you have
+so if you're running at a sufficient
+isolation level this asset transaction
+will guarantee that if there were
+simultaneous attempts to access to
+create orders for the same customer that
+business rule is enforced but in this
+model orders have belonged to one
+service customers are in another service
+you can't write a database transaction
+that looked like this and then if you
+did you'd have to have some form of
+distributed transaction and you know
+two-phase commit XA that kind of
+technology and basically as was
+mentioned in Randy's talk people just
+don't do this kind of thing anymore
+right it is simply not fashionable or
+not practical in order to do this and
+all of our cool mod intent there I mean
+it's a bunch of like technical issues
+why two-phase commit is problematic you
+know the cool new technology generally
+does not support it right and then
+you've got the cap theorem that says you
+basically have to choose between a
+consistency and availability and people
+prefer to be available so there goes
+consistency so so that that's sort of a
+problem so we kind of have to kind of
+we're in a micro service architecture
+we're giving up on our regular acid
+model and and someone at eBay coined the
+term base basically available soft state
+eventually consistent which sort of
+describes this new transaction model
+interesting later on I'm going to
+actually describe how sagas are actually
+a CD they just don't give you the I but
+that's kind of another acronym but bass
+sounds cool so so we can't use two-phase
+commit to enforce this credit limit so
+what do we do so that's where this
+concept of a saga is really useful and
+that comes from a 1987 paper so yes they
+had computers back then just didn't
+start with the web and
+or anyway it's a it's sort of an
+adaptation of this saga principle and
+there the idea was instead of having
+long transactions that hold on to locks
+you break them up into a sequence of
+short transactions and each one commits
+at each stage so that's the general idea
+so it sort of looks like this so instead
+of having one big transaction that spans
+all of the services you have a series of
+local transactions one in each service
+and they're actually strung together
+using some form of messaging or events
+so one service does something publishes
+a message that triggers something in
+another service and so it goes on until
+the Saga completes so in the correct
+case of creating an order it looks
+something like this request comes in to
+create an order it will create the order
+service creates an order in this pending
+state so someone can actually fight look
+up the status of the order so it's kind
+of created it just hasn't been verified
+and then another transaction occurs in
+the customer service to attempt to
+reserve credit and then this assuming
+that is successful another transaction
+will occur in the customers in the order
+service to approve the order so we've
+got a series of three local transactions
+in order to create an order and verify
+it or reserve credit so on the height on
+the surface this sort of sounds and it
+sounds fairly straightforward and you
+know diet and in some ways it is but
+there are some tricky issues that you
+have to deal with so one is you know
+imagine you could be five steps into a
+saga and you've decided that you cannot
+proceed because a business rule will be
+violated well you have to undo the
+preceding four steps in an asset
+transaction that would be trivial you
+just execute a rollback statement and
+it's as if those updates have never
+happen in a saga you have to explicitly
+code this you've got to write what are
+known as compensating transactions to
+undo what
+you did before so conceptually then a
+saga looks like this it's a sequence of
+four transactions t1 t2 t3 and so on
+each one of those T transactions has a
+corresponding C transaction c1 c2 and so
+on the undoes what it did so in this
+model if say imagine we execute t1
+that's committed then we execute attempt
+to execute t2 that fails we then have to
+execute c1 to undo what t1 did so it
+would go T 1 T 2 C and c1 and that all
+has to be kind of coordinated and
+sequenced and made made reliable because
+you know we want to ensure that either
+all of the T's execute or all of the T's
+that were executed had their
+corresponding C transaction executed to
+undo what was done so it's kind of
+tricky in the case of creating order
+creating orders the compensating
+transaction is actually to reject the
+order if if you can't reserve credit so
+so that's one complication but it's sort
+of a matter of programming to just get
+that right and it's not too difficult
+what's a little more interesting is now
+what was previously sort of a
+synchronous transaction has now become
+an asynchronous operation so we've got
+our synchronous REST API triggering an
+asynchronous saga and so the issue is
+it's like well hey when do we send back
+a request so I send back a response to
+the request and there's sort of two
+options one you could actually the
+service could actually wait until the
+saga completes though that's good
+because the response could spessard
+specify the outcome of that saga the
+order was approved the order was
+rejected it would be bad because you're
+sort of waiting on all of those services
+to sort of respond and it kind of
+impacts the availability of that
+particular API
+so it's actually nicer to sort of
+introduce some asynchronicity into the
+API so you so the service can send back
+a response immediately saying while I've
+received your request to create an order
+and I'm thinking about it you know that
+downside is the client has to them poll
+to see whether that order has been
+placed so that's nice though because it
+does improve availability no one really
+has to kind of be up for the entire time
+because the message broker will
+guarantee that messages will eventually
+be be processed so the API then changes
+right where create order just says well
+here's the order ID and check back later
+by calling get order if you want to know
+whether the order has been approved or
+rejected this doesn't necessarily impact
+the outcome of kind of doesn't impact
+the user experience though because the
+UI like you know you have a bunch of
+JavaScript running in the browser it can
+actually hide this asynchronicity from
+the user you know it's like when you
+place a credit card in a dialog box that
+pops up saying don't hit the back button
+right you do it slicker than that but
+but in general the jar you know the
+JavaScript in your UI can actually hide
+the polling and so on and you know that
+the server could even push the
+notification of approval or rejection
+down to the UI so you get a pretty
+respondent responsive UI so so the API
+is different the user experience does
+not have to change but then there's this
+really tricky issue which is you don't
+actually have any isolation so you know
+you go back to you know acid right the I
+is isolation well there's not any you
+don't have that anymore because each
+step of a saga is a local transaction
+that commits its changes so you know
+we've got these two from the perspective
+of the sort of the order service we've
+got these two transactions right
+and then you know another request could
+come in to cancel their order and that's
+kind of interesting now we've got this
+situation where which we never had
+before where the the users requesting
+that we cancel this order in a pending
+state and that's kind of a little
+strange because this create order sagar
+is still in the middle of sort of
+processing it so how do we handle that
+right so one is you could just say are
+the orders pending you can't cancel it
+right now so that that would be sort of
+a poor user experience maybe you could
+interrupt the the order saga somehow set
+of create order saga somehow set a flag
+that saying well you were in the middle
+of validating it but it's but the users
+requested that it be cancelled so you
+could set a flag and that could trigger
+the that could cause the create order
+saga to rollback you know that that's
+not bad but then it does mean that well
+perhaps the create order saga it needs
+to know a bit more about the cancel
+order saga than you'd otherwise want it
+to and then another option which is kind
+of interesting is that the cancel order
+saga could wait for the create order
+saga to be completed though that
+suspiciously sounds like distributed
+locking but maybe that's okay
+because that that's sort of kinda like
+have you got this object domain object
+it's in the middle of being worked on by
+a saga it's kind of nice to wait for
+that other saga to complete before
+trying to perform another operation on
+it
+it's kind of like reminiscent of the
+actor model where you sort of you got a
+mailbox that where if the if the actors
+in a particular state that the messages
+get stashed until the the actor returns
+to a state where it can process them
+there's some kind of analogies there so
+there's some interesting design issues
+that can arise
+in this create cancel order scenario
+from the lack of isolation and I sort of
+trouble by this and now it's like
+looking around in the literature to find
+some sort of I don't know academic paper
+to X to tell me what was going wrong
+here right and then I found this paper
+back from 1998 so not quite that old it
+was about they well they have what they
+call a true countermeasure transaction
+model which I thought was a fantastic
+term and the idea is they have about a
+bunch of countermeasures to kind of deal
+with the AI with the isolation anomalies
+the resulting from the lack of well from
+the lack of isolation and they have an
+interesting way of describing sort of
+these long term transactions or sagas so
+their model is one of these sagas is a
+series of compensate able transactions
+so things that can be undone then they
+have this interesting notion of a pivot
+transaction which is something that
+can't be undone like it either has to
+work or be rolled back or if it commits
+then that's like you're fully committed
+to this transaction which is kind of an
+interesting like concept that I'm not
+sure applies in the in the model I'm
+presenting here and then but then once
+you've committed you up this series of
+what they call retry herbal transactions
+that are just things that you can do
+sort of asynchronously after the pivot
+transaction is committed and that could
+be like arranging to send out emails
+which is kind of intro sort of an
+interesting way of making a distinction
+between things that can that can fail
+and need to be undone versus things that
+will just can just be done and will
+never fail for business reasons so it
+was kind of thought-provoking so in
+their mind sagas are actually a CD so
+they're atomic in the sense that all of
+the Ford transactions will be executed
+or or they will all be compensated so I
+thought that was which is a little
+different perhaps
+from some of the definitions of
+atomicity so it doesn't appear as one
+thing but there is this guarantee that
+all of it will happen or or all of it or
+none of it will happen effectively
+because of the compensating transactions
+it's also consistent because you have
+referential integrity within a service
+because of referent referential
+integrity constraints in that database
+but if you want and then referential
+integrity across services is handled by
+the application that came up in Randy's
+talk and it's also durable as well
+because things do get committed locally
+they get put in a message broker that
+guarantees that that is durable as well
+but what's missing is this I and that
+can cause a set of anomalies and so
+these are sort of from classic kind of
+database literature right where you can
+have lost updates where you know one you
+know the one-step of a saga can read an
+object another some other transaction
+can go in and modify it and then a later
+step of that transaction or a
+compensating step can write can
+overwrite that that intermediate update
+and then you can have dirty reads as
+well where you know once a saga writes
+some other transaction reads and then
+the that compensating transaction is
+executed to like undo what was done so
+that so the intermediate transaction
+read a value that was only there
+temporarily and then the saga can
+exhibit sort of these non repeatable or
+fuzzy reads where one step if it reads a
+value some other transaction writes that
+value then later on the saga rereads
+that value gets a different value back
+so this is all from lack of isolation so
+to solve this they described a set of
+countermeasures for solving these
+problems and I'm just gonna summarize
+them here so one thing to do is just to
+try and make the up
+dates commutative so sort of you know
+anything about basic arithmetic adds and
+subtracts a commutative for instance
+right you can do them with any order and
+the outcome is the same so that that's
+one way to deal with these isolation
+anomalies there's another approach which
+they call a version file which is kind
+of strange terminology but the idea
+there is that you record a history of
+changes and then you can use those to
+sort of reorder the updates to make them
+commutative and what was interesting
+said Katie from is at Twitter gave a
+talk about Saugus somewhere else and she
+is she in in in her talk she gave an
+example where creating a reservation and
+cancelling a reservation needed to be
+commutative which meant that you could
+because of things because because those
+requests could arrive out of water which
+was really really interesting in this
+notion that you could cancel a
+reservation before you made it but that
+to me sounded like an example of a
+reversion file so when the cancel
+arrives and there's no corresponding
+reservation you record the fact that
+you've received the council so that when
+the create comes along you just know to
+not execute it which it's kind of
+interesting this also sounds a bit like
+event sourcing where you're recording
+the history of changes and then they
+talked about them another another
+countermeasure was rereading values so
+Ti reads it well a later one can then
+reread it just to make sure the value
+hasn't changed and if it has perhaps
+abort that sagar and retry it from the
+beginning so you can sort of rollback
+and then restart and then another one
+was this pessimistic view which was sort
+of an interesting thing because it's
+stressed minimizing business risk so the
+idea is if you're going to increase
+someone's credit do it after once you
+know that that transaction won't be
+compensated right so there
+this notion that you can reduce credit
+and then increase it later because
+that's not going to introduce a business
+risk I guess it would cause a lost sale
+which is another but that's that sort of
+let may be less risky than reducing the
+credit processing a sale and then then
+in a compensating transaction reducing
+the available credit which means that
+that sale should never have happened so
+that's kind of an interesting idea is
+that you yeah the your data is
+inconsistent and your application is not
+working in a perfect way according to
+acid transactions but you make it and
+you make it behave in this imperfect way
+that minimizes the risk to the business
+and I thought that was interesting and
+then they also had some strategies which
+work one was counter measure by value
+they actually said well if there's this
+really high-risk transaction someone's
+trying to transfer a metal place of a
+huge order then use a distributed
+transaction at that point because it's
+too risky to do anything else and I
+thought that was interesting and then
+the other thing they had the final one
+was was basically semantic locking so
+locking at the application level which
+is kind of like the cancel order
+scenario saga waiting for the create
+order saga to complete which I thought
+was you know that that struck me as an
+interesting approach I mean it's like
+some is basically an application level
+distributed lock so you need to
+implement some kind of deadlock
+detection in order to time out if
+there's some failure or something like
+that the other approach they suggested
+along these lines is to set a flag to
+say this bank account is in the middle
+of being updated so when you are doing
+some form of reporting treat it
+differently like if if an account is not
+being is not in the middle of being
+updated by by a saga then you know that
+the balance has is accurate whereas if
+it's in
+the middle of being updated by a saga
+well put that in the fuzzy fuzzy balance
+column because we don't really know what
+the value is just yet so thought it was
+kind of interesting so yeah so there's a
+whole bunch of you know tricky issues
+that you have to deal with but it's sort
+of like you go search the literature and
+you know people have been thinking of
+ways to reduce the risk at the
+application level so quite intriguing so
+that that's kind of sagas and now kind
+of want to get back to sort of less
+scary things the actual technical sort
+of implementation of the sagas starting
+with how to coordinate and sequence the
+series of steps okay so you know you
+conceptually write saga as a sequence of
+steps they have to happen one after the
+other maybe there's branching but I'm
+ignoring that and then if there's a
+failure
+you then have to execute the
+compensating transactions in reverse
+order so there needs to be some logic
+somewhere to make this decision and if
+this sounds sort of like kind of
+workflow that I think there's some
+strong similarities and so the solutions
+are kind of the same way you you have
+this two approaches choreography where
+the decision-making is sort of implicit
+and distributed amongst the participants
+and then there's orchestration where you
+actually as you're going to see you have
+basically a domain object telling the
+participants what to do so with Orcas
+with with choreo choreography I always
+get them mixed up in my head basically
+you can do that in a very trivial way
+using events so for instance you know
+with the order service when a request
+comes in to create an order it can
+create an order and publish an event
+that event gets consumed
+by the customer service which will then
+attempt to reserve credit for that order
+and then it will publish an event saying
+yes the credit was reserved or the
+credit limit was exceeded the order
+service would then receive that of them
+and either approve or reject that order
+so you just got these services that just
+emit events receive events perform some
+action emit more events and eventually
+this this saga completes and
+interestingly I think it was a Q Khan
+three years ago I gave a talk about
+event sourcing and I might have used
+this slide but I didn't have a word for
+it so it's like kind of subsequently I
+discovered what I was talking about was
+something that could be labeled
+choreography based coordination teasing
+event but it was just sort of like very
+natural because you know event sourcing
+is basically where you're using events
+to persist the state of your domain
+objects so whenever a domain object
+changes you just publish an event just
+just kind of like I described here so
+it's really trivial to sort of implement
+these choreography based sagas and in an
+event sourcing application it's sort of
+this natural way and also you know in
+this model that the SOG is all loosely
+coupled they're just kind of exchanging
+events and it all kind of works but
+there are some interesting issues in the
+sense that you know there's a cyclic
+dependency because the customer service
+is listening to events from the order
+service and vice versa and you know from
+a design point of view should you really
+have cycles mmm maybe not maybe that's
+not such a good idea and and also the
+domain objects potentially have to know
+a lot about what's going on so in the
+case of the order some work some logic
+in the order service has to know oh yeah
+when the event comes in from the
+customer service I have to kind of
+approve the order or but then it might
+get a lot more complicated if there are
+other validations that need to be done
+such as reserving inventory and so on so
+there's sort of all this event
+processing logic mixed up with the
+business logic and then also events are
+a very indirect thing sort of way of
+causing things to happen I mean I
+remember you know cuz an event is
+something that has happened like an
+order was created an order was approved
+credit was reserved or credit limit
+exceeded and sometimes you just want to
+tell a participant what to do you know
+just direct it rather than sort of
+indirectly suggesting hinting strongly
+via an event that it should maybe
+consider doing something so that kind of
+then leads you to another model where
+you have an orchestra you implement
+sagas using orchestration and that's
+where you have an object that's
+basically like this little workflow
+that's directing the participants
+telling them what to do so in this model
+is you're going to see that when the
+order gets created as part of that you
+get this create order sagar object which
+it then just goes and tells the customer
+service what to do the order service
+what to do so it's a lot more direct
+none of this indirection sort of hinting
+via via event so so in this model you
+have a saga Orchestrator or which I
+actually shortened to the term saga and
+that's actually a persistent object so
+it lives in the database that tracks the
+state of the this little of the saga the
+workflow and then tells the participants
+what to do so it will tell one
+participant to execute a tea you know
+tea one another waiting when it when
+that has succeeded it tells another
+participant to execute a tea - and so on
+and then if there's a failure it will
+start execute
+the compensating transactions one by one
+and as you're going to see later on
+actually send command messages to the
+participants so there's this sort of
+it's all done via message broker but
+instead of events it's command saying do
+this and then eventually a reply will
+come back so kind of so kind of the more
+the behavior of this saga or saga
+Orchestrator is when it's created it
+tells the saga participant what to do
+then a reply comes back at which point
+it figures out what's that which is the
+next saga participant to invoke next and
+based on whether that's in Vic that
+transaction was successful or not and
+then it tells the saga participant sends
+it a message and then it updates its
+state which is persisted in the database
+and it just kind of goes around that
+loop until it runs out of things to do
+at which point presumably it is done so
+in this model it works like this where
+you know the request comes in to create
+an order it actually creates an order
+and it creates a create order saga which
+maybe should be cool validate water
+creation saga or something cept that no
+it's debatable what that what the term
+is and that then tells the customer
+service to reserve credit so it's
+asynchronously invoking an operation on
+the customer service which is then going
+to send a message back saying oh the
+credits been reserved so sending back a
+reply message indicating the outcome of
+that credit reservation and then the
+create order saga when it gets it well
+in this case approve the order if it was
+credit limit exceeded reply it would it
+would reject the order so that's kind of
+the idea so in terms of the code this is
+actually what it looks like I'm just
+gonna talk about this quickly you can go
+see it online so there's a simple saga
+interface and it's a generic type and
+the
+what we're looking at here is like a
+stateless singleton and then create
+order saga data is the actual state of
+any particular saga object the workflow
+is defined by this sort of simple DSL
+there's a series of steps each step
+invokes either a participant or it in
+execute so compensating transaction and
+all its doing is invoking these methods
+that create a command message to send to
+a particular participant so in this
+example it's sending a reserved credit
+command to the customer service so a
+bunch of details there but the sort of
+the logic is fairly fairly
+straightforward and then inside the
+customer service there's a bunch of
+command handlers so this is just a layer
+of abstraction over a message broker and
+we're actually kafka to be more precise
+where messages have a header and a body
+in those particular semantics to each
+one so in this example you know when it
+gets a reserved credit command it that
+it invokes the reserved credit command
+handler which basically just implements
+the usual domain logic finds the the
+customer object in the database execute
+the reserved credit method on it if it
+and then sends backups it will returns a
+success reply otherwise if it throws an
+exception it returns a failure reply so
+that's all so it's just this layer of
+abstraction over message descending so
+in the framework you can for doing this
+you can if you go look in and github
+eventuate kind of came up with this name
+tram transactional messaging because
+this is all tied in with so the mess set
+the sending and receiving of messaging
+is tied in with database transactions
+but it's not using JTA and Jay
+assets using a different approach so
+anyway so that's what a saga looks like
+I mean the nice thing about these saga
+orchestrators is the logic is
+centralized in one place you know the
+customer in this case doesn't know a
+whole lot it just it's not listening to
+all of the order lifecycle events and
+knowing how whether to reserve credit or
+release credit it's just being told what
+to do so that that reduces coupling and
+it's actually it reduces cyclic
+dependencies as well one downside is
+there's always a risk of having kind of
+these smart saga objects telling the
+dumb participants what to do but I think
+that's just a matter of careful design
+so that's the orchestration part so
+that's sort of a high level how do you
+tell how do you sequence this series of
+local transactions and how do you deal
+with compensation and so on so yeah
+simple framework that just makes
+defining that quite straightforward and
+it's sort of similar to what you might
+get with some kind of traditional sort
+of workflow engine I mean the main
+difference is it's very focused on
+implementing sort of sagas as opposed to
+more general purpose workflows and then
+the other difference is as I'm going to
+talk about now it's actually based on
+sort of transactional messaging because
+there seems to be this whole big gap
+where I want to I you know I want to
+reliably send a message and up and
+update the database atomically and a lot
+of them frameworks don't seem to do that
+very well assumption is you use
+two-phase commit which you could con in
+this situation so anyway so if we look
+at how messaging needs to work right so
+the sugg Orchestrator needs to tell the
+pilot send a command to a participant
+telling it what to do and then the saga
+participant has to send back a reply and
+this all has to happen even if there are
+transient failures so you know maybe the
+saga
+discipline is down maybe the saga
+Orchestrator sends the message and then
+goes down but you want it to respond to
+the reply and for me that actually means
+that you really want to do this on top
+of a messaging broker as opposed to some
+form of re tribal RPC interestingly
+during the panel Lewis from Google said
+that Google doesn't really use message
+brokers they do rely pre tribal RPC for
+a bunch of reasons not entirely I don't
+know how to adapt that to this model to
+me it's like it's it you know this you
+get a lot of simplicity by just relying
+on your message broker to do the right
+thing and it doesn't require the
+participants to sort of be up and
+available so the model ends up looking
+like this where you know the create
+order saga sends a command to a
+participants request Channel think Kefka
+topic so the customer service has a
+customer request channel which is
+reading from processing those messages
+and then it's going to write the reply
+to the message channel that's specified
+in the reply to head or the message
+Reserve credit so the saga reply channel
+which then gets read by the saga and so
+the process goes on so that's the easy
+part there's just some sort of simple
+messaging the tricky part is making this
+happen transactionally because at each
+step you know the saga part is the saga
+is updating its state and wants to send
+a message likewise the participant is
+updating its state and wants to send a
+reply and all of this has to happen
+basically atomically but the trick is is
+that we can't use the classic approach
+of sort of you know two-phase commit you
+know JT a a JT a transaction spanning a
+JDBC day
+and our JMS message queue right because
+that's specially JMS that sort of
+old-school technology and we don't want
+to use JTA
+so it's sort of like how you know how do
+we do these two things atomically and
+that's sort of kind of the underlying
+foundation for this saga framework and
+the way it works kind of took
+inspiration from Howie Bay did this and
+the basically the model is this so you
+have a message table so that that
+basically acts as an out box for a
+service so in this in this case when the
+customer service updates its database
+and it wants to send an order created
+message that doesn't make sense
+typos on the slide so yeah so so the
+idea is to when it when when a service
+wants to update its database which
+obviously has to be done in inside a
+transaction as part of that transaction
+it will insert a message into a message
+table and that that's that's a local
+asset transaction so it's guaranteed to
+be atomic so that that's so that's step
+number one so that that's kind of it
+from the perspective of that service and
+then there's a separate process that is
+pulling messages out of that table and
+publishing them to a message broker so
+we sort of broken it down into two steps
+the first step gives us the atomicity
+that we need and we're just going to
+assume that this message publisher is
+going to keep trying until it's actually
+published the message there's actually
+two ways it could do this one way which
+is generic and works with a lot you know
+a whole bunch of different databases is
+basically to pull the message table you
+know select from messages where some
+where the message is new and hasn't been
+published so that that that can work you
+know that sort of a generic approach
+a much better approach is actually to
+tail the transaction log so actually
+look in the my sequel bin log see the
+series of inserts into the message table
+publish them to Kafka or look at you
+know each database has its own
+particular transaction log you know
+Mongo even has an OP log so you could
+look in that to see the changes and then
+know to publish them to it to a message
+broker and that's a much sort of kind of
+lower latency pure yeah I'm nice a wait
+way to do this so a framework that I
+work on is called tram that actually
+implements that so that's like a whole
+bunch of messaging abstractions that are
+based on the mechanism that I described
+on the on the past couple of slides so
+then the other option is actually to use
+event sourcing kind of a sort of a
+reliable foundation because when you
+basically you know say if when an order
+or a customer is created well that's
+going to result in an event being saved
+or published in an event store and that
+can actually reliably be turned into a
+command or message that's sent to some
+other service so there's a couple of
+different mechanisms for implementing
+this it's kind of such as absolutely
+fascinating area but it kind of the key
+point is is that in order for this to
+work reliably you need some form of
+transactional MCing messaging and
+transactional in the database set sense
+of the word anyway so that's my talk
+hope that you found it useful so in
+summary right like the whole point of
+using micro services is to tackle
+complexity or as someone pointed out
+slow the growth curve of complexity an
+accelerate development right database
+services data a database per service is
+essential for loose coupling right it's
+enabling the teams to work autonomously
+and the way you want to maintain data
+consistency between services is using
+sagas and then the underlying sort of
+platform for the
+that the sagas are built on is this
+transactional mechanism that enables you
+to atomically update the database and
+publish a message so that's my talk
+thank you for listening and I hope that
+you found it useful</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

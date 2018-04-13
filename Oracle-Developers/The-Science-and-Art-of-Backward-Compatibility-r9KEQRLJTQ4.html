@@ -1,0 +1,1600 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>The Science and Art of Backward Compatibility | Coder Coacher - Coaching Coders</title><meta content="The Science and Art of Backward Compatibility - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>The Science and Art of Backward Compatibility</b></h2><h5 class="post__date">2015-06-05</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/r9KEQRLJTQ4" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">okay I'm going to be talking today about
+backwards compatibility the science and
+art which is a fancy way of saying
+backwards compatibility going to be
+starting off by referring just talking
+about you know why do we care about
+backwards compatibility and we're
+actually going to do this in two parts
+first going to focus on serialization
+and passing messages back and forth and
+then secondly on API design and so for
+each of these we're going to have to
+talk about why backwards compatibility
+matters why we should care and then with
+serialization we're going to talk about
+if you have a serializable type how do
+you evolve it in a way that new readers
+can read what old writers sent or
+perhaps vice versa and then similarly
+similarly with API design we're going to
+talk about ways that a library can
+evolve and how you can do it in a way
+that old clients can still call your new
+methods without having to recompile
+which and we'll see why that's important
+we're going to talk about you know
+strategies for doing this in a way that
+is maintainable and then finally some
+best practices mostly focused around
+sort of how to detect when you've
+accidentally introduced an
+incompatibility so a few quick words
+about me I'm an application architect at
+verisk health I've got 13 years of
+experience working in Java mostly on
+larger scale projects where backwards
+compatibility is an issue in my spare
+time I like to do carpentry or blog or
+tweet none of which you likely care
+about I work at verisk analytics which
+is a large company that deals with risk
+management mostly in the insurance
+industry specifically within verisk
+health and the area that I'm focused on
+is preventing fraud and medical billing
+but again you probably don't care so
+let's talk about why backwards
+compatibility matters so serialization
+and we'll be talking mostly about Java
+serialization but a lot of this stuff
+applies more generally to things like
+XML or JSON or Avro protocol buffers you
+name it but why do we use serialization
+at all and for the most part the reason
+is distributed computing use
+serialization when you want to pass
+messages between different biens if it's
+all within the same JB and you can just
+do method calls that's that simple but
+when you need to start passing data
+around then you're talking about maybe
+it's web services in which case you'd
+probably
+using something like JSON or jack's b or
+something along those lines but it might
+be our mi or JMS and for these standard
+java object serialization works great
+maybe you're putting data into a
+distributed cache like co-parents again
+serialization is going to be the key to
+getting data in and pulling it out the
+problem is that in a distributed
+environment you'll generally have more
+than one client in JMS you'll have a
+producer and a consumer in a cache you
+might have multiple people hitting the
+cash otherwise why would you have a
+cache web services rmi same sort of
+situation and the problem well there's
+really two problems the first problem is
+that not all of your clients can
+necessarily upgrade at the same time you
+might have your producer upgrade before
+your consumer if you're dealing with JMS
+you might have the client of a web
+server upgrade after the web server
+itself and of course if you're thinking
+well we tend to roll everything at once
+if you've got a 24-7 uptime system it's
+not possible to roll everything exactly
+at once there are millisecond delays and
+these can cause problems but even if you
+say now I'm going to just shut
+everything down and bring it back up
+with the new version you may still have
+problems because sometimes your data
+sticks around longer than your
+applications if it's in a distributed
+cache it could be around for hours if
+it's in JMS it might just be there for a
+few seconds but it's it's still an
+appreciable length of time backwards
+compatible serialization simply means
+that the writer and reader can
+communicate even if they are of
+different versions in general though not
+always you can design it so that you
+know that you'll upgrade your writers
+before your readers or perhaps your
+readers before your writers if you can
+do that it helps it's not essential but
+it certainly makes life a little bit
+easier if you only have to think about
+backwards compatibility in one direction
+and not both so let's see how we evolve
+serialize classes well the first step to
+evolving a serialized class is to write
+a serialized class so in Java
+serialization is almost for free but you
+have to say you want it the reason for
+this is simply that there are good
+reasons that you might want to class not
+to be serializable maybe it refers to
+things within the JVM like threads that
+don't naturally transport maybe it
+carries sensitive data in it that you
+don't want to serialize but for whatever
+reason Java makes you say I would like
+to see realize this but there's more to
+it than that because whenever you
+serialize a class java includes what's
+called a serial version you ID which by
+default is composed by looking at just
+about every public aspect of the class
+and every private visible aspect of the
+class and saying you know what does this
+class look like and then later if you
+change your class it will change the
+serial version you ID accordingly it's a
+64-bit number the odds of ending up with
+the same one or rather small so in
+practice you practice don't turn off
+your monitor but also in practice what
+you want to do is is declare your own
+serial version UID and one is just as
+good a number as any other so if you
+don't do this you're going to get
+exceptions when you try to deserialize
+across versions so it's sort of like
+Java first of all says okay you need to
+say that your serializable but then if
+you actually want serialization to work
+you also need to do this it's kind of an
+extra step the theory is if you're not
+thinking about serialization
+compatibility the JVM will helpfully
+throw an exception for you it's it's
+kind of like as I've heard sometimes
+checked exceptions referred to there a
+great idea in theory and they're kind of
+a pain in practice so in practice what
+this means is that you just want to do
+this I know an eclipse and almost
+certainly an intelligence ette it up to
+give you a warning if you have any
+serializable class that does not define
+the serial version you IE it's an
+excellent practice that said should you
+forget it you can always run the serial
+ver tool later on a class that you've
+already written it'll tell you what the
+current serial version uid is and then
+you can stick that into your class so
+that it doesn't change going forward
+okay so the important thing is that you
+should never change this unless you
+actually want to break backwards
+compatibility so unless you want to be a
+jerk to your clients don't do that well
+what are some ways that a serialized
+form can evolve we're going to talk
+about each of these in more detail in
+essence the following things can happen
+you can add a field you can
+remove an existing field you can change
+the values that are allowed for a field
+perhaps you know remove or add some
+constraints you might change the type of
+a field that one's a little trickier you
+can move fields up and down in the
+inheritance hierarchy and and finally a
+news article case effectively you can
+change the allowed values in a new more
+a reorder them which is sort of like
+changing the allowed values for a field
+but there's also reordering and renaming
+to take into consideration there so
+let's start by talking about adding a
+field so if you're adding a field to a
+serialized class there's two situations
+that you want to consider one is the
+situation where the reader is upgrading
+first in this case this means that the
+reader is now going to be expecting a
+new field say we had a person class for
+the first name and a last name and now
+we're adding a middle name well in this
+case this just means that the reader
+needs to be able to handle the middle
+name taking its default value which is
+going to be in the case of a string no
+and that's usually fine I mean middle
+names are sometimes actually no the
+second case you have to deal with is
+where the writer might upgrade first so
+in this case the reader is reading in
+some data and it says okay I've got
+first name all right I know what to do
+with that I've got last name I know what
+to do with that and then I've got this
+thing called middle name and I have no
+idea what that is so in that situation
+if you're going to upgrade the writer
+first the reader needs to have been
+designed in a way that it can handle
+data it doesn't know about now the good
+news is java serialization and for that
+matter Jack's be handled both of these
+cases well if java serialization is
+expecting a field and doesn't get it it
+will assign it the default value for the
+field that's going to be null for any
+object reference it's going to be false
+for a billion it's going to be zero for
+any of the other primitive types
+conversely if it receives a field that
+it doesn't know about it'll just throw
+that on the floor which is probably the
+best you can hope for but you do need to
+be careful in this situation even though
+java serialization if you define your
+cereal were you ID even though it's
+going to handle this gracefully in the
+sense that it won't fall over and die on
+you you still need to worry about
+semantic compatibility this means that
+not only should you not
+Pro exceptions do 2d serialization but
+you should also actually continue to run
+properly so if this means your your
+reader upgrades first it needs to handle
+the absence of a new value properly it
+needs to in particular it shouldn't be
+change its behavior if the new value is
+given its default value so let's take an
+example let's say we have a dimensions
+class for measuring I don't know boxes
+and we've got you know a few fields
+we've got length width and height and
+and these are going to be measured in
+meters well this is all fine and then
+and then some of our American clients
+start complaining and saying we don't
+like meters we'd really prefer to
+measure things in feet so we think all
+right let's allow us to measure things
+in in meters or feet and perhaps a poor
+API design choice but we just decide to
+use a boolean to indicate whether or not
+to use meters and if the boolean is
+false we'll use feet well you can
+imagine this can cause some problems
+because any data that was sent from the
+old version was naturally assuming that
+the data was and meters in our new
+version boolean the default value for
+bullion is false so now it's assuming
+that we're measuring things in feet if
+you're NASA you're going to miss Mars so
+you want to make sure whenever you're
+adding fields that the default value of
+the field is going to work well
+otherwise you're going to need to look
+at custom serialization and we'll talk
+just a little bit about custom
+serialization a bit later in the talk
+i'm not going to go into too much detail
+into it because it's really a good chunk
+of a talk in its own right but the goal
+here is to do things in ways that you
+don't have to do custom serialization
+removing a field so this is actually
+rather similar to adding a field it's
+just kind of in Reverse so what this
+means is in this case if you upgrade the
+reader first well it needs to ignore the
+old field if you upgrade the writer
+first well then the reader is going to
+simply receive a default value for the
+field whereas before it received
+whatever the writer sent when that field
+was present again as before semantic
+compatibility is important one other
+thing that's worth quickly mentioning
+here is that if you rename a field
+you're effectively removing it and
+adding it java doesn't have any notion
+of a rename in a field which if you
+think about it makes sense you know I
+had an old field named foo I've got a
+new field name bar sure there are the
+same type but how should I know they're
+the same so another possibility to deal
+with the situation where you change the
+allowed values for a field in general
+this is not a serialization issue it's a
+semantic issue but it's one that you
+need to think about so for example maybe
+you had an age field and previously you
+were assuming that anyone would be at
+least 18 years of age because you're
+writing I don't know a voting
+application for Diebold and then you say
+you know actually we're an inclusive
+society the kids should vote too so
+we're going to let the age go down to
+zero or maybe the other way around in
+either case serialization doesn't care
+and the reason serialization doesn't
+care is because serialization doesn't
+use your constructors and this is an
+important thing to remember your
+constructors might have all sorts of
+lovely logic in them so that will throw
+illegal argument exception that someone
+tries to pass in an illegal value that I
+mean it's legal from the sense of Java
+but you know we don't allow ages less
+than 18 we don't allow age is less than
+zero serialization simply uses
+reflection to populate your fields it is
+not going to care in the slightest about
+the constraints York instructors at so
+the good news is it doesn't matter what
+values pass in serialization is going to
+be happy the bad news is it doesn't
+matter what values are passed in
+serialization is going to be happy even
+if you didn't want it to be if this is
+going to be a problem for you you may
+want to consider adding in a read
+resolve method in your reader and we'll
+talk about that again in a bit that does
+some posts deserializer post d
+serialization compatibility checks to
+make sure values are what they should be
+and if not either correct them or throw
+exceptions as necessary beyond that if
+you're handling that or if you're not
+handling it you just want to make sure
+that you're not going to run into
+trouble again think about the order in
+which the readers and writers upgrade if
+you're constraining the list of allowed
+values then you should upgrade your
+writers first so that they're no longer
+sending what will now be illegal values
+if you're constraining if you're
+expanding a list
+well then your reader needs to upgrade
+first so that it can handle the new
+values before the writers start sending
+them changing the type of a field is a
+little bit trickier so in certain cases
+it's okay specifically if lift scoffs
+substitution apply apply so remember
+liskov substitution is the principle
+that if I'm expecting a type of foo and
+you give me a type which is a child of
+foo that's perfectly fine I don't need
+to worry about that at all because a
+child of foo is still a food so if
+you're sending a subtype of what the
+reader expects you're going to be just
+fine but of course the other way around
+doesn't work the reader cannot expect a
+subtype of what the writer sends so for
+example if the writer is sending a
+java.util.date and the reader is
+expecting a java sequel date which
+extends java.util.date that's going to
+be a classcastexception in more general
+terms and this goes beyond just Java
+serialization the reader needs to be
+able to process whatever the writers
+sentence subtypes are fine anything else
+is going to be a problem so what if you
+actually want to change the type either
+to a supertype or perhaps even to a
+completely different type well there's a
+way you can do this without having to
+customize your serialization methods and
+it can actually help for clients even
+that aren't dealing with serialization
+and the trick is to add a new field with
+a new type different name and have the
+old field and to some extent the new
+field forward to each other so let's
+take an example let's say we have an
+invoice class that's serializable and
+for starters well the invoice has an
+amount on it it might have some other
+fields but we're going to just focus on
+this amount field so we we think we're
+pretty clever we realized that amounts
+aren't always whole dollars so we use
+the next best thing which of course is a
+float and we're pretty excited about
+this we have a getter and setter we're
+all happy until someone points out that
+floats are terrible things to use for
+money because they don't always round
+like you want them to so we think okay
+let's add a bigdecimal but instead of
+simply changing amount to bigdecimal we
+are literally going to add in a new
+field with bigdecimal type now we
+require a new name for the
+and of course you were really happy with
+the amount field name that you already
+had you need to come up with a new name
+sometimes with experience we realize you
+know it's not the amount it's the total
+amount that we're actually talking about
+so we come out ahead in this case
+otherwise you might need a suboptimal
+name so far so good but we need the old
+and the new to be able to work with each
+other and so what we do is we add in a
+custom setter and getter for each of the
+old and new fields I'm just going to
+show a couple examples here due to
+limited screen real estate so for
+starters if a legacy client calls set
+amount passing in a float we're going to
+set that but we're also going to set the
+new total amount field by constructing a
+bigdecimal out of the float similarly
+the set amount field that takes in a
+bigdecimal would also set the legacy
+float that would allow it if you
+construct a new version and send it back
+to the old reader the float will be
+there and that's exactly what you want
+well suppose that the old version
+creates an instance of invoice which
+just has the amount field and sends it
+over to a reader that is using the new
+version of our invoice class well in
+this case it's tricky because we can't
+put in a remember we can't have a
+constructor that says oh if you only
+have one set the other because the
+constructor doesn't get run instead what
+we can do is we can resolve it when it
+comes to accessing it so when someone
+calls the new total amount we first say
+hey is the total amount no well if it's
+not null then return it but if it is no
+let's assume we were dealing with our
+old value and simply construct a
+bigdecimal on the fly that is based off
+of the old float amount which I have
+actually written here as float amount
+and it should be amount my apologies so
+in this way without having to do any
+custom serialization or D serialization
+you can still have compatibility and in
+fact in this way you support
+compatibility in both directions so this
+is kind of a nice trick to have in your
+up your sleeve yes
+no furious would say sure so the
+question is purists might say well this
+is bad because now we have a setter
+that's updating two fields we have a
+getter that's that's reacting to two
+fields my answer would be that purists
+need to remember why we had getters and
+setters in the first place if you're
+feeling is that a getter should always
+just directly access the field and a
+setter should always directly access one
+field then get rid of your getters and
+setters and make your variables public
+but the reason we have these is
+precisely to allow for evolution and so
+this is i would say in fact a peeress
+would be in favor of this because this
+is yes nope we have not so the question
+is have we broken binary compatibility
+them on yes and and then amount is still
+afloat to alter the baby's dad so yes
+the old Gators are still there now one
+thing that I didn't do here but you
+probably would want to do is deprecated
+the set amount and get amount field
+methods so that going forward people
+start converting their code over another
+interesting question is what happens if
+you move fields around in the class
+hierarchy well this is a little bit
+tricky because when serialization sends
+data across its effectively sending the
+name of the field and the value of the
+field but the name of the field isn't
+just the name of the field it's actually
+the name of the field along with the
+class in which it's defined so let's
+look at an example here let's say that
+we had a standard hierarchy we have
+people and then some people are actually
+employees and we decide that employees
+are important enough that we're going to
+give them names and then some no
+do-gooder comes along and says all
+people are valuable everyone should have
+a name so we say okay let's move our
+name field up from person or excuse me
+up from employee into person well this
+is fine as far as general Java goes and
+you can still have the getters and
+setters work the way you want but from
+the point of serialization these are
+unrelated fields you have effectively
+removed one field and added another it's
+like renaming a field in some sense it's
+the name of the field from C
+realizations point of view in some sense
+is class name colon field name so if
+you're going to be moving fields around
+like this you need to take care you can
+use forwarding fields as before is one
+strategy or if you need to you can again
+look into custom serialization options i
+mentioned i talked about a news and
+newness generally work pretty well
+there's there's two ways traditionally
+that a news can be encoded one is that
+you can encode the name this is how java
+serialization does it i believe it's how
+jack's b does it the name is simply a
+coded across the wire another is that
+you can encode the ordinal of the field
+of the of the aeneas oh you've got your
+zero thenew mure first in your second or
+noon i think protocol buffers takes that
+approach both of these are fine both of
+them present their own challenges the
+challenge in particular with
+serialization and using a name is that
+if you decide to refactor your code and
+give your anews new names that will
+break serialization because the new name
+is unrelated to the old name even if
+it's in the same position so the best
+practice here is to avoid a convenience
+that the Java language gives us which is
+that we can access the names of our news
+quite easily so by default and I forget
+the exact not that I think it's get name
+or for that matter to strain on Anna
+noon we'll give you the code name of the
+inuman it's very tempting to use that
+and in fact sometimes it's tempting to
+use that in all sorts of interesting
+ways like in your display logic you just
+print that out I strongly recommend if
+you're thinking that you might have to
+evolve your a pneumo ver time and that
+it might get serialized avoid doing this
+instead have a separate method on your
+new mewtwo fine that returns the name
+you want whenever the ANU ms to be
+displayed initially it can simply
+forward back to the original get name
+that the ANU minus at some point down
+the line a need from a programming point
+of view to excuse me if you have some
+point down then i need from a display
+point of view to change how your new ms
+displayed you
+change that without having to rename
+your anoon and therefore you avoid
+breaking your backwards and compare
+excuse me you avoid causing a backwards
+incompatibility from the point of view
+of serialization so again the key is
+just using new names internally don't
+use them for anything that you might
+need to change in other words
+refactoring a new ms not as easy as we'd
+like it to be so let's try to avoid
+having to do it in the first place so
+these are all the things that you need
+to be thinking about and one strategy in
+programming is simply to say okay I know
+all the things I need to think about I'm
+going to always keep them in mind i'm
+going to make sure anyone else working
+on my code base always keeps them in
+mind and we're going to make sure that
+none of us ever make a mistake in other
+words we are immortal but we're not
+immortal and of course even if we were
+the odds that we would make mistakes
+goes up because we live for way too long
+so we need some backup we need a way to
+detect when we've introduced a backwards
+and compatibility and the basic strategy
+here is testing what I recommend is is
+is one or two forms that the simplest is
+whenever you create a serialized class
+output the serialized form of that class
+or a few different instances of that
+class to a file check that file into
+your source control write some unit
+tests which read that file in if you
+change your class down the road the old
+unit tests are still going to be running
+reading in the serialized form from the
+old class if you've introduced a
+backwards and compatibility those unit
+tests will break which is what you want
+you want to know about this backwards
+and compatibility this in particular
+preserves you for the most common care
+protects you in the most common case
+which is that your writer is going to
+upgrade before your reader and the
+reason I say that's the most common case
+is because it's the easiest case to
+manage and so you should make it your
+most common case now one question is how
+long do I have to keep the old files and
+old unit tests around and the answer is
+as long as you need to support the old
+orals once you know that there are no
+old Sierra let there are no see realized
+forms of the old version of your class
+hanging around anywhere you can safely
+delete those tests but not before now as
+I said that protects for the writer
+upgrades first more generally things
+could get a little tricky if you want to
+support both directions or if you don't
+want to have to deal with all these
+files hanging around another strategy
+that you can use is to actually take
+advantage of your artifact repository
+something like Nexus or artifactory and
+say in my unit tests I'm going to pull
+down all the different versions of this
+class that I've had to deal with in the
+past and I'm going to through class
+loader tricks or whatnot have each of
+them both right and read data that the
+others are producing takes a little bit
+more work to set up but it will give you
+compatibility checks in both directions
+and then in that case when it's time to
+retire an old version you simply remove
+that version from the list of classes
+that you're pulling down so what happens
+if the techniques we've talked about
+aren't enough or they're just too
+cumbersome there are ways to do custom
+serialization and deserialization and
+again I apologize there's simply not
+enough time to discuss this in detail
+today but I'll give you a hint at where
+you should be looking if you want to
+customize how d serialization happens
+all you need to do is implement this
+method and notably it's a private method
+serialization just loves to play around
+with private that didn't sound right um
+it's read object it takes in an object
+input stream and the first thing that
+you can do I mean one thing you can do
+is simply call the default read object
+method on the object input stream itself
+but you can also if you want you can
+call a special read fields method that
+is available on the object input stream
+that's passed in and that gives you
+something akin to a map basically it's a
+map of names field names to field values
+and then you can pluck and choose from
+those values and doing any massaging
+that you want to sign them two variables
+as you need do whatever is necessary to
+make this work uh one
+aviat about the reed fields
+implementation while it's easy to use it
+does have an unfortunate side effect of
+being 0 of n squared in the number of
+fields the reed fields method stores its
+fields at least in the latest version of
+Java as far as I could tell it stores
+its fields in an array and when you ask
+for a name it just starts looking
+through the array until it finds it so
+that's obviously going to have a
+performance impact for large classes if
+you have a large class oh I I'll get
+back to that in a second but similarly
+if you want to override serialization
+there's a right object method there's
+also similarly a right fields method I
+believe our put fields method that you
+can invoke their to customize how that's
+going to go if that's not enough for you
+you can also actually implement
+externalize abell this is a sub
+interface of serializable and it has a
+pair of methods that you can call which
+give you total control or near total
+control over how serialization and
+deserialization happen the downsides to
+external I zabal are a couple one
+downside is now that you have total
+control you also have total
+responsibility you've got to make sure
+that every field is going in in the
+right order and coming out in the right
+order this can be handy if you know
+you're going to be evolving things a lot
+for example you could start your very
+first field being a version number so
+that deserializer snow what version
+there deserializing from going forward
+but you you're really on your own you
+definitely need testing at this point
+the other drawback of external I zabal
+is that there are some tools that can
+actually look at a serialized form of a
+class and tell you what's in it even if
+they don't have the class available
+because remember the serialized form
+basically is name value pairs in some
+fancy sense once you go externalize
+about your metadata I mean you can add
+in metadata but the existing tools out
+there aren't going to know anything more
+about your metadata than then just data
+so you were saying if your serial
+version you IDs don't match yes so
+serialization still right so that the
+observation was that serialization even
+when you're implementing read and write
+object it still first does the check on
+the serial version you ID to make sure
+there's even any point in calling it if
+not it says out now now you know I know
+you've implemented your custom
+serialization and deserialization logic
+but you didn't remember to set this so
+I'm going to assume you've been naughty
+and broken everything and i'm just going
+to protect other people by throwing an
+exception now instead of letting
+something break later alright so this is
+the the serialization point of the talk
+before i go forward are there any quick
+questions about this part or should we
+move on to api compatibility okay we'll
+move on oh yes the values of the fields
+at which point in time manatee okay so
+the question is what is when you're
+doing d serialization what are the
+values of the fields and the values of
+the fields so before deserialization
+happens the fields all are empty I mean
+they're no llore they have their default
+values and then its values come in and
+the do serialization process works with
+them it sets them to whatever is given
+or or effectively leaves them where they
+were if they weren't I'm not sure
+whether it leaves them where they were
+or goes back and sets any remaining
+values afterwards so if you have an
+anonymous ah so if you have an anonymous
+block that's effect that's it so the
+question is what if you have an
+anonymous block in your class so
+typically these get run right after your
+constructors and the question is whether
+that will run or not in the case of do
+serialization and the answer is I don't
+know I will find out we can we can take
+a quick look afterwards and we'll do a
+quick experiment that's a really good
+question no thank you I have not thought
+about that how to initialize final
+fields I know I was not going to talk
+about that that's actually something
+I've been wondering about and haven't
+had a chance to look at do you know the
+answer okay well that's a let's let's
+talk about that afterwards all right
+backwards compatibility for AP is so the
+first question that often comes up with
+evolving library api's is why does
+backwards compatibility even matter if I
+come up with a new version my clients
+upgrade to the new version they can
+upgrade their code so that it correctly
+calls the new version what's the big
+deal and this is a very reasonable
+question and it actually makes sense in
+the very simple case where you have a
+library used by an application so let's
+see an example let's suppose I've
+written a CSV parser processing comma
+separated values and it's kind of useful
+and no one else has ever written such a
+thing so you know naturally people are
+going to use this one some guy comes
+along and writes a little library to
+read stats from a weather service using
+this csv parser and someone else says
+you know there's a service out there
+that's sending out traffic data with
+comma separated values I'm going to use
+the CSV parser to read that then someone
+else says you know I'm in San Francisco
+and I want to figure out how to how to
+do my commutes so I'm going to write a
+commute recommender and to recommend the
+preferred commute I need to look at the
+traffic data but I might want to take
+the ferry instead so let me also look at
+the weather to see whether it's going to
+be a choppy ride so far so good now CSV
+parser upgrades and it upgrades in a
+rude fashion that is not backwards
+compatible well that's not a problem
+we're still using the old version 08
+whether stats reader has decided to add
+some new functionality that's very
+useful and it's also decided to
+upgrade its dependency to the new
+version of CSV parser and when it
+upgrades it makes changes to its source
+code so that it can still call the new
+CSV parser still no problem the traffic
+data author is busy they've got other
+things to do right now they can't be
+bothered upgrading their old version
+works fine they don't release a new
+version well now the commute recommender
+is in trouble or commute reader as I put
+it down here and then bottom line is in
+trouble because on the one hand they
+would love to get this new functionality
+that came from the weather stats reader
+but they can't because if they upgrade
+to the new weather stats reader they
+have to upgrade to the new CSV parser
+and then the traffic data reader won't
+work so while the just let the client
+upgrade approach works fine when you
+only have one level of dependency
+everything gets so much more complicated
+when you have more than one level of
+dependency and really the only way that
+you're going to be able to move forward
+in life if you've got this sort of
+situation is to make your upgrades to
+your libraries backwards compatible now
+there's two kinds of backwards
+compatibility and it's important to
+understand the difference the first kind
+is source compatible this just means
+that if I have code that compiled under
+the old version then it will still
+compile against the new library binary
+compatibility on the other hand is a
+little bit trickier it says that code
+that's already been compiled against the
+old version in other words byte code
+will successfully link and run against
+the new version yes question well I was
+good i was just going to get to that
+there is also behavioral incompatibility
+which is sort of what i'm alluding here
+which is that neither of these
+compatibilities imply that the code is
+actually going to successfully run you
+may hate you know end up missing mars
+again but you clearly at least need one
+or both of these compatibilities source
+compatibility is great if all you want
+to do is say people can recompile
+against me and they'll be fine but if
+you have dependencies of
+tendencies source compatibility is not
+going to be good enough you're going to
+need binary compatibility and in some
+sense this is unfortunate because source
+compatibility is is like a siren luring
+you to crash against the rocks if you
+change your method in a fat in a fashion
+that is source compatible but not binary
+compatible odds are your unit tests are
+still going to pass and the reason is
+simply that most of us when we run unit
+tests the first thing we do is what we
+compile and so our unit tests in
+particular have compiled against the new
+version they're going to be just fine
+you'll never see the problem and while
+it's good enough again for an
+application that's going to recompile
+when it upgrades its jar dependency it's
+not going to be good enough in the
+general case so we need to be thinking
+not just about source compatibility but
+about binary compatibility as well which
+raises the question what's the
+difference and to understand the answer
+to that we need to take a little bit of
+a look at how the JVM views method calls
+so there's a few things to understand
+about bytecode calling first is there
+are two at least traditional ways of
+calling methods if it's an interface
+method we call invoke interface if it's
+a virtual method I in a concrete class
+method then we call invoke virtual the
+reason there's two is roughly that if
+it's a virtual method you've actually
+got a lookup table and you can go
+directly into the lookup table to figure
+out where precisely the method is
+located whereas with interface methods
+you got to do a little bit more work and
+say ok for this class where do i find
+this interface method there's of course
+others there's now invoke dynamic I'm
+not going to get into that today when a
+client calls a method the first day it
+needs to do is decide whether it's
+calling an interface or a class method
+and using VOC virtual or invoke
+interface appropriately it also needs to
+say precisely which method gets called
+and it does this by specifying the
+signature of the method it's calling
+very precisely so that's not just the
+name it's not just the parameter types
+it's also the return value and that's
+very important and it's important
+because type conversions are not applied
+at runtime when looking up a method
+source compatibility job is doing type
+conversions for you all the time
+I'm if you've got a job its sequel date
+and you pass it to a method taking
+java.util.date jbm the java compiler
+says oh ok you probably mean the one
+taking the job of you till date I'll
+just call that method it knows what's
+going on likewise with return types it
+can do casting as necessary and so forth
+everything's great but at runtime none
+of that happens your signatures need to
+match exactly so just to make this clear
+let's look at some Java code and then
+we'll see what the bytecode looks like
+so pretty simple code here I start off
+by creating an arraylist and assigning
+it to a variable of type array list I
+then create a second variable list and I
+assign the array list to the list
+variable but the list variable is simply
+of type job util list as opposed to
+java.util.arraylist so the list variable
+is of interface type the ArrayList
+variable is of class type and now I call
+some methods I might call ad on the
+arraylist and I call size on the list
+variable the byte code for each is a
+little bit different for ArrayList add
+the first thing that we see is well
+after we load in the string that we need
+to add we call invoke virtual on the add
+method because it's a class and if you
+look carefully you'll see the invoke
+virtual is very precisely declaring the
+parameter type to be object I mean it's
+an ArrayList of strain but we have a
+ratio so it's still going to be object
+and it declares the return type z is the
+Java bytecode shorthand for boolean
+remember a rate a lista add all those
+returns true / the collection spec by
+contrast list dot size is going to call
+invoke interface and here it's saying
+this is the size method on list it takes
+no arguments but returns an integer if
+someone were to change list dot size to
+return along or even a short which is a
+subtype of integer all existing clients
+would break because they're still
+calling the old method that takes that
+returns an integer and they in the JVM
+simply isn't going to see the new method
+so with that in hand now that we
+understand what binary compatibility is
+let's see what happens as we do
+different things
+oh I should mention one thing excuse me
+before going forward which is no sorry
+ad never mind I'm good so adding methods
+this is the simplest thing generally
+this is not a problem if you add a
+method to a class well old clients
+weren't calling the method so you're
+fine the only thing you need to be
+careful about here is if your class
+might be extended by subclasses and
+those subclasses we're already defining
+a method of that name and signature if
+that method doesn't have the same
+semantic compatible semantic meaning is
+your new method then you're probably
+going to break people at runtime not for
+binary compatibility reasons but
+semantic compatibility reasons the
+classic example is you have a gunslinger
+interface someone's extended it with a
+artistic gunslinger and on that class
+they have written a draw method for
+drawing some art and then someone adds
+the draw method to the gunslinger class
+you suddenly have a very unpleasant
+situation unfolding at the Museum but
+other than that generally going to mount
+not going to be a problem to add methods
+to an interface is a little bit trickier
+it's fine to add a method to an
+interface if clients are not
+implementing your interface if you have
+clients implementing your interface well
+then it gets a little bit trickier it
+turns out you're still fine as long as
+nobody would ever call the new method on
+an instance of the interface implemented
+by a class which hasn't gotten around to
+implementing it yet the reason is that
+when the JVM does class linking and you
+say i am a i'm a list and i implement
+these methods it doesn't actually check
+to see that you implement every method
+that's just that's specified on the
+java.util.list interface it just trusts
+you it only actually checks when
+somebody calls a new method now for list
+this is this is maybe not a good example
+but a great example is just about any
+interface in java x sequel and the
+reason is these interfaces over time
+have had lots of methods added to them
+and they can get away with this even
+though not every vendor is going to be
+update updating their driver right away
+they can still get away with this
+because as long as you can be using an
+old driver as long as you don't call any
+of the new methods you're going to be
+fine so that's something it's a little
+bit tricky you need to think about it
+carefully when you're when you're adding
+implement methods to interfaces one
+really interesting example of this is
+the Eclipse project if you look at their
+interfaces they often say this interface
+is not meant to be implemented by
+clients which is their way of saying
+look we may add methods to this and
+we're not going to give you advanced
+warning to add them to your clients so
+just use our implementations don't
+create your own removing methods well
+this is trickier obviously if if no
+clients are calling the method you're
+fine if the only one calling the method
+is you and you update your internal code
+to no longer call it you're going to be
+fine but of course if you have clients
+out there still calling the methods
+that's not going to be so good so the
+best practice is to start by deprecating
+the method release code with the
+deprecated version try to leave the
+deprecated version around for as long as
+you can if you plan on removing at a
+certain point say when you're going to
+remove it you know this will be kept
+until April of 2015 and then you're
+going to say that you can safely remove
+it after that point conversely if you're
+writing clients this means you really do
+want to pay attention to those
+deprecation warnings they're there for a
+reason unless of course they're in the
+java programming the standard Java
+libraries because I've never seen a
+deprecated method removed from from Java
+I think thread dot stop is still around
+one thing to note here is that if you
+change the method signature you have
+effectively removed the method in terms
+of binary compatibility so that leads us
+to the next question which is well what
+if I do want to change the method
+signature well there's two cases here
+the first is that I just want to change
+my parameter types maybe before I said I
+was receiving an arraylist and now I
+want to accept any kind of list well the
+good news is that Java lets us override
+method
+excuse me overload methods on parameter
+types I can keep my old method that took
+an ArrayList in create the new method of
+the same name that takes in a list the
+old method can now simply call the new
+method so I'm guaranteed that they'll
+have the same behavior and I can
+deprecated the old method eventually
+people will hopefully just start calling
+the new method and stop referring
+directly to the old method that's fine
+and good return types are trickier let's
+say that before I was returning a list
+but I realize you know I'm actually
+always returning an ArrayList so why
+can't I just declare my method to return
+array list so if someone wants to do
+something special with array list they
+can do it well this is where it gets
+tricky because the J the Java language
+does not allow us to overload on return
+types and there's good reason for that
+if I have two methods both names foo one
+returns list one returns arraylist and I
+try to call foo the compiler is not
+really going to know which one I want to
+call there's there's no clear way to
+figure that out but it turns out that
+while the Java language is pretty
+restrictive about this the JDM is more
+forgiving it allows overloaded return
+types and the reason it allows this is
+because from the JVMs point of view it's
+calling a very precise signature so
+there's no ambiguity and the interesting
+thing is that in fact the Java compiler
+will do this for us in some cases it
+will create two methods with the same
+parameter type same name but different
+return types and it can happen when we
+subclass so let's say that I had a slide
+transitions are a little off but nor the
+stuff on the bottom for a moment it
+hasn't peered yet let's say that I have
+a self caused exception type which
+extends exception and I'm thinking
+basically the reason itself caused is
+because when i call the gate cause
+method I'm going to return myself I'm
+doing this maybe because I like to see
+infinite loops in code that doesn't
+handle stack traces very well well I
+know that I'm returning myself so while
+get cause on throwable is declared to
+return throwable I can be more precise
+I can say that in this case I know the
+cause is going to be of type self caused
+well the first thing that Java does says
+the compiler says okay well I've got a
+self cause method returning self cause
+and that simply returns it loads a
+reference to myself and returns it but
+and now you can pretend the bottom part
+is shown up it also creates a second
+version of get cause with the original
+signature of throwable and this one
+simply delegates to the new self cause
+method that we've defined it also marks
+in the bike code this version as a
+synthetic method not one that was typed
+out on a keyboard in Java but one that
+the compiler introduced for you the
+synthetic is useful because for one
+thing it allows the compiler to know
+which version of self caused to call it
+shouldn't call the synthetic method if
+it can call the direct method so you
+look at that and you think well gosh a
+JDM can handle this the Java compiler
+will do this for me why can't I do this
+myself and the answer is you can't but
+costilla can so Kousaka kawaguchi he
+created hudson that was later renamed to
+Jenkins so you've probably heard of him
+or at least his work he has this lovely
+habit of doing what he calls projects of
+the day her project of the day he'll be
+working on something he'll run into a
+problem with ink oh I know how to fix
+this but you know it's probably not the
+only time someone's going to run into
+this so while I'm at it and I'll spend a
+few hours write this up documented open
+source if release it okay blog about it
+move on next day and one day he wrote
+something called bridge method injector
+and what bridge method injector does is
+use a combination of annotation
+processing and then a post a Natasha
+post annotation processing maven plugin
+to allow you to do overloading on return
+type so let's see how this works let's
+say I had a class in version 10 it had a
+get food and get bar method foo get free
+return foo get our returns bar very
+exciting stuff no doubt in version 11 I
+decide I want to specialize the return
+type of get food to food child boo child
+naturally being a child class of foo
+well if I just do that with
+anything more I'm going to break
+backwards compatibility at the binary
+level because I've changed my signature
+type so what I do is I add a at with
+Britt with bridge methods annotation and
+I specify a value of food class and what
+the bridge method injector plugin will
+do in maven after this annotations been
+processed is it will say oh I need to
+add a synthetic method to this class
+that still returns foo I have binary
+compatibility in fact you can do this
+more generally you can even do it when
+you're not returning what is a subtype
+of the original return type and in this
+case it excuse me in this case it simply
+adds a check cashed parameter to you had
+a check cashed parameter for your
+annotation and then it will insert a
+check cashed instruction to do the
+classic ask for you obviously if you're
+doing it in this situation you need to
+make sure that any clients that we're
+calling the old get bar method any
+situation they would call it would
+actually return something of type bar
+and not something of say type bar parent
+but there are use cases there's somewhat
+rare they tend to show up in frameworks
+where this can actually happen so bridge
+method injector is a great tool I highly
+recommend it if you're doing
+unfortunately it's only got a maven
+plugin at the moment I'm not aware of a
+aunt or Gradle or IV plugin although it
+wouldn't be hard to create one another
+issue with binary compatibility is class
+hierarchy so some things are better than
+others here you can add to the list of
+interfaces that you implement and that's
+fine you're not going to cause any
+compatibilities you can change the
+superclass of your class and and that'll
+be okay as long as well in some sense as
+long as the obvious problems aren't
+going to show up you want to make sure
+that you don't have any clients which
+were referencing a superclass which is
+no longer in your hierarchy and
+expecting you to be of that type you
+also want to make sure that they weren't
+calling any methods that were defined on
+the super class and not overridden in
+some cases you can add a method that you
+removed from the superclass to the child
+class and that will work but if you had
+code that was compiled to call that
+method against your class but was
+treating your class as a member of the
+super
+class which no longer contains that
+method then you're going to run into
+trouble it's a little bit complicated
+but the upshot is you want to be careful
+when you're moving methods around when
+in doubt try to leave the old method
+there for as long as possible to allow
+for binary compatibility you can remove
+interfaces just like classes again
+subject to clients actually referring to
+the interfaces of the methods on them
+trickier is switching from class to
+interface so remember the JVM there were
+two methods for invoking to bytecode
+instructions for invoking methods there
+was invoke virtual and invoke interface
+what that means is that you pretty much
+can't get away with changing a class to
+an interface or vice versa because if it
+was an interface before the compiler was
+going to generate class it was going to
+generate byte codes calling invoke
+interface and those won't work if
+everything's changed to concrete class
+methods vice versa as well so the rule
+of thumb is don't do this if you want
+backwards compatibility if you need to
+say to convert from an interface to an
+abstract class create a new abstract
+class which implements your interface
+but leave the interface around so again
+as before this is all well and good we
+can pay attention to this but we're
+going to make mistakes so how do we
+detect incompatible changes well one
+thing we can do is we can write tests
+but the thing to remember here is that
+we need to be careful because normally
+unit tests are simply going to catch
+source compatibility if you really want
+to be careful what you need to do is you
+need to compile your tests and then save
+those as an artifact in your source
+country in your artifact repository
+again Nexus artifactory that sort of
+thing and then pull them back in and see
+if the old code runs compiled against
+here when linked against your new
+libraries incidentally this is also
+useful strategy far beyond Java
+backwards compatibility it's an
+excellent strategy to use for web
+services have a web service client that
+you've checked in again that runs
+against an old version of your web
+service you if you upgrade your web
+service still run the old client test
+against your new Webster
+make sure everything works out but in
+addition to the the compatibility test
+method there's another method in this
+case which works really well which is to
+use clerk or clear or I have no idea how
+this project is pronounced it's an open
+source project it's hosted its source
+for it's been around for quite a while
+and what it does is you give it two jars
+or a jar and a clasp at I think we can
+take a jar and a directory of classes
+and you say what's changed you tell the
+old version the new version and it will
+tell you about any changes and in
+particular it's going to highlight
+changes that are backwards incompatible
+it's got I think an info and a warrant
+and an error level and you can configure
+it a little bit as to which sorts of
+things you care about and don't care
+about this is an excellent tool there
+are plugins available for aunt for maven
+and recently for Gradle I highly
+recommend if you are developing a
+library for public consumption that you
+include this in the sorts of things that
+you generate in your sonar reports or
+your maven reports or what have you and
+that in particular not just that you
+generate it but that when you're getting
+ready to do a new release you'll look at
+it look down every change and it's
+actually useful for two reasons one is
+you can look through every change and
+make sure okay is that going to break
+anything is okay i think i'm good i
+haven't broken any one and oh i
+introduced this method i totally forgot
+to put that in my change notes i think i
+should add that so it's good for that
+too now of course it doesn't tell you
+anything about what's going on inside
+the methods so you might change the
+behavior of your method in a backwards
+incompatible fashion it's not going to
+tell you about that but at least in
+terms of making sure signatures and so
+forth match up its great it'll tell you
+oh you've added a method to an interface
+this could be a problem for clients all
+this good sort of stuff finally what do
+you do if you have to break
+compatibility well first answer is
+simple don't do it it's just rude you're
+making life unpleasant for every single
+one of your clients you don't want to be
+that person okay well now you don't
+understand I really I kind of really
+need to upgrade it well again I'm going
+to have to ask really think carefully
+talk with your friends think about
+whether there are ways around this
+because almost always there are in fact
+it's very rare I've seen
+situation where an upgrade couldn't be
+done in a backwards incompatible fashion
+in fact I'm not sure I've ever seen one
+that said if you still decide you're
+going to do it at the very least change
+your major version number there's a
+lovely project out there semantic
+versioning located at sim gorg that
+talks about what version numbers should
+be like because you know there's there's
+the standard major dot minor dot sub
+minor or whatever you know for 13 and it
+and then actually created a standard for
+what these version numbers should mean
+and the idea is that you should never go
+from four dot one to four dot two if
+you're making backwards incompatible
+changes you can add new features as long
+as this backwards incompatible but if
+you're making backwards incompatible
+changes you should go from 40 or 41 to
+50 this is useful not just as a general
+sort of it gives people a heads up that
+something might be up but it also if you
+follow this practice it allows people
+using varnish version management tools
+like maven to say things like I can
+accept any version of the food project
+in the 4x series because I'm trusting
+them as long as they're in for dot X to
+be backwards compatible if they go to
+five decks I don't know so I don't want
+to let you automatically upgrade me past
+four decks 25 done X another thing to
+think about is if you're going to make
+backwards incompatible changes and
+you've got a wide client base consider
+changing your project name or even
+better and more importantly change the
+packages in your project I've seen
+examples of situations where a client
+wanted to use a couple different
+libraries that had been compiled against
+different versions of a library that was
+no longer backwards compatible and its
+really unpleasant and for example
+restlet they upgraded from 10 to 20 and
+when they upgraded they didn't do it in
+a backwards compatible fashion well at
+the time the company I was with we had
+clients that had compiled against
+restlet 10 and now we wanted to start
+using wrestler 20 we could
+because we were going to have some
+clients that were still compiled against
+the old blonde ex series and other
+clients that might need to run in the
+same jvm that would be trying to run
+against the two x series and they
+couldn't do it in fact the only solution
+that we could come up with was to
+abandon that project for a different one
+because effectively we needed new
+package names restlet wasn't doing it
+for us so we switched to i think it was
+jersey if you're going to make backwards
+incompatible changes anyway you know
+people are going to mean to need to
+change their code so why not change your
+package names it's worth noting that if
+you're on the client side and you're
+stuck with someone who's done this to
+you they've changed their methods and
+backwards incompatible fashion but they
+didn't change their packaging you can
+use a tool called Jar Jar links what
+this basically does is you say look I
+want to use this package over here or
+this this library over here but it's
+going to conflict with some other
+libraries so I want you to change every
+package in this library to some other
+package structure that I tell you and
+then I also want you to rewrite all of
+my client code to call appropriately the
+new package names and it'll do that for
+you and it works but it's it's kind of a
+hassle for the clients and you don't
+want to rely on this as a library
+maintainer you if you find yourself
+saying oh don't worry about it just use
+Jar Jar links if you need to use both
+versions you're doing it wrong and if
+anyone's wondering who I'm talking about
+i know i shouldn't say this it's rude
+but the ASM project for years did this
+they have finally gotten to the point
+now where they're using the visitor
+pattern in a way that allows them to
+make upgrades in a fashion it doesn't
+require you to do package renaming on it
+which is great because it means we no
+longer have to have 20 versions of ASM
+in our distributable because we have
+different people calling different
+versions than one for hibernate one for
+this one for that all right that covers
+what I've talked about we're almost out
+of time but are there any questions yes
+do I reflection patently which so the
+question is if I encountered a lot of
+JDM thrashing due to serialization ought
+not to my knowledge it's not something
+I've looked at have you seen that yeah I
+don't know actually we've got Joe Darcy
+in the back he might know if it's
+handled efficiently enough to avoid that
+so Joe if I heard you correctly you're
+saying that under the covers it's not
+actually using serialization like we
+would use it it's it's using more of the
+guts to to do it efficiently so it is
+using reflection but it's reliable
+enough thanks Joe good question ah any
+other questions but before that I just
+want to remind everyone please fill out
+the session surveys because I'm sure I
+did a lousy job but I'd like to know how
+to be better any other questions yes yes
+right so the question is does it so you
+were talking about the anonymous block
+and you're saying you speculate you're
+suggesting that there's probably no
+reason for that anonymous block to run
+again because it's copying the state so
+why would you need to run the anonymous
+like that's a very good point it
+probably does not run it I would also
+assume it doesn't run it because it's
+really in some sense the anonymous block
+as part of the constructor and so well
+in fact suppose that your anonymous
+block sets a variable to a value which
+later can be changed if you ran the
+anonymous block after deserializing that
+would break things so if we assume that
+Java did it right we have to assume the
+anonymous block doesn't get run I think
+is fairly safe thing to say and yes Joe
+excellent so what Joe is saying is that
+basically the inline constructors are
+actually just put the inline blocks are
+put into your constructor code either
+put into each instructor or called out
+from the Constructors so if you don't
+call the Constructors you don't call the
+end line flux it's always good having
+Joe in the audience because then I don't
+have to know many things any others well
+thank you I hope you enjoy the rest of
+online</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

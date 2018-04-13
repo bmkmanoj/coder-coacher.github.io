@@ -1,0 +1,915 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Kenny Yu “End-to-end Deadlock Debugging Tools at Facebook” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Kenny Yu “End-to-end Deadlock Debugging Tools at Facebook” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Kenny Yu “End-to-end Deadlock Debugging Tools at Facebook”</b></h2><h5 class="post__date">2017-10-28</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/Pz4ILxtPKMs" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">Hi, I'm Kenny.
+I'm a software engineer on Facebook.
+And today I'm gonna talk about deadlocks.
+So before I start, I
+want to tell you a story.
+So several years ago now,
+I had just joined Facebook,
+excited to work on large
+distributed systems.
+I was doing my first production release
+and then I had just pushed
+a subset of production.
+So almost immediately we got reports
+that requests to our service were failing.
+But our monitoring,
+all our health checks said our
+service is alive and running.
+So what's going on?
+We core dumped the process and
+started debugging for a bit.
+And we soon realized we
+had a textbook deadlock.
+Two threads, two mutexes
+waiting on a cycle.
+We fixed that issue and
+then started another push.
+Another deadlock.
+And we fixed that one too,
+and started another release.
+Another deadlock.
+So eventually we fixed
+all the known deadlocks
+and finished a release.
+So that's three deadlocks,
+my first production release.
+Welcome to C++.
+So this experience traumatized me so much
+that since then,
+I pledged myself to fight the
+good fight against deadlocks.
+And I have this little hulk on
+my desk to remind me of this.
+So me, being naive,
+I thought how is this even an issue?
+I thought deadlocks were a solved problem.
+You put an order on the locks,
+acquire them in that order, done.
+I soon realized it
+wasn't as simple as that.
+There must be some tools we can use
+to make deadlocks a non issue.
+And this is what this talk is about.
+So in this talk,
+I'll explain why deadlocks are
+hard to debug at our scale.
+And then I'll explain
+what I mean by end-to-end,
+and how our tools fit into this picture.
+And then I'll also do a deep
+dive in each of these tools.
+In order to understand why
+deadlocks are difficult to debug,
+I need to provide some
+context on how we use C++
+at Facebook.
+So just a note about memes.
+Originally my presentation
+had lots of actual memes.
+But our legal team told me
+I had to remove all of them,
+couldn't keep a single one.
+And their reason for this is because
+we don't own the rights to
+the original source images.
+Okay.
+But all original content is okay.
+So I improvised and
+came up with a solution
+to my legal problem.
+I drew my own memes.
+(audience laughing)
+So you know, any resemblance, coincidence.
+So back to C++ at Facebook.
+Almost all of our C++ is contained inside
+a single monolithic repo.
+It's a very large code base, very complex.
+If you work on C++ at Facebook,
+you are probably responsible
+for a back end service.
+Things like messaging and ads.
+So how do deadlocks relate to all of this?
+So as in my story from before,
+deadlocks are especially worrisome
+because the service may appear alive,
+but it's failing requests.
+Some threads could be deadlocked
+while some other threads
+still make progress.
+Detecting deadlocks can
+also be very difficult
+because reproducing the exact environment,
+the exact request,
+and the timing,
+can be very difficult.
+And so it can be very hard to reproduce
+in a test environment.
+It is also very easy to
+introduce deadlocks accidentally
+during development.
+So recall in order to have a deadlock,
+you need a cycle in the waits-for graph.
+We typically avoid deadlocks
+by assigning an order
+to the mutexes and acquiring
+them in that order.
+But this knowledge is typically encoded
+at most in comments in
+source code, if at all.
+There is no tooling to
+actually enforce this logic.
+And then lastly,
+the threads and mutexes
+involved in a deadlock
+might be split across multiple files,
+projects,
+and multiple levels of indirection
+through inheritance or callbacks.
+So it can be very difficult for a human
+to make sense of all of this.
+So hopefully I've convinced you
+that debugging deadlocks is difficult.
+What can we do?
+And for the rest of this talk
+I'm going to address this problem.
+What tools can we use to make detecting,
+debugging,
+and preventing deadlocks easier?
+In order to understand our approach,
+I will explain to you what I mean
+by end-to-end at Facebook.
+First there's an observation.
+At Facebook, service
+developers are responsible
+for all phases of a service life cycle.
+The typical life of a
+service is as follows.
+Engineers will develop
+and test new features,
+and then lanyard changes up stream.
+Then it's time to release the service.
+And you cut a release candidate
+and you push the service to production
+typically in phases.
+Once your changes have been rolled out
+to all of production,
+you want to monitor your service
+to make sure there's nothing
+wrong with your service.
+When we think of monitoring,
+we typically think of CPU memory,
+and other service specific counters.
+Inevitably, your service will crash
+or experience some anomalous behavior.
+And then engineers will
+need to debug this,
+fix the bug,
+and then the cycle repeats.
+To make deadlocks easier to debug,
+our approach is to
+develop end-to-end tooling
+to help engineers detect
+deadlocks in all of these phases.
+By applying these tools end-to-end,
+engineers will have higher
+confidence in deadlock free code.
+And note the tools I'm about to show you
+are all open source.
+And I'll reference this at
+the end for you to go to them.
+So let's start talking about these tools.
+First I'll tackle the problem,
+how can we prevent a deadlock
+during development and testing?
+If we can prevent deadlocks here,
+then we're done.
+This is the best possible place.
+There's no impact to production.
+First an observation.
+Most of the deadlocks I
+have observed in production
+are typically caused by over locking.
+Here's what I mean by over locking.
+Originally you start a new project,
+your class is super simple,
+you have a single mutex called mutex
+and a few data members.
+Over time, engineers add
+more stuff to this class.
+Business needs change,
+teams change,
+the class grows in complexity.
+Eventually, no one really knows
+what the mutex is supposed to protect.
+So just to be safe,
+to avoid data-races,
+we always hold the mutex.
+Critical sections start blowing up,
+eventually from a critical section,
+we call some other function
+that requires some other resource,
+and end this result in a deadlock.
+If we can avoid this over locking problem,
+we can reduce the risk of deadlocks.
+And our approach here is
+to use folly::Synchronized.
+Folly is Facebook's
+open source C++ library
+and synchronizes one of the
+components inside this library.
+Synchronize encapsulates a
+mutex with the data it protects.
+So it's impossible to access the data
+without acquiring the mutex first.
+Note that synchronize
+is just syntactic sugar.
+Whatever you already do with
+mutexes or shared mutexes,
+this does not add any new overhead.
+So here's an example.
+The red lines here are
+the critical sections.
+Say you're implementing a class
+that kept track of a counter.
+So think atomic counter.
+But also you want to
+keep track of the history
+of the deltas that brought
+the counter to that state.
+So simplest way you might
+implement this class
+is to have a single mutex,
+maybe a shared mutex
+integer representing the count,
+and a vector of integers
+representing the deltas.
+Okay, so what if a new
+engineer comes along
+and adds a new data member here?
+Should we hold the mutex
+when touching that field?
+Should we not hold the mutex?
+There's nothing actually in...
+The programmers original
+intent is that the mutex
+should always be acquired when mutating
+or reading counter in deltas.
+But there's nothing actually
+enforcing that intent.
+And then when you add a
+new member to the class,
+no one really knows anymore.
+What if we call our function here?
+It is very easy to
+forget to close the scope
+of the unique lock.
+And now we unintentionally hold the mutex
+while calling another function.
+Now let's rewrite this class
+with folly::Synchronized.
+The code looks almost exactly the same,
+except the red code is now green
+and inside of a lambda.
+Synchronized allows us to
+encode the programmers intent
+into the type.
+The synchronized declaration
+state underscore means,
+if I am state underscore,
+I protect capital S state,
+and all of its guts.
+And you can optionally pass
+me a second parameter type
+and I'll use that mutex
+type to protect it.
+And the only way for you
+to access capital S state
+is to go through me first.
+And I'm gonna make sure
+you hold that mutex
+when you read or write the data.
+Now, there's no way for you
+to access the data otherwise,
+except to go through the
+synchronized data structure.
+So now if a new engineer
+comes along and they see this,
+they're gonna think twice.
+Should I add my new data member
+to capital S state or not?
+Does it require synchronization or not?
+And same with a new function call.
+They're gonna think twice.
+Should I add it inside that lambda or not?
+Does it require synchronization or not?
+Okay, so using synchronized
+is one approach
+to reduce the over locking problem.
+Our next approach for development testing
+is to run all our tests with
+ThreadSanitizer, or TSAN.
+TSAN is part of the
+larger sanitizer suite,
+open sourced by Google.
+The sanitizer suite adds
+compiler time instrumentation
+to your binaries
+to find bugs at runtime.
+For the case of TSAN,
+it instruments all memory
+accesses and mutex calls.
+And it can find data-races,
+lock inversions,
+and other types of
+synchronization bugs at runtime.
+The important thing to note with TSAN
+is that it's a dynamic analysis tool.
+So the higher the code coverage,
+the more useful TSAN will be.
+And we'll come back to this fact later.
+So every time an engineer at Facebook
+sends a change for review,
+our continuous integration system
+will build and run all affected tests
+and all different build modes,
+including sanitizers.
+So I happen to work on a
+project called Tupperware.
+And each of these lines
+represent different build modes
+of my project.
+And all tests have passed in
+those different build modes.
+And the one in red is
+TSAN, or ThreatSanitizer.
+Engineers will wait for all
+the builds and tests to land
+before adding their changes.
+And this will help prevent
+new regressions in trunk.
+So now it's time to release
+our service to production.
+Perhaps our test coverage
+wasn't comprehensive enough
+for TSAN to have value.
+And it was too difficult
+to refactor our code
+to using a new synchronization library.
+What can we do now?
+How can we detect deadlocks
+before we release it to all of production?
+So recall from a few slides ago,
+the higher the code coverage,
+the more useful TSAN will be.
+Tests only exercise a limited
+set of production code paths.
+If we could exercise more
+production code paths,
+TSAN would help us find more bugs,
+including lock inversions.
+So, why don't we actually run
+release candidates with TSAN?
+So to do this we build
+our release candidates
+with ThreatSanitizer
+and then push to a subset of production.
+The goal here is to exercise
+real production code paths.
+And then we either send a
+subset of production traffic
+or shadow traffic.
+And I'll explain what
+that means in a moment.
+We then monitor these TSAN
+replicas of our builds,
+and if things look good,
+there are no crashes, no deadlocks,
+we can proceed with a wider rollout
+of the normal optimize production build.
+So here's how this works.
+For most services,
+there's typically some load
+balancer to spread traffic
+across the multiple
+replicas of my service.
+We push TSAN builds out
+to a few of those replicas
+and then we either send a subset
+of real production traffic
+or shadow traffic.
+And for shadow traffic,
+we record and replay
+old production requests,
+resend them to the TSAN replicas,
+and then ignore the responses.
+The only goal of this,
+the only purpose of this
+is to get the TSAN replicas
+to execute the code they
+would otherwise be running
+had they been running a
+normal production binary.
+We've used this technique on
+several services at Facebook
+and found real deadlocks in production.
+So for this particular deadlock,
+we had a deadlock with six mutexes.
+And there's no way a human
+could have found this by hand.
+It was split across so many
+different files and directions,
+callbacks, inheritance.
+And there's no way our
+testing could have caught this
+because in order to trigger this code,
+it relied on production data.
+Okay, so now we've released
+our service to production.
+Perhaps it was too difficult
+to set up TSAN builds
+with production traffic or shadow traffic.
+Or we're still paranoid
+we might have deadlocks.
+How can we monitor for deadlocks
+in a running production service?
+Can we come up with a tool for this?
+We have the additional
+constraints here that
+if we do have a tool for this,
+we don't want to have to
+restart our service to use it.
+We don't want to cause
+additional downtime.
+We also don't want to have
+to recompile our binary
+in a special way.
+Because, we're typically running
+normal production builds.
+We want our tool to work on
+normal production builds.
+Our approach here is to use Linux BPF.
+I'll explain what Linux
+BPF is in a few moments.
+We built a deadlock detector
+tool using Linux BPF,
+and it will find lock inversions
+on Pthread mutexes and anything
+that uses that underneath.
+So, standard mutex.
+This tool runs alongside the binary.
+And you can turn the tool on and off.
+It does not require a process restart
+of the process you're chasing.
+And you don't need to
+recompile your binary
+in a special way to use the tool.
+So, the way we used the tool is,
+periodically we run the tool
+on a subset of production machines.
+So let's say every 15 minutes or so.
+And if it find a deadlock, we log it.
+Otherwise, all is good.
+So let me show you an example
+of the tool in action.
+Here's a small program on the left.
+There's three mutexes,
+three threads.
+Each thread acquires two mutexes,
+and collectively, they acquire the mutexes
+in a cyclical order.
+Note that deadlock is not
+possible in this program
+because each thread is joined
+before the next one begins.
+But had we moved the join calls
+to the bottom of the function,
+then deadlock would be possible.
+But in this case we still want to know
+that there's a lock
+inversion in this program.
+Now imagine that we have a
+running production service.
+It's calling this code.
+How can we find a potential deadlock?
+Our tool, if you pass it a process ID,
+will find this lock inversion.
+If, while the tool is running,
+the service hits this code,
+the tool is gonna output
+this on the right.
+It's gonna output the
+mutexes and the threads
+involved with the lock inversion,
+as well as where each mutex was acquired
+by which thread.
+And the output here is
+very similar to TSAN.
+So how does it work?
+To understand how the tool works,
+I need to explain to you
+briefly about how BPF works.
+BPF, or eBPF,
+stands for Extended
+Berkeley Packet Filter.
+Originally, BPF was developed
+for finer grained control over networking,
+like controlling packets.
+But now it's become a full fledged
+virtual machine like thing
+inside the Linux kernel.
+The user can provide
+arbitrary code to execute
+at various hooks inside the kernel
+in a safe and efficient manner.
+So these hooks include
+any kernel space symbol,
+any user space symbol,
+like Pthread mutex lock,
+and other types of trace points.
+And within our custom code,
+we can compute calculations,
+then export these data
+structures back to user space.
+So let's see how all this fits together.
+The green box is the traced process
+that we would like to find deadlocks in.
+It's running on top of the Linux kernel.
+And inside the Linux kernel
+there is the BPF virtual machine.
+Our tool will register hooks
+inside of the BPF virtual machine
+so that whenever our trace process hits
+Pthread mutex lock or unlock,
+it's going to trap into the kernel.
+Since we registered our custom code,
+now our custom code's gonna execute,
+compute some calculations,
+which I'll go over in a few moments,
+and then export these
+shared data structures
+back to user space.
+Our tool will then use these calculations
+to build the waits-for graph.
+And if there's a cycle in that graph,
+it indicates a lock inversion
+in the green process,
+in the trace process.
+So what happens in our custom hooks
+for Pthread mutex lock and unlock?
+I'll explain it by
+stepping through a program.
+So first, the data
+structures on the right,
+these are the data
+structures we're exporting
+from the kernel to user space.
+For each thread,
+we maintain a list of mutexes
+currently locked by that thread.
+And then we also maintain
+a separate list of edges
+which I'll explain in a moment.
+So, thread one acquires mutex one.
+We add it to our list.
+Then while holding mutex one,
+thread one acquires mutex two.
+As a result, we add the edge
+m1 to m2 into our graph.
+And this graph nodes our mutexes
+and an edge from A to B
+indicates that there is some thread where
+while mutex A was locked,
+we try to acquire mutex B.
+So in this case, we're sort
+of holding A waiting on B.
+Now thread one unlocks all
+its mutexes and we proceed.
+So some of you might be wondering
+why don't we delete edges?
+The trick to preventing deadlocks
+relies on consistent lock ordering.
+More edges might be added in the future
+and by keeping around the edges,
+we can detect any
+inconsistent lock ordering
+now or in the future.
+So that's why we don't delete edges.
+Now, the same thing
+happens for thread two.
+It acquires mutex two,
+and while holding mutex
+two, we acquire mutex three.
+So we add that edge.
+And now it drops all its mutexes,
+and now thread three acquires mutex three.
+And while holding mutex three,
+it acquires mutex one.
+So now we have a cycle in our graph.
+And a cycle in this graph
+indicates a lock inversion
+or potential deadlock
+in my running process.
+Now suppose we added,
+we did all our due diligence
+from all the previous phases.
+We re-wrote our library,
+or are using TSAN,
+we're using monitoring,
+but we still get a crash.
+We still get a hung process
+or we get a core dump
+from a deadlocked process.
+So how can we detect
+deadlocks in our service
+after it's already deadlocked or crashed?
+Our approach here is
+to use a gdb extension
+to analyze mutex internals.
+So we chose to use a gdb extension
+because that's already
+what engineers at Facebook
+are using whenever they debug
+a process or a core dump.
+So by adding a new command,
+this can help engineers be more efficient.
+Our gdb extension introduces
+a new deadlock command.
+And when you run that command,
+if there is a deadlock in your process,
+then it will output all
+the threads and mutexes
+involved in the deadlock.
+Here's some example output.
+Here we have a running process
+that's been deadlocked,
+we attach gdb to it,
+and gdb has loaded our extension.
+We type deadlock,
+and now we get all the threads and mutexes
+involved in the deadlock.
+And the picture on the
+right visualizes this
+waits-for information.
+In this case,
+unlike the BPF tool,
+the nodes here represent threads,
+whereas for the BPF tool,
+the nodes represented mutexes.
+So in this graph, nodes are threads,
+and an edge from A to B
+indicates that thread A
+is currently waiting on
+a mutex held by thread B.
+So how does the gdb extension work?
+First, our tool will find all the threads
+that are currently stuck
+in Pthread mutex lock.
+Then for each of those stuck threads,
+we examine the internals of
+the mutex we're waiting on.
+And the NPTL or Native
+POSIX Thread Library,
+implementation of Pthread mutex,
+the mutex keeps track of the thread id
+that currently owns the mutex.
+So by using this owner information,
+we can find a thread
+that we are blocked on.
+So in this case,
+thread three is waiting
+on a mutex currently held
+by thread four.
+So we construct this edge.
+And then we do this for all the threads,
+blocked threads in our program.
+And a cycle in this graph
+indicates a deadlock in the process.
+Now let's recap.
+I just walked you through
+multiple debugging tools at Facebook
+and how we use it in each of the phases
+of the service life cycle.
+Here's how they all fit together.
+For catching deadlocks during development,
+we can use folly::Synchronized
+and run our tests with ThreatSanitizer.
+ThreatSanitizer is more useful
+as it executes more code.
+So we run a TSAN.
+We run our binaries with TSAN
+on a subset of production.
+Once we release our service
+to all of production,
+we can still monitor for the presence
+or potential deadlocks using our BPF tool.
+And then when our service
+has actually crashed,
+we can quickly find a deadlock
+using our gdb extension.
+The result of this work is that
+for many services at Facebook,
+our tools have helped us
+catch many existing deadlocks
+in production.
+And have helped prevent new
+deadlocks from being introduced.
+So, you might be wondering
+what are the pros
+and cons of each tool.
+There are multiple dimensions to consider.
+So the first is do we need to rewrite
+our source code to use it?
+folly::Synchronized is
+the only library here.
+And that's the only one
+that you would actually need
+to change your source code to use.
+Do I need to recompile my
+service to use the tool?
+So, folly::Synchronized is a library.
+So yes, you do.
+TSAN, you don't need to
+change your source code,
+but you do need to recompile
+your binary in a special way
+to use it.
+The other two tools do not.
+Can I use a tool on a dead process?
+So by here, a dead process,
+I mean a core dump.
+So the other tools required...
+The other tools, except for gdb,
+require the process to actually be alive.
+But for gdb,
+if you pass it a core dump,
+it can still find a deadlock there.
+So what's the overhead?
+So there's no overhead
+for folly::Synchronized
+and our gdb extension,
+if you're already using mutexes.
+There is a big overhead using TSAN
+in terms of memory and CPU.
+There is also even bigger
+overhead using our BPF tool.
+But the nice thing is,
+there's no overhead if
+our tool is not running.
+So it's a trade off.
+What types of mutexes
+do our tools work for?
+So for folly::Synchronized,
+anything that implements
+the normal lockable
+and shared lockable traits will work.
+You can pass it as a
+second template parameter.
+For ThreatSanitizer,
+all the normal mutexes will work,
+and you can also instrument
+your own custom mutexes.
+And the last tool, our
+BPF and our gdb tool,
+will only work for Pthread mutexes
+and things used underneath,
+like standard mutex.
+And then finally,
+what kinds of bugs can it catch?
+folly::Synchronized is
+meant to prevent deadlocks,
+it's meant to prevent data-races,
+but its API encourages
+smaller critical sections
+thereby reducing risk of deadlocks.
+TSAN can find many types
+of synchronization bugs.
+You get the most bang for your buck there.
+Our BPF tool can detect lock inversions,
+or potential deadlocks
+in our running process.
+And our gdb tool can actually
+find you the deadlock
+if one occurs.
+So these are tools we have developed.
+What other things did we try and not work?
+So all these tools are,
+most of these tools I
+mentioned are runtime analyses.
+You might be wondering have we
+tried static analysis tools.
+So we have.
+I've taken a look at the
+Clang Thread Safety Analysis.
+It's a feature in Clang
+that you can annotate your source code
+to indicate when a mutex
+must be held or not held.
+It must be held holding that
+data member and so forth.
+But we ran into multiple issues.
+Turns out the annotations
+for indicating lock ordering,
+so acquired before and acquired after,
+are not implemented.
+And then it's also impossible to annotate
+more complicated things, like unique lock.
+Because a static analysis tool
+does not understand conditional locking.
+We also tried tools like Helgrind,
+which is part of the Valgrind suite
+for finding synchronization bugs.
+But our binaries were too big,
+had too many threads,
+it just didn't work.
+We also tried instrumenting
+custom mutexes in the past.
+But custom mutexes add additional overhead
+which was expensive for some teams.
+Don't pay for what you don't use.
+And some teams were okay
+with additional overhead.
+TSAN already did this for us.
+So there was no need to
+add more instrumentation
+to mutexes.
+And finally,
+we tried to use our BPF detector tool,
+the deadlock detector,
+on more types of mutexes.
+But we ran into issues with inlining.
+BPF requires us to pass the
+symbol that we want to trace
+but inline, the symbols
+don't appear in the binary.
+And for many mutex calls,
+they're inlined into whatever function
+that's acquiring the mutex.
+And so it was impossible to
+annotate other types of mutexes,
+except for Pthread mutex.
+Because it turns out Pthread mutex
+is typically dynamically
+linked to the binary,
+and as a result they can't be inlined.
+So finally, I have one last takeaway
+I want to share with all of you.
+I think we should all think holistically
+when developing tools.
+And consider the entire life cycle
+of the software we're managing.
+Beyond just development
+and running and production.
+For each phase of that life cycle,
+where are the gaps in tooling?
+And how can we build the appropriate tools
+to fill those gaps?
+And if we think of this mindset,
+we can build much better
+and more comprehensive tools
+and improve the end-to-end
+developer experience.
+So thank you.
+These are all the tools I mentioned.
+And if you check out my poster outside,
+the QR codes will take you
+to these links as well.
+Questions?
+(audience clapping)
+- [Man] Do you have any experience doing
+this kind of deadlock detection
+on code running outside of servers,
+like on embedded devices?
+At Facebook we don't,
+at least from my experience, we don't.
+I haven't touched many
+embedded devices, so I do not.
+- [Man] Or even just mobile devices?
+This tool will work
+as long as...
+It depends.
+So for let's say the gdb extension,
+if you're using the NPTL implementation,
+it will still work.
+The BPF tool is Linux specific.
+So it's not gonna work on
+iOS and things like that.
+So, depends on the platform.
+- [Man] Thanks for talk, very interesting.
+Also, nice mah-gros.
+Do you have plans to publish them
+under some open license
+so that other people can use them as well?
+Maybe, maybe. (laughing)
+Cool, well thank you.
+(audience clapping)</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

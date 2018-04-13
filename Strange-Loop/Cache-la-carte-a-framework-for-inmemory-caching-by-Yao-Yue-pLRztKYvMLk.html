@@ -1,0 +1,1237 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>&quot;Cache à la carte: a framework for in-memory caching&quot; by Yao Yue | Coder Coacher - Coaching Coders</title><meta content="&quot;Cache à la carte: a framework for in-memory caching&quot; by Yao Yue - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Strange-Loop/">Strange Loop</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>&quot;Cache à la carte: a framework for in-memory caching&quot; by Yao Yue</b></h2><h5 class="post__date">2015-09-27</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/pLRztKYvMLk" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">today I'm gonna talk about basically a
+caching framework that I developed over
+the past year for buting
+production-ready cache and the name is
+polycon I came up with this name like
+three days ago so and renamed my entire
+repo after it so it's all good so a
+little bit about me I have been working
+at Twitter since 2010 back when the
+day's Twitter was still cool and back
+web when you know the fail whale was to
+do a thing and this whole time you know
+twice the average job duration in the
+Silicon Valley five almost five years
+I've been working on cash so I've done a
+lot pretty much everything you can think
+of about cash including testing capacity
+planning you know debugging weird
+performance issues arguing with
+customers how they abused cash and
+recently I have to become interim
+manager of the cash team so literally
+every job on the team I've done so a
+little bit about this talk you will find
+that this is a talk that's mostly not
+about cash because what is there to talk
+about you have a key value store you
+stick a key in it may or may not be
+there you know you will know soon enough
+right so so so there's not much to talk
+about cash but but that doesn't mean we
+are cruising along right it's it's not
+like the the job of the cash team is
+just to drink coffee and read tacker
+news every day we still spend way too
+much time dealing with all kinds of
+issues so we're gonna do something about
+it so but those things and they're
+mostly not about cash and of course all
+my experience actually this job it's my
+first full-time job after grad school so
+all my exposure to cash is somewhat
+bonded and limited by what Twitter
+exposed me to so that sort of sets the
+boundary so if you have InfiniBand I
+cannot help you you're in a much better
+place than I do so so I would tell a
+little bit about what Twitter's use
+cases are and and sort of sets the stage
+and I would see I personally see it as a
+quest for high quality infrastructure
+one thing that upsets me a lot is people
+keep using the same
+really fundamental infrastructure pieces
+for a long time but some of the
+fundamental problems never gets
+addressed so if I get a chance to do
+whatever I want which sort of is my
+current position now I want to do
+something about it right so this is a an
+attempt to view high quality
+infrastructure whether that's that's
+successful not I think only time can
+tell all right so let's set the context
+context is king marketing people tell
+you all the time
+so first let's say look at a Twitter's
+basically deployment scale we deploy
+cash as many clusters actually we have
+over 200 clusters in production so
+usually if someone has a new use case
+they come to us we'll give them a new
+cluster instead of sort of the face book
+model where they have a very very fat
+cache over a very very fat database so
+we instead of sort of trying to do
+resource isolation withing a single
+instance we what we do is we try to
+deploy all these clusters with little
+overhead so even if we do a lot we don't
+introduce too much overhead and we use
+containers and we try to automate the
+deploy because nobody wants to manually
+come up with you know how to configure
+200 caches so we basically take a
+different approach from many other big
+companies or even bigger companies in
+the industry I don't think there's a
+definitive answer for which one is
+better you can make either way work you
+just have to put effort into different
+areas and our QPS varies greatly our
+smallest clusters only have like tens of
+thousands of QPS we constantly ask them
+why are you on cash but usually they
+want to stay so on you know power to
+them and our biggest use cases usually
+have tens of millions of QPS out of a
+single cluster so you have this three
+four orders of magnitude differences
+between the largest ones and the
+smallest ones so that's a pretty big
+range and in terms of data models we
+have a lot of variety to people
+sometimes use it just to store blobs
+sometimes people will store counters and
+there are people who store you know the
+the signature twitter service would be
+timelines and timelines essentially are
+stored as indices so it's just a list of
+numbers and there are of course the the
+and hottest real-time data analysis
+those are dealing with time series so
+time serious actually a twitter uses
+hash kavanah to to get a view temporary
+view of some of the the big time series
+they degenerate so all of these data
+models yield very different query sizes
+you can imagine reading a time series
+would be a lot of data but a condor will
+be only a few bytes and the read and
+write pattern are pretty mixed so we
+have read dominant cases where for
+example tweets would be dominant who
+generated tweet wants you after that you
+only read it and there will be write
+dominant cases where liked timelines
+it's this write dominant because you fan
+out to everybody's time line so they add
+the index but they only read it very
+every once in a while so it's very hard
+for us to say we are going to just
+optimize for re having your workload or
+optimize for right heavy workload
+optimized for a particular data model or
+optimize for you know a particular query
+size because they're all over the map so
+cache is basically a soft problem
+memcache D is 12 years old even Redis
+the the new incoming is also already six
+years old and we use both of them not
+only that we have even more solutions we
+have slim cache which is the cache
+specialized for tiny tiny objects and we
+have fat cache which is you know if you
+want to put things on SSD you can use
+fat cache so not only is it a soft
+problem it's a problem that has been
+solved multiple times repeatedly and we
+use all of these solutions and and
+structurally it's really simple you can
+as you can see a request comes in coming
+in to the bottom you know you gets
+through asynchronous IO gets into the
+buffer you're going to parse the
+requests and if later on you will
+compose the response and you're gonna
+process and essentially all your
+processing is just go into this memories
+in memory store somewhere and you sort
+of plug the data out of it if it's not
+there you just tell user to that right
+so so so there's there's conceptually
+there's very little complexity in this
+thing but it that doesn't mean we're
+down with a cache
+so the first thing I want to point out
+that we have more than one things on the
+left-hand side that's a problem so if
+cash is conceptually so simple it's
+trying to solve this one problem why do
+we have so many solutions and the short
+answer to that is none of these
+solutions actually provide everything we
+need
+memcache D it doesn't support data
+structure for some people that's not
+acceptable Redis Redis manages memory
+basically well radius basically doesn't
+rent manage memory it allocates that to
+je malloc so you will have external
+fermentation and your malloc performance
+is gonna be somewhat unpredictable if
+your workload is mixed right and and and
+so and so forth but also if you have a
+team of a few people and and the team of
+people is supposed to maintain all these
+code bases it's totally not
+unsustainable if there is a problem
+that's common to one of the if there's a
+common problem you have to fix it four
+times and that's that's just ridiculous
+and also there are a few challenges that
+I think today still largely applies to
+most people using cash but it shows more
+when your scale is large and these
+problems are not really well addressed
+by any of the existing solutions first
+of all there's just too many ways to
+fall below lastly SOA is usually defined
+by how many QPS can you sustain and
+what's your tale they didn't see let's
+say your p triple nine agency and very
+few cashes out there can say under such
+and such conditions I will be able to
+very steadily generators to keep es
+under this latency profile and I will
+not fail that right so so there's
+unpredictability in the tail latency
+part and and small things can slow down
+for example we had to turn down our log
+level from info to warning because we
+realized that occasionally the the
+belonging is slowed down the entire
+cache because there's some other janky
+process running in the background that
+hurts the disk every once in a while so
+if you try to access the disk through
+logging they during those time window
+for mysterious reasons the entire
+process just slows down right so so so
+there are other things like you know
+networking stack
+sad things we cannot predict and those
+all can make cash flow below SLA and and
+when cash falls below SLA it has this
+ripple effect all throughout the stack
+and the second thing is like any
+stateful services cash is very prone to
+hotkeys and DDoS attacks hotkeys usually
+comes from you know like Lady Gaga
+tweets something or like the Oscar
+incident of twitter is a very good
+example basically Allen summons the
+entire internet to attack one server
+inside Twitter right and then she was
+very very successful and we were done
+and we had to sort of repair our
+architecture to handle that kind of
+hotkey for months and still today there
+is no good way of handling haki so what
+do you do when the cache is receiving
+too much traffic the only solution we
+have is that IT Crowd quote have you
+tried to turn off and turn on the cache
+that's literally it we that's the only
+knob we have and that's pathetic
+right so so so what are the better knobs
+better knobs include I can reject the
+excessive requests but I can serve the
+rest I can apply back pressure I can
+tell my caller stop calling me or
+calling me last frequently and use
+whatever stale copy you have for a
+little bit so I can't breathe right but
+if you look at today's memcache tree
+protocol Redis protocol back pressure is
+not actually part of the design so so
+there's no place you can have these
+additional features of pressure
+protection into existing architecture
+and also it's really hard to debug
+I had a few bugs I had to solve two bugs
+in production through pure guessing like
+twice because I couldn't turn on logging
+if I turn a logging we had that problem
+and in the first case right you know the
+full whole thing basically doesn't work
+so so I basically had to guess because
+I've been working on this for many years
+I have good guesses and I reproduce it
+locally by altering like sometimes
+monitoring malikan enforcing certain
+behavior to show up and then I deliver
+with high confidence that this is going
+to fix it and and and of course
+eventually they fix
+but in one case it took me three weeks
+in another case it took me a week it's
+just way too long there's not enough
+tools out there or information out there
+for me to debug and if essentially
+eventually there's also kepada capacity
+planning problems external fragmentation
+is terrible
+like if you have to do deal with a
+capacity plan you you know what I'm
+talking about so if you think you are
+using one gig of heat your internal
+metrics track that you are using one gig
+of heat however somehow you have a
+fragmentation ratio of 1.3 meaning
+you're using 1.3 gigabytes
+how do you plan for capacity do you
+assume everybody's gonna use 30% next
+year what if they use 50% actually
+what's in your control and another
+source of surprise capacity is its
+connections right most services would
+just accept connections as they come in
+and they don't really have a cap for it
+this is true for memcache that's true
+for Redis so what if you have a network
+glitch now all your connections are lost
+for the client of course your client
+would try to reach it's flat establish
+those connections but the resources
+attached to the previous connections
+don't necessarily go away maybe not even
+for a long time unless you set your
+keepalive correctly all right so so
+suddenly you have a lot more additional
+resources that you are holding up and in
+this case too bad that you run in
+containers right unless you have lots of
+headroom if you're running container you
+you reserve 1.5 gigs thinking you have
+give it 50 percent overhead and somehow
+you mysterious it goes over that
+threshold magic threshold your entire
+job is killed and this is terrible for
+stateful services which caches wanna
+because if there's a global condition
+that triggers this 50% overhead to every
+other backhand back and you can lose
+your entire state and at that point I
+guarantee you Twitter is gonna go down
+right so all these things we don't have
+we sort of cope and hope that they don't
+show up too often but when they show up
+we are were eventually essentially you
+know defenseless so here's a basically
+you will come to the drawing table and
+say what do we want so we essentially
+one code base that supports or our use
+cases it's just cash let's do cash right
+just just a simple thing and I want it
+to be easy and fun to work on I want to
+reduce time that I read the code and I
+want to curse because that's not how you
+do sustainable projects it eventually I
+won't really want the cash to be
+production ready
+meaning that when we deploy there to two
+hundred two hundred clusters I don't
+have to worry about the Hong Kong not
+getting any sleep for the next week but
+here's the problem
+what is production readiness I don't
+think anybody know so so by here I said
+we but I don't want to include everybody
+I'm sure there are good engineers out
+there who knows way more than I do but
+first of all we includes I I took this
+job five years ago I was supposed to
+keep Twitter's cash up I had not viewed
+anything in production ever so of course
+I brought the site down multiple times
+right you know it's sort of my I wear it
+as my badge of honor but but but truth
+is I had no idea and I had to learn a
+lot of things one one example is Locker
+rotation in grass when nobody told me I
+would I was supposed to pay attention to
+lock rotation and of course I knew
+nothing about it and four months after I
+deploy my system like where's my desk
+and then I realize I have to redeploy
+all my services host ton of data
+just because I didn't put large rotation
+in place and it wasn't correctly
+configured so I felt plenty bad about it
+but I made sure I didn't make that
+mistake ever again but certain enough
+all the projects around me some other
+hashed projects mesas Manhattan which is
+Twitter's storage projects every single
+one of them when they went into
+production
+they had rotation issues nobody knew how
+to set them correctly the first time
+so so that's I mean this is still a
+small scale it could be that all the
+infrastructure people at Twitter are you
+know it's just somehow incompetent but
+but I suspect it's there's something to
+it right the industry is so young
+everybody it's working with something
+new you just don't know right so so I'm
+like ok let's let's google it and see if
+there's a production readiness
+that I can just check and copy and make
+sure I do better and and actually I
+found nothing
+so so there's no information guiding
+anybody's to say if you do these things
+you have a good chance to have a stable
+system that serves you well in
+production that list doesn't exist so
+instead we do we go to big companies
+companies bigger than us or of a similar
+size and say what do you use I use
+whatever you use because I trust you
+would have solved all these problems
+which works most of the time but there
+are two problems first is there's no
+guarantee that they have solved those
+problems they might be faking in who
+knows and they may have very different
+infrastructure they may have different
+setups they may have a different set of
+rule for referral tools that secretly
+cleans out all the logs that you you
+just don't have so if you use their
+solution without their context it
+doesn't it may or may not work for you
+right and also it's it's sort of a we
+put a lot of faith just because
+someone's big or someone is important in
+the industry and that's a little bit
+unfair to the product yourself the
+second attitude is just bucket you know
+you hope for the best you just deploy
+and you hold tight to your on call phone
+if something buzzes then you know you're
+just gonna dick done and try to solve it
+so I'm like I've done this enough times
+I want to define at my best
+what is production ready cash so I want
+to hold this standard against myself I
+want to hold this against any cash I
+will use in the future and see if they
+provide everything that I need so it
+comes with a few things so first of all
+is pretty predictable so the bigger your
+scale the more important predictability
+is if you have one instance one use case
+chances are it's gonna be fine that's
+exactly what happens when you try to use
+something on your laptop but if you use
+200 clusters and they they're all over
+the map then weird things are bound to
+happen so if something is so-so
+something in your workflow it's going to
+trigger unpredictability if those are in
+place so we really want very stable
+tendencies and we want predictable
+performances
+because these will also allow you to
+automate your capacity planning the
+second thing is failure behavior so once
+we get a Twitter because we operated a
+certain scale it's actually really easy
+to DDoS the cache I I have this we have
+this incident where we would see a big
+spike of writes when when something gets
+a little slower and when we talk to the
+customer they're like oh yeah when we
+don't get our data we would just assume
+the data is not there and we were just
+gonna try to add the data back into
+cache which is perfectly reasonable
+however if you think about it if you get
+a write that is a Miss sorry if you get
+a read that is a Miss and you get a read
+that is an exception these actually
+indicate whole or different things right
+and exception means you know the network
+is down it doesn't indicate anything
+about the actual existing of the data in
+the cache so only when you have a true
+read miss should you try to answer the
+data into the cache in other cases
+you're just contributing to a problem
+that's probably already slowing the
+cache stuff right so so when these kind
+of things happens the back and usually
+behaves badly when you see too many
+requests it just drops everything on the
+floor and now client starts the D
+connecting and reconnecting and those
+create what we call sync storms so you
+have a lot of clients trying to
+establish clash into a single server at
+the same time it's actually a very very
+expensive operation in the case of cache
+it's much more expensive than issuing
+your requests so basically from there
+you have a snowballing effect where
+things go goes from bad to worse alright
+so these are not what we call graceful
+degradation you want something to
+protect yourself do as much work as it
+can and sort of share the rest of the
+load off and if eventually you know
+there's a resource footprint like I said
+before you don't want someone claimed
+they are using one gigabytes of memory
+but actually uses two and gets killed by
+same asos in the meantime so
+observability everything in production
+should be ready for monitoring it's it's
+so obvious into the day before lunch
+right you're like I'm gonna write my
+alerts if something
+goes bad I'm gonna be called up about it
+but oh wait a second I don't have any
+metrics in my system so this is not
+uncommon it's not as dramatic but most
+people would basically push off
+observability and to the last second and
+two they have to go through some
+production readiness meeting and someone
+asked them a question do you have stats
+and then they spend two hours adding
+metrics to their system but they will
+see later that this is not the best way
+you can do it and debug ability is it's
+really important so so cash has been
+around for long enough that people would
+sort of just wave it off be like this
+cash have bait has been used for a
+decade
+it must be bulletproof but this
+mentality doesn't work anymore if you
+want to create something new which I
+think every engineer wants to do right
+so people gets very afraid when they
+cannot debug their system because any
+new logic introduced is very hard to
+debug and there's no guarantee those are
+gonna be right so lack of deductibility
+basically slows you down or even stops
+you from making changes and and another
+thing I think it's very nice to have is
+when I first started working on cash I
+spent about two weeks reading memcache
+code base which was not pleasant so I
+spent a lot of time figuring out what
+the logic flow of the system is which is
+a problem for everybody who's coming
+into a new code base so one thing about
+visibility that's nice would be if you
+can come to a system issue a typical
+operation and you can see all the key
+components telling you what they're
+doing you sort of have the flow of a key
+action in a new system that helps you
+greatly sort of bootstrapping yourself
+and familiarize yourself with with the
+code base okay so and eventually I think
+this has been sort of a little bit of
+step up from the rest which is fairly
+standard is in the analytics friendly
+who here who has operated cash can tell
+me with confidence that if you want to
+achieve a 90% hit rate how much memory
+should you provide for your particular
+use case for 85 or 95 do you know how
+much cap and data in your cash is in
+cacheable that they only read once and
+never read again
+right so so so if you if you you know do
+as much planning as we do our customers
+ask this question all the time and
+usually what we say oh you should know
+about your data right we're just you're
+just providing infrastructure we're not
+supposed to know but but this is not
+impossible we you can look at the
+traffic pattern someone's trying to read
+someone's trying to write you can look
+at those accesses and over time you
+should be able to construct a map how
+many times that he has been accessed
+since its created right these things
+information actually are accessible
+within cache if we can find a way of
+sort of directing them out and to the
+right analysis infrastructure then you
+can actually have a optimal
+configuration so finally we want things
+to be flexible you know and everything
+that can be configured that's
+configurable should be exposed if you
+cannot solve your specific use cases by
+configuring with the right tuning knobs
+you should be able to do small
+modifications on the source code
+proportional to the change that you want
+to introduce instead of forking the repo
+and and doing this thing all together
+and losing all the upstream benefits and
+I wanted something that's quick to
+develop features because of course
+customers don't come and talk to you
+several months before they launch they
+all they'll always come to you a month
+before and be like we need this
+otherwise you're slowing us down you're
+delaying our launched it you do not want
+to be that person so we want things to
+to be easy and quick and and in fact if
+you do it correctly if future
+development is about the easiest thing
+like I the last three features that
+develops and none of them took me more
+than a day right so so if most of the
+time it's about refactoring other things
+and and one thing I want to point out is
+all these attributes are sort of related
+you you want your observability to be
+flexible you want to be able to turn off
+up observability if you want to even
+just to test how expensive observe it
+yes like what's the overhead of it and
+you want your predictably to be
+observable because you want to know
+what's your true latency instead of
+you're just assuming right soso so these
+things are concepts are not sort of ISIL
+in isolation you cannot just bolt
+something
+on to your final product and claim you
+have achieved one of them they basically
+these should be carried out throughout
+the development process okay so I've
+talked about of you know grand ideas
+what have we done how do we measure
+against all those things that we think
+we want to achieve well I assure you
+there's a lot of boxes here don't worry
+you don't have to read you don't have to
+read you know each one of them I think
+the thing I want to call out is you can
+see there are two parts right that the
+top part it says cash the bottom part
+assess common core so these are actually
+intentional divide I'll explain them
+later the the dotted line means
+components that we actually still need a
+lot of work on and the solid ones are
+things that are fairly usable so so one
+of the takeaway from the previous chart
+is there are lots of boxes that means
+we're doing a lot of work to properly
+and formally modularize all the
+functionalities that we see and it's
+actually the trickiest part of coming up
+with this thing is sort of coming up
+with those modules and and scoping them
+correctly because if you do too little
+marginalization everything is just in a
+big blob it's just a magnet for
+attracting technical debt right it's
+very unwieldy it's a monolithic it's
+actually sort of the state of previous
+caches because they were exactly solving
+one problem so so they just sort of put
+everything together over time and that
+proves a little difficult to evolve but
+if you do too much of that you end up
+with like a Scala program you click and
+click and click every class adds an
+additional attribute and five times
+later you finally know what's in an
+object so there's a sum sum of a balance
+between there and and and you really
+want to minimize surface area if you
+don't need to expose something don't
+expose that because if you want to
+change it behind this thing later you
+will require that you have expose it in
+the first place because someone might be
+misusing it now so of all each module
+you basically ask you those questions is
+it observable is a configurable is a
+flexible those things you make that
+thought process
+done at the module level not the
+application level so when you put them
+together it's easy because every one of
+those modules is ready to go so one
+thing I want to call out is code we use
+I think Cobre use is definitely
+overrated being a lot of projects often
+what we do is we look at what we already
+have on all the building blocks and we
+view things on top of it the problem was
+that is those might not be perfect fit
+so you might be cooking your design very
+slightly just so that you could use
+those beauty box right the building
+block may not come with observability
+you go with it now you have a black box
+so so basically my priority has always
+been structural integrity first and then
+I will reuse as much code as I can but
+I'm gonna order it if I have to see in a
+sense is actually a good language for
+that sort of philosophy because it's
+really hard to reuse currency there's
+there's no namespace you have to
+actually copy the code you need to make
+sure it compiles so you've got to change
+it anyway right so so that's actually
+helpful for us to sort of design from a
+clean slate and then we will see what we
+can use so and then we'll alter it and
+and another sort of common pitfall is oh
+I'm gonna write a framework and we're
+gonna make sure this module works for
+five different scenarios with you know
+two different connection types you know
+over generalization I try to build a
+future-proof module that never works
+unless you use the module in that way
+you probably will come up with slightly
+wrong abstractions so instead of doing
+something that's future proof I think
+the best we can do is to say let me
+think about what the possible use cases
+are let me just don't think don't do
+things that outright would prevent me
+from doing those things I may not be do
+do those things in the future without
+changing my code first but as long as
+it's not like in the opposite direction
+I'm just gonna go with whatever I need
+to be right now so that's sort of the
+minimum abstraction approaches what we
+take
+so finally we have a cup of core
+decisions
+those are splits the first one is the
+one you saw we split our code bases
+structurally into two parts the first
+part is a common core the way of
+thinking about the common core is what
+if you want a pink server but instead of
+your 200 line you know a quick
+prototyping server you have a production
+reading server you can deploy it through
+your system at large scale you get all
+the metrics you get all the logs
+whatever you want but it's a ping server
+so the the reason we did this is because
+ping server is the mother of all servers
+right anything that is a proper service
+has to be able to handle ping it's
+really well so we do ping server first
+and we will add on all the cache related
+parts on top of it so making this into
+two problems then the second thing
+decision we may was we want to
+explicitly call out control plane and
+data plane so there's a lot of
+functionalities that are that are
+extremely important but they tend to
+slow things down like logging if you log
+and you need to flush the log to disk
+that potentially creates contention
+point where IO could block the rest
+right so so if you identify what
+operations are on a data plan which
+shouldn't be anything more than you know
+reading from a socket or any other media
+processing the request and writing a
+response really your your data plan
+should be extremely simple and then you
+lump all the other necessary but not
+performance critical functionalities on
+to control plane and you want to have
+physical separations of these two in
+terms of runtime you want to have
+dedicated thread to your data plane and
+you want your data plan to never be
+blocked and then you do the rest on the
+on the control plane thread which you
+know if something happens whatever right
+so so having this mental model allows us
+to to optimize our performance and to
+get rid of a lot of the non determinism
+on the data plane so the development is
+mostly done by me starting from 2014
+summer and this
+here I was joined by another engineer
+and we just got on someone else a third
+person on the project so so we are well
+stuffed right now and we did a claim
+design so I didn't set out anything to
+be reused but in the end we were able to
+achieve about 50% code reuse so about
+50% of the logic I copy paste it from
+somewhere else like including from cache
+shredders twin proxies some of them very
+well tested code bases and we have three
+binaries right now pala confirm cache
+base it is a tomcat replacement which is
+memcache D compatible polylines slim
+cache which I'll talk about in a little
+bit it's just a variety of memcache and
+park and Redis right now it's sort of a
+stealth so it's a Redis is a lot of work
+we are not nearly done in that in a
+space yet but eventually we will be able
+to support a lot of the Redis protocol
+out of the single codebase
+and we have done some production deploy
+you if you a regular Twitter user some
+of the Condors you have seen on the
+tweets are served out of slim cache but
+we we factor the codebase significantly
+since then so we're back to the joint a
+back to the sort of the test lab we're
+gonna do a load testing and then we're
+gonna roll out again and replacing all
+the existing meant memcache cases with
+disco bass so okay let's put things to
+the test so what have I done to make
+this version more production ready than
+the previous ones first is so the things
+at the bottom of the of the overall
+architecture chart I want to call these
+out specifically because these are
+special logging stats configs they sort
+of go against the divide and conquer
+overall methodology we apply to a
+modular rise design because modular
+writes design means other than the
+interfaces exposed by those modules you
+shouldn't care about anything behind it
+right but observability is sort of
+peeking into otherwise black box and get
+some insight so so that means all these
+functionalities they are not just
+modules they are actually
+bifidus their paradigms that you have to
+apply everywhere so they have global
+implications if logging is slow if stats
+is slow if config is inconvenient it
+affects every single model so it has to
+be they have to be given priority
+instead of bolting something on at the
+last minute they actually have to come
+in first so they have to be cheap
+you don't want locks you don't want
+anything that could block they should be
+configurable so you can test with or
+without them to know the performance
+implications and all that things or if
+you don't use a module you shouldn't pay
+for the logging cost or the stats cost
+or the memory right and eventually we
+want to make them composable so if every
+single module every single motor you you
+ever write or encounter has
+configurability and has monitoring and
+has logging beaut into them you don't
+have to write observability for them you
+just have to include them and the
+observability just happens so that's
+very nice here's an example of what I
+mean by those and because see is this is
+where the age of C really shows you I
+have to use some preprocessor magic to
+achieve certain things so it's not
+really all that pretty but but I guess
+the job done so on top you have a bunch
+of metrics for this particular model
+which is buffer that you want to track
+so you just declare them the type in the
+explanation and there are two other
+preprocessor macros help you helping you
+to initialize them and declare them so
+that's all you need to do for
+declaration and initialization and when
+you use them it's you know it's just
+like any other within this the buffer
+module you would try to increment the
+right counter at the right place and if
+I write a service that use this
+particular module I can include the
+metrics related to buffer along with all
+the other modules that I used and I want
+to observe and I will allocate memory
+for them globally and when I initialize
+the module which is at the bottom I was
+set it up with the right memory location
+for all the metrics this way I will any
+if I set up my application this way
+to get visibility into the buffer
+mountain metrics there's nothing the
+application needs to do extra to track
+it the second thing I want to call out
+is buffer Channel and stream these are
+sort of i/o related components IO is is
+so-so in cash actually you would see
+majority of the resources being consumed
+actually by doing IO and in doing IO
+efficiently usually you have to resort
+or asynchronous IO which is extremely
+painful to handle right people don't
+think about asynchronous programming
+very naturally so it's nice to sort of
+single out buffer as this barrier
+between asynchronous programming and
+synchronous programming cash has the
+luxury that wants something isn't buffer
+everything you need to do at that point
+you know serialization processing is all
+can all be done synchronously so so if
+someone can write a cash-only thinking
+from the same point of buffer is
+actually not that hard and then you
+delegate the rest you know to some
+underlying framework the common core we
+talked about and that will eventually
+give you the data in the buffer and one
+thing another thing I want to say is you
+can see we say buffers channels and
+streams in plural because there's
+actually a lot of research that could go
+into say channels you can have UDP you
+can have TCP if you have have the luxury
+of infinite band the the channel
+interface can actually can use
+dramatically different performance but
+we haven't seen too much of that
+experimentation in the existing
+solutions because existing solutions
+have the the channels like TCP very
+tightly coupled with the rest of the
+processing so if you want to change how
+you handle channel you have to fork the
+entire base there's no dropping channel
+replacement so if you single out that
+interface and you have a generic the
+definition of what the channel should do
+you can swap out you can have your UDP
+amputation you can have UNIX to my
+socket implementation and they use and
+feel the same for the logic above them
+so so that sort of encourages us at
+least us in the future to explore some
+of those possibilities one last thing is
+sort of
+the design principle is if you can have
+a symmetrical design don't go with
+something that's arbitrary in this case
+you can see we sort of formalized the
+the cash processing into these stages
+right you you come in with a buffer
+again a nice starting point for
+synchronous programming you parse the
+buffer you get a request you process
+requests you get the response you
+compose a response from the object and
+now you end up having some data in your
+write buffer and in the middle you may
+need to consult some storage to get the
+data this is very clear right so but if
+you look at again the existing
+implementations what they tend to do is
+they tend to sort of compress processing
+and composing together so so the entire
+product or they sometimes have do a
+little parsing in the processing stage
+so so mentally it's very hard to to
+decide when does one operation stop and
+another operation and start so it makes
+it just a little bit harder to write new
+caches if you have to so in this case if
+you want to write you know a usable
+cache service the flow is exactly the
+same you have you start with a read
+event some data is coming so you read it
+through i/o you'd now have data so you
+need to do some processing and
+processing is the three three stages we
+stated which is parsing processing and
+composing and now you have data that you
+need to stand out you just go with a
+largely symmetrical structure where you
+start with the right event and the
+infrastructure takes care of the rest so
+if you want to write a new cache you
+have awesome idea about a new protocol
+that uses a new storage
+you only need to alter the part in the
+middle right so so the Audis also more
+specifically you all you need to
+implement is these five functions you
+need how you need to know how to parse a
+request and you don't know how to
+compose a response and you don't know
+how to process a request actually three
+is the bare minimum right so if you were
+doing a server you only need three but
+having five provides symmetry allows you
+to do testing allows you to write a
+client so using the same library there
+are nice things but basically that's it
+you know writing a cache should be super
+easy as that so as a case study I can
+tell you what you know what we did
+so to encash which we are going to
+replace itself is 14,000 lines of code
+it uses the verb and which I didn't
+count Pelican tuam cash which is the new
+thing is 16 thousand lines of code
+including event libraries and the common
+core ends up being the majority of the
+code again proving the the the fact that
+cash is not that complicated so in the
+rest of the cash flow logic is seven
+thousand lines of code so compared to a
+stand-alone like everything squished
+together implementation it's actually
+not that bad it's only slightly larger
+the benefit starts to show once you want
+to add a new cash so we want to achieve
+something really nice for the small
+object like if you have a simple counter
+with a simple key you are paying way
+more overhead than the actual data
+so both memcache and Redis spent about
+60 bytes to store every single object so
+if you have you know you have a condor
+which is eight bytes and they have a key
+again as eight bytes you were actually
+spending majority 80% of the storage
+space just storing overhead so we can
+actually do much better using cuckoo
+hashing um but that means we need to
+swap out the the storage part so so we
+did exactly that so and we we did
+everything in under sixteen hundred
+lines of code and about half of that
+goes into implementing the new storage
+we need to do new processing to use the
+new storage paradigm and then we need to
+set up because we need a second binary
+we need to set up some other code to get
+a new executable but the marginal cost
+of adding cash and also I want to
+mention this uses the memcache D
+protocol so we didn't have to write that
+part but the marginal cost of adding a
+new cache now becomes much more
+affordable compared to previously when
+we have to fork that the code base and
+litter our changes throughout the code
+base so this is basically how slim
+caches down there cuckoo caching I've
+talked to people who have used
+this book caching other scenarios before
+if you have if you're curious feathers
+and have insights you know come talk to
+me afterwards so in summary we basically
+spend almost a year achieving something
+we already have nothing no new feature
+has been added to through our code base
+since we created it however now we have
+great about the debug ability so I said
+weightless logging and I mean weightless
+logging we can't you can log however
+much you want
+it will never slow down the worker
+thread because it never touches disk we
+use ring buffers and someone else
+another thread is is in charge of sort
+of flushing that data to disk and and
+takes however much time it it needs
+right so so now we can log to our hearts
+content and this is a framework that's
+really easy to add things onto as we've
+tested and that's really fun to work on
+so even though it's so far we've done
+nothing you I'm expecting that you know
+many new things could come up out of
+this relatively quickly now that we've
+done all this sort of a garage the
+laying down the foundation or all the
+hard work up front
+so what now for Twitter you know we have
+this grand scheme of unifying all our
+cash cases and and migration is about
+the most scary thing for infrastructure
+engineers right if you tell people you
+want to migrate from a 10 year old very
+stable technology to something new they
+freak out so the way we do it is we just
+replace all the existing caches in a
+protocol compatible wave with a
+different runtime this new runtime we
+make sure the runtime is good and then
+whatever new features or new protocol we
+want to introduce we introduce
+afterwards so we're only changing one
+thing at a time
+so people won't have to worry about oh
+the new product is bad or the new
+runtime has I don't know but it's bad
+right so we only change one variable at
+a time
+and eventually we'll be able to migrate
+and that would be awesome and for the
+rest of you because you're not working
+at Twitter so so how does this apply um
+I really think there should be a much
+more active community around caching
+development I've I've heard people who
+did really cool work
+based on cash they push things to GPU
+they sometimes view things poor
+InfiniBand none of them can eventually
+go back be merge back into sort of that
+the main version because because what
+they provide is sort of don't fit you
+have to fork them the co-pays but if you
+have a relatively modular construction
+then we can viewed five different
+backends we can view attend it from
+executables depending on how you
+configure it then depending on what you
+exact feature you want so we can have
+sort of a poor Tomas ISM a prolific
+creation of functionalities without a
+prolific ation of code bases so that's
+the whole point of a having a framework
+is we think we compute everything out of
+a single codebase
+so originally I was hoping that I could
+open source the code base for this talk
+but around the time I had the talk I
+also became a manager and and that would
+prove to be detrimental to my
+productivity so so so we're we're a
+little behind but you know I get help so
+things are getting better so we are
+gonna do the proper thing we're gonna
+document everything we actually have the
+binaries running just fine but we want
+to do more testing and have
+documentation so people can read they
+don't have to dig into the wild code
+word so and we want to do open source
+right so I've got my name attached to a
+number of token source projects I have
+to admit I so far I've been doing a
+terrible job sort of keeping up with the
+open source community and I think a
+critical part of that is when you
+develop in private and push to the open
+sewers you're not really doing open
+source right only I think I think a
+project can only take the open source
+community seriously when the Vaman is
+actually dying in the open so we're
+gonna try that this time we're gonna
+move entirely on to get up when we open
+source so I want to know you know if you
+have anything that that you want to be
+it out of cash that has had the only
+thing that has the turbulence so far as
+because the unwieldy codebase I want to
+hear what kind of things you may need
+out of caching and
+you know we have two minutes quickly
+funding this type of doing everything
+you've already have again type of
+project is extremely hard right I had
+this idea like in 2012 it's only until
+last year that I actually could get the
+resource to do it so so so that sort of
+points to some problem about the
+environment and the refactoring is a
+continual process many times in the
+development I'm like I finally have a
+version of the module that I can be
+proud of
+yay and three weeks later I come back
+and look at it and be like this is crap
+so I had to rewrite it so so refactoring
+is not gonna solve I think from this
+point on it's still gonna happen like
+three months later I'll be like oh this
+piece is not good enough and I'm just
+not changing um
+and form actually does influence
+functionality so so if you structure
+code in particular way functionality
+sort of happens within the boundaries so
+if your boundaries are set incorrectly
+things that are sort of smashed together
+they tend to stay coupled and you cannot
+change them it very easily so so the
+sort of the structure of the code base
+is actually much more important than
+what each individual component actually
+can do and you know it's nice to sort of
+try to predict what's gonna happen what
+technology what kind of use cases you
+have but you will always be wrong a lot
+of the time so so so don't take any of
+those assumptions too seriously and
+eventually you know it's nice to have be
+working in a consistent code base if you
+want long names dual names just do them
+everywhere if you want your names to
+show names do it everywhere if you want
+to you know use a particular style
+because a lot of times when you see a
+code base where you just don't know
+what's happening what's happening in one
+go Bay in one file is very different
+from what's happening another file and
+you can clearly tell they're written by
+different people that actually is very
+bad for productivity so what we try to
+enforce is everything should look more
+or less the same stall wise so with that
+that's the end of the talk we I think we
+have one minute so if anybody wants to
+ask questions ask now or you can find me</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

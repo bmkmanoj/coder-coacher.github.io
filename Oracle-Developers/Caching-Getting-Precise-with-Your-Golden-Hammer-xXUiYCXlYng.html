@@ -1,0 +1,1250 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Caching: Getting Precise with Your Golden Hammer | Coder Coacher - Coaching Coders</title><meta content="Caching: Getting Precise with Your Golden Hammer - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Caching: Getting Precise with Your Golden Hammer</b></h2><h5 class="post__date">2015-06-02</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/xXUiYCXlYng" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">alright thank thank you so much for
+coming to my talk today I know three
+o'clock it's a tough our the day during
+a conference it's you got all that food
+in your stomach you're a little sleepy
+so i'm going to try and teach you guys
+some stuff about caching and keep you
+awake it's not an easy task so to start
+off with a brief introduction for this
+talk and what inspired it i originally
+gave this talk at a previous company
+that i was working for and the reason
+that i put this talk together is I found
+that I kept having the same
+conversations with people over and over
+and over again which was we'd end up in
+a situation where something was added to
+our code base it was performing some
+kind of query against the database maybe
+it's lightweight and it's happening a
+lot or maybe it's heavy weight and there
+was just this automatic let's just put a
+cache in front of it no matter what we
+were doing and there wasn't a lot of
+Diagnostics being done to figure out how
+that caching should look what made sense
+to do because they kept saying this to
+people having the same discussions I
+finally decided you know what this needs
+to just be aggregated into one place and
+I think it's something that throughout
+our careers all of us have done it's a
+very easy thing to do to just say it's
+slow throw cash in front of it it would
+be great but you can run into some
+problems doing it and we're going to
+explore some of those problems today and
+some of the decisions that are involved
+with using caching so I want to start
+off by giving you guys an idea of what
+we're covering and what we're not just
+to get everything out in the open this
+is primarily focused on cashing within
+the JVM it's not focusing on external
+caches such as memcache which it's a
+very popular one and we're not going to
+be discussing sharding which is a common
+subject when you're talking about a
+distributed cache they're both important
+subjects but because we only have an
+hour and we have other material to cover
+it's a little bit outside the scope so
+motivation for the stock caching is
+great that's it thank you but no caching
+is great it solves a lot of problems for
+us it gives us more performance it gives
+us greater scalability but can we have
+too much of a good thing how do we know
+if we have too much of a good thing how
+do we know if we're doing it wrong
+ultimately caching isn't free but it's
+usually pretty cheap some caches are not
+very effective though they may have a
+very low cache hit ratio so most of the
+stuff that you're actually fetching out
+of the cash you actually have to go pull
+it out of a persistent store before it's
+entering some caches hold on to way too
+much data you have if you have a low
+cache hit ratio a lot of that stuff may
+be sitting in memory but you're not
+actually using it and it's taking up
+space some cash is actually cause
+resource contention and we're going to
+delve into that point much more
+specifically and further down in the
+presentation and if you use it
+incorrectly caching can destroy the
+performance after the performance of
+your application believe it or not I've
+seen this happen I've seen it happen on
+Cyber Monday at a retail company and it
+is not a fun experience to go through so
+what are we doing we cash we're storing
+data in memory right it's a replacement
+for fetching that data from some slow
+persistent storage slow is relative a
+lot of the persistent storage that we
+use is very fast but you don't want to
+keep piping it over the network you want
+to have it nearby servers have lots of
+memory now right if you look at a server
+now it's almost incomprehensible how
+much memory you just get that you don't
+even have to think about asking for more
+of it there's just tons of it around
+however the JVM only handles so much
+memory gracefully as you increase your
+heap there are some constraints around
+the performance of the JVM and you have
+to account for now this varies depending
+on what garbage collect collection
+strategy you're using and it also varies
+based on who your jvm vendor is those
+topics are beyond the talk so for now
+that's sort of a follow up appointment
+let's talk a little bit about how the
+heap is structured it's split between
+young tenured and permanent spaces now
+in Java 8 tenured and permanent are
+actually being coalesced into one space
+so
+I put this up here because I figured it
+was relevant not everyone's on Java it
+yet objects start off in the young
+generation new whatever it's there and
+it can move between these different
+portions of the young generation as more
+garbage collections happen most of the
+objects that you create our short-lived
+and ultimately garbage collected think
+about a web application when you're
+getting requests in a lot of that data
+is only going to be around for the scope
+of that request once that request is
+done that data can go away you don't
+need it anymore if your objects in young
+Gen survived repeated garbage
+collections they eventually move on to
+the tenured space and objects that are
+in tenure are generally the long-lived
+objects in your application for example
+cache data you want that to stay around
+for a while tenured is just going to
+keep growing as more and more objects
+survive garbage collection whenever you
+have to see about freeing up memory
+within the heap the garbage collection
+the garbage collector has to briefly
+stop the application to do that so that
+varies depending on which strategy are
+using different garbage collectors will
+have different pause characteristics for
+example g1 will actually do several
+smaller pauses versus something like CMS
+may have a much larger pause after doing
+smaller ones to figure out what's going
+on within your tenured space they get
+more expensive the larger the heat gets
+there's more data to keep track up
+there's more that it has to examine to
+see if it's available to be reclaimed or
+not when you start to enter these long
+pauses and these pauses can get into
+five seconds ten seconds depending on
+the size of your heap you're going to
+start to see performance problems right
+if you have a website and you're under a
+lot of load and your application is just
+for ten seconds you have all of these
+requests queuing up and eventually
+they're all going to come through when
+your heap is full so you have all of
+this space use in your tenured space you
+also constantly have objects being
+allocated in the young space
+can happen is as it's trying to move
+data that is survived garbage
+collections in the young space over to
+the tenured it can end up doing repeated
+garbage collections and that gets really
+really ugly because if your jvm is just
+garbage collecting over and over and
+over again your performance is just
+bottom doubt it's not going to be
+responsive at that point so what does a
+cache actually look like really it's
+just a map kV half the time its keys to
+value sometimes that differs depending
+on the data set you're caching but it's
+actually pretty straightforward in terms
+of data structure anything you put
+inside of a map is going to be strongly
+referenced there are other maps that
+don't do this but generally if you're
+using a hashmap strongly referenced any
+reachable strong reference cannot be
+garbage collected so you put data in a
+map you're holding on to that map you're
+holding on to the rest of the data
+caches have to be reachable to be useful
+if they're not reachable they're just
+going to get cleared away from the
+garbage collector and you don't want to
+go back to your persistent storage for
+that data they also don't automatically
+just get rid of stale data for you
+oftentimes your cash if you're using
+something like eh cash or guava cash is
+just using a least recently used viction
+policy so it's going to just hold on to
+that data and as soon as it needs to put
+something else in the cache if it's full
+it will then just stop referencing data
+that was previously in there to make
+space for new stuff so how do we solve
+these problems first of all try not to
+cash more than is necessary if you're
+caching something try to strive for a
+good cache hit ratio eighty percent I
+call out is a good target it's really
+going to depend on what it is that you
+need to cash how heavy it is you kind of
+need to play this one by ear but the
+higher the better understand how I'm on
+your date is used this is really
+important because it's easy to make a
+poor estimation of how much stuff you
+actually need to cash if you don't
+understand how it's being
+used you may end up either cashing way
+too little and you just end up having
+this nasty cycling of data out of the
+tally or cash because you're constantly
+pushing weeks recently used objects out
+of there and then pulling new data in or
+you're cashing way too much and you just
+have stale data taking up memory for no
+good reason try to get an idea of how
+large your data is and how large it will
+be usually data grows over time and
+that's going to change how you have to
+go about caching things if you find that
+you end up with a lot of stale data
+let's say that you're caching something
+that has some sort of temporal nature to
+it it's maybe it's articles on a news
+site and you want to cash them for a
+while but as new articles come in the
+other ones fall out and you want to
+reclaim space in a more controlled
+fashion you could use a background
+thread to actually go through and evict
+older stuff so you don't have as much
+kicking around while that actually has
+support for this you could also roll
+your own depending on what caching
+solution you were using can I just not
+use the heat I mean all we're talking
+about is well the heap causes problems
+the grabs crotch has to keep track of
+everything I don't want to use the heap
+well yeah you can do off heat caching
+and no it's not particularly
+straightforward to do I don't recommend
+it unless you're really prepared to deal
+with some of the consequences that come
+up doing this if you're going to do a
+few caching if you're on a 32-bit JDM
+depending on the platform you either
+have four gigs or two bigs depending on
+how much you're allowed to allocate to
+the process minus the max-heap available
+okay so if you have a one gig keep and
+your platform supports four gigs there's
+three gigs of room in your process that
+you could allocate for off heap if
+you're on 64-bit it's all the available
+memory on the system minus whatever your
+max heap is all of this spacing you
+allocate is actually part of the Java
+process so if you look at it with PS or
+top or whatever you'll you may only have
+a 512 min heap but you may have a two
+gig Java process if you've allocated a
+bunch of direct memory it's not managed
+by the garbage collector at this point
+this is outside of that space the only
+stuff that's managed by the garbage
+collector is memory that's part of the
+heap so why is this so difficult doesn't
+sound that bad you end up having to
+manage your own memory when you do this
+it's allocated as a block of memory via
+java and io byte buffer or you could do
+it through sun misc unsafe there's a
+reason they call the class unsafe if you
+want to roll the dice and use it be my
+guest but they gave it a scary name for
+a reason you can cause errors that will
+just totally shut down your application
+or potentially cause issues on the
+machine that you're using you need to
+know where things are in this array of
+data that you have so you need to have
+some way of knowing where to look in
+your contiguous block it's not just as
+simple as a collection or anything like
+that you're actually keeping reference
+of different points in this big span of
+data and you actually need to serialize
+and deserialize from a byte array you're
+in need of memory at this point it's not
+just Java object in the memory you go
+like it is at the heap you have to
+serialize this in order to store it
+there's also a cost to allocate the
+block of memory that you're using so
+really if you're going to do this you
+need to allocate a good-sized chunk that
+you think is going to store what you're
+using and then try to avoid doing it
+again and I'm going to quickly show you
+some code so this is ok we switch
+primary screens thank you so this is
+actually from the JDK and this is a
+class called bits so this method right
+here reserved memory is what gets called
+when you try to allocate memory directly
+well the first thing we do is we
+synchronize on bits class because we all
+know that that scales well luckily these
+are fairly lightweight things that we're
+doing so we lose the lock pretty quickly
+but if you scroll further down or if I
+scroll further down
+we didn't call system GC again this is
+actually in the JDK which kind of
+surprised me usually you don't see calls
+to system GC kicking around after we've
+called system GC which may or may not do
+anything we then sleep for a hundred
+milliseconds this is not something you
+want to be calling every time you need
+to allocate memory outside of the heap
+in your application so you really need
+to just allocate as much as you need and
+just live with it okay have I scared
+everyone away from off you cashing
+unless you absolutely need to do it then
+okay so let's talk about blocking versus
+non blocking cash two different
+strategies for doing caching they have
+very different constraints to them they
+each have their own use cases whenever
+you have to load data and it's not there
+that's a cache miss right you have to go
+out to your persistent storage pull it
+back up put it into the cache serve it
+back that also means you're going to be
+blocking any threads that are asking for
+that data this is generally unavoidable
+usually you end up blocking the reason I
+say generally unavoidable is let's say
+you have an app that's just under a ton
+of load and you have some kind of
+messaging that is on your old say it's a
+web app you have some kind of messaging
+on your web page and it's not
+mission-critical data and you're trying
+to fetch it and it's not there in that
+case it may be okay to just return
+nothing just say you know what I don't
+want all these requests to stack up just
+serve up the page and the next person
+who comes along will try and display it
+to them when you hit stale data in your
+cash it also means that you're going to
+reload it so if you say anything in my
+cash lives for an hour then fetch it
+again you're going back to the database
+to get it in a blocking cash you're
+actually going to be preventing the
+threads from proceeding blocking on
+reloading that data can be optional
+though you can actually return stale
+data and reloaded asynchronously this is
+an
+blocking cash you could do that by just
+having a background thread fetch stuff
+for you so what are some of the pros of
+blocking caches then first of all the
+data is predictably stale if you say
+data lives for an hour you go to fetch
+it it's going to make your thread wait
+until it gets a new representation
+sometimes this could be important it
+really depends on the nature of your
+data it's also a little less resource
+intensive than loading asynchronously
+because you don't have one or more
+background threads that are in charge of
+going out to the database either on an
+on demand or scheduled basis to fetch
+stuff for you however you can have
+insane latency if you have really
+popular keys in a blocking cash and I've
+seen this firsthand and it gets really
+really ugly because all your threads are
+waiting and because you're making them
+wait on a limited number of mutexes once
+you actually fetch that data back it's
+not just every thread gets that once
+it's you can have somewhat serial
+performance depending on how many new
+texts you have because everything is
+queued up and can only get a certain
+number of locks actually read the data
+out of the cash this is often better
+when you have a lot of keys and you
+don't have really high key contention on
+certain keys within your cash if you
+have a subset of them that's accessed a
+little more frequently that's one thing
+but if you had a thousand entries cash
+and there were five that just got
+hammered and the other ones were here
+and there that's a little bit different
+the story so for non blocking we can
+return stale beta don't block any of the
+reading threads and then just load it in
+the background and we don't have to have
+any review texts at all we could just
+say just hand it back hand a backhand it
+back and swap it whenever we get a new
+one however this does require additional
+threads to do it and you have to make
+the decision of what am I doing this on
+demand you know I go to fetch something
+and it's stale so then because it's
+stale i send my thread to go get
+something or you know every 60 seconds
+am i just going back to the database to
+reload it the data is also unpredictably
+stale as a result of this it may be a
+really
+narrow margin of staleness if you're on
+a scheduled basis but because you can
+return data that's beyond what your
+amount of time is it might be a minute
+and two seconds old does that matter
+depends on what your data is right so
+you have to figure out what works for
+you in terms of timing and staleness and
+all that this is generally better if you
+have fewer keys and high contention so
+if you have some fixed set of data that
+you know is going to be hit a lot and
+you just can't afford to go back to
+persistent storage you need to cash it
+and you don't want contention this makes
+sense so which is what what do I use
+there's two different options there and
+data is highly variable in nature
+depending on what's happening each cache
+popular technology that's a blocking
+cash well the cash can be either you can
+do a blocking catch you could do a
+non-blocking cash and configure how many
+threads you want to load stuff you can
+configure our cleanup thread if you want
+as well neither one of them is the best
+choice in all cases you need to do your
+homework you need to figure out what's
+going on in your application and what
+makes the most sense to do that you need
+to figure out the characteristics of
+your data how is it being used if is
+there a subset that's more frequently
+hit than another what kind of key
+contention are we going to have how is
+it going to grow all of those matter as
+far as a decision that you make and if
+you're really not sure what to use you
+should talk to your co-workers sometimes
+just the interaction of explaining
+something to someone else when you're
+deeply ingrained in a problem they're
+just going to go yeah just do this and
+sometimes they might clear the air for
+you so this used to be the last slide on
+blocking and unblocking but I gave this
+presentation of my co-workers and they
+very quickly called out and called me
+out and said real nice Ian at the end
+you say talk to other people and then
+move on to another subject so I decided
+to go back and actually go through some
+example cases because I felt like that
+was a worthwhile exercise so let's say
+we have a product catalog with millions
+of items in it and we need to cash those
+that's maybe a little bit expensive to
+pull a product out of your database
+in a case like that a blocking cash
+probably makes sense it may not if you
+have maybe two products that they're
+just hit constantly and everything else
+is just sort of out in the periphery but
+you probably don't have that kind of
+distribution of traffic let's say a
+subset of those products are featured on
+the homepage of your website so that's
+getting hit all the time right that's a
+common entry point for websites we will
+just type in the domain hit enter go to
+it in that case a non-blocking cash
+probably makes more sense you really
+don't want to tie up request to the home
+page trying to load those products and
+you probably don't care that much if
+there are a few seconds older than you
+had intended with a blocking cash what
+happens if we have a subset of products
+that are on sale for a limited time this
+one's questionable because we have
+contention to deal with and we have
+staleness to deal with as well they're
+both important from a performance
+standpoint at a business standpoint if
+we're advertising something and it's a
+limited time and it runs out of stock
+you want your customers to know about
+that pretty quickly in this case a
+solution that I've done in the past that
+has worked pretty well was actually
+splitting data on the time to live based
+on what's static and what's dynamic in
+nature so most of your information about
+a product is probably pretty static you
+probably have things like a title and
+image a description maybe there's some
+other metadata at it maybe there's tags
+to it but things like your pricing and
+inventory data those change a lot so it
+may make sense to actually keep that
+subset inside of an asynchronous cash
+that you reload on a scheduled basis
+maybe it's you know maybe you're getting
+I don't know a thousand requests a
+second to this sale page and you're
+reloading your price and inventory data
+on a scheduled basis every second on one
+hand we have that thread that's
+constantly polling but it's still a lot
+better than actually having those be
+live hits and if its off by a second
+chances are the customer impact of that
+is going to be somewhat narrow narrow
+enough that you could get by with this
+solution so let's talk a little bit
+about local versus distributed caching
+there are very very different strategies
+caching and often with distributed you
+need to really explore a lot of
+different criteria about your system
+architecture in order to know how to do
+it correctly when you have a local cache
+it means each server has its own cash
+everything has its own memory allocated
+to it it keeps whatever's there doesn't
+care about the rest of the servers out
+there it just cares about what it's
+holding on to when you're dealing with
+distributed though it means that
+multiple servers are sharing some space
+now that can vary depending on how
+you're doing it if you're dealing with
+actually coordinating state and sharding
+or if you're dealing with replica sets
+there's some variability there local is
+really really simple I could just be a
+hashmap if you wanted it to be
+distributed on the other hand is very
+complex you need to have a way of
+coordinating state between the servers
+in your cluster and you need to be able
+to do it fast and reliably greater
+detail of distributed is a little bit
+outside the scope of this talk I would
+like to get into it more but there's so
+much that you have to figure out in
+terms of serialization overhead in terms
+of fault tolerance in terms of how do
+you deal with well the opposite of fault
+tolerance you lose a node and you bring
+it back up and then you have to
+redistribute your state there's a lot of
+stuff to go over there maybe next year
+maybe an extra one the pros and cons of
+local it's really just a decorated map
+you're just dealing with some contracts
+around how long you're going to keep
+data in it and you don't have any
+serialization overhead either it's in
+the heap you can get it immediately and
+it's they're free you could use guava
+you could use the H cash there's
+probably a hundred other options out
+there that are available to you
+including ash map if you really wanted
+to on the flip side though they're going
+to be less efficient because you're
+going to have more cache misses because
+every server that has a local cache has
+to make the same request to your
+persistent storage and large clusters
+this could really get ugly because
+you're increasing the number of requests
+that are going back to whatever your
+storage is quite a bit
+and on top of that if you're dealing
+with a cluster consistency becomes an
+issue if you have half an hour time to
+live and something is changing
+frequently but it's accessed somewhat
+infrequently and you at a cluster would
+say 20 servers you might have 20
+different copies of the same resource on
+there because they all loaded it at
+different times and they all have their
+own local cache customer could sit there
+and just refresh that page and just keep
+seeing different things and then just
+laughing website who hasn't done that
+come on you're sitting there refreshing
+the page you go these guys don't know
+what they're doing I keep seeing
+different things distributed you're
+going to get fewer cache misses in
+clusters right because you are
+distributing that data across them you
+are keeping a a single space that you're
+storing everything in and you get
+consistency the cluster sees the same
+version of the resource that you're
+pulling down and for big data sets this
+is great because if you're dealing with
+local and big data sets you might be
+keeping around a gig of data on each
+server whereas if you had 10 servers may
+be your only storing 100 megs of data on
+each server much better however you have
+to deal with data management and network
+chatter these things have to move data
+across the network and they have to do
+it quickly in order to keep your
+application up and running they also
+have to serialize once you're leaving
+the heap it's bytes once you re enter
+the heap it's bytes to objects so
+there's a cost to doing that it's not
+just as simple as sending data over the
+wire enterprise solutions like coherence
+or hazel cast is another big one they
+cost a fair amount of money you have to
+be ready to pony up some some bucks to
+get them there's some free ish solutions
+but they're they're way more bare bones
+they don't have very elaborate options
+in terms of how you're agreeing on state
+across the cluster so which one of these
+do i use it really depends on the
+constraints of your data how your users
+are going to be using your application
+you need to do some homework to figure
+out what that means for you local is
+quick and dirty
+up the map put in the map done it's in
+memory we're good distributed is going
+to be better if you have a large data
+set because you're not repeating that
+data across your cluster and it's
+probably going to be better for a
+cluster because you're not increasing
+the load to your persistent storage but
+you're going to have complexity of
+managing it and you're going to have
+some costs associated and if you're not
+sure talk to other people and this is
+where my co-workers said that is a
+cop-out give us some examples that's not
+cool so example cases let's say we had a
+content management system and we had
+these really large view templates okay
+we have whatever view technology you're
+using I don't know velocity handlebars
+mustache something and you want to store
+those in memory but they're also updated
+frequently because your content
+management system people are going in
+and editing them in that case
+distributed probably makes sense because
+you're dealing with representations that
+are pretty large in size and you care
+about consistency on the cluster you
+don't want someone to get an old version
+of it and think that's weird I could
+have sworn I edited that and then have
+to go change it again if you're dealing
+with data that's for example greetings
+can messages stuff like that well it's
+not very big and it doesn't change very
+frequently and there's probably not a
+lot that you're gaining by going across
+the cluster to a distributed cache in
+fact it's probably going to slow you
+down if its data that you're accessing
+frequently on a lot of the different
+endpoints of your application in that
+case it probably makes sense to just put
+it in local what if we have a session
+store for user behavior a lot of us have
+probably dealt with the question of do
+we do distributed sessions there's a
+cost of doing that right sessions can
+change frequently depending on what kind
+of behavior you're actually looking to
+record and if they're changing
+frequently you have to coordinate those
+changes across your cluster so you have
+consistency constraints and you have
+resource constraints because you're
+using up network bandwidth it's often
+times depending on what data that you're
+dealing with it's not mission-critical
+for example let's say that you're
+recording what product someone has
+looked at because you want to serve them
+recommendations on your website it's
+great if you could serve them accurate
+recommendations because you're probably
+able to upsell them but if you didn't
+have that data you could still show the
+website you could still just show
+products that are maybe top sellers in
+this case one option is to actually do
+local with a sticky session and I've
+heard that Amazon does this but I could
+not find a article that actually
+explains and verifies that they do this
+where they'll actually track your
+behavior on one server and if that
+server ever becomes unavailable they'll
+just shipped you off to another server
+and the recommendations will become less
+relevant but they do that so that
+they're not constantly shifting all of
+this customer state all across their
+cluster other data that you care about
+maybe you care about something's not
+user behavior maybe you care about
+authentication tokens maybe you care
+about a coupon that they have or
+something like that that kind of data
+you probably want to keep maybe in a
+cookie or something like that this way
+they don't lose all of that if they move
+to another server but things like
+product clicks that you can afford to
+lose so we keep talking about
+understanding your data a little bit
+better and it's worthwhile to talk about
+what kind of questions you should ask
+and how you should break that down first
+of all how expensive is it to load this
+is sort of the definitive question about
+whether or not we need to catch
+something right if it's expensive to
+load we have to catch it what does it
+mean to be expensive to load it could
+just be size right it's a lot of stuff
+that we have to Sri mover the network
+electrons ultimately only move so fast
+so you could just have an i/o boundary
+that you can't get past you could have
+really high database or CPU load when
+you're trying to load this data in cases
+like that chances are you must cash
+because you can't afford to take down
+your database because you're loading
+something and you can't afford to have
+application servers go down because
+they're just chomping away at data
+trying to produce a result to the
+user frequency is another case you may
+actually have a really lightweight query
+but if you're just running that query
+constantly it can really hinder the
+performance of your application and I'll
+tell your short story on that hibernate
+has some odd behaviors when you're
+talking about limiting result sets and
+doing a joint because it doesn't always
+apply the limit to the join the way that
+you want it to and I know there's at
+least one person in the audience signing
+his head because we worked on this
+together when this happens it can end up
+loading a lot of data for a joint more
+than you anticipated maybe the children
+of all of the parent records and because
+those parent records maybe there's other
+parent records or associations that
+don't exist yet in the in the objects
+you can end up issuing a ton of
+individual queries back to your server
+in this case it was a hibernate issue
+but it's an illustration of you could
+just really kill performance just by
+doing really lightweight queries in this
+case the query that was running was
+actually taking up about fifteen percent
+of our Oracle clusters CPU and it was
+just a primary key join and fetching
+maybe a dozen columns but it happened so
+often that it was a huge load on her
+systems yes it was a lazy so what would
+happen was it would load the parents and
+apply the limit but then I think we were
+using a sub select and the sub select
+didn't apply the limit the same way
+loaded all of the children and an effort
+loaded all of the children the parent
+has to be eager and it went back and
+loaded all of the parents because we
+were doing a query against something
+that wasn't it wasn't against the parent
+right it was against some other facet of
+that entity so yeah we just loaded a ton
+of parents sorry say that again
+oh absolutely absolutely yeah and that
+totally fits into the the i/o and memory
+bound right if you have a service that's
+slow and actually it that's a good point
+because it brings up both right if
+you're waiting on some load on some
+other system you probably don't want to
+tax it over and over again another
+question you should ask is how often
+will I hit cash this is going to figure
+out what your cache hit ratio may be and
+how it may improve or degrade over time
+an example is if you have static content
+it's probably a pretty high cash hit
+ratio or relatively static in nature if
+it doesn't change very often you could
+probably cash this for a long time and
+get a decent amount of hits going
+through it however if you have really
+diverse data you probably will have a
+low cash hit ratio depending on how the
+traffic to that data is distributed so
+you should do some estimation for
+example estimate how your data will grow
+how many new records will I get per
+month how much of that data is
+considered active it's not uncommon to
+have data that fall that ends up being
+live in your system and eventually falls
+out of scope that's probably data that
+you don't need to cash because people
+probably aren't going to see it anymore
+and it's not going to be frequently
+accessed unless it ends up and maybe a
+search index or some random page on your
+site that grandma has bookmarked or
+something like that try to figure out
+how diverse the data will become are we
+going to get thousands of unique entries
+are we going to get millions of unique
+entries and is there a subset of that
+data that's more popular than the rest
+because if there is well that's the
+stuff that I want to cache because
+that's the stuff that's going to cost
+you the most to load whenever you're
+trying to figure this out it helps to
+work with your product owners to get an
+idea of how they envision that data
+growing because they're going through
+the legwork of figuring out how they
+might promote a feature how they might
+see users using a feature in production
+they may also be talking to other
+customers selling them on feature
+it really helps to have that other end
+of the equations that you know you're
+dealing with in advance and that you
+don't get caught off guard when you put
+your cash into place and you've done
+some math on you've looked at trends in
+the database and you've kind of figured
+out how fast it's growing and then you
+find out that some new customer just
+came on board and all of a sudden your
+cash hip ratio just totally bottom Dow
+you're hitting your persistent storage
+for all of these requests and your
+performance on your application just
+tanks and if you would have known that
+ahead of time you may have increased the
+size of your cash and been able to
+handle it so let's do a quick recap
+since we've covered a lot of stuff we
+could just go through a few quick points
+to reiterate things caching is great but
+it's not free there's a cost to doing it
+there's performance cost there are
+hardware costs there are other resource
+costs that you have to consider you
+really need to know the characteristics
+of your data to do it correctly it's so
+easy to just throw a cache in front of
+something and throw caution to the wind
+but there's a good chance it can bite
+you later so try to figure out what it
+is that you're dealing with and plan
+ahead consider how much memory your
+application is going to need to use when
+you're dealing with caching within the
+JVM because if you start to get up to
+four gig heap a cake heap you really
+need to start thinking about am I going
+to hit long GC pauses am I going to
+start to thrash at some point am I using
+the right garbage collection strategy
+for this to all important questions
+trying to figure out how expensive it is
+to load that data as well that can
+change depending on how it grows you may
+have an index on something but if you
+have enough you know a complex of enough
+join it could still be kind of an
+expensive query or if it's just that
+well the data is growing and growing and
+growing and I have to stream more stuff
+over my network there's a cost that too
+and it can also really slow down your
+application take your cash hit ratios
+seriously don't ignore these if talk to
+your talk to your op staff talk to
+whoever it is that can give you some
+visibility into that see if you could
+make it
+part of your performance testing metrics
+so if you have an environment that you
+run load tests in before you ship your
+application try to get some monitoring
+hooked up to you can do monitoring
+through jmx try to get something hooked
+up to that and then record that data and
+make that part of your baselines that
+you have some general idea of maybe
+someone shut off a cache or maybe your
+Kashyap ratio has gotten worse or it'll
+tell you things before you go live and
+have a problem and remember not
+everything needs a cache there are some
+things that it's okay to go back to the
+database too it's either not
+economically viable to catch depending
+on your organization and your system
+architecture or it's something that it's
+just so lightweight that we don't really
+need that here or it's highly volatile
+in nature and the amount of complication
+that we get with caching it doesn't
+offset the cost that it takes to load
+you just need to figure out what is the
+ultimate cost to that and can we get by
+without doing it if it makes sense so
+choices to make non-blocking is great
+when you have a bounded data set for
+example the the subset of products that
+are featured on the homepage you know
+what that data set is it's really easy
+to look up you could do it in one
+background thread pretty lightweight
+blocking is great when you have diverse
+data because you just want to make some
+threads wait while you load it it's not
+that big of a deal and you're not going
+to have your chances are you're not
+going to have a lot of contention across
+your cluster and you don't have to have
+a lot of background threads trying to
+load it for you non-blocking will use
+more resources as a result of that
+thread usage and blocking will get ugly
+for you if you have really high key
+contention and you're blocking on reads
+local caches they're simple and they're
+cheap but they could really wreak havoc
+on consistency and the amount of memory
+you're using in your application
+distributed can work wonders for big
+data sets and large clusters but you
+also have to pay for it and you have to
+deal with the complexity of it so
+getting runtime information
+you can track cash statistics via jmx
+for example eh cash will tell you cash
+hits cache misses total number of
+objects in memory and tools like nagios
+and AppDynamics can track this for you
+and give you meaningful data about it so
+you can go into production and you can
+figure out or staging or however your
+infrastructure setup and figure out
+exactly what your cache hit ratio is one
+thing that's worth calling out on this
+and it kind of goes back to my statement
+before of trying to get the set up in
+your staging environment where you're
+doing your performance testing is that
+you will never simulate entropy in your
+load test environment you may have a
+nice diverse data set you may run
+billions of requests through your
+application in your load test
+environment it's never going to match
+what your customers are going to do and
+that's the kind of data that you really
+need because production is where you're
+caching performance counts most right so
+you really want to have it in both
+places to get an idea up front of how
+its performing but also to capture that
+behavior that you just simply can't
+reproduce guava does not have jmx but
+it's really easy to add if you've ever
+done that before you create an interface
+and then a concrete class you attach
+some sort of statistics pojo to that and
+you expose it through the is that the
+beam manager I forget what the name the
+exact name of the classes off the top of
+my head and being sober I think yeah and
+you can get metrics that way it's really
+not bad to do and there's actually
+resources out on the web that will show
+you how to do it but what do I use
+there's a lot here and I need to cash
+stuff and I don't know how sorry but
+you're going to have to figure it out
+there's hopefully enough covered in here
+that it should give you some example
+cases and some data points to work off
+of to give you an idea of how to break
+down the problem and how to figure out
+which strategy will work for you and
+also plan for the future talk to your
+co-workers as well they're going to help
+both both nit outside of IT they're
+going to help give you an idea
+of what you're going to be dealing with
+both in the short term and the long term
+and really it all comes down to
+understanding the characteristics of
+your data knowing how it's going to grow
+knowing how big entities are going to
+get knowing how diverse it's going to
+get or at least having an idea of what
+that will look like over time so
+shameless self-promotion slide I have a
+website it's the other end com the
+reason for the other end com is when I
+started at my first job at a school
+there was the chief architect at the
+company who was aimed Ian it was in the
+audience and I was always known as the
+other Ian I decided to just take my
+identity crisis to heart and call myself
+the other end and register a domain for
+it some of the stuff that's in these
+slides there are very in-depth blog
+posts on my site that talk about things
+like off heat caching putting jmx and
+guava stuff like that so if you wanted
+to get more in depth there's some
+information there I also put all of my
+stuff up on github my gists are what I
+use it on my blog posts so if you wanted
+to get ahold of that that's all there
+for you and if you're interested in
+these problems the company I work for
+now macerate is hiring if you go to
+mastery com / careers we're an API
+management company we work with
+companies big and small we have
+companies like Starbucks best buy so on
+and so forth and scalability is corridor
+business so if these kind of problems
+really intrigued you dealing with really
+high load and a lot of complexity and
+how much data you have to move around we
+deal with a lot of that okay then the
+obligatory questions slide because we
+still have that's 343 we have the half
+an hour break in between we have about
+17 minutes so yes sir oh sorry look I'm
+just going to run my own for a mind you
+than you
+they are on the they get uploaded to you
+to upload them if you were a speaker on
+the on the Java one speakers portal I'm
+assuming they're going to make them
+available oh yeah sure absolutely the
+question was are these slides available
+my understanding is that all the slides
+are being uploaded I don't know where
+you download them from do just go to the
+link for the talk has anyone done this
+yet okay fair enough I yeah I yeah I
+could put it on SlideShare so and then
+you which of the products that you
+discussed offload the job of insertions
+from the developer so that just happened
+I'm sorry say that again I don't think I
+caught all that we have some caching
+products require the developer is to do
+the cash insertions themselves like sure
+versus other products like a transparent
+I grew between so which is I mean well
+for the technologies I mentioned with eh
+cash and guava cash they're both they
+both read for you you can specify
+something that's going to populate the
+cash for you and then on a cache miss
+that automatically gets invoked if you
+are trying to roll your own for whatever
+reason then you'd have to basically
+write your own cash loader to do that on
+a cache miss you wouldn't want to have
+to lock against the key outside of it
+now you'd really kind of want those
+things together I would say but if you
+ever if you if you try using guava cash
+that's what it has you do when you build
+a loading cash it actually has you
+specify a loader that's generic to the
+type of your cash and then you just
+configure how it gets loaded against
+that key and it's a similar thing in eh
+cash as well yes sir
+say that one more time I'm sorry the
+door closed gotcha so the question was
+strategies for cash cashing via the data
+database here versus the application
+tier right so that's a good question I
+you know if you're dealing with the
+application tier you're probably trying
+to cash if I'm understanding your
+question correctly you're probably
+trying to catch stuff that's
+computationally expensive where you
+don't want to have to repeat that so if
+you get some kind of result maybe maybe
+you're trying to crunch some numbers
+about a user's behavior on the fly
+you're just trying to cash some kind of
+results that you know something to serve
+up for a while that's the kind of thing
+that would make sense in an application
+class or in an application cache if
+you're talking about the data tier it
+really first of all depends voyeur
+persistent storage is right because if
+you're dealing with something like a
+relational database you know that's
+usually your the main purpose of your
+relational database is probably not to
+stream data it's probably using all of
+the all of the features of acid and you
+know transactions on your database right
+you want to have some kind of mechanism
+to guarantee the way that you're
+manipulating your data and in that case
+it probably makes sense to take more of
+that load off of that database because
+you really want it to have availability
+to do all this complex work on inserts
+and updates and stuff like that to keep
+your data consistent if you're talking
+about something like let's say you're
+talking about a no sequel database let's
+say you're using a database i like is
+couchbase couchbase is really just the
+union of memcache and CouchDB so you're
+actually in a cache at that point in
+that case it's really a question of do I
+actually am I making to network hops or
+am I actually you know sending the user
+directly over to couchbase maybe it's
+just heading through a load balancer so
+you kind of need to figure out well is
+it I owe or is it the the computation
+cost to load it off of the server
+depending on how the servers actually or
+how you how your data server or data
+tier is keeping that data available does
+that kind of answer your question or
+okay cool here ah yes sir you know
+honest that's a great question so yeah
+so the question was if you're dealing
+with a cash that's one to two gigs does
+it really make sense to keep it in the
+heap at that point that's a great
+question so first of all it depends on
+what you're dealing with because as soon
+as it's outside the heap your
+serializing right so serial a
+serialization overhead can actually be
+really expensive if you're dealing with
+a ton of transactions so that's one
+factor in it the other factor in it is
+just complexity if if that's something
+that your operations seeming your
+infrastructure is able to handle they
+can pull up it doesn't sound like a lot
+but for some people that can actually be
+asking a lot to actually say okay I have
+this memcache cluster over here and then
+i have my application closer over here
+sometimes it's non-trivial for people so
+if you have the ability to do that and
+you're saying well i have these you know
+fairly large static representations and
+you know i have a to get keep but i'm
+only storing a thousand things in it
+well I probably push towards external at
+that point it really doesn't make sense
+to keep that in the heap it's just not a
+good use of heat memory does that kinda
+answer your question okay cool anyone
+else
+alright thank you so much for coming to
+my talk I really appreciate it</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

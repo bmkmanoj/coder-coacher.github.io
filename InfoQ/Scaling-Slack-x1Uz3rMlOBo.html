@@ -1,0 +1,665 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Scaling Slack | Coder Coacher - Coaching Coders</title><meta content="Scaling Slack - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/InfoQ/">InfoQ</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Scaling Slack</b></h2><h5 class="post__date">2018-02-09</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/x1Uz3rMlOBo" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hello everyone my name is Bing and my
+engineer on the infrastructure team at
+SLAC today I'm going to talk about
+scaling slack before the talk I want to
+do a quick poll raise your hand if you
+have used the slack before wow I saw
+maybe in that heat 95% of you have used
+the slack that's fantastic
+so for those who haven't used slag let
+me spend 30 seconds introduce what's the
+racket so that is a messaging app the
+conversations were connected by channels
+you can send and receive messages get
+notifications sent themes to your
+co-workers upload files search for
+content and the install tools and
+services that you already use inside
+slack today there are over 1000 apps
+available inside slack here are some
+examples of them slack is where what
+happens our mission is to make people's
+working life simpler more pleasant and
+more productive we launched the slack
+about four years ago at first we only
+have small teams with a few dozen and
+hundreds of users today we have gigantic
+organization with hundreds of thousands
+of users the design decision we made
+back then made sense
+showed their limitations I'll talk about
+the challenges and problems we run into
+how we solved them and where we're going
+next here are some numbers about slack
+skill we have over 6 million daily
+active users over 9 million weekly
+active users the average time people
+spend stay connected is over 10 hours
+and over 2 hours in active use on a
+typical working day over half of our
+daily active users are outside of us
+this
+a simplified version of slacks
+architecture slack use a typical la MP
+stack short for Linux Apache Mexico and
+PHP in the center there is web
+application it it implements our
+business logic of slack it's backed by
+short in Mexico and a job queue system
+which executes a synchronous jobs
+another important component of the stack
+is messengering server
+it sends real-time events to users it
+used WebSocket protocol which is a food
+to clerks communication protocol over
+TCP it is the post multiplexing and is
+bi-directional both the client and a
+server can push data to the other end
+our client
+mobile desktop will web the speak HTTP
+to web to web app and web socket to
+messaging server the problem we had was
+user experienced slowness connecting to
+slack the problem first show up in 2015
+to understand why that's a challenge
+let's take a look at the login flow
+imagine you arrive at your office you
+had your first coffee now you open your
+laptop and the launch slack what happens
+then is your client send HTTP POST to
+the server the server validates your
+token and it sends back a snapshot of
+your team here is a screenshot of the
+response with top-level objects there's
+team including your team name and the
+team setting the list of channels the
+list of private channels your AIIMS your
+group AIIMS users and bots on the right
+this shows the response size with
+different number of users and channels
+of your of the team you don't need to
+read too much about the exact number but
+a takeaway is the response that can
+become fairly big and it grows with the
+size of the team I will come back to
+this in a moment
+in this response there's also a
+WebSocket you are L which client used to
+establish the WebSocket connection with
+the messaging server then real-time
+events flows in on this WebSocket
+connection and your client is ready to
+use you can now navigate to channels
+send messages and start a conversation
+with your co-workers on that WebSocket
+connection there are over 100 types of
+events essentially anything happening in
+real time
+inside slack it's sent to you through
+those events examples of such events
+include chat messages type indicator
+indicating who it's type in the channel
+files upload files comment replies to
+threads user profile change user
+presence change reactions pin stars
+app installation X etc etc in short
+client first download a snapshot of your
+team then it is tablished a WebSocket
+connection and real-time events floating
+on that connection the client is a
+eventually consistent snapshot of your
+team this design made make a lot of
+sense in early days the slack objects
+users channels messages are stored
+locally on the crime side this enabled
+us to support extremely rich user
+experience and we it allowed us to move
+fast and experiment here new features
+and designs it worked great for small
+teams however is not so great for big
+teams there are a few problems the first
+team payload is too big it takes time
+for the server to assemble them to
+transmit them of the internet and and
+takes time for the clients to process
+them it contributes to your large client
+memory footprint clients needs to
+process is payload and keep them up to
+date
+it is expensive to reconnect to slag
+imagine you had a break in the middle of
+the day when you come back 50 minutes
+later your client needs to sync up all
+the events that hit missed during that
+time there can be reconnected storm if
+there is a regional networking blip many
+user come back online in the same time
+the Thunder herd overloaded the servers
+with which caused cascading failures and
+it takes time to recover we were aware
+of this problem so we did a bunch of
+incremental improvement improvements
+first we reduce the initial team payload
+from three different effects client
+stores at timestamp of the objects so
+that's the server only needs to send a
+delta of those if they are updated since
+last time we we removed certain objects
+out out like I am so that are not
+currently open
+the idea is to establish the WebSocket
+connection as fast as possible then
+those data can be loaded in parallel
+while the WebSocket connection is made
+third we simplify the certain objects
+for example we simply provide the image
+the image you the user image URLs into a
+hash code under 10,000 user team this
+change alone saved us a few megabyte of
+data we also changed how climbed
+bootstrap instead of instead of loading
+the whole word the client can choose to
+load one channel first this is
+especially useful on mobile imagine this
+use case you you'll receive an push
+notification on your phone you tap it
+all you want to know is what you want to
+do is to be able to reply to this
+message as fast as possible so instead
+of loading the whole world mobile client
+loads this one channel first with the
+current message a short message history
+and users who are mentioned in the
+history this was first implemented in
+mobile then web client adopted
+adopted it the web can also do a full
+load in parallel this reduced user
+perceived a latency by 30% a few other
+things we did we implemented a rate
+limit when servers are overloaded
+rittany meters kicks in so that we only
+allow our percentage of traffic to go
+through we set up pops around the world
+point of presence to terminate SSL
+connections closer to the users we
+implemented load testing framework we
+similar we created the big teams and
+simulates user different traffic
+patterns in a controlled way so that we
+can see me we can find out potent acts
+proactively we're not only dealing with
+the scale of teams we are also dealing
+with new product features for example in
+late 2015 we launched group ion's this
+cost the users to be naturally in more
+channels and caused the initial payload
+to be bigger we also launched emoji
+reactions
+this makes messages to be bigger and the
+client and the reactions are synced to
+client
+this makes client more likely to dump
+his local storage because at some point
+it's easier and simpler to load
+everything from scratch instead of
+applying a delta this bad of all this we
+managed to keep the situation in control
+with incremental improvements however we
+know that's not enough we would still
+run into problem if even bigger teams
+end up with us we were at risk of
+outages when many clients dumped their
+cache
+oh it was it is time for an
+architectural change the idea is simple
+client lazy loading down on less data
+upfront and download more on T mount
+this means a real tech chure of the
+client code of the client because client
+can no longer make an assumption that
+all data is accessible locally sometimes
+data are fetch the look fetch to
+remotely from remote servers what they
+have fetched remotely there is
+networking one trip Tommy introduced but
+still we want our user experience to be
+seamless regardless of where data are
+fetched so we decided we want a new
+service this service also client queries
+on demand it is backed by cache and sits
+on the edge of the network so it
+provides fast data access we call this
+service flannel you may ask why the name
+flannel any guesses
+well naming as we all know it's very
+difficult in computer science on a day
+when the project would kick off the lead
+engineer happened to wear a flannel
+shirt that's why in short flannel is a
+query engine back to back cache it sits
+on the edge locations we examined the
+objects in the initial payload and move
+the biggest object out first
+so users and then comes with channel
+membership and channels we tweak to the
+login process now users established
+WebSocket connection to flannel first if
+the user is the first user on his or her
+team then Freneau does not have the team
+data in cache it goes to web app and
+loads the data from DB then it he
+established a WebSocket connection on
+behalf of the user if the user is not
+the first user on the team then friend
+already have to have a warm cache it
+skips step two and goes to an
+established WebSocket connection
+directory for the user flannel is
+essentially a May in the middle
+it sits on the WebSocket connection
+between client and a messaging server
+and that WebSocket connection
+emissions they're over 100 types of
+event flannel passes through all of them
+to the client it process a handful of
+them to use them to update his cache
+such such events are users and channels
+related examples are channel creation
+user creation user change their profile
+a user joins or leaves a channel flannel
+is deployed to seven different locations
+the Red Guard is our main region in u.s.
+East in the main region it has the four
+slack stack including flannel web app DB
+and messaging server flannel is also
+deployed to sell to six other remote
+regions and only flannel is in the
+remote region we use a mix of AWS and
+Google cloud for our remote regions here
+are some UI example that is powered by
+flannel quick switcher it's a quick way
+to to navigate to different channels and
+users when you start typing it gives you
+a list of channels and user suggestions
+when you select while you can navigate
+to them directly if you haven't used it
+I highly recommend it
+it's control its command K only a Mac
+and control key on Windows mentions
+suggestions in a master box when you
+start to type at something it gives you
+a list of user suggestions it also tells
+you whether the user is in the current
+channel or not channel head bar it tells
+you currently you are in general channel
+and with a bunch of basically
+information about the channel number
+count and the channel topic channel
+sidebar it tells you more about the
+channel team directory tells you
+everyone inside this team and allows you
+to search it insured
+anything related at you users channels
+channel membership and autocomplete is
+powered by flannel
+Flener was launched early this year
+there was a load testing team with
+200,000 users we had not been able to
+load this team without flannel but now
+we were we are able to load it friendo
+serves over five minutes simultaneous
+connections to the peak and it serves
+over 1 million queries per second here
+is a side-by-side comparison of the team
+directory loaded with and without
+flannel on the left hand side it's
+already loaded on the left on the right
+hand side it's still spinning takes more
+seconds ok that's not all of it
+evolution of flannel the design of
+flannel client lazy loading requires
+client to be able to load data
+asynchronously aunt amount however
+before flannel the web current is in
+flip was implemented in a way with the
+assumption that data is always available
+locally so right before it it's about to
+render user Bob
+it needs Bob in slow Co storage it's
+impossible for us to change every word
+in crime code to be able to support lazy
+loading or at once
+so what flannel did was to implement it
+just in time our notation let me explain
+it in an example suppose you send a
+message you mention Bob in your message
+and Bobby is not in the select clients
+cache so that the client has no way to
+render the message at all friend seats
+on a WebSocket connection it's it's this
+chat message it used some heuristic to
+know ok the client does not have it so
+it generates a synthetic user change
+event about Bob client still uses out
+code it see this user change event it's
+absurd
+it's local storage with Bob mom's later
+the chat when the chat message is
+received client is able to render that
+message without problem in short
+just-in-time annotation complete our
+needs without changing 1,000 places in
+the web in cran code today our client
+evolved it is able to load data
+asynchronously everywhere so we no
+longer need just-in-time annotation but
+it used to be instrumental for us to
+route flannel while the web client made
+incremental changes to support it let's
+take a closer look why does flannel sit
+on the WebSocket connection it needs to
+receive real-time events to update his
+cache however there's a downside
+imagine this use case today you are at
+Keuka you only check slack in and out of
+talks occasionally you want your
+co-workers to know that's the case so
+that they can just their assumption
+about your responsibilities in you
+crying messages so you change your slack
+status to be in a conference this state
+has change is broadcast to all your
+co-workers if you are on a 1,000 user
+team messenger server send out 1,000 of
+such events flannel at the may in the
+middle it receives 1,000 copy of the
+same event this is very inefficient what
+we did is we supported a we implemented
+publish subscribe pops up Rennell pops
+up to a list of users and channels it is
+interested in with messenger server and
+only at github dates for those this
+means a rewrite of the messenger server
+for it to support pops up I won't go
+into details about how we did it but we
+implemented it provides us a few
+benefits
+it saves plan or CPU with simpler code
+we also changed from Jason event to
+thrifty event the schema data it's much
+easier to manage it provides flexibility
+for cash management previously Flener
+okay allotted the team data when the
+first user connects and unload theta
+when the last user disconnects it has to
+do it in this way because that's the
+only way for it to keep the cash up to
+date when the roster user disconnect the
+web connection the WebSocket connection
+is tore down and Friends cache local
+would go still pretty quickly today
+which pops up we isolate what events
+friend receives from who are connected
+to flannel so if Leno can keep the cash
+data around longer next time when the
+first user on the team connects Fran
+already have a warm cash this helps with
+the user click connect time pre-warm
+cash is currently under development
+let's take another closer look which
+pops up does friend know still needs to
+be on the WebSocket path dancer is down
+we can move flannel out of the path in
+fact there is no need to capo a search
+query engine with real-time events path
+once flannel is moved out of the
+WebSocket path it provides better
+isolation in our architecture and this
+is the next thing where the next thing
+we're going to work on so far I've been
+talking about the involvement the
+evolution of flannel
+because of performance requirements
+there's also product requirements a big
+one is enterprise grade graded select
+select solution for big enterprise in
+third grade you can create unlimited
+number of federated teams by complete
+departments of locations or anything you
+define each grade team provides you the
+same experience that many of you are
+familiar with across teams you can
+create shared channels across a food a
+few
+teams or the entire grade it's a great
+level it provides management privacy and
+security control when flaner was first
+implemented we don't have grid in our
+mind one important design of flannel is
+team affinity this means all users from
+the same thing goes to the same clan or
+host if they're from the same
+geographical location this is to you
+guarantee cache efficiency with shared
+channels it means many different teams
+share the same objects
+this makes flat no to cache duplicated
+objects inside their carriage inside the
+cache repeatedly it's clear we need to
+do better we introduced great aware
+cache which means enough and a single
+flannel host we store those shared
+objects in won't separate key space
+which are referenced by multiple teams
+with this change we saved a lot of
+flannel memory our average per host we
+saved Chinese yogic bat of the 22 to
+kick that of memory and one point one
+terabyte across the fleet for our
+biggest customer it also improves their
+DB shard CPU usage the CPU idle
+increased from 25 percent to 90 percent
+that is because it's more likely for
+shared objects to be in cash so it takes
+so flannel needs to go to the beach
+fetch data less fewer times for the
+exact same reason this also improves
+user collect connective agency p99
+agency dropped from 40 seconds to 4
+seconds in the future we plan to
+implement scatter and gather when
+requests coming one flow no hosts fetch
+data from different his bases which may
+located on different flannel hosts and
+combine them together our thinking is
+this will further improve our cache
+efficiency
+so far I've been talking about the
+evolution of flannel let's tweet switch
+gears and look at client pops up this is
+an interesting feature for performance
+reasons if you still remember the
+example I brought up earlier you are at
+cue card you change your slack status to
+be in a conference and this is broadcast
+to all your coworkers in fact this is
+unnecessary most likely you are going to
+talk to you a few dozen co-workers most
+of the time so only them needs to know
+your state has changed instead of
+broadcast everything to everyone
+client-side pops up is for clients to
+sub support for crunch subscribe to your
+list of users and channels they're
+interested in and only get updates for
+those in fact reduce the number of
+events client have two clients have to
+process largely improves clients
+performance the first thing we moved to
+presents - the first thing we moved to
+Oakland pops up is presence update this
+is a feature when the user goes online
+or offline we render a green or grey dot
+by the side of your avatar presence
+events used to be 60% of all the events
+in terms of volume due to its volatile
+nature under 1000 the user team suppose
+each user flip their presents once its
+generate 1 million events it grows with
+n square in Big O notation so what we
+did is client keeps a list of users in
+counter view and only subscribes to
+their presence when the user changed
+their view it it's changed the
+subscription list this reduced the
+presence events by a fact by a factor of
+five across the fly and we're moving
+more events into this model
+lastly let's take a quick tour of
+messaging server what is missing you
+suffered you can think of it as a big
+router it aroused events to users when
+the event happens on a team a message is
+created we actually it's made a file is
+uploaded messenger server found this
+event to the list of users who are
+supposed to receive them
+less new server maintains metadata so
+that he knows where to route the traffic
+it knows which channels are on the team
+and who are connected to which channels
+initially it was implemented shortened
+by team meaning once there is
+responsible for your team all the events
+related to that team goes to that server
+this is a single point of failure when
+the server goes down it means your
+select you cannot connect your select
+you cannot connect to slack we have
+shared channels share cellos channels
+means there are many shared States among
+different teams and we need to copy
+messages around imagine a shared channel
+which is shared among a few thousand
+teams which we do have in production
+this makes States management impossible
+it's clear we need a plan B we changed
+from team shardene to topic Charlie what
+is topic in this context topic is a
+group of affiliated objects that you
+divide so at home it can be a user a
+specific group of users a channel shared
+or long shared a DM a group DM a team
+work great events has sent two topics
+topic Charlene's a natural fit for share
+the channels the events from the share
+the channel you send to the topic that
+represent in that channel and fend out
+to all channel members
+Recovery's of which team the user his
+arm it reduced user perceived failures
+now when a server goes down he means the
+list of topics are not available very
+likely you can slap you can still
+connect to slack but you may not be able
+to access all your channels it's the
+messenger server react texture we also
+improved our failing recovery previously
+when a server goes down
+it requires human interaction and
+operator needs to come in run a script
+micro age the states to a healthy server
+today all these are automatic it reduced
+to failure recovery time from minutes to
+seconds messenger server support pops up
+a mission earlier posts flannel and
+clients subscribe to the list of topic
+they're interested in and only get
+updates for those this improves flannel
+and client performance messenger were
+implemented felt is the edge previously
+Messner server only sees in the main DC
+today we move part of the functionality
+to the edge this reduced the networking
+bandwidth between our main region and
+remote regions this is a two-year
+journey we had a problem within a bunch
+of incremental changes we keep the
+situation in control than we did a big
+architectural change this architectural
+effort is across different teams
+Beck had a friend and mobile PMS and
+product engineers our first design of
+this architecture is not the most
+optimal we knew that but with deciding
+that you do it this way because that's
+the faster and the easy way to push out
+the change then we take time to evolve
+on this architecture I think this is the
+biggest reason why we succeeded in such
+a big effort
+and we have a long way ahead currently
+we're working on creeks at a pre-warm
+flannels cash more flannel out of the
+websocket pass and everything pops up
+under you for our team
+besides flannel and a messenger server
+we are also responsible for job queue
+and the sorority layer if you are
+interested get in touch thank you now I
+will take questions so one question
+about your messaging server why do you
+decide to implement pops up yourself in
+the server rather than use a middleware
+or
+something else to implement it for
+examples they RabbitMQ Redis or any
+other pops up systems out there we
+discussed that within our team the thing
+is we already have a system ready there
+that were the implement most of the
+logic so when we do the architecture we
+feel like we don't need to spend an
+effort to bring in something completely
+new we can just tolerate tailor our
+existing system and be able to support
+all those new features so if the client
+is doing a lot of lazy loading as
+opposed to those big payloads coming
+across the wire
+how are you protecting yourself against
+you know death by reconnect so if your
+service goes down and you have these
+clients across the world trying to
+reconnect to your service
+how are you protecting yourself against
+sort of a thundering herd problem
+honestly it depends on how much we
+connect we guess today we can only
+support here to up to a certain point
+for example two weeks ago we actually
+have an incident where we are like this
+whole service was was done because of a
+thunder herd problem but actually that
+problem is we lost half of our WebSocket
+connections and all of them are
+collecting slack all at once
+we actually didn't handle it well enough
+today what happened back two weeks ago
+was a WS gob was done because yoga
+cannot scale fast enough and then we
+have to set up a new year b cluster and
+scale it over time that's how we
+recovered our traffic okay let's thank
+me</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

@@ -1,0 +1,1322 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>BetrFS: A Right-Optimized Write-Optimized File System | Coder Coacher - Coaching Coders</title><meta content="BetrFS: A Right-Optimized Write-Optimized File System - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Microsoft-Research/">Microsoft Research</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>BetrFS: A Right-Optimized Write-Optimized File System</b></h2><h5 class="post__date">2016-06-21</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/fBt5NuNsoII" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">each year Microsoft Research hosts
+hundreds of influential speakers from
+around the world including leading
+scientists renowned experts in
+technology book authors and leading
+academics and makes videos of these
+lectures freely available
+you
+so good morning everybody thank you for
+joining us we're very fortunate to have
+dr. or sorry professor Rob Johnson
+visiting us here I know him from when he
+was a grad student back at Berkeley I
+think at the very first conference I
+went to I was trying to save money and
+he had a spare bed in the room he was
+renting for the conference and so he
+looked out for me when I was a very
+young grad student so very happy to have
+him here I'm prepared with his work in
+the security world where he's done some
+very cool stuff on sort of language
+based security looking for
+vulnerabilities in the Linux kernel but
+lately he's been looking at optimized
+data structures particularly for
+high-performance systems and in this
+case file systems Rob thanks Brian so
+good morning and thanks for having me
+here and this is a talk based on better
+FS which is a project that has a lot of
+authors from a lot of different
+institutions if you don't I'm not going
+to actually name everybody that it's a
+collaboration between Stony Brook which
+is where I'm from now
+toko tech incorporated is a start-up by
+some of my co-authors Rutgers and MIT
+and this was a talk it's an expanded
+version of a talk from fast this year
+music's fast and my goal here is to
+actually communicate information so feel
+free to ask me questions and stop me at
+any time because I really want to
+hopefully teach you about what write out
+to my data structures are if you don't
+already know them and and how they can
+impact how they can benefit file system
+design but also how they impact file
+system and system design
+because they're kind of a radical
+departure from the data structures that
+we're used to um so let me begin by
+explaining the motivation if you if you
+take an off-the-shelf file system
+something like ext4 which is kind of a
+default file system in most Linux
+installations and you run a benchmark
+where you just do a gigabyte of
+sequential writes and you run it on a
+spinning magnetic disc and the disc is
+rated for 125 megabytes per second then
+you'll see that ext4 gets the throughput
+of
+104 megabytes per second and so for a
+sequential write load ext4 does great
+it's getting most of the disk bandwidth
+out of the disk on the other hand if you
+do a random write workload same file
+system same disk but you're doing small
+random writes over a 1 gigabyte file
+then the throughput that you HD for
+visit gets is only about one point five
+megabytes per second so it's hardly
+getting any of the performance out of
+the disk it's really wasting a lot of
+the potential performance that little
+slivers what is actually getting now so
+what's going on here and you probably
+guess the real problem is that these
+random writes in deuce a lot of sikhs
+buy the disk and if we do kind of a
+back-of-the-envelope calculation the
+average seek time on a disk is around 10
+or 11 milliseconds and there's the OS is
+writing data for kilobyte granularity so
+there's about one seat for every four
+kilobytes and so if you work that out
+that would imply about a half a megabyte
+of bandwidth for random writes like this
+now we did a little bit better but we
+weren't seeking over the entire disk we
+were seeking over a one gigabyte file
+and presumably Linux did a little bit of
+i/o scheduling to try to get things in
+it in some rough order so we you know
+it's not surprising we did a little bit
+better and the disk might have done some
+work okay this definitely yeah yeah so
+but you know still this is a problem if
+you're doing random seeks for every i/o
+there are other file systems that try to
+overcome this so the most you know the
+most well-known class of file systems is
+log structured file systems and what
+they do is whenever you write new data
+they just append it to a log and so
+appending to a log doesn't require any
+seeks and so you can write data really
+really fast the problem is that over
+time as you write to a file in you know
+different locations of the file the file
+gets kind of
+scattered over the disk and it's not
+stored in any meaningful order on disk
+and so when you go to read back the file
+then you have to do all those seeks and
+it can be very slow so log structured
+file systems you know they they're they
+have a different performance trade-off
+but they still represent a trade-off
+between these two types of operations
+random writes and sequential reads
+now what better FS does is it uses a new
+class of data structure called write
+optimize indices and write optimize
+indices they can take in data at a very
+high rate so they're not really seek
+mown they're more bandwidth bound but
+they do maintain logical locality so
+things that are logically consecutive
+are stored more or less physically
+consecutively on the disk so that when
+you go to read them back you can read
+them back very fast and one of the main
+contributions of our better FS design
+was a schema for mapping file system
+operations down to operations that the
+write optimized index can perform
+efficiently and so that where we're
+trying to extract as much of the
+performance that from the write optimize
+index as we can and carry it over to the
+file system
+another important thing we did was we
+implemented all this inside the Linux
+kernel rather than using fuse or some
+other kind of you know external
+interface between the kernel and the
+file system and as a result we found
+there are some opportunities for you
+know redesigning the interaction between
+the file system and the rest of the
+kernel to get some additional
+performance I'll take a little up that
+later we're not the first to do a file
+system based on a write out those index
+there have been several others that have
+shown that write optimization can be
+used to speed up some operations in file
+systems they we our goal really is to
+take things as far as we can so to try
+to take this right optimization to its
+logical conclusion in file system design
+to see how how much we can get done
+also this prior work was all in
+userspace and as I mentioned we want to
+understand how right optimisation
+affects the system design and the design
+of the higher level file system so we
+had we wanted to do things in the kernel
+all right that's the overview I want to
+dive down now into the water right
+optimize data structure is and how you
+can build one and what its performance
+characteristics are and for that I just
+want to introduce a simple performance
+model that we'll use to think about how
+well different data structures perform
+this is called the disk access machine
+model it's also sometimes called the
+external memory model but it should
+hopefully look pretty intuitive to you
+the computer has some RAM of size M
+although that's not really going to come
+up in this talk and then you have a disk
+of however big size you need we don't
+really care about the size of the disk
+and in order to operate on any data it
+has to be brought from the disk into RAM
+and data is moved in blocks of size B
+and then of course if random gets full
+you have to shuffle something back out
+to disk to swap it back out and the data
+size is going to be and that's so if you
+see capital ends in the later slides
+that's what it's referring to the total
+number of data items and all we care
+about in this model is how many block
+transfers we perform during some
+operation like a lookup or an inserting
+of the new item we don't care about
+computation in memory at all we're going
+to completely ignore that we just to set
+that aside and maybe we'll come back and
+think about it later yes so this model
+simplifies lots of stuff all the blocks
+are the same size so you're just coming
+we're just counting six and we don't
+care about whether two blocks are
+adjacent or not we don't yeah every
+every Sikh is a Sikh we just count C's
+okay yeah there's a lot of there's a lot
+of stuff that this model throws away
+okay yeah yeah we're gonna add back in
+bandwidth a little bit later in the talk
+but it's still a really helpful model
+for understanding performance of data
+structures as a warm-up let's look at B
+trees dude who here knows B trees
+everyone knows okay let's do it just to
+make sure we've got the terminology on
+the same page real quick so in a bee
+tree you've got nodes of size B so you
+every time you access the block you're
+just gonna read in the whole node and
+the entire space of this node is used to
+store pointers to the children and the
+pivot keys that you know tell you which
+child you need to go to next and since
+the fan-out is B or roughly be the
+height of the tree is going to be log
+base B of N and what that means is that
+if you want to do a query you have to do
+log base B of n block transfers to get
+to the leaf and if you want to do an
+insert of a new item basically an insert
+is query for the item to get the leaf
+that it would go into and then put it in
+the leaf and then right back that leaf
+back so it's more or less just the same
+cost as a query good maybe it's even a
+B+ tree element but we're not gonna use
+them so I didn't vote I didn't I wasn't
+careful about it so this this data
+structure by the way okay you guys all
+know this so I'm preaching to the choir
+maybe but I mean this has been the data
+structure for databases for like 40
+years yeah and you know there's file
+systems based on this - like butter FS
+and Linux is a btrfs NTFS is a b-tree
+file system it's a direct researcher
+it's expensive okay
+that's bigger that's right so you know a
+very venerable data structure but it
+turns out it's not the best you can do
+there is in fact an optimal trade-off
+curve between the IO cost of inserts and
+queries in a non dissipative structure
+this was proved back in 2003 and the
+curve is parameterised
+by an epsilon and I'm not going to ask
+you to read or understand this there
+won't be a quiz on this part at the end
+of the talk but it turns out that B
+trees are basically at one end of the
+curve if you kind of plug in an epsilon
+equals one you get log base B of n for
+both operations the point that I really
+care about is this one because if you
+plug in epsilon equals 1/2 then you're
+still going to get log base B of n for
+queries what you actually get is
+basically log base square root of B of n
+but log base square root of B is just
+twice log base B and so this is still
+order log base B but the big doozy is
+that you get a square root of B in the
+denominator for an insert cost and if
+you think about what a typical value for
+B might be it could be something like a
+thousand and so this square root of B is
+definitely like 30 and so what this
+means is that you can build a data
+structure that can ingest data an order
+of magnitude or two orders of magnitude
+faster than a b-tree but it's query
+performance is essentially the same yes
+the constant factors there really aren't
+any hidden constant factors here except
+for maybe that factor of two the tree
+will be twice as high
+however you know I wouldn't get too hung
+up on that um yes well well I think
+they're really there might really be an
+extra factor of two here that the other
+was not paying but what what um well my
+co-authors have told me they've seen in
+doing their startup is when they go to
+customer sites oftentimes it's not
+really a matter of a trade-off between
+you know the queries and the inserts in
+maintaining an index for many people's
+workloads the data comes in so fast that
+the only index they can maintain is a
+time stamped index and so when it comes
+time to query they have no index and so
+what this makes it pause it makes this
+bit makes this makes it possible to have
+an index at all so it's not really a
+trade-off between this and this with a
+factor of two that's missing it's this
+and well I didn't have an index I had to
+scan the data so here's a cartoony
+version of this trade-off curve you know
+if inserts being slow over here and fast
+over here and queries being slow versus
+fast and a b-tree has fast queries but
+it's kind of you know as far as this
+trade-off curve is concerned they're
+kind of slow inserts and fortunately the
+shape of the curve means there's a huge
+opportunity for us to slide our data
+structure along this direction and get
+dramatic speed ups in inserts with only
+a modest slowdown in query it's very
+small slow down in queries and so that's
+that's the target of opportunity for
+about optimize indexes questions
+everything so far so good this is slow
+fast slow slog slow on the the one axis
+of linear slow of yellow so
+right if you're just logging you don't
+need to expend then breezy later slow I
+actually I think logging I think
+technically logging is not on the range
+of the curve that I showed you
+yeah yeah it's even um so let me show
+you an example of a data structure that
+moves along this curve to the point that
+we were looking at this data structure
+is called a beat of the Epsilon tree
+which is maybe now you can guess how we
+got the name betr FS and it's very
+similar to a bee tree but we're going to
+use the space in our nodes of size B
+differently we're only going to allocate
+a small amount of that space to pivots
+and pointers to the children so the fan
+out of the tree is going to be square
+root of B instead of B and so that means
+that the height of the tree is going to
+be log square root of B instead of log B
+and then what we're going to do with the
+rest of the space in this node is we're
+going to use it as a buffer for newly
+inserted items so whenever we insert an
+item into a tree we simply stick it in
+the root of them in the buffer of the
+root of that tree so la-dee-da I'm
+inserting items this is really fast I
+don't have to do any log base B type
+work if I've got the root of the tree
+cached in memory this is basically no
+i/o at all I'm just adding things to the
+buffer and then once the buffer fills up
+I just flush all the items down to the
+the buffers of the children
+although otherwise we'll leave just one
+level down so let's let's think about
+what the cost of different operations
+are going to be does everyone understand
+the data structure first so you know
+items items will always live on the path
+from the root to the leaf that they
+belong in so we can always find an item
+by simply doing a normal searching
+algorithm the only extra cost is going
+to be that we have to look inside the
+buffer to see maybe it hadn't gotten all
+the way to a leaf yet but that's where
+ignoring computation
+so that's basically free we don't count
+that and so a query still basically
+takes log square root of B iOS just go a
+root to a leaf path traversal and the
+height is log squared of B now not sure
+it has done the work load you've got a
+lot of space at the stoppers you do have
+a lot of CDs this data structure you I
+don't want to put most of the space and
+the buffers rather than the leaves I'm
+not sure that's early well let's suppose
+the square root of B is like 30 then I
+think you'll have this space divided by
+30 at this level and then that divided
+by 30 again in the next level and so
+that well I would definitely about three
+percent of the space F and C you would
+have so that the leaf would be size P
+right the the reloj of it so it's her to
+be is 30 then B is 900 yep
+some keys that you've got 870 in each of
+the in each of the next belief nose and
+then 900 in the bottom so how after
+space is one level up there's 30 times
+as many leaves there yeah so I think the
+total space of the top of the tree it
+squared to be as 30 would be like 3%
+totally sorry yeah yeah um most of your
+data is gonna be in the least yeah it
+seems like it's making up access quick
+to the data that near the root but isn't
+that did in your RAM anyway and it
+doesn't need to be excess parameters I
+don't understand he's avoiding oh right
+we're warning the writes
+queries are are the same queries you
+still go all the way from root to leaf
+and in fact as you're gonna see we're
+gonna end up going all the way every
+belief anymore
+but let's sail so let's see how to write
+you don't we have okay okay
+I'd really appreciate the questions so
+let's analyze a query cough
+I'm sorry insert cost um so is we're
+gonna do an amortized analysis so the
+number of i/os we need to perform a
+flush is we need to load square root of
+B things is that square root of B iOS we
+can count this one Square to be plus one
+whatever it just calls Square to B and
+then how many items do we get to move as
+part of this operation
+well we move B - Square to B let's just
+call that B because Square to B is
+nothing compared to B and so the
+amortized iOS required to move one item
+down one level is square root of the iOS
+divided by B things that got moved down
+so it's 1 over square root of B iOS to
+move one thing down and everything needs
+to move down that many levels so the
+amortized IO cost to get everything
+inserted into the database is this is
+the amortized io per element move down
+one step this is a number of times and
+all that needs to move down one step and
+so if you simplify as I did before you
+just get log base B of n divided by the
+square root of B so this data structure
+is super duper fast at handling inserts
+of new data and and lookups are
+basically the same as in a b-tree oh
+okay so I just noticed a question on
+line this is probably a little bit of an
+old question so they asked can I
+precisely define sequential right and
+random right with an example or a
+scenario sorry I didn't see the question
+sooner so a sequential right would be
+typically either something along the
+lines of you just call right with a one
+gigabyte buffer and say here write all
+this data to disk at the application
+level
+or you might do a bunch of small rights
+maybe you're writing you know 64
+kilobytes at a time but each 64
+kilobytes is after the last 64 kilobytes
+in the file a random right you can think
+of it as essentially we run a random
+number generator that tells us the
+offset within the file that we want to
+write and then we write maybe a byte of
+data or you know eight bytes of data
+some small amount of data to that offset
+in the file and sequential writes occur
+all the time you can think about like
+any sort of multimedia application you
+know streaming data from a video camera
+or something like that random writes
+occur often in databases where data is
+arriving and needs to be added to an
+index okay so yeah and so so this said
+it works very well if they work load is
+uniformly distributed over they beeps
+you push square we can be down when you
+need to flush you need to consider
+uneven
+so actually you can get even better if
+you have bias
+there's many slight tweaks on this data
+structure I kind of gave you a
+pedagogically simple one where when this
+gets full you flush to all the children
+you could be greedy and say well I'm
+gonna figure out which of my children is
+gonna get the most of this stuff and I'm
+only gonna flush to that child you still
+get the same amortized cost but what
+that would mean is if someone was
+hammering on a particular region of the
+database just inserting a bunch of stuff
+to this leaf that's all good at destined
+for this leaf then this buffer would be
+completely full of things that were all
+going to the same child and so your
+amortized cost would be one over B is
+that I won't ever Square to B so what
+you say is that you
+in your system you will flush in a bias
+with activity so so yes you can yes you
+can do bias flushing like that in fact
+one thing we've been working on sorry -
+I'll get you a question
+as you're gonna see our sequential i/o
+performance is not as good as other file
+systems but it's within a pretty decent
+constant factor and we're trying to
+speed that up and that's sequential i/o
+you can think of as a very biased I'm
+sort of bunch of stuff it's all going to
+the same part of the truth so we care
+about that case okay your question was
+tree rebalancing tree rebalancing so
+this you know in terms of maintaining
+the balance of the tree think of just
+this is like a bee tree say we're gonna
+do splits and joins of nodes and more or
+less the algorithm is exactly the same
+except you kind of just have to split
+the buffer when you split a node but
+it's obvious how to do that and it turns
+out that just like in a b-tree the
+actual i/o costs of even though
+splitting and merging is very complex in
+terms of the code in terms of i/o it's
+it's very it's small Ione isn't it's
+really not that important did you have
+yeah so I probably got the though it's
+squirted be if you look at them in the
+infinite trace each block is going to be
+written to the root and that's gonna be
+written to and then eventually believe
+it the next level and eventually all the
+way to the leaf so each block is going
+to be written order logs over slug
+square to be and time so why is the
+amortized cost not log square face
+birthday eval because good right so
+every you're right every item does get
+written log square root of BN times
+but the reason we get to amortize that
+is because when we move an item from one
+level down to the next we move a bunch
+of odd-eyes yeah
+inskipp mists one more operation I want
+to just keep in your head is range
+queries the way you implement a range
+query is much the same as in a b-tree
+you do a query for the start of the
+range and then you just read the leaves
+you do have to keep reading through the
+higher levels as well to check their
+buffers but the total cost ends up being
+log base B of n that's the iOS to find a
+start of the range and then if your
+range query contains K items K over B
+iOS to collect all the items than your
+range yeah but we're we're throwing with
+a well sometimes it isn't right we're
+gonna fix the parameter of one half I
+know I feel a little bit like I'm
+cheating something well honestly you
+probably do not better to just skip the
+order of the constants Alice's this is a
+practice okay so this is the beat of the
+Epsilon tree I want to I want to I want
+to dive a little bit into range query
+performance and argue that we can do
+range queries at nearly disk bandwidth
+and the reason is that we can have very
+large values of B now what what do I
+mean I can have very large values of B
+it doesn't the disk have a block size it
+you know this transfers data in blocks
+of 512 or 496 or whatever but an
+application could choose to just say
+well I'm gonna always issue reads of one
+megabyte or I'm always going to issue
+reads of 64 kilobytes and if you look at
+the these asymptotic formulas I showed
+you a minute ago then it's quite obvious
+making be bigger reduces the number of
+i/os I have to perform which is not a
+big surprise
+I just put my whole database in one big
+block I'm great but that is ignoring the
+other cost of doing a read which is
+there's the seek time or set-up time and
+then there's transfer time and obviously
+the transfer time is going to grow with
+B so there's kind of this sweet spot
+that you have to choose in terms
+how big can be and it's a little bit a
+little bit complicated by the fact that
+if you work out the bandwidth costs for
+an insert its square root of B times log
+base B but the queries it's B log base B
+and then for range queries is B log base
+B but what we can do is we can tweak the
+data structure a little bit so that the
+bandwidth costs on all of these scales
+of square root of B which I will and
+then once we've done that then it then
+that means that the bandwidth costs grow
+very slowly with B and so we can make B
+really big like 4 megabytes whereas the
+typical node size for a B tree is like 4
+kilobytes or some right it is
+ridiculously small right so some of them
+use like 64 kilobyte nodes but you don't
+they don't get much bigger than that
+most B trees that that's called a big a
+big leaf B tree and so we can
+dramatically speed up of unit forming a
+bunch of raising their time so if you
+know I think if you're using 4 megabytes
+then you if this is 100 say honey
+megabyte per second disk you're gonna do
+about 25 seeks per second 25 seeks is
+about actually you're right yeah but 10
+mil thing about quarter of a second so
+how do we how do we get these bandwidth
+costs down um essentially we're gonna
+organize the node the internals of a
+node a little bit differently we're just
+gonna put all the pivots up front
+that's your pointers to the children and
+the pivots the keys that tell you which
+child to go to and then we'll just
+arrange the buffers for each child
+afterwards and each buffer will be size
+square root of beads this isn't going to
+change the asymptotics of the insert
+cost at all when an insert occurs it can
+do a single seek read this whole thing
+flush things down and then write it back
+to disk but what it means is that on a
+query all we need to do is read the
+pivots and read one buffer for the
+contents of the stuff that's going to
+that child and so this is still a
+constant number of i/os and now the
+bandwidth has reduced the square root of
+these
+to read that note rather than be but it
+doesn't affect the insert costs at all
+so I didn't understand something very
+strange so you're doing a poor one query
+I understand you read the pivots right
+that makes you a pain to know how do you
+know which offers to read and why
+there's only one good ok so well there's
+sort of two ways you could approach this
+one would be every buffer has a fixed
+size so you just know it that's right
+I'm gonna I'm having to that that baby's
+going out the window I think we can get
+it all but I'm not gonna describe add a
+description that gets all of this talk
+and so what you do is you would read a
+pivot yup so you read the collection of
+pivots and that would tell you which
+child your query is going to be routed
+to it will also tell you which of these
+buffers you need to look in to see if
+the item you're looking for is actually
+in the buffer of this node to read the
+buffer at that point it is small that's
+right so it's gonna be two seeks instead
+of one yes let's choose two seeks and I
+guess these things are big enough now
+that did cost me well like to see
+extreme the whole thing I think and so
+do you save not very much it looks great
+because you're really much less data but
+you're actually saving not very much
+right so in you know I'm not gonna go
+into the implementation that we use but
+the implementation effectively does this
+trick at the leaves only for the
+internal nodes it doesn't really bother
+and that's because most the time the
+internal nodes are gonna be cached you
+kind of imagine that the top of the tree
+is cached in expose the tree
+we treat our college coach so it's not
+really worth it next of all yep but I
+just want to I want to give you
+intuition that we can in terms of the
+asymptotics we can get things in the
+right shape that enabled us to support
+or to operate efficiently with very
+large node sizes and so now you know
+those bees turn into square root of bees
+and if you compare that to a bee tree
+you know a b-tree the bandwidth costs
+are B and so that's why B trees versus B
+epsilon trees have this different sweet
+spot in terms of node size and so
+typical B tree node sizes are 4 to 64
+kilobytes I can't say there's a typical
+be the epsilon tree node size because
+there's only one be the epsilon tree
+implementation that I know of in the
+world but a good one is somewhere in the
+range of 2 to 4 megabytes right because
+your I think the beat that be treated
+claiming that that 64 kilobytes is
+actually it could be treatment size only
+happens when you come up the wrong thing
+what you actually how this time right
+and and so it kind bytes transferred is
+it is it no it's constrained by their
+i/o bus man yeah I'm not I know that's
+not a super bunny sighs birdie trees
+wages fall yeah I'm just making this
+theme about what I believe you that is
+but if there's there's two things to
+tease out here right the PD epsilon tree
+actually does matter and also the things
+I'm competing with are tune for the
+computer supply making sanity's and now
+it's really true and and and and so you
+know you get some credit for cleverness
+and then your competition loses some
+credit for lack of progress I'll take it
+and but what this means is that since
+the nodes are really big when we're
+doing a range query essentially we're
+reading a big swath of data and then we
+do a seek read another four megabytes so
+we read another four megabytes and we
+can do those range
+this bandwidth or nearly dismantling
+also okay so it is another question
+that's popped up can you please briefly
+compare this tree to log structured
+merge trees who here knows log
+structured merge trees great so a log
+structured merge tree is sort of a very
+popular right optimized data structure
+that's used in Cassandra and HBase and a
+bunch of other of these modern
+open-source databases and it is Right
+optimized there are some versions of a
+log structured merge tree that have the
+same asymptotic so that B to the epsilon
+tree most of them actually have worse
+asymptotics the the the query complexity
+in a naive LSM tree would be log squared
+like log B of n times log of n you can
+improve that for point queries by doing
+a bloom filter e thing and that gets it
+down from point queries to log the log
+base B of n but it doesn't help with
+range queries you still have a log
+squared because you have to do a search
+within each of the levels of the LSM
+tree so I'm sorry if nobody else knows
+what level some trees are and can follow
+that but that's sort of the short
+version there's another feature of a be
+the Epsilon tree and this also interacts
+poorly with LSM trees but it works
+nicely in epsilon trees which is called
+the absurd so in a lot of times in a
+database you've got a record of the
+database you want to update it and
+another one way you would do that is
+read it modify it write it and if you
+think about it what we've just seen in
+the video on tree is that the i/o
+complexity of a query is like log B but
+the i/o complexity of inserting is log B
+divided by a square root of B so if
+every insert was tied to a query we
+would basically running at the speed of
+the query we wouldn't be getting these
+performance gains and so we want to
+avoid doing queries whenever possible
+and so an up sir enables us to transform
+a read modify write operation into a
+blind just insert something into the
+tree
+um yes great I like the look of I'm
+skeptical about this
+so suppose I've got you know this is
+maybe a banking database and I've got
+five dollars and this it's keyed by my
+ID and I deposit ten dollars so an up
+cert is essentially a message that gets
+inserted into the tree just like any
+other item might be inserted into the
+tree so it's just a blind you know just
+like any other insert algorithm or
+operation but an absurd message has a
+destination key that this is going to
+apply to an operation to be performed on
+that with that key and value once you've
+found it and then parameters to the
+operation and so this just gets
+serialized and placed in the tree you
+can think of it as like a continuation
+or a saved function with some state and
+this message will get you know flushed
+down the tree over time just like any
+other piece of data that's been put in
+the tree until it finally reaches the
+leaf that holds the key that it's
+destined for and at that point the
+database system will apply this
+operation with this parameter to the old
+value compute the new value and then
+replace the old value with the new value
+and and then this message can just be
+discarded that's a temporal ordering
+right so sort of so it will maintain
+temporal order in within this buffer but
+also they'll be temporarily ordered you
+know the older up certain message will
+be further down the tree things never
+jump over each other in this flushing
+process now here's one of the biggest
+steps where we ignore the cost of
+computation which is what if this
+message this absurd message is still
+sitting in the buffer and I do a query
+for my balance well what we do is we
+just on-the-fly
+apply the absurd message so the query
+for my balance will descend the tree get
+my old balance and then it will walk
+back up the tree looking for up certain
+messages that apply to this key and
+apply them and then return the current
+value now there's a question once
+done this should I update the leaf or
+something like that and that's gonna
+there's actually some heuristics you can
+use to decide is it worth the additional
+IO of going ahead and applying this back
+to the disk or maybe it's just cheaper
+to just throw it away
+and the tree remains unmodified and so
+if you're getting if you're if you're
+querying that thing a lot maybe it's
+worth going ahead and updating the value
+if the queries are rare it's not worth
+it but you know in this model we're just
+ignoring computation so we're going to
+ignore the cost of that but this lets us
+do read-modify-write type operations as
+fast as an insert so to summarize here's
+the BD epsilon tree performance inserts
+and up certs both run and log be over
+square to be time which is SuperDuper
+fast point queries are in log be time
+which is the same as a b-tree and range
+queries can run in time log B plus K
+over B but B is really big so this is
+essentially a disk bandwidth what is
+this these are the asymptotics what does
+it mean in practice if you assume that
+the top of the tree is cached then most
+queries are about one maybe two seeks
+and then you can if you're doing a range
+query you just read a disk bandwidth
+then that means if you're running on a
+spinning disk you can do hundreds of
+random queries per second and then
+inserts and upsets you can do
+tens of thousands sometimes if your
+computer's good enough hundreds of
+thousands of these per second okay and
+numbers say one if you have if you have
+them so before making a B as before
+megabytes then and it takes you sixteen
+bytes for a key and an offset right at
+eight places yeah if you have eight
+bytes a final address name eight bytes
+of disk address me because it's logical
+file offset it means that that route B
+is 100 the branching factor is 125 times
+four megabyte vectors which means that a
+treatment with adjustor root is a half a
+gigabyte a tree with the root and one
+level one level under it is 62
+and a three-level tree is by 8 petabytes
+asset which which means that you never
+even you rarely have a three-level tree
+right so so so just I mean I was trying
+to training I understand what this is
+but the real answer is these trees are
+one or two levels deep logic there are
+asymptotics but the asymptotics go out
+the final size that grows so quickly in
+this today fact that once you get to
+about a 4 or 5 level tree it's bigger
+than the total amount of disk space
+produced ever in the history of the
+world no really right 125 times 4
+megabytes grow quickly so you know it's
+actually about twice that um the
+implementation we use actually has a
+fan-out of average of about 10 not 125
+so the tree is gonna be about twice as
+well this was engineered for variable
+size keys so you don't really know how
+big the keys are and so if I had to go
+talk to the people who built it keys are
+actually well wait for it
+let me take our file system let me tell
+you our possible keys are not just all
+of them so what inquiries you you assume
+that what synchronous feedback query
+completes and used to a new query and
+can you change the computation model to
+do previously patches and get you know
+given a synchronous replied
+so I think so I haven't thought about
+that I believe there are some lower
+bounds on batch query processing in
+external memory and they are not very
+optimistic lower bounds as in you once
+your data is large enough you can't do
+batch queries much faster than simply
+doing each of the queries one at a time
+but I'd have to don't take that with you
+know that's gospel um let me tell you
+about the fauces hopefully we'll have
+enough time to actually get to the
+falsest in here but the point here with
+these number these numbers is that if we
+want to get the LA filesystem that's
+going to get this performance we need to
+avoid queries and do blind inserts
+whenever possible and so here is our
+schema for implementing a filesystem we
+maintain to be the epsilon trees one in
+what you call the metadata index and one
+of which is the data index and our keys
+and the metadata index are actually full
+paths and the reason we use full paths
+is that means that files that are within
+the same directory will be logically
+adjacent to each other in the database
+and so if you want to do a recursive
+directory traversal that can be done at
+the speed of a disk parent so full paths
+mapped to struck you know stat
+information who owns it how big it is to
+fit the data index maps full paths and a
+block offset to the well the data and we
+we use full pads here again so this file
+system does not have any notion of an
+inode and that's rather it's a radical
+departure from normal file system design
+and what that but you know what we get
+for this is we get very fast directory
+scans and since these are sorted by the
+block number weak data blocks will be
+laid out sequentially on disk more or
+less you know they'll be a node and then
+every so often you have to jump to
+another node
+rename we're working on yes the rename
+is that is the downside of this yep
+here's a quick roundup of how the
+operations get mapped from file system
+operations to PDF subtree operations you
+know read is a range query or write can
+be coming up sir
+readers arrange query you know so we
+could do very fast you know says
+metadata just you can be coming up sir
+so for example in linux there's this
+thing called a time on a file that they
+often turn off updating that basically
+every time you access a file it has to
+update that thing on this yeah
+such an idiotic design I love this ramp
+that you can read it on Wikipedia belt
+the POSIX designer said let's turn every
+read into it right yes so but hey now we
+can actually do it we can do efficient
+directory scans these operations unlink
+and rename as you've already seen don't
+map nicely to the operation that I told
+you about so far and so those are a
+problem right now in interest of time
+I'm going to skip the the details on
+this the high-level point is that up
+certs enable you to write new data to
+disk very very fast and so imagine an
+application does a small like a one byte
+right into the middle of a page it's
+cached and the pen that page cache is
+clean now normally what the OS would do
+is it would write that byte to the
+in-memory cache market dirty and then
+later on write four kilobytes of data
+back to disk what we can do is we just
+write the byte back to disk we apply the
+byte to the in-memory cache and we say
+it's still clean and so that avoids
+write amplification where a small write
+gets amplified into a big write if the
+page wasn't cache at all we can also
+avoid having to read the page in and so
+this is one of the cool aspects of how
+write optimization can actually change
+what the right decision is in the design
+of your system whether you should do
+write back or right through caching
+here's the architecture of the system we
+basically took B to the epsilon tree
+implementation and it's just imported as
+a binary blob into the kernel this is
+our VFS api that translates from file
+system operations to bf Suntory
+operations the this code was user space
+code so it expects a file system so we
+wrote a shim layer and then it just uses
+ext4 underneath so the exe 4 is doing
+our block management on the disk for us
+and you know this this code is it's
+really kind of amazing this is C++ code
+which in Linux is verboten and so we
+just compile it and usually end and then
+just shove it in there and hope for the
+best and it actually works great now let
+me tell you bout performance results so
+here's where we get to the where the
+rubber meets the road did we actually
+get a speed-up for random writes that
+was one of the things we started out
+with how do we do one sequential i/o we
+wanted to not sacrifice that and do we
+actually see a speed-up in any
+real-world application um we tested it
+on a computer that computer had a disk
+we're gonna compare it yeah we didn't do
+large experiments we just did obviously
+we're gonna compare against several
+other common file systems although the
+tests start with a cold cache and all
+the tests end with you know sync
+operations to make sure that everything
+is actually on this no cheating there
+here is the time it took us to do a
+thousand random 4 byte writes into a 1
+gigabyte file on the different file
+systems this is better if s time so
+lower is better log scale if you work it
+out if you want to know what the actual
+numbers are it's about over 50 times
+faster so this is a huge improvement in
+random write performance by using write
+out to my signature which is what you
+expect that's their bread and butter
+and you know this is showing the benefit
+of being able to do these blind rights
+small file creation is also a basically
+a small write operation so creating a
+new file you have to update a little bit
+of metadata then we write to and invites
+to the file they're balanced in in the
+directory so you don't hit any funny
+dumb file systems worst case where it's
+just using a linked list for its
+directory data structure or something
+like that
+and what this graph is showing is the
+instantaneous creation rate for new
+files again on a log scale and this is
+after it's created yay mini files and so
+you can see better FS is creating like
+10,000 files per second where other file
+systems have dropped out to 1,000 or
+maybe even somewhere in the range of a
+hundred files per second but again
+that's this is the kind of bread and
+butter application for about optimizing
+destruction ZFS is weird ZFS I don't
+know I guess maybe it's warming up it's
+cashers how are we doing on time are we
+okay okay okay all right
+you know again this is a log scale
+sequential i/o here we don't win we're
+reading a gigabyte file about 40
+kilobytes at a time
+our read performance is within the
+ballpark of a normal file system and you
+know probably with some optimization we
+can get that we can close that gap
+our write sequential write performance
+is actually about 1/2 or 1/3 the most
+file systems performance now one reason
+is could be that we're writing all the
+data twice because our beaded epsilon
+tree implementation does full data
+logging whereas these other file systems
+are not doing full date of logging
+except for ZFS which I understand the
+students tell me is doing logging in
+triplicate it literally writes all the
+data three times so we are we're
+actually working on this we have some
+tricks where we're going to preserve the
+semantics a full data journaling but
+we're not going to have the costs we're
+going to write the data one time but
+that's still ongoing work here is our
+delete performance in the version of
+better FS that was described in the fast
+paper so as the file gets bigger the
+time to delete gets bigger yeah so
+basically have a pointer like a symbolic
+length degeneracies when you have long
+chains at those links if you rename it a
+to B and B to C and C to DS and you got
+noise those
+yes but then what happens if I rename a
+full directory and then something down
+inside that directory oh I didn't think
+it through
+we have some other we have fixed the
+rename outside the delete performance by
+implementing essentially an up sir that
+has a applies to a range of messages it
+says delete all these so now this is our
+I think we're actually faster than most
+of the fellows it deletes now so that
+the old scaling was terrible the new
+scaling is good does it actually benefit
+any real application what you know did
+we get the speed-up that we wanted for
+recursive directory scans so here we're
+doing a fine which is only looking a
+recursive traversal of metadata here
+we're doing a grep which is a recursive
+traversal of data and here is time and
+here's better FS on the find and here's
+better FS on the grep so this is a it's
+a pretty dramatic speed-up for these
+kinds of benchmarks now you might say
+finding gripper artificial but you might
+think about things like a backup or a
+virus scan on a computer these are real
+workloads that people care about this is
+a this was the Linux source code and you
+know this is because our sorting method
+our way of organizing the data put
+directories and their contents close
+together some real benchmarks here's an
+IMAP server and it's doing a bunch of
+message reads and message marking I
+don't actually know the dimension mark
+in detail here's the time to run the
+benchmark and as you can see we do quite
+a bit better than other file systems but
+this is no longer we're no longer in log
+scale territory so you know the only one
+that outperforms us is ZFS which we have
+to look into how it does that you know
+if you are sink code between two
+directories on the same file system so
+this is our syncing between a better FS
+and a better fast directory this is our
+syncing between a butter FS that of
+butter Fester
+then the megabytes per second that we
+achieved is quite a bit higher than
+other columns and that's presumably
+because you have to we have to do our
+sync with the - - in place flag
+otherwise it actually makes a temporary
+file and then renames it which as you
+already pointed out is we're not going
+to do well on it so we cheated a little
+bit but if you do that then it can
+basically issue blind rights to create
+the new files and blind rights to write
+the new data into the files so we can
+run really fast so sort of in summary do
+we achieve our goals sequential i/o I'm
+sorry random i/o I would say it's pretty
+much a slam-dunk
+we I'm really proud of that performance
+sequential i/o we've got work to do
+but we have work in the pipeline and yes
+there are real-world applications that
+benefit from this kind of performance
+okay
+so wrapping up the big picture message
+for our work is that we believe that it
+is possible to have to have your cake
+and eat it too you can have a file
+system that supports good random i/o and
+good sequential reading of that data
+back so you don't have to make this
+trade-off that you're sort of forced to
+between something like ext4 which is
+good sequential reads but not good on
+manomaya or something like a log
+structured file system which is good for
+random writes but not so good that
+sequential reads but rot optimization so
+dramatically changes the performance
+landscape of the underlying data
+structures that we need to revisit
+design decisions that we've made in the
+past you know we abandon I notes and
+organize our data quite differently we
+use right through caching and sort of
+right back caching because writing is so
+cheap now and we engineer the system to
+perform blind writes another possible so
+we think there's a lot of research
+opportunity here to figure out other
+ways that these new data structures can
+impact system design and the way they
+can be used to speed things up and it's
+open source all right thank you
+yeah it seems like a lot of benefit so
+this just come from the bed come from
+the blight right opposition which could
+be done without the right after you use
+blight rights and then have a log of
+white rights on any file system and
+maybe that would be a good way to get
+your ideas into mainstream file system
+you know one step at a time so that's
+actually interesting point um so your
+idea would be maybe we would blindly
+write stuff into a log or into a
+buffering memory yeah and then blog on
+disk and keep in the buffer memory yeah
+so one one thing I can point to is there
+is a database that does something like
+this in ODB which is the database
+storage engine for MySQL the default one
+it has what's called an insert buffer
+and so as data is being inserted into an
+index it's just being stored in memory
+and then when that buffer becomes full
+it tries to pick some part of the data
+that will that is all going to the same
+place on disk and just flush it all the
+way to the leaf so just inserts it into
+a b-tree standard B tree is the on this
+data structure and this gets a speed-up
+it's a it's actually an ODB is a really
+good B tree so it gets you maybe a 3 or
+5x feet up but it doesn't get you a 30
+year or 100x speed-up in that scenario
+set it now maybe we can adapt it or do
+something a little different and falses
+yeah
+I hear the disks are on their way so we
+so some of my collectors have
+benchmarked at this on flash Martin at
+Rutgers is doing that and there's two
+comments I would say about Flash one I
+haven't seen the benchmark results one
+is since this does rights in big chunks
+like four megabytes it's actually much
+kinder to your Flash in terms of your
+race cycles and you know having to go to
+a garbage collection and what's all that
+worth of fresh like flash translation
+layer has to do the other thing I would
+say is although I haven't bench I don't
+know the file system benchmark results I
+have seen benchmark results of a
+database built on the same be the
+epsilon tree backend on flash and it
+dramatically outperforms Abby tree on
+the same flash disk so even though flash
+doesn't have the big seek time they're
+still set up costs and so you can get it
+win out of doing this now the next
+question you ask is well what about
+non-volatile Ram aren't we all just
+going to have our file systems and
+everything in RAM and there I don't have
+a good answer for you that might that
+might be a disruptive technology doesn't
+matter
+oh really well yeah we've been we've
+been pleading for phase change memory
+now forever and memristors our you know
+phase change memory plus ten years so
+there's the battery back set of
+technologies and a lot of things that
+don't seem to work yeah</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

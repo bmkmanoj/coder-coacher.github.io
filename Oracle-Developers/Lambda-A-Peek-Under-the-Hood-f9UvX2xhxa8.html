@@ -1,0 +1,1433 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Lambda: A Peek Under the Hood | Coder Coacher - Coaching Coders</title><meta content="Lambda: A Peek Under the Hood - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Oracle-Developers/">Oracle Developers</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Lambda: A Peek Under the Hood</b></h2><h5 class="post__date">2015-06-08</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/f9UvX2xhxa8" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so this talk is a little bit different
+from the many other lambda talks that
+are going on this week I did talk
+yesterday about what lambdas are and how
+they're implemented in Java 8 and I've
+got a talk tomorrow
+on a little bit more detail on how we've
+evolved the collections library for bulk
+operations this is a this isn't under
+the hood talk so in some sense the
+material here is going to be useless to
+you in the sense that there's really
+only a dozen people in the world who
+really need to know this information on
+the other hand is really cool and I want
+to talk about it so and I think a lot of
+you will find it interesting as well so
+I'm going to talk about how it is that
+we actually implement lambdas in Java
+some of you may be surprised at what the
+answer is and I'm going to talk a little
+bit about the path by which we made some
+of these decisions and some of the wrong
+decisions that we considered so you know
+what most of you only get a chance to
+see what the finished product looks like
+and immediately your head is full of
+questions of why didn't they do it this
+way did they think of this did they
+think of that short answer yes we
+thought of that
+you know we evaluated you know dozens of
+possible approaches before we pick one
+you know so but but you don't see all
+that so we'll talk a little bit about
+that today
+all right so lawyers make us say this be
+a quiz on this at the end of the talk so
+like I said this talks about the
+technical details of how we actually
+implement lambda expressions at the
+bytecode level so I'm gonna show some
+byte code if you've never seen by code
+before don't be scared you know it's
+you're using it every day you just don't
+know so I'm gonna I'll try to leave some
+time for questions at the end just in
+case you know people have you know
+questions about all the stuff that I
+cover but I do assume that you're a
+little bit familiar at least with how
+the JVM works if you're not it's
+worthwhile to once it'll you know to
+just at least once run the Java pee tool
+on a class file so anybody use java
+the-- okay excellent
+so Java P is a bytecode number so you
+points it at a class file and it dumps
+out the bytecode
+and it's you know pretty useful tool for
+getting to understand exactly how you
+know Java is translated to the VM and
+what you know what the VM programming
+model looks like so I'm gonna do a quick
+review on what laughs you know what
+lambda expressions look like in Java I
+kind of assume that you've seen you know
+either the keynote talk or you know my
+talk yesterday but I'll just show some
+quick syntax a lambda expression is an
+anonymous method it has everything a
+method has it has an argument list the
+arguments have types it has a body it
+has a return type it has a set of thrown
+exceptions what it doesn't have is a lot
+of syntax to describe all these things a
+lot of these things are inferred by the
+compiler so for example we've got a
+lambda expression here whose argument
+list is one argument called a whose type
+is person and whose body is the
+statement names dad you get name okay
+very often the compiler in first pieces
+of this so we can leave out the type of
+the argument if the compiler can figure
+it out again this is not dynamic typing
+this is just the compiler figuring out
+and not making you say it and lambda
+expressions can capture values from the
+enclosing lexical context so for example
+in this lambda expression at the bottom
+min age is not an argument to the lambda
+so it must be a name defined in the
+context the Foo lambda is defined it's
+going to capture that value from the
+enclosing context and when I say value I
+mean value I don't mean variable people
+very often talk about capturing
+variables lambda expressions in Java
+don't capture variables that capture
+values same thing with inner classes in
+her classes were very pedantic about it
+they made you type fi nal just so that
+you like you know signed off on the fact
+that yes I know this is a value it's not
+a variable we don't make you type final
+the compiler can infer finality for you
+but it still has to be effectively final
+so that we can capture the value and not
+worry about is this variable gonna
+change after the lambda is captured okay
+so just quick background on what lambdas
+look like in Java okay so also quick
+reminder of why we're doing this
+a big big reason why we're doing why
+we're doing lambdas for Java besides the
+fact that it's kind of a bath time is
+providing a path to multi-core right if
+you want to have a programming model
+that scales from sequential to
+multi-core we have to have a compact way
+to express B to express code or behavior
+as data where you can pass a little bits
+of behavior around that say you know
+when you get here do this do this for
+every element of a collection do this if
+you get an error do this when you're
+done etc so it's a small feature that's
+going to make a big change to the way we
+program and the way we design libraries
+and you know those of you who have
+programs in other languages have already
+had this experience you have this like
+how did I ever live without this
+experience those of you who haven't yet
+programmed in a language of lambdas I
+think you're in for a treat
+although it you know may take a while to
+rotate your brain in the right direction
+to fully appreciate it but what once you
+do you're never gonna want to go back so
+what this court what what this talk is
+about is how is it that we take this
+expression that we write in the source
+you know ii aro
+getname or something like that and
+represented in the bytecode and you know
+there were a lot of different ways that
+we could have done you know to represent
+this and a lot of different aspects to
+how do we surface you know this new
+feature in java in the type system and
+the bytecode etc so that's what this
+talks about so and and you know it's
+it's easy to say these issues of runtime
+representation don't necessarily matter
+you know I just want to be able to
+program in this way I want to be able to
+write like code like this and we'll let
+the runtime deal with it but runtime
+representation does matter
+you know because running efficiently on
+the JVM is really important you know
+people are not going to be happy if the
+code looks good but the the performance
+isn't good and that's what comes from
+when there's a mismatch between how
+things look at the language level and
+how they're represented so to try to
+avoid that you know that that pain of
+mismatch we wanted to design this in a
+way so that it would fit
+the JVM okay so question number one we
+have to ask is I have a lambda
+expression what's its type and you know
+if you've you know if you've worked in
+other languages and especially in
+functional languages there's an obvious
+answer to this question it's a function
+type a lot of languages have a notion of
+function type function from TD you
+function from int to long and most of
+the early proposals for lambdas in Java
+included some you know something to the
+effect of we're going to add function
+types to Java as we learned with
+generics monkey and with the type system
+is the gift that keeps on giving
+so that's not something to be done
+lightly I mean yes it would be possible
+to add function types
+it's a java's type system there are not
+a lot of languages that have
+successfully merged nominal and
+structural typing there's a lot of
+dragonss here so this is something to be
+a little bit nervous about so function
+types are an obvious idea but used when
+you start to ask the questions of how it
+would actually work things start to get
+murky so for example how would we
+represent a function in a VM type
+signature when you call a method we take
+the signature of that method and we put
+it in the class file how would we
+represent a function we know how we
+represent int or you know or or a class
+name class how would we represent
+invocation would we use one of the
+existing invoke op codes or we have to
+invent a new op code how would instance
+creation look like right now the only
+instance creation by codes we have our
+new a new array would we use those we
+have to invent something else and then
+how would this interact with the generic
+type system where if you have a function
+from t to you maybe you want this to be
+a function from you no question super t
+the question extends you how do we
+reflect that in the type signatures well
+lots of nasty questions that like don't
+appear at all at the language level but
+but become very important when you have
+to write the compiler and you have to
+produce some byte code so I used the
+word just in scare quotes because that's
+like a great way to like take something
+that's impossible and make it seem
+yes why not just do this right why not
+just add function types so the JVM has
+no natural representation of function
+types or at least no untraced
+representative function types that it
+can put in VM signatures so the closest
+tool we have for rec for representing
+something like function from int to int
+along is generics well that's not so
+good generics are boxed and they're
+erased and we really wouldn't want our
+function types to be boxed and erased
+that would expose a lot more people to
+the pain of erasure than are already
+exposed to it and unhappy about it so
+for example if we represented function
+types with generics you couldn't
+overload a method that took a string to
+to an int with a method that took a long
+to a float and people would say why
+can't I do that there are completely
+different types well they would erase
+too the same you know one arity function
+type and that would be that would be
+terrible
+teaching the VM about real function
+types would be very intrusive it would
+affect type signatures it would affect I
+would require byte codes it would affect
+the verifier so you know no small task
+so we looked at how things have been
+undone historically so historically we
+modeled functions with one method
+interfaces runnable comparator etc so we
+decided all right rather than complicate
+the type system with these kind of lousy
+erased function types why not just
+elevate the concept that we already have
+by giving them a name so we give them a
+name functional interfaces and we say
+the type of a lambda expression is a
+functional interface you can only assign
+a lambda expression to a functional
+interface type so the compiler
+recognizes a functional interface by
+counting its methods it you count the
+non object non-default method so like
+some interfaces like comparator have an
+equals method that is just an override
+of what would be an object we ignore
+this so here we have an example of a
+functional interface called predicate it
+has one method called test it morally is
+a function from T to boolean okay so the
+compiler looks at it and says that's a
+functional interface I'm willing
+to make anything that looks like
+function from T tabouli incompatible
+with predicate and if we have this
+method called remove if whose argument
+is predicate of T and we pass a lambda
+to it the compiler says all right well
+predicate of T that's like a function
+from T to boolean I have one argument so
+that's the right number so I can infer P
+to be whatever people is a list of let's
+say it's a you know list of first and so
+on for a P to be a person then I can
+type check the body this body type
+checks two boolean so that's compatible
+with predicate this I can infer the set
+of exceptions thrown from the body
+that's compatible with the empty set of
+exceptions thrown by predicate so yes I
+can make this lambda into a predicate
+okay and so what you can't do is say
+object o equals lambda expression
+because you don't have any typing
+information of what you're gonna convert
+it to so this turns out to work out
+really well because it builds on an
+existing pattern that exists in all of
+our API anyway and so we were able to
+sidestep having to add all this
+complexity of the type system just by
+recognizing an existing pattern and
+having the compiler support it so the
+the notion of just add function types it
+was this thing that was really obvious
+and turned out to be the wrong answer
+the amount of complexity it would have
+introduced it would have been another
+generics of wildcards and we didn't need
+that if we want to be able to write
+libraries that use lambda expressions we
+can do it this way without having to
+change everything about the VM without
+having to change the language type
+system without having to change the VM
+type system and without dividing the
+world of Java libraries into new
+libraries and old libraries and spending
+the next five years converting our old
+libraries to new libraries which is a
+pretty low value but and highly
+distracting effort as a bonus by not you
+know by not introducing a new typing
+mechanism for lambdas we gain this sort
+of surprising forward compatibility
+where we have libraries that were
+written 15 years ago that had no ideas
+lambdas were coming to Java but used
+types like runnable and comparator to
+represent actions all of a sudden they
+can use lambdas with no change that's
+pretty cool bytecode compiled 17 years
+ago you know you can can use lambdas
+today without recompiling well that's
+pretty cool so sometimes the boring old
+approach is better than the shiny new
+approach and you know this was one of
+those cases
+alright let's um let's let's turn to the
+question of representation in bytecode
+so we have an expression like this where
+we have a predicate of person we're
+going to assign a lambda expression to
+it this lambda expression captures one
+variable min age from the enclosing
+context and we're can convert it to a
+predicate so that's going to be a
+function from person to boolean so what
+by coach of the compiler emit well again
+there's a sort of obvious choice that
+that we could have used which is in her
+classes so let's look at how that might
+play out so if we said that lambdas were
+just an inner class this was just a
+purely syntactic transformation where
+the compiler would generate an inner
+class that looked like this because
+where it you know makes up a synthetic
+name foo dollar one implements the the
+target type predicate a person has a
+field to store the captured age variable
+has a constructor to initialize that
+variable and then it has it implements
+the one method of predicate call test
+and the implementation looks
+surprisingly like the body of the lambda
+compares it sort of takes its argument
+gets its age compares it to mini edge so
+that's pretty simple we could have done
+this we actually like would have been
+done in a couple days and capturing a
+lambda translates very cleanly into
+invoking the constructor of this
+synthetic you know in our class so we
+could have done that let's let's drill
+into it a little more so this is the
+byte code that we would get out if if we
+took this approach so you would have
+source code like this I'll list out
+remove if and you have a lambda
+expression the compiler would
+generate for the lambda expression an
+invocation to the constructor of this
+synthetic class $2 one so you see that's
+where it does a it does a new it does it
+pushes the the captured argument on the
+stack it invokes the constructor and now
+the lambda object is on the stack and
+then it passes that to remove F
+straightforward right this is in fact
+how our first prototype worked because
+it was the easiest way to get there so
+why wouldn't we do this well how great
+are inter classes how many people here
+love inter classes yeah okay one one
+contrarian in the audience you know
+classes aren't great they were a cute
+hack but they have they have a lot of
+problems and if we were generating in
+her classes under the hood we would be
+inheriting those problems so you know
+they have one of the problems they have
+is they generate a lot of bytecode right
+so you get a lot of food all or one food
+dollar two classes in the file system
+bloats up your war files you know it's a
+et cetera so we would forever be stuck
+with one class per lambda and that puts
+a constraint on how fast lambdas could
+ever get right we sort of want to look
+at the performance of inter classes as
+the worst case that we would accept for
+lambda performance but we'd like to get
+something better out of that so this one
+class per expression turns into issues
+in the VM in the form of type profile
+pollution if you have a zillion classes
+that implement runnable whenever you
+have an invocation of you know runnable
+dot run
+now if the VM has seen many different
+types that implement runnable at that
+site it can inline through that that
+call site because the high profile is
+too wide so this proliferation of types
+turns into a performance problem at
+runtime allocating a new instance of an
+object every time you want one is kind
+of unfortunate and and you don't always
+need to and the rules for for inner
+classes are pretty complicated too that
+the rules for name resolution in inner
+classes are complicated because you have
+two hierarchies to search
+you have the lexical context and you
+have the super class hierarchy and very
+often you get the wrong one you know so
+if you call like the two string method
+in the body of an inner class you're not
+going to get the two string that you
+think you're gonna get the synthetic two
+string of the inner class as opposed to
+the the one of the enclosing class so
+there's a lot of reasons why we
+shouldn't build on something that's
+imperfect like this it's important to
+remember that whatever we do here is
+going to be our binary representation
+for lambdas forever
+so whatever byte code the compiler
+generates the first day Java 8 is
+available is what lambdas will look like
+at the bytecode level forever we want to
+be we want to choose very carefully and
+we we certainly don't want to pick
+something that were you know that we're
+gonna be stuck with and unhappy about it
+and we have to be careful ideally not to
+conflate our implementation with our
+binary representation because that
+limits our choices so I think this was
+another obvious but wrong choice
+although it's not quite obvious what the
+right choice are so let's look at some
+of the other options in Java SE 7 we
+added a mechanism called method handles
+so this is a facility in the package
+java.lang invoke it was added at the
+same time that invokedynamic was added
+and it's a VM level representation of a
+method you can store them in the
+constant pool so so in a class you can
+store in the constant pool a method
+handle which is a reference to some
+other methods so it's sort of like
+reflection at the VM level but much much
+faster right so it has all the benefits
+of reflection but none of the
+performance you know pains reflection
+the VM knows what they are they VM can
+inline through them you can obtain a
+method handle for a static method or an
+instance method or a constructor or even
+for a field getter and setter the VM
+knows what it is so you get you get good
+performance and then the the method
+handle API gives you all these ways to
+slice and dice method handles where you
+can insert an argument remove an
+argument compose to method handles etc
+so you know if you're building something
+like a compiler it's kind of like a
+Swiss Army knife if you wanted if you're
+generating bytecode and and
+and you're manipulating functions you
+have all these tools for compose these
+functions adapt this function to that
+signature etc so it's very convenient
+tool and you might think this is an
+obvious choice because lambda is a
+method object at the language level and
+method handle is a method object at the
+VM level so perfect right so how would
+we use this we could say all right so
+for every lambda expression we're gonna
+take its body and create a synthetic
+method lambda dollar one that holds the
+body of that that lambda expression and
+then if we have a method whose argument
+is a method handle the the method
+signature that describes the type of
+that argument would be method handle all
+right so let's see how that looks so
+same example this table remove if we
+would distribute the body into a into a
+method with a synthetic name lambda
+dollar one we notice it has an extra
+argument for the captured the captured
+variable min age and so at the epical
+site what we do is do a load constant
+out of a constant pool to get a method
+handle to that lambda and then we would
+use this method handle insert arguments
+API to say oh we have an extra argument
+we have to glue on to the front let's
+put the min age argument on the front
+and then pass that method handle to list
+on remove F so that's something else we
+could have done so why didn't we do that
+if we did that the signature of remove
+if would have been like this notice
+there's no types there right what's you
+know every method maps to a method
+handle of exactly the same type this is
+like ultra eraser right so method
+handles at the VM level are completely
+erased which means that we couldn't even
+overload two methods that took lambdas
+even if there were different era T's and
+that would just be completely awful so
+we would need to mangle up the
+signatures somehow that's not a very
+pleasant Pleasant direction to go in we
+would still need to stick the type
+information somewhere in the class file
+so the come
+Tyler could read it at least recover the
+generic type information and at the time
+we started this three years ago there
+were some lingering questions about
+method handle performance which have
+largely been addressed but you know we
+didn't want to we didn't want to bank on
+something that might not have come
+around and again if we did this this
+would be the binary representation of
+lambda in Java class files forever so
+another obvious solution didn't seem
+perfect
+so take step back here are the questions
+we asked ourselves at this point what
+we'd like is a way of representing
+lambdas in the class file such a way
+that they're not tied to the actual
+implementation right in your classes
+have a certain problem as an
+implementation method handles had a
+different problem as an implementation
+and we didn't want to tie our binary
+interface to the accidental properties
+of this implementation and historically
+we have never asked people to recompile
+your class files with you know for
+future versions of Java we don't want to
+start doing that now we don't want to
+say you know if we discover some better
+way to translate lambdas in Java 9 we
+don't want to have to say the people
+make sure to recompile all your class
+files to get the better performance
+right how many people would like that
+yeah no one would like that that would
+not make us popular so we all know as
+computer scientists the all problems can
+be solved by introducing another level
+of indirection into the problem so
+that's what we did we have the static
+compiler emit not the implementation of
+the lambda but a declarative recipe for
+how to make this lambda and this gives
+the runtime a great deal of flexibility
+to to change our representation strategy
+we could use inner classes this week
+method handles next week as long as it's
+fast that's the problem with layers of
+indirection is they're not always fast
+so we don't want to give up any
+performance to get this indirection so
+is there a way to do this so we turn to
+another feature that was added in Java 7
+a VM feature called invoke dynamic which
+was originally designed to support
+dynamic languages on the on
+JDM like JRuby and not necessarily we
+weren't necessarily thinking about how
+statically typed languages like Java
+would use it turns out to be an awfully
+good tool for the Java compiler as well
+so let's take a look at what
+invokedynamic does so prior to Java 7 we
+had four ways of invoking a method
+invokes static into a virtual invoke
+interface invoke special the first three
+are obvious for what they invoke invoke
+special is the grab bag of everything
+else so it gets used for constructors
+and it gets used for private methods and
+it gets used for super calls and you
+know there's a lot of complexity and
+develop special because it handles all
+the weird cases and we saw examples of
+two of these in vacations when I showed
+you the inner class compilation before
+we used invoke special to invoke the
+constructor of the synthetic inner class
+and we used invoke interface to invoke
+the removeth method so we've seen these
+already in Java seven we added invoke
+dynamic so invoke dynamic is a you know
+new invocation mode the invoke invoke
+modes we had were their semantics are
+very tied to the Java language semantics
+big surprise invoke dynamic is meant to
+be more flexible and the idea of invoke
+dynamic is a method call and Java and
+method call and Ruby method call and
+JavaScript don't have the same semantics
+and so historically you know the Ruby
+compiler had to go through all sorts of
+contortions to make a ruby method call
+using the tools of for Java method
+invocation so invoke dynamic is a way of
+allowing a language compiler to provide
+some custom dispatch logic for if I call
+this who should you know what what
+target should I dispatch to do this
+computation in a language specific way
+and here's the key part then get out of
+the way right we could always do this
+reflectively right like if you if you
+want to do a dynamic dispatch where
+you're calling a method based on its
+argument types and you might call a
+different method for adding instant for
+floats you could do this with reflection
+it's just dog slow right so the idea
+is to allow the compiler to provide some
+dispatch logic and then say if nothing
+changes
+keep calling this target okay so
+different languages can provide their
+own language specific logic and and once
+they resolve the call sight it turns
+into a regular old Java and VOC virtual
+or invoke static and you know like I
+said this started out for dynamic
+languages so like in a dynamic language
+where you don't have manifest types you
+have an ADD method let's say that adds a
+and B and B could be in state could be
+floats they could be strings so
+theoretically every time I call add I
+could be providing different argument
+types and branching to a different
+target but in the real world that's
+probably not what's going to happen if I
+call add with two intz there's a really
+good chance that I'm gonna call add with
+two inch again because I'm probably in a
+loop and I'm adding up numbers okay so
+the idea here is there's a win to be had
+by saying you do this one-time analysis
+that says add with two into arguments
+branches to this place and it gives the
+VM back a call side target that says
+here's where you call and here are the
+conditions under which you have to ask
+me again so it encodes the as long as
+the arguments are still in keep going to
+this place and it allows us to not have
+to re resolve this call every time we
+invoke the method okay so that's what
+invoke dynamic was sort of designed for
+so here's how it works the first time
+you call through an invoke dynamic call
+side there's a special method that took
+that's called call the bootstrap method
+this is specific to this call site every
+call site has its own bootstrap this is
+where we put the quote language logic so
+if the JRuby compiler emits an invoke
+dynamic it will use as its bootstrap a
+call back into the JRuby language
+runtime for resolving the resolving the
+call what the bootstrap does is it
+returns a completely linked call site so
+it's here's who to call and that call
+site in beds by the way if something has
+changed here are the conditions under
+which you
+to ask me again now it may be the case
+that nothing's ever going to change in
+which case you can now statically link
+the call site and and get the language
+logic completely out of the loop all
+right so that's that's where the win is
+because once the the call site is linked
+the VM says I know where to go and it
+can inline through it like a can inline
+through any other method okay so go
+through the mechanics a little bit so we
+can see how this works
+when we get to the bike code and invoke
+dynamic call site has a couple of groups
+of arguments it has the bootstrap method
+which encodes the language logic that's
+called by the VM the first time we hit
+this call site ideally never called
+again there's a static argument list
+which is passed to the bootstrap method
+so this all comes out of the constant
+pool and then there's a dynamic argument
+list which comes in on the stack like
+any other method invocation all right so
+this isn't available to the bootstrap
+method but the arity and static types of
+the arguments dynamic arguments are
+available to the bootstrap okay so once
+the call side is linked the dynamic
+arguments are passed to the links target
+so why are we talking about this this is
+supposedly for dynamic languages Java is
+a statically typed language certainly
+when we're compiling lambdas all the
+types involved are static I already know
+that this is a function from person to
+boolean why do I need to invoke dynamic
+well what's dynamic here is not the
+typing there's many different dimensions
+to static versus dynamic what's dynamic
+here is our code generation strategy
+what we want to do is we want to use a
+declarative recipe to describe what a
+lambda is and then dynamically at
+runtime choose our code generation
+strategy from which we can pick from a
+menu like we've already named a couple
+inner classes or method handles or we
+could use dynamic proxy as if we hated
+ourselves or we could use some you know
+private VM API for making objects out of
+raw bits and and you know and and and
+and larks feathers and a lot of options
+if you're hiding this at run
+and if you're doing this cogeneration at
+runtime you can change your strategy
+once you have a better strategy without
+changing the byte code so if the
+performance of method handles goes up
+relative to inter classes we can in you
+know 8.03 switch from one of these
+strategies to another without affecting
+the byte code the only thing that would
+change is the performance so what India
+lets us do here is defer a fundamental
+decision of what byte code am I actually
+going to generate to implement my lambda
+from what byte code do I put in the
+class file to represent a lambda say
+extra level of indirection okay
+so what we do is we use invoke dynamic
+to amanda recipe for constructing lambda
+in the form of the invoke dynamic static
+arguments that's where the recipe is so
+the recipe is going to include what
+method is the implementation body what
+method is the target type the functional
+interface predicate runnable callable
+etc and any other additional metadata
+like is this lambda serializable or how
+many variables does it capture from the
+lexical scope and what are their types
+so we omit this invoke dynamic which is
+a basically something you call and it
+hands you back your lambda object so
+you're say you're calling this thing and
+you're saying I'm looking for lambda
+whose behavior is this whose type is
+this you call that you you call you
+invoke this invoke dynamic call site and
+it hands you back to lambda okay now
+again most of you don't need to be aware
+of this level of detail this is all down
+at the intersection of the compiler and
+the VM but I think it's useful to
+understand how things how things are
+built so the first time you you evaluate
+a lambda expression at a particular line
+of code it's going to it's going to do
+this one-time linkage thing it's gonna
+call the bootstrap method that may do
+some code generation or construct a
+method handle or what have you
+subsequent invitations are going to
+bypass this slow linkage path and that's
+that's where the huge
+performance wind comes from so I have
+performance numbers at the end that are
+pretty impressive so so the first thing
+we do to translate a lambda so this is
+what if the compiler actually does is we
+distribute the lambda body to a method
+just like we did before so this lambda
+expression gets translated to you know
+private static boolean lambda dollar one
+takes the extra captured argument min
+age takes the predicate argument person
+and it's body is just the body of the
+lambda expression very straightforward
+so if there are no captured arguments
+the signature of the lambda method
+matches exactly the signature of the
+functional interface if if we're not
+capturing the receiver we can distribute
+this to a static method if one of the
+things that we capture is you know a
+field or a member of the enclosing class
+then we distribute to an instance method
+okay it's pretty it's pretty
+straightforward and then to actually
+evaluate the lambda expression where it
+comes time to we generated invoke
+dynamic it's bootstrap is this special
+method in the Java Runtime lambda meta
+Factory it's static argument includes
+what type of my converting of two and
+who's my behavior and the dynamic
+argument is that's captured from the
+lexical scope okay and so we and when
+you when you invoke this invoke dynamic
+call cite what it returns is the lambda
+object you want to static type is
+predicate and you just pass it gets
+passed to the remove F method okay so if
+you were to use Java P to dump out a
+little class that uses lambdas this is
+what you'd see you'd see invoke dynamic
+when you chained it when you look up
+into the constant pool where it
+describes the invoke dynamic argument
+lists these are the things that you'll
+see again complexity that you don't
+necessarily need to think about in your
+day-to-day programming so okay what now
+that we've built all this machinery for
+deferring class code generation to
+runtime which I've promised you is
+faster but you still don't believe me
+what could
+what flexibility has all of this
+interaction bought us well so the
+manufactory which is the the bootstrap
+it could spin in her classes dynamically
+just like the compiler would but doing
+it at run time well that sounds kind of
+silly we've just built all this
+machinery to do what we used to do
+statically dynamically why is that
+better
+well well the reason it's better is we
+have flexibility to change later if we
+did that we spun it in her class what we
+would do is just link the call site to
+the constructor of that generated class
+and turns out that the signature of the
+constructor exactly matches the list of
+captured arguments and this is actually
+the initial strategy that we're going
+going out with in Java eight there's a
+lot of alternate strategies we could use
+and that we will be benchmarking and
+when they get faster than the initial
+strategy we will switch to them so for
+example we could instead of spend one
+class per lambda we could spin one class
+per functional interface type 1 for
+runnable one for comparator or one for
+callable that would generate many fewer
+classes and then we would just pass a
+method handle to the constructor and you
+know of that and that's something again
+we can change as a pure implementation
+detail would not affect anybody's byte
+code and there's lots of other things
+that we could do dynamic proxies or
+methanol proxies or whatever VM private
+API as your VM has so what we've gotten
+out of this which I know sounds very
+complex is a lot of flexibility you can
+think of using invokedynamic here as a
+procrastination aid we wanted we didn't
+want to make the choice of what
+translation strategy are we going to use
+today for cause we might want to change
+it tomorrow so if we defer our code
+generation strategy to runtime we can
+change it dynamically we can change it
+you know from one day of the week to the
+next if we want we pick our binary
+protocol now which is the meta Factory
+API we choose our code generation
+strategy later this is very much what
+Java does for everything else move stuff
+that could be done statically move it to
+the runtime people like describe Java as
+being a statically
+language Java has a static type system
+job is actually an extremely dynamic
+language linkage is all dynamic it has
+dynamic introspection as dynamic class
+loading as dynamic class unloading
+dynamic compilation a lot of things
+happen at runtime where we can make
+better decisions because we have more
+information so this is one more aspect
+of we could have done this statically we
+decided to do it dynamically because we
+have we can make better decisions
+something really cool comes out of this
+so like how many people here have done
+the trick where you have a comparator
+object and you know it's stateless it
+doesn't capture anything and so instead
+of like inline to your sort method
+saying new comparator blah blah blah you
+say public the private static final
+comparator C equals blah right how do
+you declare do that right why do we do
+that performance right you don't want to
+instantiate a new object every time
+well conveniently if folks dynamic does
+this for you automatically right so when
+we spin you know when we generate and a
+class to represent this lambda object we
+say does this lambda capture anything
+and if the answer is yes we linked the
+call site to the constructor of the
+synthetic class if the answer is no we
+instantiate one instance and we link the
+call site to always return this the
+compiler so the VM sees this and says oh
+this is not a call at all this is a
+constant load so that little trick that
+everyone does and mangles up their code
+and moves the logic somewhere else in
+the code for performance reasons you
+never have to do that again okay the VM
+is just going to do that for you which
+is what we want you want to write the
+code that's readable that makes sense
+and let the VM worry about performance
+so invoke dynamic gives us among other
+things this lazy lazily initialized
+cache in fact it's even better than the
+trick of doing it by hand because the
+trick of doing it by hand you have you
+instantiated a class load time here you
+only instantiate it the first time you
+actually need it which might be never so
+if the lambdas never used zero heap
+overhead it doesn't stick an extra field
+in the class
+so any stateless lambda gets this lazy
+initialization and caching behavior for
+free that's pretty nice that might be
+worth a little bit of complexity in the
+implementation so we're using
+invokedynamic here as a indirection
+strategy we defer the code generation
+strategy to runtime but we don't want to
+pay the price on every on every Lam to
+capture so invoke dynamic lets us pay at
+once the first time we capture a lambda
+the meta factory gets run and then for
+the non capturing case which is really
+common right you know X ro X x squared
+really common form of lambda those
+lambdas are free they get optimized to a
+constant load and for the capturing case
+capture cost degenerates into
+constructor invocation which is exactly
+what an inner class would have been so
+worst case exactly as bad as an inner
+class best case Factory fairly common
+best case much much better so that's a
+win that's what uh game theorists call a
+dominating strategy so okay let's talk
+about performance costs we can break
+down the performance cost of a
+translation strategy into three layers
+linkage cost capture cost and invocation
+cost linkage cost is the cost of the
+first time you want you you want to get
+your hands on enter to class or lambda
+so for example if you have an inter
+class in your code the first time you
+use it you have to load that foo dollar
+one class there's a class loading cost
+of that that's a one-time cost every
+time you instantiate one new comparator
+bla that's you can quote that's
+basically capture cost right and then
+every time you actually call its method
+you call the compare method of this
+comparator that's invocation cost so for
+an inner class these correspond to class
+loading is your linkage cost construct
+our invocation is your capture cost and
+doing an invoke interface is your
+invocation cost so I this is some other
+cost to there's things like static
+footprint lambdas are much much better
+on static footprint because we're not
+generating the food all in one class so
+it makes your you know jar file smaller
+that's nice
+so we had our performance team do some
+so this particular table shows linkage
+cost the numbers are time in
+milliseconds and this was the time to
+capture 32,000 distinct inner class
+instances or lambda instances we
+factored out the the biasing effect of
+your loading classes from disk you have
+to go to disk to get the bytes so we
+assumed everything was all memory mapped
+because we didn't want to make inner
+classes look artificially worse because
+we were on a slow disk let's say so
+factored that out but if you're on a
+slow disk
+you know anonymous classes are even
+worse what we found is linkage costs was
+between ten and twenty five percent
+better for lambdas so I mean a lot of
+people came into this saying inner
+classes are the best you can do actually
+not true we've actually done very little
+performance work so far they say this is
+our like starting out of the gate
+numbers but linkage cost for and and so
+we have a couple different categories
+lambdas the Captur versus lambdas that
+don't capture and whether or not we're
+using tiered compilation which has a
+significant effect on class loading and
+so you see all the numbers different
+different different categories
+correspond to different differences in
+performance but you know across the
+board they're all better invocation cost
+exactly the same you're you're invoking
+an interface method either way so I
+don't I don't have interesting numbers
+for those but they are the same the
+other interesting one is capture cost
+and this is one where lambdas just blow
+away in their classes so this was done
+on a 80 core machine where we had we ran
+it in two different modes one was a
+single threaded test one was have all 80
+cores busy just capturing capturing
+capturing what we found was in the
+single threaded case ok non capturing
+lambdas were you know 50% better or so
+that inner classes capturing lambdas
+were exactly the same as inner classes
+but when you got to the
+saturated case where all the cores were
+busy we found that that non capturing
+lambdas just completely blew away inter
+classes you know so but and the reason
+for that is inter classes have to
+allocate and eventually you're you know
+even though most allocations come out of
+a thread local allocation block
+eventually you have to go to the heap to
+to refresh your your t lab now whereas
+non capturing lambdas are just constant
+loads and so there's no interaction
+across threads okay so here's an example
+where lambdas are much much faster than
+inter classes so worst case just as bad
+best case significantly better that was
+our that was our target okay so we added
+this facility to java.lang invoke for
+lambda capture the semantics are
+tailored you know to what the java
+language needs but this is something
+that the the JRuby compiler is free used
+it's part of the platform runtime and
+other languages that have lambdas may
+indeed be interested in using these
+api's and getting the benefit of all the
+optimization we're going to be doing in
+the future on it so this may very well
+be something that other languages start
+using there's a deep pipeline of
+optimizations that we know about that we
+haven't made yet so our out of the out
+of the gate strategy is you know as fast
+or faster than the inner classes but our
+long-term strategy you know as it gives
+us a you know a path to much much faster
+I don't want to go through the all of
+these details because I could spend a
+whole hour on each of them but we know
+we've sort of charted out a path where
+because the byte code that we generated
+is an invoke dynamic with a bootstrap
+into the Java language runtime and we
+very carefully made the semantics of
+that bootstrap method match a
+corresponding method handle algebra that
+the VM already understands the VM could
+look at that and say oh I know what that
+is
+translated to method handles and
+effectively do box unboxing where we can
+if you think about lambda capture we're
+taking a lambda we're turning it into an
+object by predicate or something like
+that that's like a boxing operation and
+then when you invoke it it's like an
+unboxing operation we can use the same
+kind
+box unbox optimizations that we know how
+to do you know to to reduce capture
+clause so there's a deep pipeline of
+ways that we're going to make this
+faster you know but still already faster
+than the alternative okay so now for my
+least favorite topic no language feature
+is complete without some horrible
+interaction with serialization
+serialization is really just the gift
+that keeps on giving so you know when we
+started we really tried to hold on to
+the idea that no lambdas are can be
+sterilizable no that's not what they're
+for but we made this decision to use
+nominal function types you know where
+you have these one method interfaces to
+represent functions so here's one
+interface fool extends serializable and
+it has an eval method so that's like a
+function from void to boolean so what if
+I wrote this code and gave it this
+lambda that always returned false I
+think people would reasonably expect
+that to be serializable they don't want
+to have to reason about this instance of
+foo well because it was born as a lambda
+it has different rules we don't want to
+make people do that okay so we have this
+dynamic code generation strategy which
+means we took the lambda object that was
+generated by the meta factory and
+serialized it it would have a class name
+that might not exist in the VM that
+you're deserializing it in so that's
+kind of a problem and it might be even
+if that class name exists remember we
+said that code generation strategy was
+dynamic maybe the VM your deserializing
+and is using a different translation
+strategy so what we need to do is since
+we have a dynamic code generation
+strategy we need a dynamic serialization
+strategy so in the class file we
+represent a lambda with a recipe
+here's might be a bit of behavior
+represented by a method handle here's
+the target type I'm converting it to
+here the types that I'm capturing we do
+the same game at sterilization time
+we'll use read resolve and write replace
+to intercept the serialization call
+serialize it out to a nominal
+representation of the recipe serialize
+that out and then at D serialization
+time we hand it back to the class that
+putative Li captured it and said hey is
+when you're lambda's if so you
+instantiate it and this actually
+sidesteps a lot of difficult security
+problems so lambdas aren't serializable
+by default but if their target type is
+serializable they can be serializable be
+thankful i only talked about this for
+two slides this took like you know
+probably thirty percent of our energy
+and none of it was pleasant but in the
+end it works the way you expect it to so
+you know that's that's the good thing
+about it so alright gonna sum up and
+then I'll tell leave some time for
+questions what I've been trying to get
+at here is when you're beating your head
+against the problem of how do I have all
+the language how do I have all the
+platform it's full of ideas that are
+obvious and wrong your first idea is is
+very rarely the right idea it's usually
+the one that barely works it's usually
+the one that's easiest to implement and
+so it's okay to listen to that first
+idea and use that as a prototype and see
+what you can learn from it but if you're
+building something where you're looking
+at maintaining binary compatibility for
+the next century you have to be very
+skeptical about whether that first idea
+or the second idea or the third idea is
+actually the right answer so what we're
+doing with lambdas and the Java compiler
+I think it's pretty interesting using
+invokedynamic not as a means for
+implementing dynamic dispatch but as a
+means for deferring certain code
+generation decisions to runtime that
+gives us flexibility to change it also
+surprisingly gives us really good
+performance even using we we have the
+dumbest possible strategy going out the
+door we haven't done a lot of
+performance tuning on it and it's
+already faster than the obvious solution
+okay that's pretty good so a bunch of
+places to look for more information go
+to project lambda and open JDK there's
+lots of documents there there's a
+document a particular cold you know
+guide to lambda translation which kind
+of describes all of this if you're a
+glutton for punishment you can get the
+language and VM specs
+if you want binary builds you can get
+them at the regular JDK eight downloads
+and with that I am happy to take
+questions did anybody understand any of
+that
+so if people want to leave that's great
+but please do so quietly so the people
+who have questions to ask can have their
+questions heard
+go ahead questions anybody really
+seriously okay
+user
+so the question is can the lambda
+manufacturer use lambdas in its
+implementation not currently there have
+been times when I've said oh gee it
+would be convenient to be able to use
+lambda here but I can't all right thank
+you questions more questions we have no
+more questions thank you very much
+oh wait wait no that see that that's
+what makes that the hands go up
+yeah so the question is gee I was kind
+of hoping to use the Java 8 compiler to
+generate code that I could run on my
+java 5 virtual machine sorry you're not
+the only one who regrets that the
+Android guys aren't thrilled about that
+the Java and the guys aren't thrilled
+about that but there's an answer here so
+it's actually a relatively
+straightforward bytecode to bytecode
+translation to say look at the
+invokedynamic site it's semantics are
+very well specified so you can use that
+to imputed associate inter-class and
+replace the invokedynamic with an inter
+class constructor and in fact there's a
+guy who as a weekend project did exactly
+this and I posted it on lambda dev it's
+in the spirit of a few remember tools
+like retro Weaver which allowed you to
+use generic in a post Java 5 bytecode on
+pre 5 VMs exactly the same trick
+perfectly straightforward just not
+supported by Oracle but you know you
+knew that already we had another
+question in the same row yeah
+how
+yeah okay so that's a good question so
+the question is all right lambdas are
+faster than inter classes so if we had
+ap is that were already designed for
+quote function objects unquote lambdas
+are better than we had before but
+because now lambdas are so easy to use
+we may use them in situations where we
+might have handwritten a for loop that
+the VM is already well suited to
+optimizing so this is an issue and this
+is kind of what I was speaking to on
+this slide about future VM optimizations
+that are largely aimed at addressing
+that right so there is a capture cost
+associated with lambdas we can eliminate
+it for stateless lambdas that's great
+but but you know capturing lambdas do
+have that cost and there is a cost of
+doing an invoke rather than executing
+the bytecode you know plus or you know
+something like that
+so there are going to be cases where the
+assembly style handwritten code is still
+going to be faster than the lambda code
+I think it's fair to say that this is a
+topic we're gonna be working on quite a
+bit to try to get it so that the
+performance is such that 99% of users
+won't care question there
+so the question is okay you're spending
+these inter classes you know what what
+are what are the performance
+considerations of that so the first
+thing I'd say is if you were using inter
+class as before it's exactly the same
+you're we're creating exactly the same
+number of classes if we migrate to a
+translation strategy of one class per
+functional interface type rather than
+one class for lambda instance which is
+definitely our intention the number of
+classes that we're spinning will go way
+way down you know there'll be one for
+runnable one for comparator etc you know
+in in Java 7 we removed the permanent
+generation so one of the problems that
+applications that generated a lot of
+classes had was they started to run out
+of memory in the permanent generation
+now that the permanent generation is in
+the regular heap that artificial
+limitation has gone away so you know if
+you went from something that used no
+inner classes to something that used
+gazillions of lambdas you could start to
+see you you could start to see you know
+memory effects from having all of these
+intermediate classes but if you were
+already using inner classes before
+you've already paid the cost it's you
+know had worst it'll be exactly as bad
+as it was before question in the back
+so the question is when you add lambda
+Stu interface doesn't that violate what
+an interface mean I think you mean when
+you add method implementations to in so
+you're talking about a different feature
+you're talking about default methods
+which I haven't talked about here today
+this is a this is a philosophical
+question of do does an implementation
+belong in interfaces and we could argue
+this for years one of the one of the the
+great things about interfaces is they
+are a rock-solid interface contract but
+they're also very rigid other languages
+that have explored more flexible
+multiple inheritance of behavior like
+traits people don't seem to have a
+problem that math is a trait people
+don't seem to be very confused by the
+fact that we're adding new methods to
+interfaces so I think this is largely a
+theoretical concern but it's a-you know
+it's what we've done so we're not going
+to change
+yeah so the question is alright so if I
+go from an imperative for loop to
+something with lambdas how much am I
+paying and the answer is we don't have
+those numbers yet we've been focused on
+the lambda specific numbers capture cost
+linkage cost and we've been focusing
+most of our measurement effort on if you
+have a sequential lambda computation
+versus a parallel lambda computation
+where's the breakeven so more of an
+apples-to-apples comparison so that is
+something that our performance team will
+be working on just we don't have those
+numbers yet though okay I think we have
+time for one more question if there is</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

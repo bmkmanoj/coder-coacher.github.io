@@ -1,0 +1,672 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>CppCon 2017: Arthur O'Dwyer “dynamic_cast From Scratch” | Coder Coacher - Coaching Coders</title><meta content="CppCon 2017: Arthur O'Dwyer “dynamic_cast From Scratch” - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/CppCon/">CppCon</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>CppCon 2017: Arthur O'Dwyer “dynamic_cast From Scratch”</b></h2><h5 class="post__date">2017-10-13</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/QzJL-8WbpuU" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">Hello, everyone. I'm Arthur O'Dwyer, and I am here to tell you about...
+dynamic_cast From Scratch.
+Which you can't see, because it's on the first slide, and I already went past that one...
+And I'm too scared to go back, because I don't want it to crash on me.
+I'm going to tell you all about dynamic_cast; about what it is, what it does...
+a little bit about how it's implemented, and mostly about how it SHOULD be implemented.
+And I'm going to show that how it SHOULD be implemented is better than how it IS implemented.
+I hope that there's someone in this audience who owns a dynamic_cast implementation. That would be awesome. Come talk to me afterward.
+All right, so, in Part 1, I'm gonna tell you what it does. And in Part 2 I'm gonna tell you—
+Well, hang on. In Part 1 I'm gonna tell you the background: what is polymorphism, and what are all the different toys that we have to play with.
+In Part 2 I'm gonna tell you what dynamic_cast does with those toys; how we implement it; and I'm going to show you my implementation.
+All right. Quick recap of polymorphism.
+Classical object-oriented polymorphism.
+We have a class `Animal`. An Animal has some `legs`, and it has a couple of virtual methods.
+The virtual methods are basically function pointers held in a vtable...
+and the `Animal` object instance has a vptr as its first member...
+—usually. In the Linux ABI. — I'll be talking a lot about the Itanium ABI, about the ABI that's used on OSX and on Linux.
+For Windows, this is largely the same, with some differences around virtual bases. I will mostly not be talking about Windows.
+Be aware.
+All right, so we have a vptr in the Animal instance.
+And then we have `class Cat`. A Cat is an Animal. Cat inherits from Animal publicly.
+A Cat has all the stuff an Animal has; and it also has a number of `tails`.
+It can override one of the virtual methods of the base class Animal,
+so where, when an Animal in general speaks, it says &quot;hi&quot;; when a Cat speaks, it says &quot;ouch&quot;.
+And, when a Cat speaks, and it says &quot;ouch&quot;, it also knows about all of the data held in the Cat, as well as all the data held in the Animal. Right?
+All right. And the way that we implement that is, that the Cat looks just like an Animal.
+It has a vptr, and the `legs`; and then it has the extra stuff — the `tails`.
+And its vtable, that is pointed to BY the vptr, also looks physically just like the vtable for an Animal.
+It's got the `speak` method, and it's got the destructor — in that order, at those offsets —
+and that's important because that means when we have a pointer to a Cat we can treat it like it was a pointer to an Animal,
+and we'll get the right physical behavior.
+For example, if I have a pointer to an Animal, let's say, `a`; and I call `a-&amp;gt;speak()`, what that does physically in the assembly is—
+go get the thing at offset zero from %rdi — that'd be the vptr —
+follow it and go get the first thing out of the vtable — that'd be *%rax here — and call that.
+So if `a` actually is the address of a Cat, I get `Cat::speak()`;
+if it's the address of a base Animal I get `Animal::speak()`;
+If it's the address of some other kind of Animal, I get that Animal's `speak` method.
+So there are several different graphical representations — ways we can represent this idea.
+One of them is just in speech. I like to say a Cat IS-AN Animal.
+Cat inherits from Animal. A Cat IS-AN Animal.
+We can also represent it graphically by drawing out the struct layout.
+This is a representation of what the compiler actually will generate as the struct layout for a `Cat`...
+Notice that it has, first, the vptr in the Animal data — at the start of the Cat —
+And then has the Cat-specific data after that.
+This is what gives us this happy coincidence that the first part of a Cat looks physically exactly like an Animal,
+and allows us to use an `Animal*` to get into it.
+And then also over here, I've got a graphical representation of a Cat descending from an Animal. We'll see a lot more of that soon.
+Multiple inheritance.
+All right. Now we get to the Dreaded Diamond.
+And interestingly, we just heard Titus Winters in the keynote [&quot;C++ as a Live-at-Head Language&quot;] talking about a different kind of dreaded diamond.
+This is ALSO a dreaded diamond.
+Here we have `class Animal`. It has a virtual destructor (because why not)...
+and we have Cat IS-AN Animal; Dog IS-AN Animal;
+And then we have a `CatDog` which inherits from both `Cat` and `Dog`.
+Notice the lack of `virtual` keywords here — `public Animal`, `public Animal` — this is intentional.
+So graphically we have something that looks like this.
+Here's the layout of a CatDog.
+A CatDog has, physically, its first base and then its second base.
+Its first base is a Cat; and the Cat has a base that's an Animal.
+So that part we've seen before — the Cat has an Animal base, that all looks the same —
+But then after that we also have the Dog part; and the Dog also has an Animal, IS-AN Animal.
+And then we have the CatDog-specific data down at the bottom.
+All right, so now we have a question.
+IS-A CatDog an Animal?
+How many people think a CatDog IS-AN animal?
+[MANY HANDS]
+How many people think a CatDog is NOT an Animal?
+[ONE HAND]
+All right, well, I'm going to make YOU happy.
+It's NOT. A CatDog is NOT an Animal. A CatDog is two Animals.
+It's got two Animal subobjects.
+It is not AN Animal.
+Because if I were to point to this CatDog and say, &quot;Mommy, can I have THAT animal?&quot; —
+she'd be like, &quot;Which one do you mean?&quot; Right? It's not one Animal, it's two Animals.
+When I point to the CatDog, I have no idea what Animal I'm talking about.
+However, we can fix this! If we can give the CatDog just one Animal subobject,
+then when I point to it and say &quot;I would like that Animal,&quot; you know exactly which one I mean. And we do that with virtual inheritance.
+So in C++ we have the idea of virtual inheritance,
+where I can inherit by saying `class Cat : public virtual Animal`, `class Dog : public virtual Animal`...
+and now that Animal base subobject sort of de-duplicates itself.
+Whenever I have something that inherits from a Cat or inherits from a Dog, that Animal virtual base sort of floats down to the bottom.
+Even after the CatDog-specific data. It just floats all the way down, and de-duplicates itself.
+So that now the Cat's virtual base and the Dog's virtual base have both combined, and we have only one Animal virtual base.
+And so we have a happy CatDog, because it is only one Animal.
+All right, but now we've changed how a Cat looks, right?
+A Cat used to look physically like an Animal, so we could have an `Animal*` that secretly points to a `Cat`,
+And we could just treat it like it was an Animal because physically they were identical.
+Now we've changed how a Cat looks, so now we have a problem. Now if I have, let's say, a `Cat*`,
+and I want to access its number of `legs` — which is part of its Animal virtual base —
+how do I actually get at that Animal data anymore?
+I don't have a way to sort of offset into it, because there could be arbitrary stuff in between.
+There could be nothing in between, there could be a Dog in between — I have no idea.
+So we have to distinguish between objects that are really just Cats —
+— like, literally it is, dynamically it is, a Cat; its actual TYPE is Cat —
+and objects that are &quot;Cat but maybe more.&quot; Maybe it's a CatDog, maybe it's a Tiger, I don't know.
+It's some kind of Cat, but I don't know what else it might ALSO be.
+Cat objects that are just literally just a Cat, dynamically a Cat, they have a fixed concrete layout.
+Cat objects that are &quot;maybe more&quot; have a fixed layout for all their base sub-object pieces, but you have to do some work to figure out where those pieces are located.
+To generalize this away from cats into C++ classes,
+objects that are &quot;most derived&quot; have a fixed concrete layout dictated by their &quot;most derived type.&quot;
+and if I have an object of unknown dynamic type, it has a fixed layout for all its base subobject pieces, but...
+to access a virtual base, you first have to figure out what is the most derived type of this object.
+That tells you its fixed concrete layout, and THAT tells you where its virtual bases are located.
+So how do we figure that out? how do we find out, at runtime,
+given that I have a pointer to a Cat, given that I have a pointer to an Animal, how do I figure out its most derived type?
+I can't do that statically.
+I have to do that dynamically somehow at runtime. How do I do that?
+Well, we have a place for stuff that's  determined dynamically at runtime. That place is the vtable.
+So. Vtables.
+Vtables have two things going on in them, right?
+There's the SCHEMA of the vtable, of what stuff does it contain — it contains a pointer to my `speak` method, a pointer to my destructor —
+— you know — um, the vptr itself is located at offset zero — those are sort of the SCHEMA of the vtable.
+They define the SHAPE of the data. But then there's also the VALUE.
+Where does that vptr point? What actually is the behavior of the `speak` method? what actually is the behavior of the destructor?
+That's the data, or the values in the vtable.
+The schema of the vtable is dictated by the object's static type.
+If I know I have an `Animal*` — right now I have a `Cat*` — the `Animal*` will always point to something that looks physically like an `Animal`.
+It has all of the Animal bits in known places.
+A `Cat*` will point to something that has all the Cat bits in known places.
+And then I just have to go look at actually what are those bits.
+And those bits' values will be dictated by the object's most derived type, by the dynamic type.
+So in this example I have a `Cat*...
+and the fact that the `Cat` object HAS a virtual base Animal is dictated statically by the fact that the object IS-A Cat.
+Every Cat has a virtual base Animal; 
+I just might not know WHERE it is.
+So the PRESENCE of it is dictated statically; the actual LOCATION of it is dictated dynamically by the most derived type.
+And the place where all this stuff comes together is in the vtable.
+So we should assume that we can find our virtual base Animal by querying our Cat object's vtable.
+All right. This is how our memory layout looked on slide 4...
+let's update it... hopefully...
+Let's see... this is not virtual inheritance, this was regular inheritance...
+Here's virtual inheritance. Our Animal virtual bases floated down to the bottom of the Cat...
+And now because Animal is also a polymorphic type, it also has a vptr, right? So we have a vptr for the Cat and a vptr for the Animal,
+and they both happen to point to two vtables whose data is controlled by `Cat`.
+In fact, this isn't even quite right; we really have something more like this.
+This needs to be a vtable for the Animal SUBOBJECT of a Cat, whereas that is a vtable for the Cat object itself.
+The difference is these little asterisks, these little red stars.
+`Cat::speak` with a little asterisk is identical to `Cat::speak`, EXCEPT...
+That when you call this you're calling it because you have a pointer to an Animal.
+But `Cat::speak`, the actual method, expects a pointer to a Cat as its `this` pointer.
+And if I have a pointer to the Animal there...
+if I have a pointer to this Animal,
+That's 16 bytes offset from the actual pointer to the Cat, which is what `Cat::speak` wants.
+So when I call `Cat::speak` with a little asterisk next to it, I actually need to first subtract 16 from my `this` pointer before I can dispatch to `Cat::speak`.
+This is called a &quot;thunk.&quot;
+Because that's the noise it makes.
+All right.
+So when in doubt, it's in the vtable.
+If we're looking for something where its PRESENCE is statically determined — It definitely HAS one of these things...
+but we need to find out what it actually IS.
+In this case the thing we're looking for that we know it HAS, but we want to know what it IS...
+We know it HAS a most derived type, but we'd like to know what IS its most derived type.
+So anything where we know statically it's got one, we just want to know what it is, is gonna live in the vtable,
+because the schema of the vtable is controlled by the static type, and the stuff in it is controlled by that dynamic type.
+And &quot;most derived type&quot; is a synonym for &quot;dynamic type.&quot;
+All right, so in our vtable...
+[LAUGHTER IN THE NEXT ROOM OVER]
+Next door is having fun. You probably can't hear that in the video. There's all sorts of stuff going on over there.
+So it offset zero we have `Cat::speak`; at offset 8 we have Cat's destructor,
+but also at the negative offsets we have room to put things.
+and so we're actually going to put things there — in the Itanium ABI.
+What we're gonna put at offset -1, we're gonna put a pointer to the type_info for the most derived type.
+This is super convenient.
+So now even when I've got `a`, which is a pointer to an Animal,
+if I want to know its typeid, so I do `typeid(*a)`, what do I do?
+I follow the pointer, and I get the vptr, and I follow that, and I subtract eight from it, and I dereference it... and now I have typeid-of-Cat!
+So typeid(*a) is typeid(Cat), which is true. It is, in fact, a Cat.
+Somehow the Animal virtual base &quot;just knew&quot; that this was a Cat.
+And the reason that it can know that is because this vptr is getting filled in by Cat's constructor...
+and it's initializing it to point to the vtable for Animal-in-Cat, and not the vtable for Animal-in-Dog, or Animal-anywhere-else.
+All right.
+Getting at Animal data. How do we get at the Animal base object of a Cat?
+So here we have a `Cat*`, and I would like to know how many `legs` this Cat has.
+So I can no longer just index, and add 16 or add 24, to get down to how many legs this Cat has,
+because it might be &quot;more.&quot; It might be a CatDog. It might be a Tiger.
+So what I have to do is,
+I follow its vptr, and— Now, I know statically that this IS-A Cat; that it's pointing to a vtable for a Cat-in-something larger — possibly —
+And I know a Cat has a virtual base of type Animal.
+I know that it is PRESENT; I just want to know where it IS. And so where do we put that? We put that in the vtable!
+Somewhere in the vtable we also have... Oh, I kind of skipped over this...
+`md-offset = 0`, the &quot;most derived offset&quot;, says that this object that I'm pointing to right here, this vptr —
+is actually at the beginning of the object. There's nothing before it.
+And, even before that, I I have the fact that my Animal virtual base is at offset 16, in this most derived type.
+Remember, this vptr points to a vtable which is controlled by the dynamic type, by the most derived type,
+and it knows everything about this object, by definition.
+Because it is the MOST derived type. It's the type that was ACTUALLY constructed here.
+This is the object we ACTUALLY have that we will ACTUALLY destroy later.
+And so it knows everything about itself — such as where its virtual bases are located — and it can expose that through the vtable.
+So here I have a function that takes a Cat and returns how many legs that Cat has.
+You run this through a compiler, you run it through godbolt.org, and you see that...
+Here's `c` in %rdi. We dereference it once;
+we dereference it again and subtract 24 — that gets us our animal offset;
+We add that to our original `this` pointer — so, vptr plus 16 — gets us `legs`.
+More or less. Ah, plus 8.
+Yeah. This address, plus that 16 to get us to the beginning of the Animal, plus the 8 that's the offset of `legs` in Animal...
+gets us the number of `legs` in this Cat.
+So accessing a data member of a virtual base actually requires three dereferences,
+where if it were a non-virtual base it would only require one dereference.
+And here's a little vtable layout recap. Again, this is the Itanium ABI. MSVC is much more complicated.
+Any questions so far? We'll do a little pause.
+[AUDIENCE] I'm still a little fuzzy on, when you talk about the difference between `Animal::speak` and `Cat::speak`,
+why I just store it twice. It wasn't really obvious to me why you only have to store twice
+when we have virtual inheritance and not when we have normal multiple inheritance or something like that.
+[ARTHUR] So the question was, why when we have virtual inheritance do we have two vptrs pointing to different vtables with thunks
+whereas when we have non-virtual inheritance we can somehow get away with only one vptr?
+[AUDIENCE] Specifically, why is `speak` listed in both?
+Well in this case, this up here is a base Animal, and it has a `speak`;
+and here we have a Cat that also IS-AN Animal and so it physically looks like an Animal, but it actually speaks like a Cat.
+And we can get away with this because we don't have to do any offset adjustment. There's no multiple inheritance going on here.
+In a sense you could think of it as, this one is BOTH `Cat::speak` and `Cat::speak` with the little red asterisk.
+It's just that the offset we're applying to the `this` pointer is zero in this case.
+So we can get away with just having the vptr do double duty for both `Animal` and for `Cat`.
+[AUDIENCE] If you have multiple inheritance, though, you might need an offset.
+If you have multiple inheritance... then...
+If you're multiply inheriting from, let's say, `Cat`, then you won't need an offset. We'll have, ah...
+We'll have something like this. Each `Animal` has its own vptr here, because there are two Animals.
+But the Dog can share its vptr with its Animal; Cat can share its vptr with its Animal.
+So. It works out.
+All right. So in the subtitle, which you didn't really see because I had it already at the outline when we started recording,
+The subtitle is &quot;Two kinds of inheritance graphs.&quot; So I'm going to talk now about how I visualize complex class layout.
+When I decided that I was going to figure out how `dynamic_cast` worked and then I was going to implement it myself,
+there were a lot of test cases involved in this.
+And a fair number of bug reports, for that matter.
+And when figuring out, like, &quot;What is it that dynamic_cast was SUPPOSED to do in this instance?&quot;
+I found that I needed a way to take an auto-generated class hierarchy
+and put it on a whiteboard, so that I could trace through it myself and figure out what I expected to happen.
+And so this is the system I came up with for whiteboarding complex class hierarchies.
+Does anyone think that whiteboarding complex class hierarchies will be a useful job skill for them? I'm just curious.
+We have a few tentative hands. All right — I was hoping it wouldn't be, like, everybody. That would be the sorry state of the industry.
+But I do hope this is useful for some people, at least.
+All right. So what I do is, I pick which class am I interested in diagramming...
+So in this case I'm making the diagram for `CatDog`. And I put it at the very bottom of my little tree here.
+And then for each of its bases, I make another little circle, and I put the name of that class.
+So I have `CatDog` inherits from a `Cat`, inherits from a `Dog`. It has a `Cat` subobject, and it has a `Dog` subobject.
+And then, for each of THEIR bases, I make a little circle and I draw a line up there. A `Cat` has an `Animal` subobject. A `Dog` has an `Animal` subobject.
+Notice that this is not virtual inheritance.
+Therefore if I turn this sideways, it looks an awful lot like the diagrams we were drawing with the big boxes; it's just more compact.
+In the case that there's non public inheritance, I'm going to draw a little dotted line instead of a solid line.
+So here, `Dog` has a non-public `Animal` base. That will become relevant when we talk about dynamic_cast.
+And then the last kind of inheritance we can have — we can have virtual inheritance.
+When you have virtual inheritance, remember, your virtual bases sort of float down to the bottom and de-duplicate themselves.
+So to indicate virtual inheritance I put a big solid circle around the virtual base and everyone points to that.
+As soon as there's a big solid circle around that, there's only gonna be one big-solid-circled `Animal` in any given diagram,
+because all the virtual bases are going to end up being shared.
+Quick question.
+Virtual bases only de-duplicate themselves with other virtual bases. Yes.
+I could have one or more non-circled Animals also in this diagram.
+Notice also here that `Animal` is a public virtual base of `CatDog`.
+There is a public path from `CatDog` to `Animal`, but not from `Dog` to `Animal`, and that will also become relevant soon.
+Alright, so lines indicate inheritance, nodes indicate subobjects, dotted lines indicate non-public inheritance, heavy circles indicate virtual inheritance.
+The root of the graph, down at the bottom, is the most derived object.
+There's always a single one of those. Because I'm interested in that class at the moment, not some other class.
+Some other class might have a graph that was just a subgraph of this graph, or it might have a graph that looks significantly different.
+mostly due to virtual bases.
+We also don't have a great way to indicate inheritance order here...
+such as, you know, `CatDog` inherited from `public Cat, public Dog` and not vice versa.
+That does affect the struct layout, of course,
+but inheritance order is not supposed to matter to `dynamic_cast`.
+If we had time for guessing games, I would not give you the solutions to these, but in the interest of time...
+Here's some possible graphs [on the left]; here are some impossible graphs [on the right].
+So these are all possible.
+Here's an example of Gaspar's point about having a virtual base `L` and a non-virtual base `L` in the same class layout.
+And over on the right-hand side we have EFGH, where it's reasonable except that G has no business being in there.
+It's not part of H. We clearly don't care about it right now. G shouldn't be there. Or something like that.
+Over here, U, the object at the root of this hierarchy, has been marked as a virtual base... of what? That doesn't make sense.
+Over here Z inherits from Y twice. That also doesn't make sense.
+Not to mention that both Ys are circled, indicating they're virtual bases and so there should only be one of it.
+And then this last one is a little more subtle. Here we have X inherits from W, and Y inherits from W, and W inherits from V...
+But in one case W inherits from V publicly, and in the other case W inherits from V privately.
+But W is a class. It it has to either inherit publicly or privately [from V]; it can't do both. That's not a thing.
+So that's also an impossible graph.
+Again, these are not graphs you &quot;have to avoid,&quot; or anything. I'm just pointing out that by these conventions,
+these [right-hand] graphs make literally no sense.
+Those [left-hand] graphs are possible to get from C++ programs.
+And we can match these graphs to their code... I'll leave that up for the video, and then I'm just going to go on.
+Now we've gotten to a break. How am I doing on time?
+Not bad.
+Now I'm going to start actually talking about `dynamic_cast`.
+We have now completely explained everything there is to know about classical polymorphism
+and now I'm going to talk about what is `dynamic_cast` and what does it do.
+Are there any questions about anything at this point?
+So what should `dynamic_cast` do?
+Let's say I have this little function `test()`. All this does is,
+it takes a pointer to an `Animal` and it says, &quot;I would like that Cat, please!&quot;
+It takes a pointer to an Animal.
+So I'm at the pet shop here, and I point to this [leftmost] Animal, and I say &quot;I would like this Cat, please&quot;...
+and the pet store owner says &quot;Okay. Here. Have this Cat.&quot; Easy.
+Because this Cat is this Animal.
+I point to this Animal [the subobject of Dog] and I say, &quot;I would like this Cat, please&quot;...
+Now there's a problem, because this is not actually a Cat.
+And so what `dynamic_cast&amp;lt;Cat*&amp;gt;` is going to do in this case is it's going to give you back `nullptr`.
+If I tried to cast it with `dynamic_cast&amp;lt;Cat&amp;amp;&amp;gt;(animal)`, it would throw `std::bad_cast`.
+I'm gonna stick with casting pointers here because pointers are nice, and I can just say &quot;this gives you null.&quot;
+And we can implement one behavior in terms of the other easily enough.
+Okay, so I have a pointer to this Animal, I say &quot;give me this Cat,&quot; and it gives me null. Because this Animal is not a Cat.
+Now I have a pointer to this [next] Animal, and I say, &quot;Give me this Cat.&quot;
+Now in this case this Animal is a base subobject of a HappyCatDog, which is a Cat.
+Besides which, this Animal is a base subobject of a Cat; so it says, &quot;Sure. Here. Have this Cat.&quot; It gives me a pointer to this Cat.
+Let's go over here. Now I have a pointer to this Animal, and I say, &quot;Give me this Cat.&quot; — Everyone sees my mouse pointer, I hope.
+I say &quot;give me this Cat.&quot; This Animal is the base of a Cat. &quot;Here you go, have a Cat.&quot;
+Now we get to a more interesting case. I point to THIS Animal and I say, &quot;Mommy, I would like this Cat.&quot;
+I am clearly pointing to something that is a Dog.
+But this Dog is part of a CatDog... and the CatDog is a Cat...
+Now, a CatDog [an AngryCatDog] is not an Animal.
+I'm pointing to this Animal, and saying &quot;give me this Cat,&quot;
+and the Animal I'm pointing to is not a subobject of a Cat... and in fact the most derived object is not even an Animal!
+I'm pointing to the Animal, but it's not an Animal.
+And I'm saying, &quot;Give me this Cat.&quot;
+And it says &quot;Okay,&quot; and it gives me this Cat.
+Because I'm definitely pointing to an Animal, right? and—
+there's only one Cat I could be talking about.
+So `dynamic_cast` is defined in such a way that it will say &quot;Okay.&quot;
+It tries to make me happy. &quot;I will give you this Cat,&quot; it says.
+All right, now I point to this Animal and I say give me this Cat. Now there's a problem.
+Now this Animal is a base of two different Cats, and so it's not going to give me a Cat.
+It says... just like before, where we saw the AngryCatDog was not an Animal,
+Now we have an Animal which is not a Cat. It's two Cats.
+I know that's not what a Siamese cat is.
+[LAUGHTER]
+So, ambiguous bases. Right.
+We have an Animal here which is two different Cats, and I don't know which Cat I want. It's ambiguous.
+Oh. Question.
+[AUDIENCE] In the first graph, if you `dynamic_cast` that Animal to Cat, will the pointer value change?
+[ARTHUR] If I `dynamic_cast` this Animal to Cat, will the pointer value change — in the sense of does it point to a different memory address.
+Well, it depends on how `Cat` is defined. Given how we've been defining `Cat`, no. A `Cat` physically is an `Animal`— or, no, I'm sorry —
+this is a virtual base, so I believe it will? But don't quote me on that. Just go try it.
+Question.
+[INAUDIBLE FROM AUDIENCE]
+Then we would have the AngryCatDog.
+[INAUDIBLE FROM AUDIENCE]
+Oh. This would be a Cat in the Cat. Yeah. Okay.
+And we pointed at this Animal, we said give me a Cat, it would give me this Cat— oh, repeat the question. Right.
+If this Animal were not virtual, and so there were Animal/Animal, on both sides here,
+this Animal, the left Animal, would be the left Cat and the right Animal would be the right Cat.
+It's again unambiguous — I'm pointing to an Animal, it definitely IS that Cat, `dynamic_cast` will try to make me happy.
+All right.
+So this problem is actually analogous to a problem we face in the other dynamic run-time-type-info-based thing that we do in C++,
+Which is try/catch.
+Right? If I throw a SiameseCat and I try to catch it as a Cat — is a SiameseCat a Cat?
+No! It's two Cats.
+So this will actually not hit that first `catch` handler,
+But it will hit the second one, because the SiameseCat is a single Animal.
+So this raises one more question. What about this case?
+So here I have a pointer to the right Cat. As type `RightCat`.
+And I say, &quot;I would like this Cat, please.&quot; Which Cat do I mean?
+Now in this case the answer is,
+There IS a specific Cat that is more like this RightCat than the other one. So yes. We do the right thing here. `dynamic_cast` tries to make us happy.
+And also! Yes, my slide corrects me here.
+This is not really a truly dynamic cast. In this case `RightCat` actually inherits from `Cat`.
+So not only is the RightCat a Cat,
+But the compiler knows at compile time that the RightCat is a Cat.
+And when you point to a RightCat and you say you want the Cat, you obviously want the Cat that's a base subobject of that.
+And the compiler can compute that! It actually turns into a `static_cast`.
+As long as it's an accessible and unambiguous base class of RightCat.
+And if it's an inaccessible base class — you're trying to cast to a private base class and you're not a friend —
+Then the `dynamic_cast` is ill-formed and you get a compile-time error.
+So this is not a truly dynamic cast.
+And we're going to distinguish now between things that the compiler can figure out on its own
+and things that really have to be done truly dynamically at runtime.
+All right. `dynamic_cast`!
+Per the Itanium spec, there are three truly dynamic casts.
+First, `dynamic_cast` to the most derived class.
+So I can actually get a pointer — a void pointer — to the most derived class.
+It has to be `void*` because I don't know what the most derived class is, by definition, so it can't be `ThatType*`.
+It has to be a pointer that can point to anything, so it's going to be a `void*`.
+To the most derived class. And that's illustrated over there on the left: &quot;to Most Derived Object [MDO].&quot;
+Second, `dynamic_cast` across the hierarchy, from `Cat` to `Dog`, to a sibling base.
+Or third, `dynamic_cast` from a base to derived.
+Now, going the other way, from derived to base — from Cat to Animal — that's a `static_cast`. That's not truly dynamic.
+You can express it with a `dynamic_cast`, but it will just happen at compile time.
+But we need a fourth one as well. And ironically the fourth one IS cast to base. But dynamically.
+So if I have a pointer to the most derived object, such as I got from `dynamic_cast&amp;lt;void*&amp;gt;`,
+And I have a pointer to the most derived object, and I want to know
+Is a SiameseCat a Cat? Is a SiameseCat a RightCat? — for the purposes of catching.
+Then I actually need to dynamically cast to a base where I have an object that I don't know — statically — I don't know what it is.
+but dynamically I have a pointer to it —
+ I have its address, that is —
+and I want to know if that is a `Dog`. So that's the FOURTH truly dynamic cast.
+So let's implement `dynamic_cast` to most derived class.
+Now, don't do this at home.
+Or, do this ONLY at home.
+Don't do this at work.
+`dynamic_cast` to `void*`. That's literally just, &quot;find me the address of the most derived object.&quot;
+And the address of the most derived object is just the MDO offset — the -16 there — plus the `this` pointer.
+So just load up my vptr and grab that offset and add it, and I'm done.
+That's like two instructions; every major compiler does inline it; they generate optimal inline code; great. Awesome.
+`dynamic_cast` to sibling base.
+In this case, we have a `Cat&amp;amp;` and we're trying to convert it to a `Dog&amp;amp;`. Or we have a `Cat*`, trying to convert it to a `Dog*`.
+The compiler already knows statically that `Cat` and `Dog` are unrelated.
+Why?
+Because if `Cat` inherited from `Dog`, then this would be a `static_cast` that wouldn't be truly dynamic, and I wouldn't be trying to do it.
+And if `Dog` inherited from `Cat`, this would be the downcast that we're going to look at next.
+So in this case we know that they're not related. Not all Cats are Dogs, not all Dogs are Cats.
+The only way for this `dynamic_cast` to succeed is if some Dogs are Cats.
+If someone has made a `CatDog` by inheriting from both of them.
+So what this means is that if either of these classes is `final`,
+then this `dynamic_cast` MUST fail. It must give us `nullptr`.
+The compiler knows this statically. It knows whether these two are `final`.
+And so it should give us optimal codegen. But it doesn't.
+Clang will optimize if the source is `final` but not if the destination is `final`; and none of the other major compilers do it.
+Here's how we do it, assuming they're not `final`. There might be a `CatDog`.
+And this might be a `CatDog`. In that case what we do is we cast to the most derived class...
+and we ask for its `typeid` — that's just in its vtable — and if that's still the `typeid` of Cat, then we haven't changed it.
+And we can just fail. This actually was &quot;just a Cat.&quot;
+Otherwise, it's something else. It's something that someone else has Frankensteined together, and it might contain a `Dog`.
+So in that case, I have a thing that I don't know what it is — but I have a pointer to it —
+— and it might be a `Dog`, and I would like to find out if it is.
+This is exactly the case that we have when we `catch` an object of polymorphic type,
+and we want to know should this `catch` handler apply. &quot;Is this thing a Dog? Should it be caught as a Dog?&quot;
+So in that case we want to use our &quot;cast to base&quot;... which we're going to write. But that's exactly the same operation we would do in a catch handler.
+So let's do that &quot;cast to base.&quot;
+This is where I diverge from the Itanium ABI.
+I say, &quot;I just want to solve the problem at hand.&quot; Which is, I have a pointer to a thing, and I have its vptr.
+I have its vtable. I have its `typeid` in its vtable. I have some `type_info` about it. I have its RTTI, basically.
+And I would like to know if it is a Dog.
+So, I could just write a function that tells me if this thing is a Dog; and just put a pointer to it in the RTTI.
+In the run-time type info. In the vtable somewhere.
+And it would look something like this.
+This is just sort of a list, for each class, of its bases,
+Where if you name one of its bases —
+ one of its public, unambiguous bases —
+it just gives you a pointer to that base.
+&quot;Ask me for a base, and I will give it to you, if I know about it.&quot;
+&quot;And if I don't know about it then it's not a base of me — and so I'll give you nullptr.&quot;
+This coincidentally is exactly the behavior I want from `dynamic_cast`. This is also exactly the behavior I want from `catch`.
+This is a HappyCatDog, so it has one Animal subobject,
+so if you ask the HappyCatDog for its Animal base, it will give you its Animal base because it IS-AN Animal.
+The AngryCatDog, with non-virtual inheritance, has two Animal subobjects, so the AngryCatDog is not an Animal;
+and if you ask it for its Animal subobject, it doesn't know about it. It's going to give you `nullptr` in that case.
+All right, so let's do a quick example here...
+Here I have a function `test()`; it takes an `Animal*`; it tries to convert it to a `Dog*` dynamically.
+So I have a pointer to an `Animal`. This is inside a `CatDog`, by the way, as it happens. I don't know that yet.
+All I see is, I see a pointer to this Animal object.
+But it's polymorphic so it has a vptr.
+and I'm trying to `dynamic_cast` it. So step 1, so I get the vptr.
+I go over there, and I get the `offset` to the most derived object. &quot;-40&quot;. Cool.
+Now I take my original Animal `this` pointer, and I subtract 40, and I go up there.
+Now I have the address of the vptr of the most derived object.
+I no longer have any idea what the type of that is. I know it's the most derived type...
+which has somewhere within it an Animal subobject; and that's all I know about it.
+But I know this is a vptr, so I'm gonna follow it.
+It's a vptr for some polymorphic type, so I know that I can get its `type_info` — its `typeid` — from a known offset.
+Or in this case let's just pretend that the function pointer is in the vtable.
+And I call that function with the pointer to that highlighted address,
+the beginning of the most derived object, and I call it with the `typeid` of `Dog`, which is what I'm looking for...
+and I just trust that it will tell me if this thing has a `Dog` subobject. If it doesn't, that's also nice to know.
+And in this case, hooray, I get it.
+But actually this is not how either Itanium or MSVC do it!
+They don't just write this little function. They actually generate data — read-only data — that represents the entire class hierarchy,
+and when they want to know if one thing is another thing, they will do a graph algorithm.
+They will do some Dijkstra's algorithm and stuff to try to figure out if there's a path from A to B
+And they get it wrong. And there are bugs.
+You won't run into those bugs in practice, but I will file those bugs.
+Is there a question?
+[INAUDIBLE FROM AUDIENCE]
+[APPLAUSE FROM TONY'S SESSION NEXT DOOR]
+[CONTINUED INAUDIBLE FROM AUDIENCE]
+[ARTHUR] Yes... from base to derived...
+To most derived.
+The first case is going to the most derived object. `dynamic_cast` to `void*`? That's the easy case.
+Yeah. And then what we're doing to go to sibling, is, we're actually simplifying that into,
+first go to the most derived object, and then ask whether that object — whose dynamic type I don't know — ask it whether it can be this type, and if so, get that pointer.
+[AUDIENCE] How do you know you're going to the most derived object? You don't know beforehand—
+[ARTHUR] We know that we're going to the most derived object because we know every object of polymorphic type HAS a most derived object —
+But we don't know WHAT it is —
+But the fact that it HAS one means that we can put WHERE it is in its vtable, at a known offset. Which is what we do.
+And that is actually what Itanium does as well.
+[INAUDIBLE FROM AUDIENCE]
+You CAN know statically that the `dynamic_cast` wants the most derived object,
+because the user told you that that's what they want. They say, `dynamic_cast&amp;lt;void*&amp;gt;`.
+Or they say `dynamic_cast` to some sibling base, which is unrelated,
+in which case how we do that is, first we cast to `void*` and then we ask that object for...
+Yep.
+[NEW QUESTION FROM AUDIENCE, ABOUT FINAL CLASSES IN CLANG]
+It's a missing optimization. But it's one fewer missing optimization than GCC, MSVC, or ICC.
+And one of these days they'll fix it. It's like a one-line change. They could fix it.
+All right. Quick digression on &quot;accessible&quot; versus &quot;public,&quot; because I've been using both of those terms here.
+Here I have a `Sponge`. A Sponge IS-AN Animal. But it's not widely known that a Sponge IS-AN Animal.
+[LAUGHTER]
+So if I'm in a context that knows about sponges... is a `friend` of sponges...
+then static_casting from `Sponge` to `Animal` is okay.
+Right? I point to a Sponge. I say, &quot;I would like this Animal.&quot; And it says, &quot;All right, here. Here's the Animal.&quot;
+Now if I'm in a context which is not a friend of sponges,
+And I say — I point to a Sponge, and say, &quot;I would like this Animal, please,&quot;
+the compiler will say, &quot;That doesn't LOOK like an Animal...&quot;
+And you'll get an error. Because you're trying to `static_cast` to something that looks unrelated.
+So both `static_cast` and `dynamic_cast` from derived to base require that the target base be unambiguous
+and accessible in the current lexical scope.
+And remember, `dynamic_cast` from derived to base is really just a `static_cast` in disguise.
+So it has the same requirements as `static_cast`.
+But now let's try throw/catch.
+Which again goes from derived to base, right?
+I throw a `Sponge` and I try to catch an `Animal`.
+&quot;Here comes the Sponge! Catch that Animal!&quot;
+It doesn't LOOK like an Animal...
+And now lexical scope doesn't matter. Because at runtime there is no such thing as lexical scope.
+If I'm at runtime, and all my lexical scopes are gone — all I have is machine code and library functions,
+and they don't really understand the concept of scope...
+&quot;Here comes a Sponge! Catch that Animal!&quot;
+It would be wrong to catch it...
+because that would imply knowledge of the Sponge-Animal relationship, which not everyone has.
+And so all of these operations in the C++ Standard are defined
+so that runtime knows nothing. Runtime is not your `friend`. Runtime is nobody's `friend`.
+I throw the Sponge, I attempt to catch an Animal, it doesn't look like an Animal, I don't catch it.
+It doesn't matter where I am lexically.
+There's no such thing as lexical scope at runtime.
+So that's why castToBase here, which is used by `catch` and which is also used by `dynamic_cast` to a sibling base,
+requires that the target base be unambiguous and public. Not just accessible, but public.
+Because there is no such thing as lexical scope at runtime.
+All right, we are now down to the last case, which is casting from base to derived.
+I have a pointer to an Animal and I would like that Cat, please.
+So again, I don't know statically — if I have an `Animal*`, I don't know that it is a `Cat`.
+So I have to do something at runtime to find out if it's a Cat.
+And now I can't use that same trick.
+One reason I can't use that same trick is the `SiameseCat` issue.
+The other reason is that...
+I might have, let's say, a coral reef. Which in this example IS-A `Fish` and IS-A `Sponge`.
+This is horrible... this is not Liskov-substitutable at all...
+Please, again, don't try this at work.
+But let's say a `Reef` has a `Fish` and a `Sponge`. IS-A `Fish` and a `Sponge`.
+And a Fish IS-AN Animal. And a Sponge IS-AN Animal but hardly anybody knows it.
+And now I point to this Animal [the subobject of Fish]...
+and I say, &quot;I would like this Sponge, please.&quot;
+This cast works.
+Because this Animal is a Reef...
+and a Reef IS-A Sponge... and there's only one Sponge I could possibly be talking about...
+Everybody knows it...
+We get that `Sponge`.
+But if I point to this Animal, the right-hand Animal that is actually a subobject of Sponge,
+and I say &quot;I would like this Sponge,&quot;
+That actually doesn't work. That will give me `nullptr`.
+Because that would require the runtime to admit that this Animal is a Sponge... this is the Animal subobject of a Sponge...
+but you're not supposed to know that a Sponge has an Animal subobject at all!
+So actually the cast from the left-hand Animal to Sponge works, and the cast from the right-hand Animal to Sponge actually doesn't work.
+Because there's no lexical scopes, because runtime is not your friend.
+All right.
+So how are we actually going to do this? This now gets tricky, right? because we can't use our trick anymore. I'm gonna point that out.
+We can't just say I will go to the most derived object (which is `Reef`) and then I will ask it for its public base `Sponge`.
+That would actually always give us `Sponge` in this case, and that's not what `dynamic_cast` wants to do.
+So we can't implement `dynamic_cast` that way.
+We have to have a new trick to make one of these casts work and the other one not work.
+So here's what we're going to do. We're going to find the most derived object, and then at this point we're going to ask it two questions.
+We're going to ask it, &quot;Is that Animal subobject that we started with a public base of a Sponge subobject, whether you're supposed to know about it or not?&quot;
+And it can tell us that. And otherwise,
+&quot;Is that Animal subobject that we started with a public base of yourself?&quot;
+If so, then it's okay to give me your public `Sponge` subobject.
+And here's code for that.
+All right.
+And now I've explained that. I'm going a little bit fast here because I saw we only have ten minutes...
+but suddenly I have fewer slides than I thought, so, we'll go back to that slide for me to ask, are there any questions?
+[INAUDIBLE FROM AUDIENCE]
+Right.
+When I'm going from an `Animal` to a `Cat` in a `SiameseCat`, how do I know which `Cat` to go to?
+Because, if that `Animal` that I started with is a public base of a `Cat` subobject,
+the most derived object will know that statically, when we do the struct layout of the most derived object,
+and so it will be able to answer this question in the affirmative and say, &quot;Yes. I can see—&quot;
+&quot;I can see you're pointing to the left Animal, so you want the left Cat. I can see you're pointing to the right Animal, you want the right Cat.&quot;
+It knows that.
+That function will know the full graph layout of the most derived object because it is generated as part of the RTTI of that most derived type
+at the time we're doing the struct layout for the most derived type.
+It knows everything about the struct layout. Yes. It knows everything about the struct layout of that type.
+Because it's generated as the RTTI for that type.
+So here's a possible implementation. Again, this is not what Itanium or Visual Studio do.
+They actually do a whole graph. They depth-first search this graph. It is slow. It is buggy. Graph algorithms are hard.
+And when you try to do them efficiently, they get harder; and ironically, you make more bugs.
+Let's put everything together and see what we've ended up with.
+So I wrote this template called `dynamicast`.
+And it takes `P`, which here is a pointer type representing what we want to dynamic-cast to,
+and it deduces what we've got as the argument `From`; it deduces `From`,
+and here `To` is the type we're casting to — and yeah, it's just `remove_pointer_t&amp;lt;P&amp;gt;`.
+So here's what `dynamic_cast` should do.
+Number one, if we're casting to the same type, just return the object and we're done.
+Number two, if this is a public— or, sorry, an accessible— an accessible unambiguous base, just cast to that and we're done.
+I'm using a C-style cast, which is sneaky, because that can actually cast to private bases,
+and you can't actually check for accessibility with type traits. So even for private bases, this will just make it work.
+Then, if we're casting to `void*`, that means the user is asking for a pointer to the most derived object and they don't care what it is,
+so I'll just return the most derived object. I'll show code for that on the next slide.
+If we're casting— let's see, we're casting down the hierarchy— from the base to a derived class,
+I've got some code for that — and otherwise we have unrelated sibling classes, and we're casting between them.
+So first of all, here's the non-portable stuff. The stuff that you're not supposed to do at work.
+A truly dynamic cast to the most derived object means...
+take the vptr. Now, this is a pointer to a polymorphic object,
+which means in the Itanium ABI, the thing at that offset, that's going to be a vptr and I can just go grab it.
+That's not true of MSVC. It gets a little bit more complicated. Look at my repo...
+which I hope is linked from one of these slides... to see how it's done on MSVC.
+We go grab the offset to MDO [most derived object] and we add it to our `this` pointer, and we return our `this` pointer.
+That concludes casting to `void*`.
+We also have this function `dynamic_typeid()`. What that does is get the `type_info` of some polymorphic object, whose type, again, I don't know...
+But I know how to go into its vtable and grab that `typeid` out.
+So you can write that. Again, not at work.
+`truly_dynamic_from_base_to_derived()`... I'm gonna skip this, I think, because we're running out of time...
+`truly_dynamic_between_unrelated_classes()`...
+Here's our completed code. It looks the same as the previous code because I skipped the implementations...
+I wanted to get to the benchmark numbers.
+So I wrote this Python script as part of this.
+I was testing this, trying to, you know, make sure I could actually write `dynamic_cast`, and so I needed to write some tests.
+And so I decided the right way to do that was with a fuzzer.
+I highly recommend this if you're doing any kind of operating on something that looks kind of like a language.
+Write yourself a little fuzzer. Write a test case generator.
+So I wrote a test case generator. It would generate ten random classes, starting with `class1`, `class2`, class3`, all of which had no base classes...
+And then it would start putting them together in different ways. &quot;public virtual class1, private virtual class2, public virtual...&quot;
+you know, &quot;private, private, public...&quot; It would put them all together, in various combinations, until it got down to class10,
+And then it would generate all possible dynamic_casts.
+From `class1*` to `class10*`. From `class1*` to `class3*`. From `class3*` to `class5*`.
+It would generate all of them, and then it would run them.
+And it would make sure that the output corresponded to what I got running it through libc++ or libstdc++,
+and that's how I found a bunch of bugs.
+And then as long as I had that test case generator I wrote a benchmark, because why not.
+So the benchmark code looks something like this. This is the link to the github with all of the code
+And I ran my benchmark comparing my `dynamicast`, using the templates and the extremely non-portable Itanium ABI magic that we just saw,
+and I got these numbers out, and I said, &quot;Huh. All right. Well, I didn't do any worse.&quot;
+But I really — you know, maybe I'm egotistical, but I really expected to do better.
+I really expected to do better than the default libc++ library implementation that's on my MacBook,
+because this is all templates, it should all get inlined, it should all...
+&quot;Inlined.&quot; Right. Right right right.
+`-O3`. Okay! Yes. That other graph — that was `-O0`. This is when you turn on optimizations.
+The green bars here are — basically —
+Left side faster, fewer milliseconds. Right side slower, more milliseconds.
+The units don't matter because this is extremely munged, but, leftward faster, rightward slower.
+The green bars are a histogram of my performance on these randomly generated, extremely non-realistic casts from one type to the other.
+And in red, that's the native `dynamic_cast` on the same data.
+On the top here, pulled out in a separate histogram...
+and a much less interesting histogram,
+That's casting to `void*`.
+And you see that we're exactly the same because compilers do generate inlined perfectly efficient code for casting to `void*`.
+But anything where you're calling the library implementation of `__dynamic_cast`,
+that library routine will NOT get inlined; it can't be.
+It will not get any more optimized based on different things, such as being `final` or not,
+And so it turns out I can do better.
+And then the last slide I have is a slightly more realistic benchmark,
+where I'm only compiling my custom RTTI functions with `-O3` and everything else is `-O0`.
+That's under the assumption that
+–that libc++ would be compiled with `-O3`, and then your code, I can't really control what your code does.
+And there I'm doing just a little bit better. It's not as dramatic.
+That, I think, is the entire talk; and we have like two minutes for questions. Thank you for coming.
+[APPLAUSE]
+Back there.
+[AUDIENCE] I'm just curious, did you look at the size of the generated binary? It seems like maybe with your approach,
+generating all these functions to hardcode the answers, basically, maybe there's a space versus speed tradeoff.
+So the question is, how does the size of these generated functions compare to the size in data of the RTTI data.
+And the answer is, I don't know, I didn't look at that.
+I would expect them to be roughly comparable. Notice that most of these functions — vast majority of these functions —
+are just `return nullptr`, which is like three bytes on x86, so.
+[ASKING IF THE BENCHMARK IS UNREALISTIC]
+Yes.
+[ASKING IF ARTHUR HAS REALISTIC NUMBERS]
+No.
+But if you have a realistic class hierarchy and you would like to try this out, I would be very interested to know realistic numbers.
+[INAUDIBLE]
+[INAUDIBLE, SOMETHING ABOUT DLLS]
+[INAUDIBLE]
+The observation was that on some platforms `dynamic_cast` can actually do string comparisons instead of pointer comparisons.
+Like in this slide where I've got— I didn't really do this slide, but the underlined things here
+It says like `ti == _To_`, and that's the typeid of the `To` type.
+And that comparison could be a string comparison on some platforms.
+In general— I think in the old days it actually used to be a string comparison more often.
+These days they will at least try to compare the addresses first,
+and only then fall back to string comparison.
+So I don't think that they would do the string comparisons in this case. You would still be paying for that extra branch, maybe.
+But yes.
+[Footnote: Actually no. `dynamicast` and `dynamic_cast` both rely on `type_info::operator==`, which may or may not use string comparison, but it would have been the same for both benchmarks.]</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

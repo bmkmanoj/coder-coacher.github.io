@@ -1,0 +1,1226 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Cliff Click - Bits of advice for VM writers - Curry On | Coder Coacher - Coaching Coders</title><meta content="Cliff Click - Bits of advice for VM writers - Curry On - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Curry-On/">Curry On!</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Cliff Click - Bits of advice for VM writers - Curry On</b></h2><h5 class="post__date">2015-07-15</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/vzzABBxo44g" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so I'm cliff click I've been writing
+code for 40 odd years if you do the math
+it says I wrote my first compiler when I
+was 15
+distributed computation shortly
+thereafter including a pile of z80
+machines if any murmur remembers what a
+z80 is I'd worked on a parallel dat mob
+device drivers operating systems and the
+thing I'm most well known for is is the
+hotspot server compiler which I had a
+huge amount of pushback from everyone at
+the time that you couldn't do a
+heavyweight compiler in a jaded scenario
+and I basically showed the world that in
+fact you could do all kinds of amazing
+optimizations and it kind of changed how
+people think about virtual machines um
+so you know along the way of the journey
+of hotspot lots and lots and lots of
+things happen for which I ended up
+making choices that at that time
+sometimes I didn't even realize I was
+making a choice that I had a choice it
+was all new to everybody that you could
+get him a virtual machine that would be
+so performant and you know we were just
+making our best shots at the time with
+the knowledge we had available and in
+hindsight looking backwards I can say
+there are a lot of interesting decisions
+made some of which shocked and led to
+serious problems that required sort of
+massive engineering overhaul efforts to
+fix later but were required to go to the
+next level of performance so you know
+I've been working on hot spot for about
+20 years you know 10:00 at Sun and 10:00
+mortis all I watched hot spot become
+thread robust so I mean thread robust
+means works well with thousands of
+runnable threads and thousands of
+threads blocked on i/o and thread churn
+rates at you know hundreds of new
+threads the second kinds of things so
+that's hard to make that work right I I
+worked on porting hot spots to all those
+platforms including you know doing all
+kinds of machine code generation for
+them all I worked on the different
+compilers mostly c2 but definitely on
+the interfaces between c1 and c2 and the
+shared runtime I worked with people who
+did all kinds of GC algorithms I don't
+know if anyone here remembers the Train
+algorithm but these were all GCS and
+there were several more that I was part
+of that were being put into hot spot or
+attempted to be put in hot spot the last
+one there was been at a zoo and that's
+interesting in that it brings pause
+times down to
+low microsecond range Emax pause down to
+the low microsecond train so not average
+pause but the max pause so that's
+actually pretty impressive these are
+only heaps that are hundreds of
+gigabytes doing tens of gigabytes the
+second allocation rates on our stock x86
+so it's a nature of this talk that I
+have too much stuff and you're looking
+at 20 years of history I'm gonna
+compress into 40 minutes I can't do it
+so there's lots of interesting things
+here there's lots of interesting weird
+inter walks between the different kind
+of design decisions and how how much
+trouble they caused you down the road
+you know what you limits of performance
+are gonna be so I'm gonna just have to
+breeze through just out of time and that
+in turn means feel free to spot me and
+ask questions because if you don't get
+it somebody else doesn't either
+so ask questions and I'm all good with
+taking the interrupts in the middle of
+talk so I'll whip through the agenda
+here real quick
+I'm gonna talk about some interesting
+choices that maybe you don't realize
+that if you're a VM writer you've
+already made or that you had a choice at
+the time you made it and then we'll look
+into native calls which in and you know
+and the first blush you think oh I'm
+gonna call some native code it's gonna
+do something stupid Blas Saxby it's
+gonna add two arrays together somewhere
+is it easy right there shouldn't be any
+trouble at all it turns out to be a
+giant pain in the neck for reasons
+they're not obvious and then I'll talk
+about some things that worked out really
+well that in you know at the time we
+made the decision we're just like a
+crapshoot your roll the dice and oh hey
+that worked out um some things that we
+tried that we knew were hard that we
+spent a lot of effort at but we're worth
+doing and ultimately some things that
+were just complete fail so I'll never
+ever do again and then I'll just run out
+of time and that's all we can do so
+virtual machines are sort of big complex
+beasties or maybe they're not you know
+maybe there are tiny tiny little things
+like squawk and ovm from a few years ago
+kind of fins on your feature set and the
+features that you pick interact in
+various bad ways so they're usually not
+obvious the time you start I went the
+big desktop server route but at that
+time there are a lot of people making
+virtual machines for tiny cell phones
+and you wanna say tiny cell phones use
+their cell phones with less than a gig
+okay so these days cell phones are
+actually pretty big and maybe you want
+to have a big complicated VM on your
+cell phone
+maybe not it's a different set of
+problems certainly if you're looking for
+like JavaScript on an embedded device
+it's gonna go in like a car or or some
+Ruby
+you can go down a completely set of
+different choices and you get a much
+simpler VM but if you're going to go to
+a place where you want to run sort of
+arbitrary code sort of native code
+that's not trustable that doesn't play
+nice with a virtual machine you have a
+lot of interesting problems that have to
+solved that make your vm complicated
+okay so here's a pile of choices I'm
+just going to throw them out without
+saying which one's better which ones not
+how portable do you want your VM to be
+you're gonna run on x86 only ever that's
+probably good choice if you want to run
+an arm right you have the Indian
+Assisi's you have calling conventions
+you're gonna use who's compiler you're
+using for doing the non VM piece versus
+your diddid code piece right are you
+using the standard C compiler using one
+of the different yawn necks 86 there's
+like five different API calling have
+inches you can pick from are your
+threads green threads roll your own my
+POSIX threads how your stacks laid out
+that's a crucial game to be played there
+which way not just look away they grow
+but how do they grow and how do you
+handle stack overflow issues you're
+looking at you know GPUs DSP chips arms
+or just xc6 you could have an
+interpreter you're gonna have a JIT you
+can have both you can get away with all
+or none of the above right or your
+threads cooperative are they gonna have
+a pre-emptive OS you have a pre-emptive
+the lash it interacts badly with GC in
+weird ways
+you have cooperative it doesn't so it
+makes a big difference yeah mostly CPU
+not just multi-threaded but mostly CPU
+your multi CPU you have to have atomic
+instructions you have to jet and the
+generate atomic instructions you have to
+have a way to define atomic instructions
+that are accessible from the language
+that your virtual machines running to
+produce an atomic you know compare and
+swap instruction so it's not an obvious
+translation layer there so here's an
+interpreter some choices all right how
+do you write interpreter well it's
+pretty easy you sitting with your Chico
+and you grab this from gray of bytes and
+you read a bytecode and you do it riah
+bytecode you do it okay fine your pure C
+interpreter is easy right turns out that
+most your time to spit and dispatch so
+you can speed it up by using GC label
+VARs for instance it's not almost pure
+C's so you'll lose some portability but
+it still it's it's like double speed
+you're gonna pure assembly I got double
+speed again
+I got fancier yet for weird dispatch
+logic for variable size byte codes to
+get more speed out yet out of your
+interpreter you know
+it's doubling in the interpreters worth
+something there you know it's it's
+useful um what's your layout of your
+interpreter is it a stack-based is it
+register bass if it's stack-based it
+typically interoperates very badly with
+jaded code and then you have a horrible
+problem having interpreter call
+code and the cheated code called back
+into the interpreter and so you have to
+make some decisions about how your
+interpreter like looks like okay it's
+all about jets right you have none makes
+life a lot easier it's much simpler but
+maybe you want to have some more
+performance and so like a stage zero
+template style jig just read a bytecode
+slap some instructions out read about
+codes slap instructions so that one is
+very quick to generate code the code
+quality is really sucky and it's very
+bulky on the other hand you get the
+calling convention of your choice for
+how you want to jet code and so that
+kind of jet can inter call with a better
+jet sort of freely if instead you decide
+you want just a you know a heavier
+weight jet you're gonna have to do
+something with how you inner call with
+interpreted code in both cases you're
+gonna have to look at how you're gonna
+call in with the native code you know
+suppose you're you're looking at like
+graphics routines for scribbling on your
+screen what's the api for calling this
+graphics routines it's probably fixed by
+the c compiler on that hardware on that
+platform okay is that a good calling
+convention most c compiler support bards
+varargs demands all your register your
+arguments we passed in registers in the
+same like integer register file because
+you don't know what's a float and what's
+a int register when you call print off
+well if you're looking at java and we
+saw strongly type and the calling arts
+you do know and maybe you want to pass
+your floats and float registers and not
+on the intra jesters so if you're in a
+calling native code you have to have
+shuffle the dom floats around from a
+float to the end and back and forth as i
+screw up so so it's a pain in the neck
+and you have to think about you know
+who's calling to mention you're gonna
+deal with um class loading versus
+inlining like non final methods like in
+in the land of c all methods are final
+right and c++ almost everything's final
+like java is final because you have to
+say virtual is a keyword you go to java
+you don't say virtual you don't say
+final i'm sorry it's it's it's a virtual
+call but almost never overridden
+actually and so most non final calls are
+actually final in practice but not in
+theory and so when you go get them you
+want to in line and that's the key
+optimization bio and all these guys
+goto jetted code inlining is the key
+optimization you want inline the non
+finals if in fact later you're wrong and
+you load a class and the class overrides
+that final that non final method that
+you inline you have to undo the amani
+and then that in turn directly drives
+the code quality you can get around that
+call site and there's some serious
+choices to make there that are some
+non-obvious hotspot went the high
+performance route no one else in the
+planet that I know of has done so I'm
+happy to talk to people who think
+otherwise and it directly impacts a
+final code quality top peak performance
+as well as all kinds of stuff around how
+you deopt and unwind from things I think
+I managed a lot of this except
+mentioning this stuff at the bottom here
+template style jits
+they're fast but they're not as fast as
+interpreting run ones code the cost to
+spray out a bunch of bytes of data that
+are going to be instructions and then
+swap them from the d cache to the I
+cache and then execute them is still
+slower than have an interpreter which is
+all hot in your eye cache reading one
+byte and doing the work and the reading
+the next byte doing the work so it's
+clearly slower at startup and run once
+code to have a stage zero jet instead of
+an interpreter but the trade-off then is
+you have to inter call between
+interpreted code which typically has
+some horrible stack layout versus you
+know JIT code which wants to pass
+everything at registers okay GC do you
+have it at all do you do ref counting
+you have a simple one like it's easy to
+get started with a stop the world run
+one one generation everything through at
+once
+but maybe on a faster one you got
+multi-core machine you got multiple
+threads producing garbage in parallel
+you better clean it up in parallel
+you're gonna spend any time from GC in
+one thread right so you want a high
+throughput let's fast musa mean low
+pause maybe when interactivity so how do
+you get a low pause collector going you
+know and when do you do it in the life
+of building your own system do you want
+an exact garbage collector versus
+conservative conservative what you inter
+call in the native code without thinking
+about it you got a bunch of C routines
+for doing all your bit bleeding screen
+scribbling stuff for doing blahs and
+Fortran routines where god only knows
+what you have to track the pointers
+because you're going to move them and a
+moving collector how do you track them
+in the C code so you
+fathers not tracking him so you go to a
+conservative collector you know move
+them it's a lot easier but it's also
+definitely lower performance an exact
+collector by default will continuously
+compact the active heap and that in turn
+gives you better cache layout and it
+shows up in fewer cache misses all
+throughout the code and it's something
+like five to ten percent faster than a
+non-moving collector it's just on the
+better cache behavior so there's a clear
+performance gain to have an exact moving
+collector at an expense of a lot of
+tracking of what's an object point and
+what's not um how about you know picking
+you algorithms how much engineering
+dollars you're gonna spin coating up
+fancy new algorithm you want to be
+parallel as I mentioned you got multiple
+cores producing garbage in parallel you
+probably wanna collect in parallel
+you're gonna start to suck on GC x right
+concurrent it's actually really really
+hard to do if you want to have you know
+low pause you want to most of the
+collections while some other threads are
+running I'm trying to keep up with a
+frame rate and if you do parallel and
+concurrent then it becomes much much
+harder to do so these are long tail big
+engineering efforts um more TC choices
+here stop anywhere versus safe points
+what do we mean here so stop anywhere
+says I have some thread and it's running
+and I have some other thread who just
+didn't allocation the heap ran out needs
+more start the GC cycle on the running
+thread do I stop it and do a GC cycle
+right now where did it stop it stopped
+on some random instruction I told the OS
+hey stop this guy I'm going to move all
+his pointers well you don't find all
+those pointers well where did he stopped
+he stopped some junky place where all
+his pointers hidden so you probably have
+a map saying oh I hid the pointers here
+and here and here and here in these
+registers
+he said that map gets way too bulky you
+can't have it for every possible place
+he stops so you have the Maps
+occasionally and then how do you look at
+where he's at and where you have a map
+and you roll forward the map sort of
+interpret them or you know how do you
+find what's where the pointers are there
+are some games you can do here like
+declare pointers are only even registers
+and even stack slots and non pointers on
+odd registers the odd stack slots
+there's a bunch of interesting choices
+there a safe points are different paths
+to go which says I'm only going to stop
+a running thread at a safe point
+whatever that is and it's a place where
+I do have a map and I have to have the
+thread only at these places when I do a
+GC
+and that means I have to roll it forward
+if it got preempted at the wrong place
+so I badly want people to preempt only
+at safe points so if they have thousands
+of runnable threads and I stopped to
+take a GC cycle of which you know my 32
+core machine 32 guys are actually
+running and a thousand were not but the
+thousand we're not we're all at a safe
+point already and so I don't have to do
+anything about I can just go read their
+stacks and do stuff
+don't thought you can pull in software
+to run safe points that was not known to
+us and the original hot spot
+implementation did safe points but with
+a different mechanism than software
+polling that's sucked really badly I'll
+talk about later threading issues so if
+you don't have any threads because
+you're running a little tiny device you
+can get away with all kinds of stuff as
+soon as you have threads even in one
+core not all your operations are atomic
+and so you can be preempted in
+conveniently and you need locking okay
+you didn't need it before now you do you
+have to go find all the places in your
+code where you have to insert locks that
+you didn't realize you did and you lose
+this long bug tail where you find all
+the missing locks
+right it also turns out that you know
+garbage collection wants your stack
+pointer and your program counter to
+discover all your stack roots okay fine
+go ask the OS please mister OS tell me
+on the GC thread over here go to me that
+thread stack pointer well the answer is
+the OS lies on low frequency rare and
+and when it lies you get a crap program
+counter back or frak SP back and that
+means you don't walk those stack routes
+correctly and you garbage collecting
+something that's live and the burtom
+crashes with low frequency way down the
+line much later when you fall over the
+the missing guy so this was very
+surprising to me except I kept finding
+these crashes on every OS I tried it on
+and I tried on a lot the fix eventually
+was I gave it up and now whenever I do
+you know VM implantation of DC it's I'm
+going to record the program counter and
+the stack pointer in user mode and not
+rely on the OS at all for this
+information it's available to also give
+it to me but the OS doesn't actually
+give it to me it gives me something
+close most of the time right and that's
+the problem of course if it gave you
+something fail all the time we can fix
+the bug okay
+as soon as I go to multi-core which
+these days is everywhere now you need
+atomic operations you didn't need them
+before you could do locks without
+Atomics when y'all had one core but now
+you have to have atomic operations and
+you have to have some sort of coherency
+and memory model going on so you know
+how threads talk to each other when do
+loads and stores actually communicate
+through the processor fabric getting
+that wrong least in these low frequency
+data race bugs that are just terrible
+hard to track down
+you need locks but you need not just
+locks but scalable walks a thousand
+threads pile up on some walk you better
+be very very efficient and very very
+unfair
+you must be fair it's all great to say
+hey the spec doesn't demand fairness in
+practice every large you know web server
+style app and Java will crash and burn
+if you don't have fair locks that can
+handle thousands of runnable threats
+just have to be there so that means to
+get efficiency out you have all kind of
+games you have to do in the walks we
+have staggered staged lock acquire
+mechanisms where you first try the
+cheapest possible thing you had it
+spectively already and you try caz
+instruction and that fails you do some
+spinning for a while and that fails you
+want to block and then you want to block
+in a way that goes to fairness and
+there's some sort of queuing mechanism
+and the OS doesn't provide fair locks
+none of the OS is I think right now well
+maybe maybe I can get some on some of
+the oasis now typically I don't get fair
+locks out of the OS I have to have them
+or the or the these web servers will all
+die in horrible ways so you're
+implementing fair locks in user land
+right also of course you woke up from
+some long blocked operation like you're
+waiting for a disk read to come back and
+the thread pops up one starts running
+but G sees in progress and the running
+threads got GC pointers that were on a
+stack that he immediately loads and
+registers and we can screw it with you
+crash and burn because you're moving a
+point of you are using so you have to
+take a short of GC lock when you wake up
+it's a bunch of interesting kind of
+walking games going on there here's a
+stupid one 64-bit math the original hot
+spot did it as on a 32-bit machine with
+a pair of n so high and low and you had
+an ad with carry it turns out the major
+user of long math was big in a juror
+which was crypto and web services well
+big and edger uses a actually as like a
+pair of in so to carry which
+and you would shift one or the other by
+32 bits or you'd mask went off or the
+other you'd store the higher the low and
+that optimizes really well as a pair of
+intz in fact so much well that getting
+64 bit ops for doing a long math didn't
+actually help in many cases you're
+better off doing this than actually
+using a 64 bit integer math op it's kind
+of like okay so any questions on that
+for I go to round 2
+all right okay so this is a native call
+so m'm a genetic all here it's going to
+take of this pointer and a double it's
+gonna return me some sort of object you
+know maybe it's like taking some sort of
+double of some sort of offset to give me
+a bit blit behavior or whatever you know
+I'm screwing around with something
+that's going to touch hardware so there
+is a native call involved and I'm
+calling from Java in this case but it
+could be almost any virtual managed
+language I'm not show this in spark but
+all these issues arise on x86 and and
+I'm just certainly arise on arm and I
+know the they arose on a titanium and
+there's a little and and whatever other
+platforms are did already so what you'd
+like to believe is I'm gonna do some
+sort of crazy stack frame for this local
+call that's the safe 64 I'm gonna do
+maybe an argument shuffle to get it from
+one argument to another bridge from
+another make my call and return results
+and I'm done so these are all you know
+you know dual quad issue one o'clock a
+pop this is like two clocks right it's
+all fast a boom native call cheap well
+almost
+so actually because if see calling
+convention loves to have floats in the
+in tread stirs because of bar args the
+registers in the wrong place so I have
+to move it from the floating point
+register to the int registers and I'm
+showing unfortunately 32-bit spark which
+probably isn't appropriate anymore but
+that would cause you to have to load two
+halves of a double in the two different
+registers because you're misaligned
+because the register zero is holding
+that this pointer so you have to shuffle
+some registers around and generally have
+an arbitrary register register shuffle
+game has to happen including stack
+location layout
+okay next can't pass oops object or new
+pointers GC before nearest in the native
+code because what the hell is a native
+code do with it he doesn't tell you what
+he does it if you have your collector
+and he moves the thing and the native
+code uses the old unmoved pointer and
+you crash and burn so you have to not
+hand him pointers now this isn't true if
+you can trust your native code if you
+wrote all that native code yourself you
+know what the hell it does you can get
+away with not playing these handle izing
+games but if it's too arbitrary some
+third-party library you know what the
+hell where it came from
+you must hide those loops yeah it didn't
+occur to me
+Oh Mario's gonna jump up and say
+something here now you're greeing with
+them or you have something else I'm
+sorry Mike
+Mike but back when we did the exact VM
+at some labs we had this dichotomy
+because the Java wander l1 don't wanna
+use conservative collection all error
+--air son wrote a ten line program which
+clearly had no significant live data but
+always ran out of memory because the in
+sloped like pointers it's the worst
+possible scenario when a shipping VM is
+to have for the CEO of some big company
+call you and say we're out of memory and
+we don't know why
+I'm sure you could I'm sure you can make
+one so what web guaranteed have has a
+larger user base than the exact VM ever
+did we did have bugs where you would run
+out of memory but we fixed those bugs by
+just making sure that we sanitize the
+stack at the appropriate points there's
+various hacks that you can do okay so
+let's let's take this offline compare
+notes because I'm wondering what your
+cost to play your sanitization games as
+well as the the lost memory for the
+conservative pieces they're stacks up
+against the the cost of dealing with
+this the engineering cost s execution
+one-time cost here is actually pretty
+modest so the engineering costs to fix
+it when she discovered it was wrong
+after the fact was it you know it was a
+big pain in the neck so this is maybe
+foreshadowing for my talk absolutely
+well I'll be happy to sit in your talk
+and and we'll have it out um okay so all
+I'm doing here is I'm gonna handle eyes
+to allow me to have a moving clock on
+the stack I'm gonna move stack pointers
+one more one more thing about this slide
+in particular um sorry so regarding the
+oops here any opinions on object pinning
+I know hotspot didn't support it it it
+was too constrictive for the kinds of
+garbage collectors that you wanted to
+have so we looked at object pinning and
+hotspot came and went on object pinning
+there was definitely times and it was in
+deadly hunting was out
+it definitely constrains the kind of GCS
+so as I mentioned earlier hotspots come
+through like six or seven different GCS
+some of which could support pinning some
+which could not the the more
+high-performance G C's definitely did
+not want to screw around with object
+pinning with more one more okay but
+all right so while we're throwing rocks
+let cliff all this handle is Asian thing
+basically is because we're writing all
+our VMs and unsafe languages should we
+stop doing that all right that so so my
+summary slide says yes we should start
+yeah I'm agree I also say that there are
+some interesting problems in doing that
+but that's a different talk okay so I'm
+gonna handle eyes is that it we're all
+maybe wait everyone read the slide five
+times over and over what's doing I'm
+gonna just skip and go yeah you have to
+de handle eyes on exit too as well as
+handle eyes going in okay
+synchronized native calls need to lock
+I'm just going to show quickie I'll talk
+to this fast here thin lock so you're
+you're setting a bit in object header
+because it's Java and all objects can be
+locked in a fail mode including like
+failing recursive locks you have to do
+something else that could be relatively
+modest if it's just a recursive walker
+taking could be highly expensive you're
+about to block because you're gonna be
+and go to the lesson block um
+unlock also has a slow path because you
+have to wake up some other thread who's
+waiting desperately to get the same lock
+that you're holding stack crawl so I
+mentioned earlier OS is lie don't rely
+on them so I store the PC and the stack
+pointer down right before I go and I
+store it down into some sort of
+thread-local storage area so that's g7
+on a spark on the x86 is I ended up
+doing lining the stacks from to make
+boundaries and then you could mask off
+bits and give you some space that was
+thread-local at very low class so
+there's a way to get at your throat
+uncle storage you're gonna do it a lot
+you want to have some cheap way to get
+at it
+it better be cheap on the order of like
+a handful of clock cycles cheap in this
+case then I jammed down some bits and
+this instruction the store at the bottom
+there of you know stack pointer down
+that is an unlock to the GC certainly
+very next clock cycle GC has moved
+pointers so you just have to be aware
+that that's the timing on that guy same
+store in Reverse when you come out
+GC is in progress perhaps so when you
+grab your thread-local storage word that
+had your your bit saying I took the lock
+you have to cast to untape it because
+fighting the GC who's also locked you so
+there's an interesting notion of the
+distributed lock which says if a thread
+eeny thread owns the GC lock he can
+mutate the heap and the GC cannot and
+vice versa when all threads have
+released the GC lock the GC can take it
+and then he can mangle a heap at his
+whim that notion turned out to work out
+really well in in all the places I've
+used it and turned out to be not nearly
+as egregious as it may be it sounds to
+both maintain and make it make it work
+right it was cheap to do and fairly
+cheap to implementing easy to debug and
+diagnose and all that kinda stuff okay
+so putting that together Oh No okay so
+dhaba includes a java environment which
+is some place in thread-local storage
+was thrown in as an extra argument to
+all native calls for whatever reason
+there's some more support for temp
+handles resetting them so that the
+native code can make and screw around a
+bunch of handles and you know throw away
+right at the end and it was something it
+looks like this of which all this crap
+you know I can say it does require on an
+x86 although we can you know talk about
+the GC handle izing game um here's some
+handle ization game here's a standard
+you know stack slot here's the J and I
+am
+here's argument shuffle because your
+arguments that you did it to probably
+we're not what you know you wanted the C
+compiler is going to get too
+here's your GC lock enabling your stack
+crawl the actual call unwind the GC lock
+d h-- analyze any result argh shuffle
+the return result in your out a bunch of
+bunch of bunch of stuff there okay so
+that was that was just that fun dive
+into some horrible place
+okay so now I'm gonna talk about things
+that that in hindsight worked out really
+well
+safe points being the major one it was
+easy for the server compiler to track
+safe points to allow the opposite safe
+points only and optimize them and that
+in turn left a really good optimization
+the number of times where you had to
+carry along extra state in the generated
+code so that you could unwind for debug
+ability for class loading you know the
+optimization was rare and picked by the
+compiler so rare meant you had to have
+one into every possible path so all
+loops had to have one somewhere but the
+compiler could pick where and that in
+turn let him do a lot of good
+optimization and it made it very very
+cheap to do so this is a notion that
+works out well in practice for getting
+you know fast good performance out of
+stuff when you do stop at a safe point
+you can ask the thread to do many
+self-service tasks and that's also
+crucial in particular all the threads
+stacks are all hot his own caches so if
+you want to crawl your stack for GC
+roots and maybe flip them do a GC face
+flip do collect unmarked routes or one
+of the hell um a thread does it on his
+own you you tell him at a safe point he
+pulls he comes up with a word saying hey
+it's not zero do something he checks
+there's some bits that scroll my stack
+and collect the routes he calls his own
+stack it's all hot and so on it's all l1
+cache hit mMmmm he's done in
+microseconds he puts those things down
+somewhere and he's back running so so
+the the the notion of safe points here
+enables a lot of good stuff out of
+threads um I'll talk more about the kind
+of fun stuff we do at safe points that
+are all like thread self-service tasks
+um
+software pulling I grab a bit in my my
+thread-local storage move stack pointer
+to jump register maslow bits test and
+branch it's a cache hitting load it's a
+predictable branch it's one o'clock on
+x86 cheap this one requires some OS
+support galapiat prevention preemption
+worth it if you're doing a low pause GC
+you got a thousand runnable threads you
+stop a random thread it's not at a safe
+point you can't crawl a stack you can't
+mutate the stock moves pointers so
+instead you ask him to stop at a safe
+point and you want to OS to say your
+your time slice your cuantas running out
+come to a safe point the next
+microsecond
+all preempt you the hard way and the OS
+and then the you you just set the bid on
+the thread stack and you'll think I run
+and he preempts himself at a safe point
+so that we'll internet to work out
+really well and let you handle the very
+large thread counts where everyone is
+basically always stopped at a safe point
+like a heavyweight JIT compiler
+certainly at the time I did this I got
+amazing amounts of pushback that it
+can't be done and it turned to out that
+you can and it works out great and you
+get really good peak performance out
+including heavyweight loop optimizations
+like loop and rolling and pealing
+invariant code motion
+rain check elimination was done by pre
+and post loop generation where the pre
+and the post loop handled the odd bits
+of the edge cases and the main body
+would have no range checks and then
+could be unrolled perhaps repeated laid
+you know quite large and you get sort of
+Fortran level performance out of your
+dated Java code most of these
+transformations are actually really
+cheap c2s graph IRC of nodes another
+non-traditional choice that worked out
+well in hindsight it's very easy to
+teach people how it works it's a graph
+reduction it's sort of very simple
+semantically we could bring new
+engineers in explain how the damn thing
+work they would all pick it up within a
+day or two and immediately become
+productive in messing around with the
+graph ir it was it was a really a great
+way to go the graph calling allocator
+i'll claims one of those things that was
+hard to do and to do right and worth it
+the particularly good thing is that I
+could get the generated code to be
+robust in the face of over inlining
+versus spill code so the problem here
+I'll talk about more later on is that
+most allocators suffer the problem at
+once they begin spilling they start to
+spill a lot and so there's this knee and
+the performance curve where you in lie a
+little bit and it's better and you in
+line a little bit better and a little a
+little bit more and you've got too many
+live things and you start to spill on
+one good spills there's another and
+pretty soon it's all spill code and then
+anything performance like falls off hard
+and so getting yourself robust in the
+face of over inlining means you can get
+away from having to find to the inlining
+edge it doesn't matter so much so you
+can in line
+if you inline too much occasionally no
+big deal and that was one of the key
+performance benefits of a better
+allocator you know better allocation
+technology uhm portable stack
+manipulation at the time I did it I
+actually didn't start the notion was
+done by other people a hotspot but it
+worked out really well and it's just you
+can have this notion of I have a stack
+to crawl it has a frame and the next
+frame I can with an iterator a classic
+Java style iterator and it works for
+this wide range of CPUs and OSS of you
+know iterating over frames and then
+having memes for the all the locations
+on the stack frame that are interesting
+including where you spilled everything
+so you can find the pointers and stuff
+like that it actually also worked well
+with with various pieces of hardware
+with hardware registers hardware stacks
+both Itanium in azul' have hardware
+stacks that needed some kind of flushing
+and tracking and lazy flushing and
+whatever hell that was all
+straightforward to move into the
+iterator separately frame adapters
+versus adapter frames I'll talk about
+that but it's a there's a really cheap
+way to reorganize your calling
+convention ARBs and it's crucial to do
+it cheap because you're gonna be doing
+it a lot and it's basically you're
+omitting custom Azzam bits for just
+doing the giant register shuffle I'll
+talk a little bit more that at some
+point here so far we haven't needed more
+than four gigabytes of jetted cut I
+don't how big your program is it much
+much bigger but the amount of hot code
+that you want a JIT has seemed to sell
+well below four gigs and all the systems
+I've worked on and that means I can get
+away with a 32-bit program counter and
+that means that I can use the cheap
+local call on all the hardware platforms
+out there that have a 32-bit fixed data
+call site instruction um big savings on
+the next eighty six for sure but also on
+all the other chips you really want to
+live with a 32-bit PC and and think your
+way through it that way and then this
+one blah blah blah a lot flags you know
+I have to blame Dave Unger for this you
+get all these fast slow path games you
+have something than the VM that's you
+know some abstract high-level concepts
+that mostly you can do really cheap
+but you have some slow path where we
+having some horrible thing you know
+classic ones DC where you have to like
+you know alcohol and OGC cycle versus a
+new to the bump pointed right so there's
+some fast slow path and the question is
+did you do it right so how do you
+diagnose that well the slow path by its
+nature by your design is rare you know
+if your slow path is comin then you're
+just slow so you're gonna be fast so you
+slow pass or rarer and therefore it
+never executes and therefore it's hard
+to debug it it's hard to diagnose hard
+to QA it so force it make it happen ol
+time and then you run giant apps and QA
+and they take forever and they run
+really slowly but you test that damn
+slow path a lot and this turned out to
+catch all kinds of bugs really low cost
+really easily we just tell a QA guys ok
+turn on bla bla bla bla flag and let the
+damn thing run you know giant web server
+X and it takes forever but bugs pop out
+and it would be deterministic and easy
+to find it was a great answer 10 lakhs
+another sort of hotspot notion you know
+I think the notion was out there
+beforehand but hotspot sort of made it
+popular and that's this idea that we can
+come up with a single a single word in
+the object header that you gonna casts
+to take a lock and that's the entire
+weight the cost of the majority cost of
+taking a lock turns out if you ran out
+of time I'm sorry I'm gonna run out time
+if you if you ran out of the one lock he
+had more complicated locking thing you
+could have a forwarding pointer on the
+on the slow path through the lock to
+send you off to some other piece of the
+world to do the thicker lock that you
+had to do when you headed a contended
+lock um even thinner locks actually for
+hot spot are very useful for job at
+least for very useful I'm gonna skip
+forward ok so I'm going to do I'm in
+told the 5-minute mark so I'm going to
+whip through this section and get to the
+things I won't ever do again pretty
+quick so this was hard but good to do
+porting to many OS is even if you only
+port to an x86 making it set up so you
+can pour it to an arm for instance
+forces a discipline in the code that's
+worth it it breaks out abstractly
+those things that are dependent on the
+x86 state of the world and those things
+that are you know done another way they
+don't
+you care what you're looking at it's all
+the notion of a virtual machine that's
+your coding your virtual machine in
+versus not there is gonna be some
+hardware specific piece but you want to
+break it out as soon as you can and move
+to a more abstract world right deopt
+there's no time to go into this now but
+it was worth it and this is the
+technique hotspot uses to in line on
+finals that technique removes completely
+the line in the code where the final got
+the non final got in line and that has
+big performance gains because those are
+usually done inside hot loops and so you
+want to get that outside the hot loop
+and if you have to load a class later
+that breaks your code you can't save
+point in the loop at correctly at any
+point because you've moved the inlining
+code out of the loop so let me talk
+about it offline cuz I'm gonna run out
+of time here but it's definitely worth
+it to get deopt the right way and what
+hotspot used the word D up for turned
+out have been co-opted by the academic
+literature to mean something fairly
+different and so we should have a
+discussion not now about what hotspot
+does for deopt self-modifying code
+happens a lot and so you want to build
+so much support into your BM
+infrastructure to help you generate and
+patch code
+you're gonna patch inline caches a lot
+of course all the patches have to run in
+the face of racing Java threads who will
+see any partial patch including no
+matter what order you do the pack shell
+patch in the and the you know data cache
+there is no memory model semantics for
+stuff in the data cache moving to the
+eye cache that you can rely on and so
+you'll see partial patches in all
+directions you have to get right of
+course one exit e6 you have variable
+size instructions you have to patch you
+can't patch atomically across cache
+lines so you have to arrange your
+patchable things to not scan cache lines
+and so on and so forth and help with
+that I've always done this high level
+assembler notion which is actually C
+code which looks like assembly and when
+you execute it it dumps assembly code
+into a buffer that's your gonna execute
+later and then it can remind of
+interesting invariants on the code prove
+them you know debug them or get support
+like adding no offs to insert so sort of
+call instruction which is one by call on
+a four byte offset doesn't span a cache
+line and the four bytes but you can
+being ended on the one-bite thing so all
+kinds of fun games you play with a
+high-level assembler that are necessary
+64-bit object header again very useful
+because you shrink one word out of your
+object pointer your heat shrunk by you
+know 5% your Ike your D caches got five
+percent more productive
+you ran five percent faster it's just
+like that simple
+dense thread ids was part of making
+those object headers dense after I lined
+my stacks on two Meg boundaries as
+thread ID was simply take the stack
+pointer and shift it right
+that's your thread ID very useful the
+ability to save point single threads
+I've talked about it earlier it's very
+cheap predictive branch oh and cache hit
+so a clock cycle every thousand or so um
+thread does a lot of self-service tasks
+for which it never has to enter into the
+the core VM it just does it and a little
+piece of assembly code sitting off to
+the side and gets back to running code
+so these are all things that are
+typically done in you know hi Nano is
+low microsecond time ranges including
+fine earlier stack roots or face flip
+them all or check for breakpoints and
+debug hooks revoke bias locks cleaning
+inline caches as a bunch of stuff okay
+things I want to again and then I'll be
+out of time in and boot me out okay I
+won't write a VM and see because mixing
+pointers and an odd garbage collected
+language is a freaking total pain that
+this pointer in C++ was usually an OOP
+and so you would accidentally pass it
+along to some function call that did
+something slow got blocked took a GC
+cycle and your this point or moved out
+from under you and of course the C
+compiler didn't have any idea so you
+just choked I did bird style pattern
+matching which is really good
+high technology twenty years ago and now
+it's like waste of time don't actually
+need it you know it's like backs but you
+don't actually need it on x86 because
+x86 architectural II is actually fairly
+regular these days
+now back then it was really screwball
+but now it's pretty regular although you
+can coding sock but the actual what you
+can do with an instructions are all
+pretty regular now you just generate
+code sort of the obvious thing do
+passion will forte points I won't talk
+about why it sucked it sucked horribly
+do pulling generic poly sieve registers
+most calling conventions involving lots
+of registers on the high reg account
+machines one of you've called save
+registers so Kali say register means
+that you pass some value that the call
+are handed you and you just preserved it
+in your call
+generally by spoiling to the stack if
+you needed it or leaving in a register
+if you didn't that's where the
+efficiency part comes in but was it a
+noob when you spilled it down to the
+stack okay so we have a newt map it says
+the Kali save register was that an OOP
+well pin what the caller passed you to
+do a call patch maneuver not so now you
+have to crawl the stack to figure out
+whether you're looking at new pernot and
+that in turn was more trouble than it
+was worth
+don't pass oops and Kali save registers
+adapter frames I'm gonna be out of time
+I'm gonna skip that one constant oops in
+code looks really good on 32-bit x86
+when hotspot started 64-bit oops look
+horrible on both x86 and all other
+platforms because you have multiple
+instructions so patching that constant
+moving it required you to a multi
+instruction patch which you can't do
+atomically so you had to stop all
+threads outside of a patch tube to do it
+and wasn't worth it um just put them in
+a table and somewhere a constant table
+and then you load a table pass offset
+and grab it up that way um way the heck
+you get an extra load easy to schedule
+around and the JIT so it wasn't any
+actual cost to run time to do it
+fewer instructions for everybody for the
+code generated and you know the GC can
+just move the table around it's easy
+walked headers in the stack don't need
+it it was a total pain of but okay I'm
+gonna be done here I'll leave this one
+up and we'll take whatever Q&amp;amp;A time
+there is before they kick us out here's
+some open questions that I can argue
+both ways on that I can't say or clearly
+right or wrong graph coloring
+I know it's faster than a linear scan in
+ultimate performance add an engineering
+cost that's interestingly large object
+header I know I can do it in one word I
+won't ever do it again in two but it's
+definitely more engineering you have to
+screw around got to have a thread ID and
+have to have a class ID notion both of
+which have interesting engineering costs
+stage zero JIT vs. interpreter I
+actually don't know I've seen successful
+systems go both ways
+all right hotspot only did it with an
+interpreter but I've totally seen people
+do stage though jet and get away with it
+and it works green threads versus OS
+threads again I've seen both ways work
+well do you see that one is all about
+how much effort you want to put into
+your GC team to make a better faster
+collector or low pause or both and
+either or whatever</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>
