@@ -1,0 +1,967 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>The Anatomy of a Distributed System | Coder Coacher - Coaching Coders</title><meta content="The Anatomy of a Distributed System - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/InfoQ/">InfoQ</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>The Anatomy of a Distributed System</b></h2><h5 class="post__date">2018-04-19</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/1TIzPL4878Q" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">all right so yep as Chris is saying I'm
+Tolly McMullen you can find me on
+Twitter right here that's you being a
+felon if you disagree with the things
+that I say you can feel free to yell at
+me you can actually just yell at me
+regardless I'm actually totally fine
+with that and I do work for this company
+and the the CTO of fastly and yeah if
+you like the things that we're that I'm
+going to be describing here this is
+interesting to you you should feel free
+to come up and talk to me afterward we
+are always looking for very skilled
+distributed system to people okay okay
+what's up mm I figured you know the
+first day of Q con SF we would start
+like nice and slow have a gentle high
+level you know description of
+distributed systems I'm just kidding
+we're gonna build a gnarly distributed
+system together so this talk is kind of
+my response to what I see as like the
+two types of distributed systems talks
+right you either end up usually having
+talks about theory without
+implementation which is so useful in its
+own right or you have implementation
+without theory where it's because
+they're often describing like okay we
+tie this technology to this technology
+and bam distributed system which is also
+useful if you're trying to figure out
+like the practicalities of things but I
+rarely find one that actually tries to
+bridge the gap between those two so this
+is my attempt to do that so we're gonna
+have plenty of theory but we're also
+going to talk about some specific
+technologies we're gonna design a system
+that involves cluster membership fault
+detection rendezvous hashing gossip and
+Ciardi T's and I have 45 minutes to do
+it so we should probably get started so
+start with the project itself right like
+you can talk about all these things in
+theory or in practice but like if you
+don't actually talk about something that
+is like real it kind of loses a lot of
+meetings so the project we're going to
+talk about is kind of specific to fastly
+but a lot of the principles still apply
+to other things so if you're not
+familiar with what fastly does we're
+essentially like a middleman we're a
+proxy in a one way of putting it anyway
+right we sit in between your users and
+your origin servers and so we try to do
+things there at that middle layer that
+you could
+necessarily do at any other individual
+place in the network right so really in
+in like the lowest possible terms you
+know you take a request from an end user
+here on the left and it sends it through
+to the origin server on the right easy
+enough but really is of course is it
+actually just one server on the right
+right
+most cuts most cut most of our customers
+have many servers whole clusters of
+servers datacenters sometimes right and
+so really we're talking about a much
+larger number and so really what we're
+talking about is like load balancing of
+some kind so individual requests come
+from the user and make it routed to one
+or a different origin server easy enough
+right
+but here's where this project actually
+comes in if you're doing load balancing
+of course you need some way of detecting
+when one of those servers is gone
+instead in some way or another so we
+need some way of making sure that this
+doesn't happen yeah I have a lot of
+animations in this talk we of course
+want to be able to route around like
+individual failures in our customers
+origin servers race we need health some
+idea of Health some idea of health
+checks but the problem is actually a
+little gnarlier than that we can't just
+health check everything because of
+course it's not just one data center
+that we're talking about
+we have many data centers there we go
+right so we have many data centers here
+and the trick with this is that the idea
+of health and health checking in the
+distributed system like this really
+depends on your perspective within the
+network so from each of these from the
+perspective of each of the individual
+data centers different origins may
+appear to be up or down right the route
+that you take through the internets has
+a great effect on the health the appeard
+health right it's all about perspective
+and vantage point inside the network
+right okay so essentially we're
+designing a system that does health
+checks but it needs to operate on a per
+datacenter basis that actually makes it
+easier right because that means that
+we're not having to share information
+between multiple different data centers
+great ok but of course it gets a little
+bit more complicated even
+each of these data centers isn't of
+course a single server each of these
+data centers actually has many servers
+in them anywhere between 4 and 64
+sometimes 128 servers in each of our
+data centers right and the trouble is
+you of course can't do health checks
+from every single server that's just
+called a DDoS if we were health checking
+let's say you had your health check set
+up at like once every second and we were
+health checking from every one of our
+servers that would mean you're getting
+thousands of requests for a second right
+so instead what we really want what we
+really want is to be able to assume that
+all the servers in one of our data
+centers actually have the same
+perspective in the network right and so
+what we really want to do is say like ok
+only one of our servers within each data
+center should be doing health checks on
+your origins ok now we have a
+distributed systems problem because of
+course oh right of course sorry
+one of the other troubles with this is
+that just due to like sheer asynchrony
+in the network and also like the design
+of our particular network not every
+server in every data center has the same
+view of which origins exist or don't
+exist at any one time right even if it
+just looking at the asynchrony of the
+network if you deploy a new server you
+say hey fastly I have this new server
+sitting here we can't put a lock over
+the entire system and say ok we're going
+to hold on everybody stop we're gonna
+like deploy a new server now right so
+like it'll arrive at different servers
+at different moments right and so for
+individual like like minutes seconds
+sometimes you know different servers may
+have a different view of which origins
+exist in which do not ok
+now it's even more complicated ok
+so essentially what we're talking about
+here is we need a way to distribute work
+right we need a way to essentially
+decide on ownership which server which
+one of our servers which one of our
+nodes is going to take ownership of
+doing health checks for each individual
+origin server again ideally we'll only
+have one inside each look inside each
+data center doing this so we need to
+distribute this work
+them in order to share and then we need
+to share the information that they're
+learning from doing these health checks
+with all the other servers in the data
+centers this making sense so far good ok
+great
+but of course we also have to deal with
+server failures on our side if an
+individual server inside one of our data
+centers fails we need to make sure that
+the work that that server was doing is
+taken over by someone else ok great so
+what we're talking about here is 50-plus
+data centers spread around the world
+anywhere between 4 and 64 sometimes more
+servers in each data center talking
+about thousands of servers then and
+we're also talking about tens of
+thousands of origin servers that we're
+worrying about health checking all right
+so to recap the system that we're going
+to design is something that keeps track
+of origin health per data center and
+make sure that regardless of our servers
+failures there is someone always doing
+health checks of your origin servers ok
+system needs to handle server failures
+gracefully needs to stay in sync as much
+as possible or at the very least be
+deterministic when it does go out of
+sync and ideally again only having one
+server health checking each origin
+server per datacenter ok everybody still
+with me cool
+all right so like we'll start about one
+possible solution to this we could use a
+system like at CD or console a zookeeper
+these are what you might describe as I
+imagine most of the people in the room
+here I've heard of like the cap theorem
+right see AP this is the whole idea
+behind like ok if you if you have
+partitions in your network what you do
+you can only choose between consistency
+and availability right you can't have
+both so essentially in the case of like
+console or at CB or zookeeper what we're
+talking about here is this idea of
+atomic broadcast the idea is that like
+it's a fully consistent system and if
+there are say partitions that happen
+inside your data center it means that
+that system may in fact stop right which
+is great in some ways right because it
+means that we could apply a total order
+to every event
+happens in the system which would be
+great it would make this whole thing a
+lot easier but my argument is that in
+this case also because this would be a
+boring talk if I was just like use
+console it might in my opinion this is
+actually too strong of consistency for
+this particular application in other
+words in the presence of partitions we
+are going to attempt to choose
+availability right console chooses
+consistency our system is going to
+choose availability so what we're
+essentially talking about in this case
+is some form of eventual consistency
+great but really really the thing that
+we care about the thing that we actually
+care about here is this idea of forward
+progress we want to be assured that
+regardless of what happens inside our
+network inside our data centers that
+each individual server there regardless
+of whether or not it can talk to the
+other servers we want to make sure that
+it can always make forward progress
+another way of looking at this is to say
+that in the case of like a system or
+network failure of some kind I would
+much prefer for us to do two health
+checks against your Oregon servers than
+to do zero health checks that make sense
+so obviously you know this this is kind
+of the idea of like coordination
+avoidance right obviously we need to
+communicate
+I mean you coordinate in some way but we
+want to make sure that that
+communication that protocol that we
+design can't block forward progress on
+any individual node all right a great
+paper on this particular thing is
+coordination coordination avoidance in
+database systems by the lake venerable
+Peter Bayliss and Joseph Heller Stein
+and so on so the question is really like
+if we can't just like rub some raft or
+paxos on the problem like what can we do
+what guarantees can we continue to make
+regardless of that we can't rely on
+ordering and atomicity to solve our
+problems which is what linearize ability
+our CP type system would give you we
+need to decide which invariants we need
+in which we don't so okay let's talk
+about ownership so just a recap again
+this is the idea that we need to spread
+work around and handle failures when it
+occurs okay so how many people here have
+heard about rendezvous hashing Wow only
+a few neat I'm happy to like help so
+rendezvous hashing was invented at the
+university of michigan in 1986 it was
+actually invented like concurrently with
+consistent hashing which I imagine a lot
+more people in the room know about it
+solves the same problem but in like a
+significantly different way and it's
+like good in different circumstances so
+what what it basically just looks like
+is this it's actually really it's really
+really straightforward so H is just a
+hash function simple enough any hash
+function probably want to choose a good
+one I don't know if s then here is what
+we're talking about is the set of live
+servers the servers that we care about
+within a particular data center the Oh
+in this case is the thing that we are
+hashing right so in this case it's an
+Origin server that we're deciding on the
+owner of and what we out of this is a
+weight or priority so what this ends up
+looking like is that if I go and I pass
+an Origin into this and I iterate
+through this hash function for every
+server in one of our data centers what
+you end up with is an ordered list you
+end up with a prioritized list of which
+server should own a particular origin
+this makes sense right so yeah that's
+the whole idea here is that like for any
+individual organ server we want to have
+a prioritized list so we know that if
+this server is up
+if the server a or B is up that one is
+the one that should out it if it's down
+here's the next one
+in the list that should own it okay so
+let's talk about failure detection then
+all right so if we're gonna communicate
+in a cluster or move work around in the
+cluster we need to know who is in the
+cluster who is out of the cluster who is
+alive and who is dead at any particular
+moment right
+yeah nice so one of the ways that that
+people have started doing this lately
+one of the more popular failure
+detectors is the swim fare detector this
+is like become one of the more popular
+ones over the last few years and so like
+guys let's walk through roughly like
+very high level how this works
+so the idea here is that every so often
+servers that are in a data center you
+know they wake up and they say hmm okay
+I know that the server used to be here
+my pier used to be here and so I'll wake
+up and I'll say okay hey are you up
+right and that server responds and is
+like yeah I'm up great
+okay cool now we know that that server
+is up and server one in this case but
+then broadcast that around the network
+and say hey three is still alive
+everything is cool keep moving on the
+other hand sometimes what had since is
+that server one will say hey you up
+server three doesn't respond and nothing
+happens so the idea with swim is that
+swim then says hey two and four can you
+check on three maybe there's just like a
+little communication blip between us I
+can't quite tell if it's up right now
+right and so then three is checked by
+two and four three responds four says
+yeah it's totally still up everything's
+cool and then of course you have like
+the example the down server where we do
+the same thing three never responds and
+we know that it's dead right so that's
+like it's actually a really simple
+protocol it's hard to get like all the
+little fiddly bits of it totally correct
+so I wouldn't recommend actually just
+going out and trying to implement swim
+if you're actually trying to make a
+production system and said you can use
+something like member list so member
+list is a house record project the whole
+idea here is that it's just a way of
+determining what is in it like which
+servers are still alive at any one
+particular moment that's the whole idea
+behind failure detectors veteran techs
+are actually like a totally fascinating
+area of distributed systems which I
+totally recommend reading about we
+probably don't have time to go into it
+right now
+so so for our example system here we're
+just going to use member list great that
+gives us
+an easy way to like achieve this fault
+detection thing that we need to achieve
+okay so we have a way of load balancing
+using rendezvous hashing we have a way
+of determining ownership also using
+rendezvous hashing will you swim be a
+member list for failure detection and
+cluster management but of course we also
+need a way to communicate
+hmm everyone here is probably at least a
+little familiar with the concept of
+gossip right periodically each server
+decides to send messages that it has
+like that has received from other
+servers or that it has generated itself
+and it chooses other service that random
+within the network and says hey here's
+what I know or possibly it says hey what
+do you know
+please tell me things so this is kind of
+the idea behind like push versus pull
+and gossip another way of doing gossip
+is that pool system where instead of
+saying like here's my messages like a
+fire-and-forget type of thing and said
+what you do is say hey what do you have
+please tell me things there's advantages
+and disadvantages to both so push as you
+might expect like if you're pushing you
+know that you're immediately getting
+your messages out and so when you look
+at like the growth rates of message
+delivery and they push based gossip
+system what you see is a huge spike at
+the beginning and then it slowly levels
+out until it gets to every server in the
+network pool on the other hand is a
+totally different piece
+what pool does is instead of again
+instead of saying like here
+fire-and-forget you're waiting for
+someone to ask you about your messages
+right and so if you look at the growth
+rate of a pool based gossip system what
+you end up seeing is that for a little
+while your message doesn't get around to
+anybody and then eventually someone asks
+you and suddenly as soon as it starts to
+grow it starts to grow rapidly it hits
+every server really quickly so it ends
+up being this like they are both log n
+time but they get there in a slightly
+different way so in our particular case
+for this particular application we're
+gonna go with a pool based system and I
+will try to explain why as we get into
+like a later part of the talk but for
+now just now we're gonna go with gossip
+it's gonna be a pool based system okay
+so
+yes convergence okay so again we're
+making an eventually consistent system
+we're gonna use rendezvous hashing for
+it for load balancing and ownership
+we're gonna use swim for failure
+detection we're gonna use some form of
+some form of gossip for communication
+and so that's actually much of the
+infrastructure of our system right
+that's actually a lot of like the actual
+lake or guts of it like gossip better
+detection okay great but we still need
+to talk about how we keep everything in
+sync how we know that the system will
+converge in some way
+I guess essentially what we're talking
+about is we need to design the protocol
+right so okay so let's talk about
+convergence like this is the idea of
+like knowing that regardless of like
+which way the messages arrive when they
+arrive like who is up and who is down
+that eventually the system every node
+will converge to the same set of values
+okay how so how do we do that so going
+back to like the eventual consistency
+decision that we made early on we can
+actually do better than just a like
+basic weak eventual consistency rather
+than again so going back to like
+linearize ability and like one of those
+CP type systems which assign a total
+order to events a total order meaning
+essentially that like anything that
+happens in a CP system you know they're
+like this event happened before or after
+any other event there's no non
+determinism in there so with causality
+the idea is that we assign a partial
+order to events so what does that mean
+it allows us to say that some events
+happened before or happened after other
+events but it also allows us to say that
+some events actually just happened at
+the same time so one could think of it
+as like much more consistent with how
+the world actually works right like that
+our universe is a lot more causally
+consistent than it is like linearizable
+so let's look at an example of this
+let's say we have we have two actors
+here we have Jack and we have Joe great
+so Jack and Joe are just trying to
+decide what they're going to eat for
+lunch
+Jack suggests let's have arugula grates
+Jack then says okay arugula tells Jill I
+have decided upon arugula Jill on the
+other hand is like you know what I don't
+like arugula I like burgers Jill wants
+burgers and so what happens is in this
+case we know that arugula happened
+before burgers so essentially this is
+going okay when Jill made the decision
+burgers
+she already knew that Jack had said
+arugula great so we know that the
+burgers event happened before I'm sorry
+the arugula then happened before
+burgers event so Jill then replicates
+that back to Jack and Jack is like now I
+don't think so that's I don't want
+burgers I instead one calzone great well
+while at the same time Jill is like
+actually I changed my mind
+I don't want burgers I actually want a
+doll okay great
+so in this case what we can say is that
+burgers happen before calzone and
+burgers also happen before doll however
+as we replicate those messages back and
+forth to each other
+we now realize that calzone didn't
+happen before doll and doll didn't
+happen before calzone they are in fact
+concurrent with each other and so that
+is the example of lunch based causality
+okay so now that we have like some basis
+for like when we're talking about
+causality let's talk about something
+that's related
+let's talk about lattices so lattices
+are data structure a mathematical
+concept of some kind and specifically in
+this case what we're talking about if
+you wanted to look this up later or read
+about it more is a what's called a
+joined semi lattice so what that means
+is essentially it's a data structure a
+concept of some kind upon which you can
+always apply what's called a least upper
+bound
+aka a join aka emerge function right so
+what it's saying is that if you have two
+lattices to join semi lattices there is
+always a merge function that you can
+apply to them okay let's talk about what
+that means
+so
+lettuces start from a root or a bottom
+value despite the fact that our dot is
+at the top here and from that empty
+value if you are like operating on this
+thing if you have two different three
+different actors that are operating on
+this lattice they can diverge right but
+the thing is those branches no matter
+how much they diverge can always be
+merged back together in some way again
+no matter how much how much time has
+passed they can always be like brought
+back together at least two of them can
+always be merged so and then of course
+they can diverge again after that okay
+so let's go back to causality turns out
+lattices are super useful for modeling
+causality for reasons that you can
+probably already see and specifically in
+this case what we're talking about is a
+concept called version vectors
+the idea behind version vectors well
+actually let's just let's just walk
+through an example of a version vectors
+scenario okay so in this case let's say
+we have three servers we have s 1 we
+have s 2 and we have s 3 right s1 has an
+event of some kind in this case maybe
+it's doing a health check for instance
+ok so s 1 increments it's it's
+individual index in that version vector
+so we have three nodes we have three
+indexes we have three slots in our
+version vector s one is going to
+increment one because an event happened
+right that's one can then replicate that
+down to s 2 and now s 2 sees ok I have
+seen s one's events from there we can
+then go ok well we have more events that
+are occurring right so in this case s 2
+has its own event and so now it's
+version vectors 1 1 0 because it has
+seen s 1 s event and also has its own
+event meanwhile s 3 at the bottom hasn't
+seen any of these so it is just
+incrementing its own then of course we
+can merge these back together from s 3
+to s 2 and now s 2 knows that it has
+seen the events from every other node so
+that's the whole idea behind version
+vectors right so this gives us a way of
+tracking causality gives us a way of
+seeing like this thing happened before
+this other things
+in this particular case given that s3
+hadn't actually seen any of the other
+events that occurred on the other parts
+of the system its event is concurrent
+with all of the other ones and you can
+determine that based on that version
+vector and so of course it continues on
+and so it turns out that you can
+actually model this exactly the way that
+you model lattices so again if you have
+your root value there at the bottom zero
+zero zero for our version vector it can
+diverge it can merge and it can continue
+merging there and then of course diverge
+again this making sense cool so one way
+of applying lattices to distributed
+systems problems is through this idea of
+CR DTS and so what we're gonna design
+next is actually what's called a
+coordination free distributed map
+it's a CR DT map of some kind okay so we
+need a data structure that we can
+replicate that it respects causality in
+our case and is guaranteed to always
+converge so again
+CR DT map great okay what it looks like
+is something like this this goes back to
+like when we were talking about before
+with our pool based gossip system so
+what we're gonna do is say okay when one
+node wants to exchange state with
+another node it wakes up and it gets its
+own version it looks at its own version
+its own version vector and it says hey
+here's what I have seen this is my
+summary of the causal context I have
+seen so far in our distributed system
+and it's going to take its version
+vector it C realizes it and it sends it
+out over the network and my prototype of
+the system it actually just uses HTTP it
+could use really anything any way that
+you want to communicate between them so
+what it does is it sends this version
+and it gives a way of summarizing it
+says like okay I have seen up to this
+particular cut in our causal time so
+what that does is it allows the know
+that is communicating with to come up
+with a delta that node also has its own
+set
+its own set of like operations that is
+seen like these two nodes are operating
+independently one sends its version this
+one can then take that version and go
+okay I know that you have seen all these
+things let me show you everything that's
+newer that I have seen great so it
+constructs its Delta it sends it back
+and then the first node can just merge
+it because again this Delta that we're
+operating on is actually a lattice so it
+can always be merged back together with
+whatever state that node has pretty cool
+so this is again called a deltas oh yes
+this is actually not just a regular CR
+TT map what we're talking about in this
+case is a Delta si R DT map because it's
+not exchanging the entire state each
+time it's actually exchanging Delta's
+which are themselves a lattice okay so
+let's just look at code it's actually
+like surprisingly easy to do this so
+this particular project was written and
+go so what we're talking about in this
+case is actually just a very simple
+thing so we have our shared map at the
+top that we're going to exchange back
+and forth with each other that shared
+map has its like actual underlying
+storage and it actually has a version
+vector that goes along with it so it
+remembers what its current state looks
+like a summary of its current state each
+of the shared map records includes its
+value but it also includes what's called
+a version vector dot so where a version
+vector includes like is a way of
+summarizing the entire state a version
+vector dot is a way of saying this is
+one particular event so a version vector
+dot in this case is actually just a
+couple of a server ID and an event
+number right so it doesn't give you the
+full causal context but it says it tells
+you where in that cause of context this
+one particular value came from okay
+so again what we're gonna do is for our
+delta c r dt map the first step is easy
+we just take our version vector we
+serialize it we send it over the wire
+great now when our chosen gasa partner
+receives that particular message what it
+will do it goes through each record in
+the map and it says okay
+did this version vector happened before
+this particular event which based on the
+fact that you have this version vector
+that contains a summary of every
+possible event that occurred in the past
+and you have the individual event that
+this value came from we have a really
+easy way of saying okay did this event
+happen later or did it happen
+concurrently with it if either of those
+are true we know that that other node
+didn't actually see this event yet so it
+gives us a way of deciding which things
+to put into our Delta great so yes if
+the version happened before our
+individual record or is concurrent with
+it we add it to the Delta great that's
+it that's actually all we do then we
+send the Delta back and then the merge
+function here is actually slightly more
+complicated but really not not that bad
+the idea here is that we go through each
+record in the Delta and if the dot
+associated with the record still
+happened before our version back there
+because again remember like when we're
+talking about sending things over the
+network the state on each node may have
+changed since we actually sent the
+message right so now we need to go
+through and go like okay maybe we
+actually already got this message so
+cool we're going to zero go through each
+record in the Delta see if it happened
+before our version if it did then we
+skip it because we know we already got
+that or we saw something later than it
+and then we check and see like okay was
+our version of this value older if it
+was older great we merge it all right
+but then of course we need some way of
+determining what to do if they're
+concurrent right because causality
+doesn't give us a total order it gives
+us a partial order so we still need we
+haven't actually solved the problem of
+how to merge these records together if
+they can flicked with each other so what
+is that little sparkle that we're gonna
+use there this actually brings us
+straight back to rendezvous fashion so
+rendezvous hashing gives us that way of
+breaking a tie in this case there's many
+ways to break ties in like Delta C Rd
+T's or C or D T's in general but in this
+particular case for this particular
+application rendezvous hashing actually
+ends up being perfect for us
+it's actually probably probably my like
+favorite part of this little system is
+that not only does rendezvous hashing
+let us decide on ownership for a
+particular origin server a piece of work
+it also lets us break ties
+deterministically so when a node sees
+that its own operation has been usurped
+by some other node it knows oh I should
+probably stop doing work on this
+particular origin server because someone
+else is a higher priority to me and
+they've already done the work for it so
+it lets us not only determine
+tiebreaking but also deterministically
+determine ownership of a particularly
+thing which is pretty cool so again what
+we have now design we have built a delta
+state CR dt map it was easier than we
+probably expected it to be
+it's coordination free but it's always
+guarantee but it's guaranteed to always
+converge to a deterministic state so
+like no matter what order these messages
+are delivered in no matter how long a
+node has been like out of sync it will
+always when it gets the messages come
+back to the exact same state as any node
+in the rest of the system what's pretty
+cool so that's all actually based on
+this paper which is actually a really
+short really like digestible paper based
+out of like the one of the Portuguese
+universities has been doing fantastic
+work on this and in that paper you can
+actually see this like directly right we
+receive a version vector we've generated
+Delta when we receive a delta we merge
+it and we periodically randomly pool
+in other words gossip right so this is a
+great example as well like I like the
+system but it's also like a beautiful
+example of applying academic research to
+a problem right this is like it's just
+one to one mapping basically okay so at
+the end of this like we've actually
+achieved all the goals that we wanted to
+in this particular little system without
+applying a CP system without applying
+any linearize ability the system is
+entirely causally causally consistent
+and every node can still always make
+forward progress great okay
+so we've used rendezvous hashing we've
+used swim we have a causally ordered
+pool based gossip communication system
+and we're using CRT T's so a great
+question that one might
+is why is a CTO of a kind of like a
+company that is primarily known for
+content delivery up here talking about
+this why do I care about this one thing
+I actually do care about is this concept
+of edge computing the reason I care
+about this is because it's a lot like we
+could do so much more in like widely
+distributed edge based scenarios than we
+do today
+another way of like describing like edge
+computing which is like a very marketing
+word is actually just saying
+coordination free distributed systems if
+you're talking about an edge compute
+distributed system really what you're
+saying is that I have a whole bunch of
+nodes and I can't keep them in sync at
+all times I can't do a CP based edge
+computing system it doesn't make any
+sense so it turns out that like all of
+the research that has been going on for
+decades in coordination free distributed
+systems applies directly to edge
+computing scenarios so why why haven't
+why hasn't this like caught on more why
+aren't we doing more of these like crazy
+like not fully consistent but still
+achieving the users goals distributed
+systems obviously they're harder sure
+but I would argue that one of the things
+that holds us back is the prevalence of
+this idea and developers Minds
+single system image single system images
+is basically an abstraction it says that
+in the distributed system regardless of
+the number of nodes that were running it
+on regardless of where they are around
+the world we should provide an interface
+to our users that appears to be one
+system you see this in like distributed
+databases all the time the idea is that
+they want to hide the fact that it's
+actually running across hundreds of
+nodes from you and instead like appear
+to just be like one individual computer
+another way of describing single system
+image is essentially to say that the
+system is linearizable
+meaning that to an outside observer it
+appears that if that every single event
+has a specific order for any of two
+events you can definitively say that one
+of them happened before the other but as
+we're talking about earlier that's not
+really how like the world and the
+universe actually work causal
+consistency is actually like a farmer
+far more like accurate way of looking at
+how things happen in the real world but
+it is sometimes trickier and that's not
+the way we think about things
+necessarily as we're designing systems I
+think it's like it's our attempts at
+applying the single system image idea
+that actually like leads us to bad hacky
+failure prone and distributed systems
+designs and so when it comes to like
+edge computing this idea of single
+system image just straight up doesn't
+work you can't do that it's not
+realistic to hide the fact that your
+program is actually running across many
+many nodes all simultaneously so as I
+was preparing this talk I was reminded
+that a friend had actually written an
+article specifically about this it's
+called a certain tendency of the
+database community which is like the
+shadiest title I have ever seen in a
+toggle so what we've walked through
+today is like ah God okay actually so
+what what he says here is that we posit
+that striving for distributed systems
+that provides single system image
+semantics is fundamentally flawed and at
+odds with how systems operate in the
+real world so what we've walked through
+today is an example of like an entirely
+coordination free distributed system
+that still maintains the requirements
+and the invariants that we set out to
+achieve early on without having to use
+strong consistency linearize ability or
+single system image so ultimately what
+I'm saying here is that like this stuff
+isn't as hard as we often believe it to
+be it is so hard and it's tricky and
+like if you get it wrong it's really
+harder to bug but like what we need here
+we need new metaphors because we have
+the single system image idea like it's a
+great metaphor for a certain type of
+distributed system we don't have one for
+these types of systems that I'm talking
+about today there is no easy way to say
+this is what I like I'm imagining the
+system is going to do when you do
+metaphors we need to intuition for these
+types of things right we've all been
+building systems for a long time using
+this idea of single system image and
+what we're what we're lacking is the
+intuition to build systems like this we
+also need more tools and frameworks for
+this so that's all I got for you thank
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

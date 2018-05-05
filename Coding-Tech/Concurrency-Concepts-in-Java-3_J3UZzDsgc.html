@@ -1,0 +1,854 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Concurrency Concepts in Java | Coder Coacher - Coaching Coders</title><meta content="Concurrency Concepts in Java - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Coding-Tech/">Coding Tech</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Concurrency Concepts in Java</b></h2><h5 class="post__date">2018-05-01</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/3_J3UZzDsgc" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so my name is Doug Hawkins I work on the
+just-in-time compilers at a company
+called Azul systems so I work on turning
+your Java code into machine code and
+this is a talk on how that relates to
+concurrency now just to be clear this is
+maybe not your usual concurrency talk
+this is not about say parallel fork/join
+or akka or executors and futures or
+reactive programming or any of those
+things it is about the nitty-gritty
+details what we're going to talk about
+is the core memory model set compose the
+memory model atomicity ordering
+visibility rules the history and some of
+the future of the memory model my goal
+in doing this is actually to convince
+you you don't want to know the details
+and you want to use the things on the
+previous slide along the lines of in
+Katz thought my goal is to get you
+convinced you that you really do not
+want to program at the imperative level
+of concurrency you would like to use
+something higher-level
+something more declarative but before we
+get into it I have a question for you
+how many have you who have read this the
+Java language specification it's a mere
+700 pages this is primarily a Java
+conference you're mostly Java developers
+I assume you've all read it
+cover-to-cover
+right well that's a bit unfortunate
+because what you have to understand is
+compiler writers like me
+we're language lawyers in the worst
+possible sense of the word we sit there
+studying the specification looking for
+loopholes and going ooh
+that's cool I can make your code a
+little faster if you did that it might
+have some unintended side effects but
+those are within the rules so it's ok
+we're not doing this to harm you but
+sometimes things happen for those of you
+who haven't read chapter 17 of the
+language specification
+the Java memory model the too long you
+didn't read it is as if as if there's
+one thread unless you tell otherwise any
+optimization that does not change the
+outcome of this thread in the absence of
+synchronization that optimization is
+legal this sounds rather innocuous it
+doesn't sound that bad but if you look
+at the spec it's full of some rather
+foreboding words it actually opens with
+the behavior of threads particularly
+when not correctly synchronized can be
+confusing and counterintuitive that's
+what you're going to see today confusing
+and counterintuitive but correct
+behavior now this is a talk about all
+the rules of shared mutability try it do
+not to use shared mutability I really
+think you should use immutable objects
+or something even higher you know akka
+accuse actors something along those
+lines I rather like this quote from job
+at practices calm immutable objects have
+a very compelling list of positive
+qualities without question they are
+among the simplest and most robust kinds
+of classes you can possibly build when
+you create immutable classes entire
+categories of problems simply disappear
+this is what I want as a programmer I
+want to get things done efficiently
+I want entire categories of problems to
+simply disappear and if you're dealing
+with shared mutability you've got a hell
+of a category of problems to deal with
+so let's get started first property
+atomicity what operations in Java are
+indivisible they have to happen as a
+single step I think there's a bit of a
+tendency by programmers to confuse
+succinct miss for atomicity in fact the
+succinct nosov a statement has very
+little to do with atomicity for instance
+in java shared x equals two you actually
+can't tell me based on just that whether
+or not that statement is atomic no that
+that cannot be but it is the vm is
+conceived as a 32-bit machine 32-bit
+stores are atomic so intz floats smaller
+types those are atomic reference
+assignments as well but Long's and
+doubles not guaranteed to be atomic so
+if I'm storing two and it happens to be
+into a long variable that can actually
+be done as two 32-bit stores according
+to the spec so you could actually have
+one thread store the high half another
+thread store the high half and then it's
+low half and then the first thread store
+it's low half again and you end up with
+a high half from thread one and the low
+half from a high hat from thread two and
+the low half from thread one that's
+perfectly legal long store is not an
+indivisible operation shared x plus
+equals one also not atomic it's really
+sugar for load shared X into a local
+variable add one to the local variable
+and store it back it's what we would
+call a read-modify-write operation the
+loading of shared X and storing of
+shared X may well be atomic
+but to nation they are not and then some
+things that well you should really know
+they're not atomic but say newing an
+object it's so nice and compact we think
+it must be comic but no it's composed of
+multiple steps it's actually a zeroing
+allocation of the size of whatever we
+need
+a call to the constructor which of
+course can be arbitrarily large and
+clearly divisible and then in this case
+storing back to a shared variable we
+should know this isn't atomic but it
+isn't now a visibility question which
+we'll get to later so that it might
+appear atomic to other threads but
+unfortunately that's not true either
+okay visibility what can the other
+threads which right now we're assuming
+don't exist see well one nice thing that
+Java provides is no garbage values or as
+the spec would call it no out of thin
+air values in Java it is guaranteed that
+you will see a zero or an assigned value
+if it's a local variable you're forced
+to initialize it if it's a member in an
+object it will be zero initialized or
+zero is initialized it could be false or
+null or you'll see an assigned value
+something that was actually stored to
+that variable now what it really means
+is no completely garbage values remember
+Long's and doubles aren't atomic so you
+can see two separate halves of the
+longer double they're both halves that
+were a song so it's not complete garbage
+it's only half garbage but this is
+actually still an assigned value and
+better yet as of the Java 5
+specification you will only see assigned
+values for finals that wasn't actually
+true before the Java 5 specification but
+is true today and that's what enables us
+to write those lovely immutable objects
+now when I say you'll only see assigned
+values
+I didn't say you'll see all assigned
+values take for instance this example
+shared x equals 20 followed immediately
+by shared x equals 40 is there any point
+than setting shared x equal to 20
+well from the perspective of this thread
+no that's completely pointless all we're
+gonna do is print out 40 we don't need
+that so shared x equals 20 is a dead
+store the VM doesn't even have to
+generate that code at all you can just
+get rid of it the rule here is we keep
+things that have some sort of dependence
+on them in this case a data dependence
+the shared x equals 40 masks the
+previous value of shared X so print
+shared X only has the data dependence on
+shared X equal 40 we have to keep that
+everything else we're free to discard in
+fact if we took this example in
+isolation we could actually just say
+let's not store X at all let's just
+print 40 does that give us the right
+result for this thread yes no can't
+cannot be the case that is actually the
+case there are some reasons why that
+doesn't really turn out to be true in
+practice but taken in isolation that is
+true ok well that was interesting
+okay so if I can take two stores and
+turn them into one store do you suppose
+I can take three stores four stores five
+stores infinitely many stores inside of
+a loop and turn them into one store yes
+that's actually legal
+so I on the Left I have this shared
+summation loop so I have a shared some
+variable and I just add to it inside the
+loop it is actually a perfectly valid
+transformation to create a local sum
+variable
+add to local sum and only at the end of
+the loop store into shared some clearly
+if there is another thread here it will
+never see inner any of the intermediate
+sums it will only see the final sum and
+that's okay this preserves single thread
+semantics
+chillin but we do actually have to keep
+that one last right when a thread exits
+it is guaranteed to write back to main
+memory so if another thread calls thread
+joint on it it will see the final value
+of sum or if it calls thread is alive
+and that returns false it will see the
+final value of sum but say put asleep
+inside that summation loop would that be
+guaranteed to show the values according
+to the spec the answer is no now in
+hotspot today leave the answer is yes
+but that's not per spec it's one valid
+implementation but there's no guarantee
+about that sleeping does not have to
+write back to memory and similarly
+neither does yield amazingly under the
+pre Java 5 specification there was no
+guarantee that a thread ever wrote back
+to memory at exit fortunately no VM was
+insane enough to implement those
+semantics but that was the rule it was
+okay to not do that and the rules that
+apply for stores well they also apply
+for reads so let's say I have x squared
+equals shared x times shared X I have a
+question for you could x squared here be
+say 30 or some non square value the
+answer is yes what this nominally
+compiles into is take shared X put it
+into a local take shared X again put it
+into another local multiply them
+together if another thread were to
+change shared X between those two loads
+we could get some rather su propia
+for instance this case where thread to
+set shared x equal to 5 we load 5 in the
+thread 1 set it to 6 in thread to load 6
+and we get a result of 30 perfectly
+legal
+usually will not happen just as we're
+allowed to take two stores and turn them
+into one store we can take two loads and
+turn them into one load so we can say
+let's not load shared X twice let's just
+load it once and then use that value and
+so we'll always get nice squares but
+both implementations are legal and you
+actually really want this optimization
+that's great it gives you nice
+consistent results what you'd expect and
+better yet it works for loops just like
+you could take infinitely many stores
+and turn them into one store you can
+take infinitely many loads and turn them
+into one load and that's awesome if
+you're iterating over say an array
+that's on the heap an array reference
+that's on the heap so you might write
+this enhanced for-loop with X in array
+but if array is a member variable that
+reference is still coming from the heap
+and we'd really not like to not have to
+reload that every single time and guess
+what we don't have to we're actually
+allowed to turn that into a local
+variable and use that but it's great for
+a raise
+they're probably some situations where
+this doesn't work out quite so well
+let's consider this classic consumer
+example where we're just waiting for
+something to be done while not done from
+the compactive this is no different than
+the array it's allowed to pull this out
+into a local variable it is allowed to
+say local one equals not done while
+local one because this thread never
+changes it so we've maintained single
+thread semantics but what will happen
+this will load false and it will loop
+indefinitely in C or C++ this is
+actually undefined behavior the compiler
+is free to like kill your cat burn down
+your house whatever it wants in Java it
+will just loop indefinitely see much
+better now the spec contains some lovely
+quotations like to some programmers this
+behavior may seem broken however it
+should be noted that this code is
+improperly synchronized see it's your
+fault and to make matters worse ordering
+this just makes everything so so much
+worse what the spec would call program
+order or interest read order is defined
+by what would be called data and control
+dependence we already talked about data
+dependence control dependence is
+basically ifs so if we take this example
+here share it x equals two shared y
+equals three if shared X is greater than
+zero print shared X the if shared X
+greater than zero has a data dependence
+on the prior student the print of share
+of X has a control dependence on the
+result of the if ie
+it doesn't happen if the if was false
+and the printing of shared X also has a
+data dependence on shared X as well what
+about Y what does it depend on nothing
+so it is free to float wherever it wants
+what actually happens inside the
+compiler is we create a graph you can
+kind of think of it like a build system
+you know I click a build target and it
+say it says it depends on these other
+two things so you have to do those two
+things and well this one depends on two
+other things so we have to do those two
+things and we only do what we absolutely
+need to do and that's actually how we
+eliminate dead code
+and if two things are not dependent on
+each other but we both need to get them
+done we can do them in parallel and
+that's what happens here share Docs and
+shared why in theory they can happen in
+parallel or shared why it can happen
+first or it can happen at the very end
+it doesn't matter
+in fact shared why could actually be put
+in the true branch and the false branch
+of the if that would maintain the
+semantics of this thread and believe it
+or not there are circumstances where the
+compiler will do that but this is what
+the spec calls program order not exactly
+what you probably expected it is not the
+order in which you wrote all the lines
+now we didn't just apply this one Tinley
+to you know it was forced upon us the
+modern hardware does this sort of thing
+too if you actually look at a modern
+intel chip this is a cabby lake it
+pretends to be a system chip but it's
+actually a wrist chip underneath and
+that bottom row those are what are
+called execution ports that is how many
+instructions it could do simultaneously
+well in fact it can really only do about
+four simultaneously but a single-core on
+a modern intel chip can do four things
+simultaneously
+before on the left all do arithmetic
+operations so we could do four ads at
+once and if you want to get the most out
+of your chip you want to be doing four
+ads at once so in your code did you
+write Java compiler please run these in
+parallel just like in a little comment
+off to the side know the compiler has to
+do this the chip has to do this to get
+the most out of it and what's worse it's
+actually not even just allowed to run
+things in parallel it's actually a route
+to reorder them as well and this has
+actually been true for
+20 years it goes back to the first
+pentium pro in 1995 you were just mostly
+blissfully unaware of this awfulness and
+that's all very cool but boy does it
+complicate things we're allowed to do
+all sorts of things out of order both at
+the chip level but also at the Justin
+time compiler level take our new example
+if we look at this we started decomposed
+into an allocation a call to a
+constructor and a store to the shared
+variable well the call to the
+constructor and the store to the shared
+variable both only depend on the
+allocation they could happen in parallel
+or they could happen in any order we
+want so we can actually move the store
+to the shared variable up before the
+constructor and that would be legal
+oh my you realize what that means that
+things the variable can be non null
+before the constructor has finished
+running that is frightful perfectly fine
+for this thread but what if another
+thread is involved this is why double
+check locking is broken double check
+locking is this notion that we're doing
+a say initialization 8 initialization of
+a lazy singleton we'd like to do one
+check without taking a lock then we'll
+take the lock and then we'll check again
+sounds like it should be ok but in fact
+it is not ok that construction of the
+singleton inside the innermost nesting
+well it decomposes into those three
+options and so sharedinstance can be set
+to the fresh allocation and become non
+null before the constructor is done
+running which leaves the potential for
+another thread to come along outside the
+lock and go oh great shared instance
+isn't null I'll just return it but the
+construction isn't done yet probably not
+what you wanted and we're also allowed
+to reorder memory stores so let's say we
+have this classic producer-consumer
+example our producer fills a shared data
+variable and then when it's done doing
+that it sets shared done equal to true
+our consumer is meanwhile doing well not
+share done which remember could be an
+infinite loop but setting that aside
+it's waiting on share done to be fault
+true and when it is it expects the data
+to be there but shared on and shared
+data and shared done in the producer
+they're not any different than shared X
+and shared Y in our prior examples not
+from the frame of reference of the
+producer thread it will get the right
+outcome as far as its concerned other
+thread not relevant unless you tell me
+otherwise so we can flip them we can set
+shared unequal to true the consumer goes
+great you're done and then goes wait
+where is my data and goes boom maybe
+infinite looping wasn't so bad
+again we could blame the hardware for
+this our modern ships like to reorder
+memory memory is the slowest thing we
+have if we want to keep the CPU happy we
+have to keep it fed with stuff from
+memory and so it reorders things to keep
+the chip busy both risk and systems so
+for risk think arm for sisk
+thinks x86 until AMD both are allowed to
+reorder loads after loads of 2
+different variables so if I have load X
+load Y both will freely reorder those
+loads after stories of two different
+variables also allowed to be reordered
+stores after stores is where they differ
+on arm if you have a store of X and a
+store of Y their order can be changed on
+Sisk ie x86 the answer is no it will not
+reload store X followed by store Y if
+you had a store of X and a load of Y yes
+it would reorder that now at a hardware
+level the way you actually tend to solve
+these things is something called offense
+and it's usually coached in the same
+terms as the slide so in our producer we
+want to prevent the reordering of two
+stores so we put a store store fence in
+between them all this fence does is keep
+all the stores above the line above the
+line and all the stores below the line
+below the line there could be a thousand
+stores above the line they can all
+freely reorder thousand stores will
+above the line they can all freely
+reorder but no store can cross the line
+so if we want to keep these two stores
+in order we put a fence in between that
+will do it and then on the consumer side
+we can put in a load load fence and it
+seems a little strange but you could
+actually think of it as putting a load
+load fence inside the loop and there's a
+load of shared done on one iteration of
+the loop and a load of share done on the
+next iteration loop and because there's
+a fence in between the two can't be
+folded together it does work but we have
+to blame Java here too it's not just the
+hardware's fault the language
+specification allows this in fact Java
+allows the reordering of stores after
+stores don't think just because you're
+running on Intel chip you don't have to
+worry about this know what happens here
+is the compiler is free to reorder the
+store of X&amp;amp;Y and then the Intel chip
+will happily make sure they stay in the
+wrong order forever wonderful I guess it
+is still better than getting potentially
+alternating behavior like you could on a
+risk okay so how do we tell Java not to
+do all of this well in the specs
+parlance we use what are called
+synchronization actions you know what
+these are volatile synchronized final
+has this weird thing called the freeze
+and then there are various classes we
+could use unsafe Atomics and in java 9
+their handles will start with final the
+way an immutable object works is if you
+have a final field the final fields are
+frozen at the end of the constructor all
+this freeze is is a fence and what it
+says is the constructor has to run to
+completion before the thing that's after
+it ie the storing back to the shared
+variable and that makes use putting an
+immutable object into a shared variable
+safe now a low-level there's still
+mutability happening here and in fact
+you could use a very similar mechanism
+of putting in some sort of fence to make
+it where you take a beam set all its
+fields and then put it in a queue or
+something like that that would work
+provided you don't change it afterwards
+that's what the immutable object is
+really guaranteeing but you have to be
+very careful here the freeze isn't
+something you write it's just put there
+magically and it's always at the end of
+the constructor there's no way to say I
+want to put my code after the freeze
+other than returning from the
+instructor so if you say call other
+threads see this inside the constructor
+there's no guarantee where that sits
+relative to those stores the freezes
+after that and so the other thread may
+see default values it may CZ rose false
+null it won't necessarily see the final
+values if you want to guarantee that you
+have to let the constructor return and
+then hand the new object to the other
+thread you use the tool like find bugs
+it has warnings about what it would call
+raw types to tell you about these sorts
+of things okay that was immutability
+let's look at some shared mutability
+volatile free Java 5 that was kind of
+curious the only thing it did in the
+original memory model was guarantee
+atomicity for category 2 types things
+that take up to 32-bit words ie Long's
+and doubles that was it that's all it
+did no guarantees about ordering no
+guarantees about visibility nothing
+that's all it did as a Java 5 we've
+given it some other properties in the
+words of the spec the write synchronizes
+with all subsequent reads and other
+threads ok that's not super helpful what
+does that actually mean in practical
+terms what it is saying is if this
+thread rights and another thread tries
+to read at the next moment we must see
+that change in essence what that means
+is you can't get rid of redundant stores
+dead stores you don't know that they're
+dead because another thread may read it
+in the very next instant you can't get
+fold reads together because another
+thread may have changed it and you're
+required to see that and it does have
+stronger ordering guarantees within
+the red as well and we could use this to
+solve our producer-consumer problem we
+could change volatile data and volatile
+done our data and done to be volatile
+and that would introduce the necessary
+fencing so to speak and now this works
+on the right hand side because volatile
+done has to see the change that may have
+happened in the producer thread we can't
+pull it out into a local variable and on
+the right hand side there are ordering
+requirements that volatile done or
+volatile date done data must happen
+before volatile done this works it will
+still busy spin your thread on the
+consumer side not a great idea but it is
+valid it will also fix double check
+locking if you made shared instance
+volatile then the constructor is
+guaranteed to happen before the storing
+into shared instance and this is now
+correct it's a terrible idea but it's
+correct if you actually wanted to do a
+lazy singleton in Java here is how you
+do it class initialization in Java is
+lazy when the class is initialized
+construct your singleton usually you use
+a holder class but you don't have to
+that's it this will actually perform
+better too
+but even with volatile certain things
+still aren't atomic if I have an
+increment of one no we can that's still
+a atomic read of shared X guaranteed to
+be atomic even for something that's
+64-bit a modify of a local and then a
+store back to shared space so it's still
+a read-modify-write operation the reads
+and writes are now guaranteed to be
+atomic but the whole thing the whole
+increment is not we can get weird
+interleavings where two threads Rita
+zero increment to one in store one when
+we really should have ended up with the
+two now all this stuff about fences and
+the like may seem rather academic but
+it's actually going to leak into your
+world and it sort of already has if you
+look at the unsafe class today which
+you're not supposed to use so don't look
+at it there is a method called full
+fence what it does is it says all loads
+and stores above the line stay above the
+line all loads and stores below the line
+stay below the line with the
+introduction of Java 9 we're going to
+add something called ver handles and
+part it's a way to let us do some things
+that we can't do today we can have an
+atomic store of a longer a double
+without the ordering properties if we
+don't want them that's probably not a
+problem you have but it is a problem
+some people do care about and today with
+volatile we can't do that we could do it
+with the atomic classes but they have a
+lot of overhead but their handles will
+also expose these fencing operations it
+will expose a load load a store store
+fence an acquire fence a release fence
+for people who really want to get down
+into the nitty-gritty
+and then of course the last
+synchronization action is well
+synchronized if we want to do something
+bigger we want to make it a top and
+increment atomic you synchronize in this
+case on a class object and I increment a
+counter this is now an atomic increment
+synchronize has some interesting tricks
+beyond just having a bigger atomic
+region bigger mutual exclusion it has
+something called wait and notify and
+this would be the right way to do a
+producer and consumer so let's say my
+consumer gets there first it
+synchronizes on a lock so it actually
+takes the lock a checks to see if we're
+done and says no okay well I'll wait and
+when it waits it gives up the lock and
+it puts itself to sleep so now the
+producer can come along and because the
+consumer is no longer holding the lock
+he can go okay I'll take the lock I'll
+shut shared data equal to something I'll
+shut share done equal to true and I'll
+do a lock notify what does lock notify
+do it wakes up the consumer note I did
+not say it lets the consumers start
+running I said it wakes up the consumer
+the consumer actually cannot run until
+the producer gives up the lock
+notification does not give up the lock
+leaving the synchronized block gives up
+the lock so now the consumers awake and
+he's waiting to get the lock hopefully
+it would actually be completely correct
+to put the lock notify at the top of the
+synchronized block really confusing but
+correct
+so now Zoomers awake he retakes the lock
+he checks share done it's true and he
+can print out his data that works just
+fine and it doesn't busy
+and the consumer that's good but
+synchronized doesn't exactly work the
+way you'd expect you might think well it
+keeps everything in order no actually it
+doesn't it's just a mutual exclusion
+prevents us from seeing the nonsensical
+results it's still perfectly okay for
+shared data and shared done to reorder
+it's just the consumer can't wake back
+up until the producer has left and both
+are done if the consumer didn't
+synchronize he could still say oh great
+you're done too early and then find out
+that the data isn't there both sides
+have to synchronize in some fashion if
+they don't it is wrong and synchronize
+has yet one more interesting property
+we're allowed to do something called
+lock Corsa name sounds a little
+terrifying when you think about it and
+Java we have all these like synchronized
+objects floating around you know we used
+to have string buffer we still have
+inputs but they're really only used by
+one thread and maybe they're doing
+pretty short operations like we're just
+adding to some buffer and so rather than
+take two locks for a short period of
+time maybe we take the lock once for a
+longer period of time and what happens
+to the stuff in the middle
+oh we're allowed to take it into the
+lock at least under some circumstances
+so it's possible to take these two
+synchronized operations with this one
+assignment in between and put them into
+one big synchronized block provide the
+assignment you know doesn't itself take
+a lock or do something like that but
+that's allowed this is a little scary
+for not an entirely obvious reason
+normally two synchronized blocks they
+stay in order but once you turn it back
+into one synchronized block
+is what contents are free to move around
+again wonderful and for this reason
+fences are not quite enough to actually
+describe Java's memory model there are
+certain things were allowed to do that
+actually would transcend fences but to
+me one of the most interesting
+concurrency primitives we have is
+something called compare-and-swap and in
+part it's interesting because it's
+implemented a hardware level it actually
+gives us a way to do that increment in
+an atomic way without locking today
+these are exposed through the atomic
+classes they're also exposed through
+unsafe they will be exposed through very
+handle as well but you can create an
+atomic integer and you can call get an
+increment the way this works underneath
+is we use optimistic concurrency at a
+hardware level if you use the version
+control system you used hibernate you
+know how this works
+you check out the current version from
+main memory you make some modification
+locally and then when you go to write
+back to main memory you say I think the
+value is this if it is I want the value
+to be this and the system comes back and
+says yes your change applied or no it
+didn't figure the merge out yourself and
+we can use that to create a lock free
+increment these types of algorithms are
+called what lock free not weight free as
+you can kind of understand why they
+don't require a lock but you could
+potentially spend for a long time if
+there was enough contention okay maybe
+you're not all that impressed by an
+atomic increment I can't say I'd blame
+you but what I think well is what we
+managed to build with all of these
+things Java util concurrent has a lock
+free queue it has a link transfer queue
+that was added in Java 7 which is a
+slightly more efficient lock freak you
+if you're inserting and
+removing very often it has concurrent
+hash map which is well not lock free but
+less locking it uses something called
+stripe logging in Java 7 and then we got
+a completely new implementation in Java
+8 what I hope you've seen through some
+of these examples is this stuff is hard
+there are lots of interesting little
+details here and there that are hard to
+get right and if you actually go look at
+the body of some of these classes you
+will find like 5 PHP paper citations for
+how Ascot created and I think that's
+really cool
+when someone got a new PhD around the
+time of Java 8 we got a new version of
+concurrent hash map that was better than
+the old one and I didn't have to go
+write that and I don't want to write
+that I want to work at a higher level of
+abstraction because concurrency can seem
+well in the words of the spec broken
+confusing counterintuitive and
+paradoxical despite all the rules I want
+to just have a higher level of
+abstraction and have entire classes of
+problems simply disappear from my life
+that would make things so so much easier
+and I hope now you do too
+but if you are a glutton for punishment
+and you would like to know more I will
+recommend to you Java concurrency and
+practice by Brian guess who is the Java
+language architect basically my usual
+recommendation is just go read anything
+Brian has ever written if you'd like to
+know more about the memory model and in
+particular what's going to come soon and
+some of the niggly details I'd recommend
+looking at his stuff by aleksey shavelev
+who was formerly at oracle he's now at
+Red Hat working on the Shenandoah
+collector
+but Alexi is just amazing he's made tons
+of contributions to the VM both around
+the memory model performance measurement
+all sorts of things and of course you
+could always read this and for extra
+credit there's a VM specification
+there's a hundred little ages longer so
+alright I hope you found that
+interesting I hope I managed to scare
+you a little bit into using something
+higher level and thank you all very much
+for coming</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

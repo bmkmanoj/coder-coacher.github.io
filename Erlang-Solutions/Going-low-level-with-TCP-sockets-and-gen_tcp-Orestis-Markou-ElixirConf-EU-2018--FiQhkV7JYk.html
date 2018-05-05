@@ -1,0 +1,808 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Going low level with TCP sockets and :gen_tcp - Orestis Markou - ElixirConf EU 2018 | Coder Coacher - Coaching Coders</title><meta content="Going low level with TCP sockets and :gen_tcp - Orestis Markou - ElixirConf EU 2018 - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Going low level with TCP sockets and :gen_tcp - Orestis Markou - ElixirConf EU 2018</b></h2><h5 class="post__date">2018-04-30</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/-FiQhkV7JYk" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">I've been doing a lot of server you know
+weird stuff non web stuff in my career
+and I had recently to make a control
+system that talks to a few weird hard
+word like projectors and IP paste barber
+bars and like weird things that don't
+have you cannot download the client at
+least not yet in their languor elixir so
+I had to read some TCP specifications
+and implement my own stuff and in that
+process I realized that there's not a
+lot of material out there if you want to
+do this kind of thing and I thought okay
+perhaps I could condense a little bit of
+what I found and some pain points and
+some things that might trip you up if
+you especially if you don't have if you
+haven't read the 600 page tcp/ip
+illustrated book because the official
+documentation is complete I would say
+but it's really all over the place it's
+really hard to you know there's no
+QuickStart you just on your own so
+before we actually go into code I'd like
+to just spend one minutes talking about
+the underlying protocol of TCP IP so IP
+when we know about IP it's the IP
+address or that IP stands for Internet
+Protocol and basically it works like we
+did in school where you just write a
+small message on the piece of paper fold
+it up write a name and hand it over to
+your classmate and then you hope you
+just really just hope that they will
+pass it on touch the correct direction
+right and it's the same thing with IP
+packets in that they are small they
+might be one or two kilobytes depending
+on you know a lot of things and they
+just have an IP address on top and then
+you hand it over to your router and then
+the Reuter hands it over to your ISP and
+you just hope and that's it you really
+hope that it will get eventually there
+and you have no way of knowing that it
+got there until the other side replies
+and then you have no guarantee that the
+reply will actually even arrive at your
+destination because
+Rooter might just drop it so there are a
+lot of problems in this and not I
+shouldn't say problems because it's the
+design of the system and like what
+happens if your data doesn't fit in one
+packet then you have to split it up send
+two packets and then there's no
+guarantee that the first packet will
+arrive first so a very remote side has
+to have some way of saying okay this is
+packet number one and this is packet
+number two and I'll just join them
+together and when you actually you know
+go and read how old it works you'll be
+amazed that everything still works and
+we can just you know read our mail every
+day and really makes you appreciate all
+the engineering thought that has gone
+into it back from you know the 70s so
+TCP / IP stands for transport control
+protocol over Internet Protocol
+something like that and the whole idea
+is that you take this chaotic packets
+flying around with no guarantees and you
+provide a stream abstraction over that
+so the same way that the telephone works
+and that you pick up the telephone you
+dial a number or you know used to dial a
+number and once that connection happens
+you can just speak you don't care how
+things work you speak into one side you
+listen from the other side then it's the
+same way with a TCP connection in that
+you have you have something that is a
+stream and you can read to it so and so
+you can write to it and data arrives at
+the other end and vice versa you can
+read and write to the stream so to
+actually use that in our day to day code
+there is one prevailing API that was
+designed back in 1983 I think it's
+called the Berkeley sockets and it was
+originated in the BSD UNIX distribution
+so the Berkeley distribution of Unix
+and it turns it what it does is it makes
+that a TCP connection behave like a file
+so once you use those weird functions to
+create a socket
+you can then use your usual io functions
+to read and write from into the socket
+and it behaves kind of like a file so
+you write bytes to that handle and
+magically sometime later those bytes
+will arrive at the other end and the
+other way around and this is a now a
+POSIX standard for a long time it's most
+most probably implemented by the
+operating systems we use every day
+and the thing is because it's real life
+code that not some you know abstraction
+it breaks the illusion so it's not like
+the telephone where you just speak
+continuously because we are working with
+bites and bites have sizes and you have
+to fit them in memory somehow somewhere
+so there's a few already we start to see
+that why tcp/ip is a bit complicated to
+use daily so Jen TCP is actually an
+Erlang module it's writing the
+distribution of Erlang and it exposes
+the bsd socket API to the beam and it
+does that in a way that feels slightly
+more being native than what you would
+have with the plain C functions and so
+the issue with Jen TCP is that it's both
+intricate to using configure and when
+you read the documentation you see a lot
+of arcane looking options and all that
+so this is actually the entire API for
+Jen T CP there's no other functions in
+there but when you actually go to use it
+you'll see that you have to also learn
+about the eye net API which only has no
+this is two functions that are the most
+common to use there's like other other
+fiber ten functions that are a bit
+peripheral but that set opts function
+has a list of options that you can pass
+through it and that list of option is
+huge and it's like 40 different things
+that all come together and then you can
+of course drop down to the Rho BSD API
+then you can start you know creating a
+binary struct that gets passed roll to
+the operating system we won't see any of
+that today but if you want to actually
+go and have a look at how this is
+documented you should because it gives a
+lot of options that you could use and
+you might find useful so let's go and
+have a very quick look now at some code
+and we will write a very simple server
+that accepts connection on port 4001 and
+when a client connects to it it will
+just send the current date as a string
+and then close the connection so let's
+see how that could work and this is now
+blind so we are this so oops
+I should have done it the other way
+round so the server is running on one
+side and I just connect to it through my
+client and I could use the same way with
+netcat if you don't know that cut is a
+thing like cut but over the network so
+it will just print out to the standard
+Thunder out everything that arrives to
+it so you can use the same thing if you
+get that string so you see that the date
+is current and we can even use tablet
+and telnet prints out a lot some like
+noise there but the main the last two
+lines are what the server returned and
+then tell that prints out that server
+close the connection so that's the demo
+and let's go and have a look what the
+server looks like so this is you know
+you have to wrap a module around that to
+actually make it work but those two
+functions are the server and the first
+part is that you call gen DCP listen and
+you pass it the port and then that
+options we've been talking about so
+options is a list and it could be it has
+both atom pairs like you know a couple
+of keywords and value or it has just
+plain items in there and it's really
+convoluted but most of the time you'll
+use binary which means treat the data
+that I'm giving you and the data that
+you're giving me as binaries because the
+default is char lists which is the
+Erlang strings which is just lists of
+integers and in elixir land they're not
+as useful we use other is some arcane
+thing that's nice for the demos because
+otherwise we'd have to wait one minute
+or so until we could rebind to that port
+don't worry about it
+so we call gen PCP listen and we get
+back a listen socket and we just pass it
+over to our server handler and what that
+does is that it calls except on that
+listen socket so so far the listen call
+is just returns almost immediately but
+the accept call here is actually
+blocking so the code will stop here
+until a client connects and when a
+client connects now we have our socket
+right and this socket in our line is
+actually a port let's not get into that
+level of detail but if the socket is
+something that's stateful so you can
+right through it you can read from it
+and all that once we have that we
+calculate the time and we convert into a
+string and we call gentie CP send with
+to using the socket and our binary and
+we just pack a new line at the end to
+make it a bit nicer for the demos and
+then we call shut down and what that
+will do is that once send returns it
+means that the data is no longer at our
+control it's gone over to Erlang and
+eventually al angle passed the data to
+the operating system and eventually the
+operating system will actually send the
+data over to the destination and shut
+down it just ensures that the packet
+participe packet that actually signifies
+the closing of the connection will get
+delivered after everything else so
+usually you don't usually have to close
+a TCP socket because when your process
+that open the socket dies it will close
+it with it but for the demos we use shut
+down so we are just make sure that
+everything arrives and then once that
+happens we can just call except again on
+the socket and now we are ready to serve
+the next client
+so the listen socket is long-lived but
+we accept socket the accepted socket is
+represent one connection from the
+outside I showed in the demo that we can
+also write a client for this kind of
+thing so it looks really similar in the
+sense that it's two functions and we'll
+see why in a bit but what we do is we
+connect we pass in the address we want
+to connect to the port the same list of
+options or a similar looking list of
+options and we get a socket and this is
+again blocking so once we have
+the socket it means that we are
+connected to the server and we can start
+doing things with it
+the major problem here that you will
+probably run into is that you have to
+pass in the address as a char list so
+notice single quotes around the host if
+you pass in a string you will get an
+error bad arg figure it out
+no use that use single quotes and you
+can use IP addresses or other weird
+stuff in there the documentation shows
+no the types that you can pass in there
+and we also see that we use binary again
+because we want to stay in binary land
+and not use char lists for the data but
+there's also active true which is
+actually their default but it's a good
+opportunity to talk about it and we'll
+see why in a second now we have the
+socket and then we call this client
+function client handler function passing
+that socket and we immediately go into a
+receive block and the reason we do that
+is because the active mode means that
+airline will deviate from the VHD API
+and it will convert the incoming data
+into our link messages so there is two
+kinds letters three or four kinds of
+messages you can receive the basic ones
+are three element apple that has a tcp
+atom the socket that actually used that
+actually send the data so you can handle
+many sockets in the same connection in
+my case i just matched on the socket
+that we used for to be clear about that
+and the last element is the data and
+because we passed in binary this is now
+a binary when that happens we just write
+out to the standard i/o and we wait for
+the next message to arrive so the client
+in this case has no idea what's coming
+so it will just wait many messages will
+arrive and then eventually the socket
+will be closed because from the other
+side we called shut down so eventually
+the socket will be closed and then we
+agree we will receive the TCP closed
+message and
+we just print out that it's closed and
+we die so everything's clear so far
+yep so if you remember the server code
+I'll just jump here a bit the server
+code as it is right now as it is shown
+on the screen can only handle one client
+at a time and why is that because we
+have a single Erlang process we called
+accept and accept this blocking so while
+we are blocked there no other clients
+can come in so there you go they will
+they will not get refused at a
+connection because there's some pooling
+going on behind the scenes for the
+listen socket read the documentation
+about that but they will not be
+connected until the first client exits
+so of course this is very common in many
+programming languages like Python Ruby
+you have to spawn multiple multiple
+process processes to handle this but in
+a lecture world or the beam world
+it's just trivial to do to accept
+multiple clients at the same time we
+just spawn processes so what I've done
+here is instead of just calling the
+server handler directly as we did before
+we spawn it that we spawn 10 processes
+running that function at the same time
+so now we have we can accept 10 clients
+at a time and we have to sleep the main
+process because otherwise our program
+will exit of course you wouldn't do it
+this way if you have to do it in
+production you would use something like
+ranch which is the library that Phoenix
+and because it's used in sorry Ranch is
+a TCP acceptor pooling library so if you
+have if you want to accept multiple
+clients you do it essentially this kind
+of thing and if you're using Phoenix
+Phoenix uses cowboy and cowboy uses
+ranch and if you ever went into your
+process diagram you will see that there
+is a ranch supervisor with a hundred
+workers by default doing essentially
+this
+for you so just like that we've
+eliminated all the complexity that for
+example Python used to have it either
+have to spawn new processes like
+operating system processes and then try
+to coordinate between them or you would
+have to go the async way where there is
+some cutter API that you can listen on
+multiple sockets and all that
+it's complicated this is way way simpler
+so the code we've seen so far is very
+simple hello world style let's go and
+have a look at some code that does a
+little bit of more complicated back and
+forth and we'll have a server that
+accepts connections and when the client
+connects the server will send that
+greeting and this is mostly like the I
+think SMTP works where you connect and
+the server might easily sense hello then
+the client when it receives that hello
+think it will serve let's talk about the
+server first the server will send hello
+and then we'll wait until the client
+send some data back and then the server
+will take the data and send it back
+using that hello name and then this will
+close the connection the client on the
+other hand it will connect to the server
+wait until it sees that hello binary
+then send some data over and then just
+read all the data and wait until the
+connection is closed so we have a demo
+for this as well and we have here
+ah sorry
+this is our server whoops ah ah of
+course
+so this is no video
+so the server now is waiting for
+connections and I will launch the client
+and some something has happened because
+I'll just write my name here
+elixir oops oh yeah time out we'll talk
+a little bit about that later
+let's be a little bit faster okay so the
+server is now doing that and the client
+has shows us how all this worked
+this never happened when I did at home
+so the server the listen part is the
+same so I'm just showing the handler
+part and you can spawn this in one
+process or how many processes you want
+so we again call accept waiting for a
+connection and then the moment we are
+after accept it means we have a
+connection so we send that hello thing
+and then the server goes into the
+receive block so it blocks and then when
+that message arrives means the client
+has sent us something
+so we then calls and again and shut down
+the circuit the idea here is mostly to
+illustrate that we can have the server
+both read and write data right it's a
+two-way stream you don't there's no
+client the server once the connection
+happens you don't know who started it
+you either side can closed can read can
+write can do whatever the client is also
+the same just here we patent much a bit
+better because we are waiting a specific
+thing to arrive so we can pattern much
+on that message and say ok when that
+happens do this in our case we just know
+read from standard in and whatever trim
+it send it back and the other cases are
+exactly the same so this is the active
+mode where incoming data gets turned
+into
+messages and you use a receive block to
+handle them the most traditional way
+which is the BST way is to have a
+passive mode which is a no Erlang magic
+going on you have your file and at some
+point in your program you read some data
+from the file and this of course means
+that if you want to read more data than
+is available your code will block you
+have to use a timeout the most important
+thing here is that the way tcp it was
+designed it was designed to make sure
+that one side that is producing a lot of
+data will not overwhelm the other side
+that processes the data or reach the
+data so TCP has built in a back pressure
+mechanism so if one side is just not
+reading the data at the same rate as the
+other side is writing TCP has a way to
+throttle the 10-digit ID so it will send
+back messages saying stop or other
+anyway it will do something some magic
+to ensure that your this doesn't happen
+when you use active mode though airline
+will consume all the data as it becomes
+available
+so you don't get to use that back
+pressure mechanism because the operating
+system doesn't know that your process
+hasn't processed the data yet it knows
+that Erlang read the message from the
+buffer read the data from the buffer and
+it will just send you more so instead of
+using the back rest or mechanism of TCP
+you have to design your own but press
+your mechanism otherwise your process
+message inbox will flood and you will
+kill your VM so most of the time we use
+passive mode and of course this is only
+relating to the receiving of data
+sending is the same because sending is
+this weird thing that is both blocking
+and unlocking but there is no Erlang
+magic for the send so the server is
+really quite the same instead of using
+active is true we use active is false
+and instead of having a receive below
+we call Jen TCP receive and we have a
+five thousand milliseconds timeout and
+we say that we want to read zero bytes
+and we'll talk a little bit about that
+later the client it gets a little bit
+bigger so when you connect you pass in
+active false and when you actually want
+to read instead of having a received
+block you again call receive passing the
+number of the number of the number of
+bytes you want to read which is zero and
+we'll see 5,000 is the timeout and
+you'll get just either okay and your
+data or error and some error which in
+our case it means that the circuit is
+closed and the demo is exactly the same
+we won't do it again so the major thing
+that passive mode introduces is the
+receive function and it has two flavors
+one without a timeout and the other with
+a timeout and when you pass in length
+that is a number that's not zero it
+means I want to read this number of
+bytes a hundred bytes something like
+that and your code will block until the
+operating system has received those 100
+bytes when it does you know that you get
+a hundred bytes back no more nor less
+when the length is zero it means read
+give me any bytes that you might have
+and this is problematic and we'll see in
+a bit
+why so here is naive extremely naive
+HTTP client it tries to download Mary
+Mary Shelley's Frankenstein from Project
+Gutenberg and it's essentially the same
+you connect to that host at port 80
+which is the default HTTP port we use
+passive mode and we send that the HTTP
+header right so this is this works but I
+won't go into the demo because we're
+running a bit late so if you say this
+actually works but the problem here is
+that
+the response that we get is 115 thousand
+bytes which is not enough to contain
+Mary Shelley's book so why is that well
+the problem is that you don't really
+know at this level of code you have no
+idea how large the response of the other
+end will be right
+so in passive mode this is very explicit
+because you have to pass in a number and
+it forces you to think about that number
+in active mode you have the opposite
+thing in that or a similar thing in that
+if you we try to partner much before at
+that
+hello string right and of course it
+worked because we are doing very little
+data back and forth and we're talking
+over the local hold so things pretty
+much work out but in actual real-world
+case you might first receive three bytes
+of Hello so HCl and then after you know
+a couple of milliseconds you might
+receive the other part so your pattern
+matching logic is now broken because
+there is no guarantee because it's a
+stream right a stream doesn't have a
+beginning and an end it's just a stream
+of bytes and you need to add your own
+level of handling on top of that and we
+call these protocols and the protocol is
+just try to give a shape of on that on
+that stream and some of them are common
+like HTTP or memcache D and some of them
+are niche like the ones I had to
+implement and some of them are going to
+be your own when you want to design a
+TCP based application and some are even
+provided by gen TCP but they're not as
+useful as I would hope so a protocol
+specification when you read it
+essentially it's a distributed state
+machine so it tells you okay which party
+goes first which party goes next what
+shape should the data have who is
+responsible for this responsible for
+that and all that and some of them can
+be really complicated like the sorry I
+mean really simple like this is an RFC
+867 which we implemented in 10 lines of
+code because it's
+reveal it just says sent back they very
+time as a string and I don't even care
+what the string looks like so that's
+easy
+HTTP on the other hand is to be 1.1 is
+176 pages then this is why you don't
+write your own drain CTP client memcache
+D is 1200 lines of text so I think you
+should be able to implement reasonably
+complete client in a week or so if you
+have if you find a way to test it and
+let's go and see a little bit better
+HTTP client the code is exactly the same
+as before we connect resent that the
+first part of the HTTP requests which
+are you know just they get then some
+headers and we just you end with two two
+new lines you can see and then if it's
+visible but the last one is rn rn so
+that's the signal for HTTP to say this
+is the end of my request and then
+instead of just calling receive once we
+call we have another function that I'll
+show and you might guess that the list
+is going to be an accumulator of bytes
+so this one looks like this and it
+essentially calls receive in a loop
+until it until the connection is closed
+which is a valid HTTP way of knowing
+that the response has finished so I
+don't know if sure if I should walk over
+this we just call receive we don't care
+how many we don't know how many data
+will arrive so we just say give me
+everything you have and we stick that on
+a buffer and as long as we read data we
+stick it on a buffer so we just use the
+functional way of having an accumulator
+and we tack it at the beginning of the
+list and then eventually I know
+eventually we should get closed
+I just pattern match another for
+simplicity and we will just reverse the
+accumulator and now we have an i/o data
+list and we just convert that into a
+binary and that's it so that is early so
+gently CB if you're gonna have a look
+has a few built-in protocols and you
+would hope that it would help you design
+applications but the problem is that you
+cannot extend them they're set in stone
+they will never change and if they're
+useful there they are if they're not
+useful don't think about it go and write
+your own thing and the main idea of
+those protocols is that for example this
+is the prefix header length and what it
+will do is it anytime you call send it
+will say okay you've asked me to send
+200 bytes
+I will tack one or two or four bytes at
+the beginning of your transmission
+saying okay the now follows a hundred
+bytes and when you use it on the
+receiving side it will say okay I will
+expect that the first 2 1 or 2 or 4
+bytes to be the length and I will read
+exactly a hundred bytes and that's it
+and it actually does it transparently so
+if you have a case where you control
+both client and server you can use that
+and you don't have to write any other
+logic the amount of data you sent is the
+amount of data you receive and you don't
+have to think about anything else
+buffering whatever and the cool thing
+also is that if you use active mode you
+will also have guarantees that exactly
+the correct amount of data will be
+passed to your messenger you can go back
+to using it's nice pattern matching
+style the default is packet to be 0
+which means no packet at all of course
+it could have a better name but it
+doesn't the other protocol that might be
+useful with a very big caveat is the
+line protocol in that it will read data
+until it finds a new line or actually
+any line any character that you can
+specify and then it will send you that
+data as a message so a lot of protocols
+use new lines the problem is they use
+both carriage return and line feeds so
+crlf
+if you've seen us last r /n to signify
+what the line means or as this protocol
+only accepts a single character so again
+not so useful the cool thing about
+gentie CP though if you get to use this
+kind of protocols if they are useful to
+your application is that the socket
+limbs itself is mutable so you can start
+off at line mode like memcache D does
+that it except it expects that first
+that you will give it a line saying okay
+I'm now doing a set operation and then
+it expects some raw data so you can
+start by sending a line and then you can
+call a specific specific function saying
+okay stop stop waiting for lines now
+we're back to row mode so the next time
+you receive or get the message you will
+get raw data back
+the most common way you do things is the
+same way as the prefix header length
+does it or HTTP does it with content the
+content length header if you've seen
+that around in that if you have your
+logic and in your logic you say and now
+I'm going to send you 500 kilobytes and
+then they're receiving code knows okay
+this is now what I'm going to expect
+from the other side I think we have time
+for a demo and this is the client so so
+instead of now we don't have a server
+instead we unmanned cache D and I have a
+very very simple implementation or very
+non-compliant client and I will run that
+and the first thing I'm going to do is
+I'm going to set a value this is the
+reply that memcache descends and then I
+will get a value and this is you see
+that the first thing the wrong response
+is the aligned and then after and it
+says 20 so 0 is some flags that it's 0
+and 20 is the number of bytes that will
+follow this line so if you count there
+should be exactly 20 bytes in the hello
+from also string and the code for this
+looks like this before they get I don't
+think it's useful to go through it the
+basic idea is that you connect blah blah
+you specify that the packet is the line
+and this actually works although it
+shouldn't work so don't do this but it's
+just an example of how you would do this
+kind of thing so receive a line and we
+know now that response should be aligned
+so the memcache the protocol will send
+you a line no matter what when you're
+doing sorry before that we send a line
+say get elixir corn for electing Cerf is
+the key that we wrote just before so we
+have the response and we use pattern
+matching perhaps it's easier to do it
+like this we use pattern matching and we
+expect that it will start with value
+elixir conf this is all the protocol of
+memcache T and then we do some mangling
+there wrangling to get very length once
+we have the length we call I net which
+we talked about in the beginning set
+options packet is 0 so we're now no
+longer in line mode were in row mode and
+then we know exactly how much data we
+need to read so this is what it looks
+like so this is pretty much it from me
+there
+is a very big pain point and I wish I
+had an announcement to make I don't when
+you write TCP based applications there
+is and the first time you do it your
+code tends to be like inter interleaved
+you have giant ACP calls here gentle
+pickles there your logic all in between
+and in most other programming languages
+like I come from a Python background and
+I use twisted extensively and twisted
+has this idea of the abstracting out the
+transport so that your transport could
+be a serial port your transfer could be
+TCP port could be an SSH or TLS port
+could be a tunnel of things and you
+don't really care as long as the
+obstruction of the stream is maintained
+I couldn't find any library that would
+do this for me in their line or elixir
+and if someone wants to do this kind of
+work I think there's a very big nice gap
+and if you are going to do some TCP
+based applications think about how you
+would test them because you either have
+to mock something out it's messy better
+to think about it before and you also
+have to think about how to handle
+timeouts because there is a timeout for
+send there's a timeout for connect
+there's a timeout for receive there is a
+mode for everything and it's really not
+a not a good thing to realize all this
+after you've written all your code and
+say oh what do I do now and it's a hard
+problem and it's it doesn't have a good
+solution at the moment so that's it from
+me you can find all the slides and all
+the codes at github try and read the
+book read the documentation and I'm we
+have seven minutes for questions so
+any questions ends up got a question
+okay thank you a quick one what can you
+say about UNIX domain sockets for a
+related story yes it's not I net I net
+module deals with UNIX domain sockets
+but you don't use gen TCP for that you
+use something else which I'm not really
+familiar there's also on that topic
+there's gen UDP which is UDP based
+communication this is a different model
+and but you DB doesn't have the stream
+obstruction so it's a completely
+unrelated thing but with in theory you
+could have you're the same code working
+TCP with a disappea socket and with a
+UNIX domain socket because it's just a
+file to you right so you just read and
+write but they haven't done that yet but
+I know that it's possible somehow any
+other questions okay thank you thank you
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

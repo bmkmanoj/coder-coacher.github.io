@@ -1,0 +1,909 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Ship Your Code While It's Hot - Albert Zak - ElixirConf EU 2018 | Coder Coacher - Coaching Coders</title><meta content="Ship Your Code While It's Hot - Albert Zak - ElixirConf EU 2018 - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Ship Your Code While It's Hot - Albert Zak - ElixirConf EU 2018</b></h2><h5 class="post__date">2018-04-30</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/KGNfqiVF234" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">hi I'm glad you're all here it's
+actually gonna be my first talk ever so
+let's see what this brings I'm Albert
+I'm pretty new to elixir in fact I first
+used it about a year ago for a class
+project at university where we had to
+write a video streaming server
+everything went extremely well until it
+came to deployment I just could not
+figure out a simple smooth non
+interactive way to build and deploy that
+thing from a CI server in the end I just
+gave up and rewrote the thing in
+JavaScript in an afternoon and decided
+to dedicate the next year of my life and
+my bachelor's thesis to try to figure
+out how to deploy elixir so here's sort
+of what we're gonna cover in the next 40
+minutes first we're gonna look at the
+basic mechanism whereby the beam swaps
+your modules it's actually really simple
+and we're gonna inspect OTP releases
+next we're gonna look at sort of the
+core of the upgrade process the upgrade
+instructions that you find in your
+relabel then we're gonna look at ways to
+ship your release from wherever you
+built it to your servers and start it
+there now oh sorry then we're going to
+talk about some of the things that can
+go wrong and how you might deal with
+that and lastly we're gonna look at ways
+to automate the whole process and see
+what's out there so let's start now
+before we actually get hot swapping I'm
+gonna just say that if you can avoid
+doing hot swaps in production then
+please do that there's really just a lot
+of added complexity that if you can of
+what you should do so unless you're
+absolutely certain that you really need
+hot upgrades
+please just pack your lease or just
+start a server like this so sort of
+valid reasons to use hot upgrades would
+be if you have a lot of long lived
+connections that you cannot easily drain
+or that if you would just cut them out
+they would cause like a reconnect storm
+and bring them down your machine when
+some more or if you've got a lot of in
+memory state like for example if you're
+building a game server so if you can't
+do rolling restarts please do but then
+again we're here for the hot swap so
+let's look at the mechanics so basically
+hot swapping is done on a module level
+what does the means of the beam can keep
+up to two versions of one module loaded
+in memory at once say we've got this
+module loaded and from it we have
+spawned a plain old process no chance or
+anything just something that runs a
+tail-recursive function now you so you
+change something in your file save it
+compile it load it what's gonna happen
+is the file that you just changed it's
+gonna be loaded and it's gonna be marked
+as current whereas the old version
+that's been running previously is now
+marked as old note that your process is
+still running the old version of the
+module and just to keep things things
+interesting let's also say our process
+gets some internal state and that we've
+changed the representation of that state
+in our upgrade so what we want is a way
+to transform that state so that our new
+code can just deal with the new state
+and the way you do this is you ship as
+part of your new release and upgrade or
+a state transformation function it'll
+receive the old state transform it
+somehow and then just continue the tail
+recursive loop
+just in the new module this time so to
+actually switch over execution what you
+need to do is to make a what's it's
+called a fully qualified call
+so that's your module name dot function
+name and in this case we do that by
+sending our process a message that could
+be anything we'd have to implement that
+so now our process calls a this fully
+qualified call and it calls the state
+upgrade function in a fully qualified
+way so at this point execution switches
+over to the new module because fully
+qualified calls always go to the latest
+loaded version of a module that's sort
+of really the key here if you do a fully
+qualified call you switch over to the
+latest loaded version if you're already
+delays loaded version it's just gonna be
+like a local function call now your
+state transformations function is gonna
+receive the state because we would have
+to pass it with that function call it's
+going to upgrade it and just continue
+the loop now this time it can just do a
+regular local function call and it'll
+automatically resume in the new version
+of the module all right what's gonna
+happen to the old modulus that as soon
+as there are no more processes running
+the old module it's gonna get purged now
+what happens is if you still have
+processes running on the old module of
+the code on the old version of the
+module and you're gonna load a third
+version then the oldest version is just
+gonna get to forcibly killed so you see
+the mechanics of the code swap are
+actually really simple when you look at
+them in detail now
+I just talked about this a little bit
+but you really had to have the foresight
+to implement all of this fully qualified
+call and handling the upgrade message at
+the time when you wrote the first
+version of the module so that's not
+really something you should use in
+production at all luckily there's always
+Oh T P to relieve us from having to
+think about this and what you usually do
+is not build your own kind of gen server
+using like a tail recursive loop but
+rather just use a transceiver and
+implement the code change call back in
+your modules so a function is pretty
+simple it basically transforms your
+state and returns it now note that
+whereas previously we had to just sort
+of resume the loop by calling our loop
+function this time we just returned a
+state so this function receives the old
+version that's just the string of the
+release version that we're upgrading
+from usually you don't have to care
+about that if you happen to do it
+compare and match against it also if it
+happens to be a downgrade that old
+version is gonna be an atom it's gonna
+be tuple with the atom down as its first
+element but then again I think you don't
+shouldn't really care about downgrades
+and if you notice something wrong with
+your upgrade you just cut a new release
+and roll forward so next argument is the
+old state of your chain server that
+you're gonna have to transform it's
+pretty straight forward that extra
+argument then really care about it's
+usually an empty list you can't pass in
+some extra stuff if you happen to need
+that so then transform your state and
+return it alternatively if you raise an
+error or if you return error the
+upgrades gonna fail and usually what
+that means is that your node will so
+that your emulator is gonna reboot using
+the old version of all your applications
+and obviously lose all its state now
+this obviously was a sort of happy
+little example and it's not gonna be
+what you
+see in the real world in a real world
+your systems are gonna look more like
+this and what you would really want on a
+production machine is a controlled way
+of orchestrating changes and you want to
+go for Oh TP releases now at this point
+when I started trying to figure out how
+everything about OTP releases fits
+together I looked at the Erlang
+documentation I read that section on
+releases of the learners number one for
+a great good book and there's really
+just a lot of manual steps that you'd
+have to do and I find that scary copying
+things around renaming things attaching
+various shells to run various commands
+that I found that a little scary to be
+honest but if you think about it it's
+maybe somewhat understandable I mean I
+like evolved since like I know what 1985
+or something so Ericsson probably
+designed that process for themselves for
+hugely complex telco systems and they've
+got a lot of people who can spend all
+day copying files around and renaming
+things and running commands manually I
+certainly felt a little lost and scared
+now I don't want to scare you by not
+showing you step-by-step how to generate
+and apply a release using only the
+tooling that Erlang gives you because
+that's really a little involved but
+think about it this way I mean we do
+database migrations all the time and
+don't bat an eye so why can't we just do
+the same with our processes state if
+we've got a little more tooling support
+so what I'm gonna show you though are
+the most important concepts around OTP
+releases the various files that you will
+find in a release and their purpose is a
+little bit about the SAS application
+which is sort of the which brings it a
+sort of lowest level module
+that most of the tools are using to
+construct and apply releases so now
+these releases are a religious boxes
+full of goodness they pretty much give
+you everything you need to run and
+install and upgrade your application
+anywhere in your really at least let's
+open one up and see for ourselves so
+grab a tarball extract it somewhere and
+at the top level you will see the
+following folders there's spin er TS lip
+and releases now bin there's a
+convenient strip in there which has just
+the name of your release so it's like in
+my release and you can use that to
+easily start your release you do pin my
+release for ground for example er TS
+that's basically the Erlang runtime
+system the emulator nothing too
+interesting to see here but you do want
+to make sure it is there you can belt
+releases without including the FPS but
+if you do want to use hard upgrades you
+do want to make sure it's part of your
+release lip that's where the actual sort
+of meet of your application lives all
+your compiled source code in the form of
+beam files they are in various versions
+subdirectories inside that lip now
+there's that releases directory and this
+is where it gets interesting now I
+wonder why is the release directory I
+mean we're looking at a release Meister
+another releases directory inside now
+when you use hot code loading you want
+to avoid falling into the trap of
+thinking of this release package is sort
+of an immutable container that you would
+just transfer to your server extract
+unpack start stop and destroy each time
+you do an upgrade it's not like that
+think of it more like a house
+that you would place somewhere once and
+then over the course of the lifetime of
+your system various files and folders
+are gonna come and go like canons so
+what's inside that release directory
+metadata basically let's look inside
+there is the dodger L file that's a
+release resource file basically nothing
+too interesting it just has your release
+name your release version and all the
+applications and the respective versions
+that are part of your release the
+all-caps
+releases file keeps track of which
+releases are installed on your target
+system on this note it's same thing
+basically so right now we're looking at
+sort of an initial release package just
+obviously when it gonna be that same
+metadata about that release inside that
+releases file but remember this is gonna
+be extracted somewhere and then it's
+gonna stay there forever and when you
+install a new release the release
+handler is going to modify that releases
+file and tell you what's installed and
+which one of this is current so then
+there's that other 0:01 directory that's
+the example of where and I'm using it
+for this inside is a bunch of stuff like
+the VM darks file and the assist config
+basically just stuff to tell your VM how
+to start itself and how to start your
+release that's it for the initial
+version if your release now it's time to
+look at a second version which was built
+as an upgrade release let's look at it
+see what's changed so there's a real up
+file that's short for release upgrade
+instructions file and besides the
+version number that's really the only
+change in structure between and what I
+call fuller initial release and an
+upgrade release there is really no
+notion of a upgrade only or delta
+release there's only releases and
+releases that know how to
+upgrade from a given previous version of
+themselves keep that in mind
+confused me we'll look at the contents
+of this relic file in just a moment
+first I want to tell you about two
+important modules that all of the other
+tools depend on are called sis tools and
+release Handler they're part of the sass
+well that's SASL stands for I think
+system architecture support libraries
+application part of the OTP distribution
+and you do have to list this sass law
+app as a dependency if you do want to
+cut upgrades because the release Handler
+that's departed that is that you're
+going to be calling when you unpack
+install or remove releases on your
+production system so the assess lab
+needs to be part of your of your release
+sis tools that's the sort of offline
+release assembly module it does stuff
+like write the boot scripts generate
+develop file and zips up your tarballs
+so let's now look at the heart of the
+upgrade process the app ups and roll ups
+now these are the actual instructions
+that orchestrate changes to your running
+system in a controlled way which is
+exactly what we want now we've seen that
+if you have a release and if you want
+this release to be able to upgrade from
+a previous version it needs to include a
+relic file I certainly was confused
+about the purpose of a pups versus
+relapsed and how exactly they relate to
+each other basically for every
+application that's part of your release
+so if you have an umbrella that's all
+the applications you are yourself plus
+all of the applications you pull in as
+dependencies and if you just write one
+app that's your app and your
+dependencies so it's always a lot of
+apps there
+for each part of your app for each app
+that's part of your release you do need
+to have an app up file if you happen to
+want to upgrade that app now these app
+up files live in the Lib directories
+next to their respective beam files of
+that application but they are not part
+of the release package directly because
+when you assemble a release this tool is
+going to compile and combine your all of
+your app files into one single relabel
+and only this single relic file is then
+going to be distributed with your
+release so that's something to keep in
+mind let's look at an app file here it's
+basically in our link term it's a triple
+so first element that's the version
+you're gonna upgrade to it's basically
+your goal for this upgrade now these are
+the versions of the respective
+applications so you have to
+differentiate between the versions of
+each of your applications and there's
+another version identifier for the
+release which can be completely
+different now
+this app file tells us basically the
+instructions to either upgrade from 0 0
+1 that's the next two lines here or
+alternatively if something fails or if
+you just want to downgrade to down grow
+it back to 0 0 once you read that first
+user 1 as up from 0 0 1 and the next one
+you read that as down to 0 0 1 and these
+are basically lists of lists so you
+first you can have multiple instructions
+obviously this is just a very simple
+functional change but yes also since our
+list of lists you can actually have one
+app up file that defines the process how
+to upgrade from any number of previous
+versions and you can put all that into
+one app up file by just specifying
+multiple down to and up from versions in
+here you can apparently also use regular
+expressions
+as version number Sharron and you match
+against a range of versions if you so
+desire now here is that a pop file
+compiled to a relevant I remember again
+usually there are going to be multiple
+app files compiled to single app file
+but you can also obviously upgrade just
+one application so it's got the same
+structure pretty much on top there's
+your target version now this time we're
+looking at a release version which is
+separate from the application versions
+again it's got the same structure its
+lists of lists of Lists so you get the
+app from version Anthony down to version
+instructions there you also see that
+point of no return
+what is that it basically just means if
+anything goes wrong during the upgrade
+process past that point of no return the
+VM is gonna reboot using the old version
+of your applications but you really
+can't do many interesting things before
+that point of no return so don't worry
+about that another a few fun instruction
+that you that you might find there apply
+basically lets you run any function that
+you wish as part of your upgrade process
+you just specify the MFA identifier you
+can use that for example if you wanna do
+an a hole upgrade that changes the child
+specs of your supervisors or one of your
+supervisors and what happens is that if
+you change the child specs that's only
+gonna apply to newly spawned children of
+those and it's not gonna affect the
+existing children which is usually what
+you want but if in case you want to mess
+around with your supervision trees you
+can use a function and apply it during
+the upgrade restart new emulator don't
+get your hopes up this is not hot
+upgrade it's just basically means that
+you can upgrade the ER link vm as part
+of a release and what happens is that
+the it's gonna start the new version of
+the vm gonna shut down your old version
+gonna start the new version of the vm
+using the old version of your
+applications
+and then it's gonna continue with the
+upgrade process ins gonna upgrade your
+applications it's really a two-step
+process sync notes that's interesting if
+you've got a distributed Erlang setup
+our elixir setup is the same thing
+really when we're down here if you've
+got distributed setup you can have your
+notes apply the upgrades at the same
+time and the mechanism whereby this
+happens is that you have to start the
+upgrade process on each of your node and
+they when they get to this sing notes
+instructions they're gonna wait for all
+of the other notes in your cluster to
+get there as well before continuing all
+right so we've seen how modules get hot
+swapped with looked inside a release
+package inspect the develop file seen
+some instructions that were generated
+from vedepo files now we know our why
+our epic files are not part of the
+release package basically we got this
+thing ready for deployment sitting
+around wherever we built it now let's
+look at some ways to get this thing on
+to your servers the most common way
+probably is to use something like SSH
+copy the tar file over and pack it start
+it and then if you get the tarsal extra
+high-tech is that just never can
+remember them later you can transfer
+upgrades the same way just this time
+you're gonna attach a shell to your note
+and run the release Handler unpack
+release install release or if you're
+very lucky your tool that you used to
+generate the release has equipped your
+release with a convenient script you
+just can go in and say been my release
+upgrade now that's fine and it's great
+you can script this to crazy Heights
+deploy to multiple notes what have you
+what I'm saying is that
+if you have this sort of setup working
+for you and if you're happy with it then
+just roll with it there's really nothing
+wrong with using SSH this way now some
+of us aren't that lucky if you happen to
+have messed around with releases you
+might have seen this error this is what
+happens when you build a release on your
+for example Mac OS machine and then
+transfer it to a Linux box and try to
+start it there it just gives you this
+syntax error apparently so
+you really do want to build your leases
+on a machine that is as close to your
+production boxes as possible in terms of
+CPU architecture it has to be the same
+so you can't do cross compilation in
+terms of OS it really also should be
+almost the same for example this is
+sorta UNIX and a real UNIX and that
+doesn't even work so I wouldn't bother
+I like containers to do that basically
+if you're not familiar with that they're
+like a like a VM just a little more like
+way to start in a few milliseconds
+they're super portable and the tooling
+is great around containers with docker
+so when you one thing you can do is on
+the machine where you built a release is
+start a container that's similar to your
+products or doesn't even have to be that
+similar to your products actually since
+you're using containers so you start a
+container which you'll release inside
+and then configure your container so
+that it starts to release in the
+foreground
+when this container is run for the next
+time that's basically how containers
+work and then you just seal that
+container off basically ship it to your
+browser now the tooling is really great
+aground containers there's a lot of
+tools to smoothly deploy containers
+anywhere and it's it's gonna work well
+again this is something you can totally
+use maybe even should use except that
+you're not gonna be able to enjoy hot
+upgrades this way again if you can do
+without sure go for that it's great but
+what we really want is a way not to ship
+those self-contained
+containers but rather these shipping
+releases without the containers but we
+still kind of want to be able to smooth
+them out these OS disparities here so
+one thing you can do is build your
+release inside a container and then pull
+that out of the container and ship it
+then to prod and start it there now you
+could start it inside a container and
+produce well or just a new host
+depending on what you want now I really
+like containers I use them everywhere
+even though it's not strictly necessary
+now I have left out one detail before in
+order to build hot upgrade packages like
+releases that know how to upgrade from a
+previous version of themselves
+you really need to have the previous
+version that you're building the upgrade
+from local to where you're building the
+release so basically you want to have
+some kind of way of fetching old release
+packages to your build server or build
+machine whichever you use now I guess
+you could just ssh into prod and and
+sort of steal the release from there but
+that's not really something I'd
+recommend you do better if you're at it
+just get some place to store releases
+and then you can configure your build to
+pull from there build the upgrade and
+push back into that store and from which
+then you can deploy to wherever you wish
+so there you have it pick whichever
+deployment options feels right to you
+now I want to talk about some of the
+things that can go wrong and what you
+should keep in mind when you do well
+when you handle hot code and let's start
+with messages now messages in mailboxes
+they may sit there for a very long time
+and therefore be really old so you do
+want to make sure that your new code
+that you're shipping is still able to
+handle and understand
+the old messages that maybe lying around
+in your mailboxes also make sure that if
+you happen to be running the recursive
+loops that you do fully-qualified cults
+once in a while so that you give your
+modules the chance to sort of jump to
+that new versions of the modules that
+you're going to be pushing also make
+sure you're receive clauses have
+timeouts because the release handling so
+that is when you apply to release has a
+default timeout of I think five seconds
+which you can of course override then
+just think about that now next thing is
+a biggie anonymous functions really are
+the worst you don't even have to be
+looking at them or executing them to
+totally break things for example if I
+send you an anonymous function and put
+into your mailbox and you don't even
+look at it and then my module gets
+purged your process is gonna explode
+so that's logical so try to really
+refrain from sending anonymous functions
+around if you do want to implement some
+kind of callback style interface on your
+servers just take an MFA instead that's
+much more robust than sending funds
+around next thing mix tasks right now
+you cannot run mix tasks on releases yet
+now this is probably gonna change in the
+soonish future because mix is gonna sort
+of become aware of releases and also in
+development you're probably gonna run
+releases or something like that I
+haven't really looked into it too much
+but just be aware of that and if you
+really do need to expose some one-off
+calls on your production box it's
+probably just best to wrap that in a
+shell stripped and spawn and lautering
+shell that calls your functions related
+to the missing mixed tasks you do want
+to make sure that you can run your
+migrations without mix
+I'm proud what I like to do is just have
+them run automatically and start up it's
+easy now configuration sadly is a bit of
+a mess right now you have so many
+different ways of pushing or making
+available a configuration to your
+dependencies and many different
+dependencies just have many different
+ways of consuming that configuration you
+just kind of do have to get familiar
+with more than one way of providing
+configuration to your releases now the
+next version of distillery which is the
+tool that you're gonna want to use when
+you cut releases of elixir projects it's
+gonna ship with a feature called what is
+it
+configuration providers that will
+hopefully make things easier in this
+regard so definitely look out for that
+luckily these days we don't have to
+write our handwrite our app ups anymore
+rather tools like distillery they give
+you a very clever app up generator that
+compares your beam files that's also why
+you need the previous version of your
+release when you're building an upgrade
+and that's great
+usually works pretty well saves you a
+lot of time kiss-up ups are really not
+that special they're usually quite
+boring to write by hand so if you've got
+a very complicated upgrade situation
+like if you've got many dependencies
+between your modules and process and
+notes and what-have-you
+then it might produce a pups that may
+look correct but fail to sort of upgrade
+your system properly and that's bad you
+definitely do want to test your upgrades
+always if you have the time so what do
+you have to do then is go in and
+manually edit the generated a pups
+usually it's just a case of reordering a
+structures so nothing too terrible again
+but imagine if these a pups are being
+generated on a remote machine like a CI
+server
+there's really no easy way to mess
+around during release generation with
+you're a pop phallus so it's really hard
+to do you used to be really hard to do
+because distillery too is also gonna
+ship with a way to define app up
+transforms now let's place like it's
+just a a call back module that's gonna
+receive the generated app up
+instructions and it's given a chance to
+do whatever it wishes to these
+instructions before returning them and
+then they will be written in your app up
+now this is a fairly low-level primitive
+for sort of fixing your app ups and I'm
+I'm just excited what the community is
+gonna come up with to make this easier
+for example one idea would be to use
+module attributes to guide that app up
+generation process where can for example
+define the load order of your modules
+versions lastly you do want to make sure
+that your versions of your applications
+always change between releases now or
+else you you cannot upgrade what I like
+to use instead of these human readable
+version strings if you just happen to
+sort of build and and run your own
+product is to get commit hash that's
+guaranteed to be unique you don't have
+to think about incrementing it by hand
+each time but you do want to make sure
+that these version numbers are sortable
+in a way that a newer version of your
+module or your app has a greater version
+number this took me a while to figure
+out just a simple way took me a while to
+figure out because my hope my upgrades
+were randomly failing simple way to fix
+is just repent the UNIX timestamp of the
+commit for example so your version
+numbers gonna end up looking like this
+which I find really beautiful now that's
+the snippet I used to generate it
+it's gives you just the commit times
+time and the hash of the last commit
+that changed something in a given
+directory so you can use this
+or umbrella apps where you want only to
+increase the version number of an app if
+you actually changed something in an app
+think of it like when you get a github
+repo store you see on the right side
+there a diversity sort of last commit
+hash to change something inside a
+directory now that's a lot of
+boilerplate I wish we could automate and
+thanks to all of you and the community
+the situation around releases has gotten
+so much better
+and today we're we're lucky to have some
+very well built solutions that you can
+really pretty much drop into your
+project and configure and then you're
+usually ready to deploy your stuff now
+if you want the absolute smoothest
+deployment experience and I'm not
+affiliated with them any in any way
+check out giggle lexer they're a
+platform as-a-service
+specifically designed for elixir apps
+surround by next Googler it's got the
+ease of Heroku but respects your
+in-memory state and supports hot
+upgrades and it comes with a CLI tool to
+push configuration it's got a remote
+shell and it's got really great
+documentation so definitely check that
+out if you're interested in that now on
+the other hand if you do want to run on
+your own infrastructure I'd suggest
+using distillery as certainly low-level
+primitive two assembler release and then
+combine that with either bootleg or a
+deliverer to sort of handle all the
+auxillary stuff like Auto versioning
+your stuff getting the correct previous
+releases downloaded to your build box
+compiling them maybe even on a separate
+build host and deploying to all your
+servers now bootleg is the Younger
+project of these two it's written in
+elixir delivers sort of the first
+project that got this really right both
+are very solid choices I suggest you
+pick one of them on top of distillery so
+it's part of my bachelor thesis that I
+started last year I set out to develop
+yet another release tool called it beam
+up now don't get your hopes up
+it's really not something that you can
+productively use right now it's sort of
+research project if you will that's
+definitely not production ready there is
+no documentation it doesn't even work
+with mix you'd have to compile your
+Elektra project with rebar three two for
+this to work right now
+yet I want to take a moment to just show
+you what I have in mind and what I'm
+working on right now so it's based on
+dr. the architecture is really similar
+to what I showed you before you've got a
+central release door and let's let's
+just get started it's really easy it's
+supposed to be easy that's sort of to go
+let you newcomers to lecture like myself
+can just use something to get something
+out of the door and just have like this
+lucky moment so you do run this curl
+pipe shell thing on each box to get the
+beam up CLI tool gives you that on every
+machine then you go to your box where
+you want to run your store say beam up
+store you know what this does is it's
+gonna spin up an HTTP server which is
+gonna accept and store your releases
+next you can go to your either your
+laptop or your CI server now another
+thing this this tool is really designed
+to be completely hands up in operations
+to you should be able to run this on on
+any CI server and don't have to worry
+about configuration or scripting or any
+parameters so you go to your project
+folder you point the beam up tool
+actually stored it if just deployed just
+do that with an OS environment variable
+because they're super easy to setup Mon
+CI servers usually you can do project
+directives a beam up built and that's it
+there's no arguments no up from version
+no nothing that you'd have to do or
+what's gonna happen is the beam tool is
+gonna pull down the docker container
+that includes Erlang for your system
+architecture in the correct version and
+it's going to start that container it's
+going to go inside the container it's
+gonna pull the correct version of elixir
+for your project it's gonna catch that
+on your host
+and it's gonna try to figure out what
+built tool you used for your project and
+it's gonna compile your project before
+it's compiling it's gonna look at the
+sort of get versions and rewrite them
+and it also makes sure that you have
+included DSS lab
+so then composite your project it also
+pulls from the store by HTTP all of the
+previous releases for that project and
+unpack them in the correct locations and
+sort of coaxes the tools to build
+upgrade releases from them and it
+concatenates all of the upgrade releases
+it just built into one single write up
+file package that into a fresh new
+upgrade release and pushes that back up
+to the server and it also exits cleanly
+so it doesn't leave like an underscore
+build directory floating around on your
+project so let's now look at how you
+start up in node go to your node point
+it at the release store again and you
+also want to say the name of the release
+that you're gonna want to run because
+when you've got an umbrella project you
+what usually usually do is if you want
+to select this host runs this in this
+app and that other house trends that
+other app you cut multiple releases from
+your umbrella project and each have a
+different name so you tell the node
+which release name you're gonna want to
+run and point it to the store and that's
+basically all you have to do it's gonna
+do the same darker magic and a pull the
+release unpack and install it it's also
+going to subscribe to the store so when
+you use to be much to look build and
+push another version into the store all
+your notes are gonna get notified and
+then they can just pull that release and
+apply it while running so there you have
+it again it's not something you can or
+should use in production right now or
+even look at it the codes horrible it's
+really just more of a playground for me
+to try out ideas it'll probably be read
+this summer I just wanted to share with
+you some of the ideas how elixir
+deployment could work again I want to
+point you to giggle ixr or distillery in
+combination with bootleg and a deliverer
+I think these projects are amazing they
+do a lot which feels right to me
+community is great so that's it I hope
+my talks given you some ideas maybe
+cleared up some confusion around two
+releases and maybe even made you excited
+to try shipping your coat while it's hot
+thank you
+you
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>

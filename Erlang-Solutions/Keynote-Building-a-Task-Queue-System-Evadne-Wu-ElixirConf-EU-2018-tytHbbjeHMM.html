@@ -1,0 +1,1554 @@
+<!DOCTYPE html><html lang="en"><head><script async src="https://www.googletagmanager.com/gtag/js?id=UA-114897551-4"></script><script>window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-114897551-4');
+</script><script type="text/javascript" src="//platform-api.sharethis.com/js/sharethis.js#property=5ac2443d1fff98001395ab6c&amp;product=sticky-share-buttons" async="async"></script><title>Keynote: Building a Task Queue System - Evadne Wu - ElixirConf EU 2018 | Coder Coacher - Coaching Coders</title><meta content="Keynote: Building a Task Queue System - Evadne Wu - ElixirConf EU 2018 - All technical stuff in one place" name="description"><meta name="keywords" content="education, coding, programming, technology, nodejs, mongodb, software, computer science, engineering, teaching, coaching, coder, learning, java, kotlin, machine learning, AI, ML, tech talks, angular, javascript, js, typescript"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="/css/font.css"><link rel="stylesheet" href="/css/bootstrap.css"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/coder-coacher.css"></head><body><div class="container-fluid"><h1 class="site-title"><a href="/">Coder Coacher</a></h1><hr><h4 class="site-subtitle text-right">Coaching Coders</h4></div><div id="amzn-assoc-ad-99d6751e-2392-4004-ad16-73aa8385d9d0"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=99d6751e-2392-4004-ad16-73aa8385d9d0"></script><div class="post__breadcrumb"><div class="container"><ol class="breadcrumb"><li><a href="/">Coder Coacher</a></li><li><a href="/Erlang-Solutions/">Erlang Solutions</a></li><li class="active">⤵</li></ol></div></div><h2 class="post__title"><b>Keynote: Building a Task Queue System - Evadne Wu - ElixirConf EU 2018</b></h2><h5 class="post__date">2018-05-01</h5><div class="container"><div class="video-responsive"><iframe width="560" height="315" src="https://www.youtube.com/embed/tytHbbjeHMM" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div class="post__text">so good morning everybody today I'm just
+going to talk very briefly about
+building a task queue in Joe's dish and
+also using actual in PostgreSQL so it's
+going to have seven major parts in it
+the outlines below so first of all I'm
+going to talk about mostly the use cases
+that that we ourselves were facing
+before before designing to build such a
+husky then I'll spend some time talking
+about some basic scheduling concepts and
+may actually help you analyze the tasks
+and also other workloads in your system
+before deciding to build queue because
+you may find that depending on the type
+of tasks in your system the design of
+the queues need to be very different or
+it may not need to be a queue at all
+after that we'll talk about actually
+designing such a system using elixir
+after you have done such an analysis now
+I'll spend some time talking about on
+one topic which is also very important
+which is regulating usage of certain
+resources are easily accessible or not
+easy to replenish in your system after
+that if there's still more time how to
+spend some some additional time talking
+about monitoring your system and also on
+how the system can be scaled in the
+future as your usage level grows then
+finally if there is still time I'll talk
+about talk about the future state and
+what we have learned what we have tried
+to find and have been being able to find
+so how to build ourselves and so on
+so I do expect at least in my personal
+opinion that after this talk you should
+have a very good understanding of how to
+design tasks and also how to design cues
+or in this case I economy executors with
+especially with the focus on using than
+within web applications because web
+applications do bring with them a
+different set of constraints what talk
+had a little bit also about how certain
+components that we have used in the
+system
+actually behaves and also on how how you
+might want to use them in different
+contexts in how these different contexts
+may impact your operations
+lastly uphold some code snippets as as
+required but in the business of it
+already see all the other places import
+posts will be probably skipped because
+for brevity reasons so only use cases we
+have at least a couple elixir
+applications but but the primary one has
+these use cases so it's a document
+system so of course when documents were
+uploaded in like first time into the
+system they have to be processed because
+when a binary is uploaded to a system is
+just a just a binary blob you really
+don't know what's in it you have to
+actually introspect it and then find a
+correct type that's supposed to be the
+type of a binary file and then process a
+document according to that type because
+the alternative would be to send a
+document to all the processes or one is
+that was and see which one returns a
+result which is not practical so the
+second use case here is that when we
+deal with migrations or deal with
+ingestion of data from other sources we
+have to have some kind of an ingestion
+queue because there may be thousands to
+millions of documents in the exact
+sternal systems and we don't want to run
+them synchronously sometimes they these
+systems actually go down for maintenance
+or they disappear for a bit while we're
+doing our imports we want in one
+workflow to be returnable Center major
+use case is that sometimes we have
+several users looking at a document and
+they wanted to collaborate when I do so
+they expect changes made by user and
+user to be available in a different
+place right away and that can be done
+via fennels but when you have multiple
+servers you have to have some way of
+coordinating them so no matter where
+where the website connection is held on
+which server all of them get the same
+information and also other many uses
+so my team basically does mostly
+commercial work for a company so close
+regard to a document platform because
+some kind of course work collection
+system
+with also with binary inspection because
+people sometimes pretend to have
+uploaded a file but if it actually is
+corrupted and you know they are in our
+shoes and also we run everything that we
+built so it's not only better supported
+but also we accumulate operational
+experience as the products were created
+before handing it off to other people in
+the future sometimes we write small
+components for other teams and also
+currently we have three team members but
+we're all active in the open-source
+community anyway so so now with a
+further ado let's talk about basic
+scheduling concepts so when you talk
+about tasks the real the real important
+question here is what is a deadline so
+generally speaking a task deadlines can
+be soft can be firm or can be hard it
+has to be the soft deadline is something
+that if ms people may be unhappy but
+really really no harm is done so it's
+applicable to web applications the
+answer is yes because most web
+application operations are fall within
+that boundary so there's another case
+which is a firm deadline different
+Airlines I mean like if you tell your
+boss you're going to send a weekly
+report by Friday but you didn't do so
+now you have miss a firm deadline the
+results may be useless if you miss the
+deadline but still no harm has done it
+with the worse in the worst case you do
+again and maybe some other stuff will be
+delayed but it's fine in in case of a
+hard deadline although I use a case
+which is to guide missiles and hard
+lines can also be seeing somewhere else
+like in audio production where if you
+miss a single buffer the audio output
+will be glitched so harden lines if miss
+will cause very bad things and I have
+categorized hard lines I mean that's not
+applicable to our applications at the
+moment so another thing is with the idea
+of deadlines in mind you can look at how
+tasks can be scheduled so in this case
+if you were to look outside a web
+application development you can see that
+there are many ways to schedule tasks in
+the first case if you if you know
+exactly what hearts are to be wrong in
+system and what and you know exactly
+when their results are expected you
+and well look at all the deadlines look
+at what the periods are you how
+frequently does a task need to be wrong
+and derive a hand-built schedule so the
+schedule something like I have from
+start to finish
+10,000 24 slots in the first place
+smells I'll do this task in the next
+five slots I'll do that house and so on
+and so on so every time I somebody tells
+you hey we have a new task you will be
+very unhappy because you have a radio to
+schedule and if something and if a task
+were to die in the middle of execution
+of that schedule then bad things may
+happen you might be able to restart from
+scratch or well maybe maybe it would
+just come all crashing down so so that's
+kind of the approach that we don't want
+to take at a moment at least inside web
+applications the second approach is more
+of a popular approach which is time
+sharing I assign each task by importance
+like Haskell a has very fair person of
+CPU time Kospi has 24 SMC few time tasks
+C has 10% and then you just contact
+switch between them this is how most
+operating systems operate right now so
+this is fine as long as you don't have a
+huge amount of tasks where you have a
+huge motor tasks doing this is going to
+cause contention so so that's why now
+you can you can just go to tasks by
+priority and when you're scheduled tasks
+by priority priorities of each task can
+be determined either ahead of time at
+bided by the programmer or it can
+actually be dynamically determined so
+scheduled races or housing schedule
+decides which tasks to run first instead
+of running all heist and inner Ottomans
+and all the lows you probably scarier
+probably want to run some lows in some
+bids right so so these are the these are
+traditional approaches to scheduling
+tasks in a priority driven manner so in
+practice as I said this is a talk gear
+to was a web application development so
+in practice if something is slow if it's
+not web application is going to be taken
+seriously you may have to work a system
+otherwise you make just in your just
+wait until it's faucet possibly and if
+if it's not a problem in case of
+breeches in this case when a task
+doesn't run
+for their deadline something supposed to
+happen 12 o'clock it didn't happen to
+happen in 12 5 is this serious we'll get
+sued
+maybe but usually you want you just
+apologized on Twitter so the last name
+is validation how are you sure that all
+the tasks can be wrong inside your
+system within it available within
+available time well with web application
+development probably you're running on
+your laptop and you run for 20 minutes
+it doesn't seem to be problematic so we
+push it out of production so I'm trying
+to say here is that at least in the
+world we operate in the tolerance for
+faults or errors or human error or
+omission error in general is drastically
+higher than other worlds and this is
+both a good and bad thing but at least
+for the purposes of today this means
+that if we apply learning from other
+fields to web application development
+and so we should be able to do a much
+better job in our application should be
+healthy all the time at least your web
+application standards another thing is
+that web applications run a service in
+some hi servers are now in the cloud so
+so they are see there's also a
+difference between Auto new world
+mindset if you look at certain queueing
+systems implementations you will find
+out there a design for a fixed amount of
+servers if you look at something that's
+more scalable it the design may look
+very different so the aspects there are
+three aspects I want to talk about the
+first one in the old world usually you
+run the workload on premises so when you
+want a new server you have to sign the
+form argue with people for two months
+and you get a new server and you have to
+actually install it your new world is
+usually cloned of course where the money
+comes from is different so also in inter
+and also there is a case of intervention
+so in our world you probably have more
+time to tweak your code anyway facing
+memory facing the server in a new where
+you get a new or larger server or we get
+to where you get four servers until
+until the code runs again
+so again this is something that's more
+or less you know more or less special
+about her field
+so again the point is that we should be
+able to do a much better job with the
+drastically loosened constraints of our
+world and with that I'll start talking
+about the actual design of tile systems
+in such a world so of course the first
+thing is we have to actually classify
+and design the tasks again with what we
+have learned so I have you say different
+classification system here in web
+application is tossed out in general
+either one-off or periodic one of them
+is eyebrows once periodic means it has
+to run periodically but one of tasks can
+either you know be are ordered or serial
+so I think here is and one of our tasks
+is for example when I make an order send
+a notification email so it doesn't
+matter if it order is canceled later you
+send another email later so this
+particular task doesn't vanish simply
+because the state of the order has
+changed so can it be paralyzed the
+answer is yes easily because it doesn't
+matter but it doesn't matter what the
+actual state of that thing is the task
+has to run and it has to run according
+to the arguments documents given to the
+task as you start or say at the creation
+time of a task so that's the easiest
+thing to paralyze and probably the
+low-low is handing forever you in case
+of a 1 of 0 tasks one of the examples
+would be this service has subscribed to
+updates against this particular resource
+so anytime this resource changes send an
+update to this service well there are
+ways to do it without without actually
+having to run these tasks in a you know
+in a serial manner you may just use the
+are duties and you tells you tell every
+single customer hang out for now on your
+resource the Aditi's or sometimes they
+probably they probably either can't or
+don't want to do that so in this case
+you have to send them in order and you
+know see my message make sure is receive
+innocent another message and so on and
+of course with that comes a entirely
+different world of challenges and issues
+like oh this customer is slow because I
+turn this server off for two days now or
+queue is back up but it's not a problem
+what can we do so so these are issues
+specific to one often serial tasks the
+last thing I would have talked about is
+periodic or batch tasks so this is
+basically your own task really the only
+difference here is that current tasks
+affect a single server only usually
+because chrome is configured on a server
+so you probably want to do something so
+each server in the cluster can do its
+own share of periodic tasks otherwise
+you will have a case where one server is
+more important than others which is a
+valuation of a cattle principle where
+each server should independently replace
+at least the application servers so of
+course the PR the tasks are harder to
+paralyze but still there are ways to do
+so so I'm just gonna just give the text
+version it's not embedded for later PDF
+export but now another thing that you
+want to talk about probably is
+cancellation ie
+Kenneth Haas be consoled in the future
+because in certain cases certain
+notifications should not be sent after
+his ever something some state has
+changed but in certain cases you don't
+want it has to be canceled so whether it
+has can be canceled isn't only a matter
+of designing the actual worker I return
+if state is not X but also the
+conservation of it has execution system
+because these tasks although they
+ultimately didn't affect anything they
+still occupies slots in your task queue
+so you basically see a lot of churn
+where you know every single task is
+wrong but for a very small fraction of
+time only because they run in this check
+the state of an underlying object and
+then since the tasks weren't actually
+retract you from the queue there's no
+indication occupying space so repetition
+so if you have something that seems to
+be periodic you should really just as a
+periodic task also the last thing is
+retrying so I did touch briefly on firm
+versus soft deadlines earlier so in case
+of a friend deadline is something that
+if you didn't do it in a results of use
+less you have to do it again in the
+future so this how is this interrelated
+with whoops question of whether you
+should retry a task even if you
+how do you try it you ever try
+exponentially do retry is space
+constantly order betrayed by some other
+man some other manner and what happens
+if something just straight out fails and
+never succeeds you this is when you want
+to intervene anyway this will be this
+will be questions relevant to your own
+system only really so now let's talk
+about the other thing in creating one of
+tasks this is when it gets interesting
+because code is going to show up so so
+there are again three ways to make
+one-off tasks you can make it from the
+application but you do it in a separate
+transaction assuming that you usually
+use a jobs table or maybe maybe use
+readers or maybe use some other data
+store which is not your data base to do
+it well it is eminently scalable because
+it doesn't impact your actual your
+actual data base master instance that
+you're writing to
+but it probably isn't consistent and
+it's a robots probably but probably not
+because now you actually have two
+assistants or record really well for the
+data and wait for your jobs so the other
+use case would be well let's do it in a
+very big transaction then so you hold
+the transaction and then and then you do
+your work and then you cute a job keep
+the transaction open of course on until
+you until you cute a job and enclose the
+transaction so it's scalable it is less
+scalable because now each transaction
+has to run for longer but it's a
+consistent the answer is yes it is very
+consistent because it's in the same
+transaction if first some reason it
+commits fails then both the job and the
+mutation to the data will not appear so
+it is consistent and also is robust
+however the question is well somebody
+try to change something in your database
+without going through your application
+it may happen and it can happen as your
+as your skill grows there is going to be
+less less of a notion of a central
+database in your team that main user
+database sometimes DBAs are different
+people from developers from the
+operators and sometimes sometimes you
+just you know you go on vacation and
+when you come back everything broke
+because somebody else didn't read your
+documentation although you wrote in so
+there's a way around that by using
+triggers although you can still
+circumvent triggers which I'll talk
+about later
+so again if you do something that's
+one-off and you do it outside of your
+transaction then you could lose these
+jobs forever and if these jobs are you
+know tend amount to this safe operation
+of your system and you loosen then your
+system doesn't work and that's a support
+request at least so well you could do
+something like okay I woke you I will
+queue a job but I will configure might
+ask you to delay for 200 milliseconds
+before running any job and then
+something something something but these
+are all ugly workarounds I shouldn't do
+them you should simply design these
+problems away by not doing this in the
+first place
+yeah so it may look like this like in a
+creative you're doing even bother using
+a cue just respond and well it probably
+will work until a certain point when it
+no longer works and you don't know why
+or you may have certain objects they are
+not in the right state and you don't
+know why and you rise you realize oh
+yeah because last last year i roll some
+code on your spawn so so don't do this
+this is not good now well you can you
+can move the job insertion into a
+transaction so either you use replicate
+multi or you you know custom code a
+transaction so it's copy-paste
+differently but it's maintainer
+unfriendly and at the same time well if
+you want to change something that's
+still you know you have to changing
+templates these ourselves even if you
+extract it into another module it's
+still you know templates that you have
+to call it is I want to complexity
+please don't do it
+so as an example this is a reformed
+version of the bad example it's still
+bad but this time it's it's even worse
+because now there's a transaction open
+for the whole time so it's even worse
+because you have to recall in elixir and
+earlier applications
+listening in actual and listening actual
+when you make a database call if you
+don't use an explicit transaction the
+calls are actually pulled in
+so only statement-level so that's why
+EXO is able to use trusted with fewer
+database connections to serve a large
+amount of you know incoming incoming
+requests like in Phoenix so that's
+that's done by eliminating the period in
+the period during which a transaction in
+it our base is open but I do so I don't
+waiting in transaction that's like the
+worst thing you reverse and you can see
+and if you check any database every
+rails application you will see plenty
+because in a rails request you get a
+connection right when you first access
+actor record and you don't relinquish it
+ever for each thread so so if you do
+this kind of stuff where you insert some
+in transaction but you do it with within
+your application then at least that's
+one more round trip at least and if you
+do some more stuff in that big
+transaction you're going to incur more
+performance penalty it may not be a
+problem in the first place but it will
+cause you to have to use a larger
+database server at least well so
+basically the suggestion is you don't
+you don't do it from the application
+because well because of the reasons
+explained before you shouldn't do it
+people may not know that they have to go
+through this application you should
+treat your database is something that's
+smarter than a dumb data store and
+actually properly leverage database so
+one of the examples of using a database
+driven job creation procedure will be to
+use a trigger function at around effort
+after a job after something has been
+committed and a change is interesting
+enough to where in a job there's an
+article on transaction list a job during
+which the idea is write something into a
+temporary table in the transaction and
+later use a very big very big reader
+writer to refund a temporary table and
+for each row taken away from the table
+put it into ridaz and then a you psychic
+to execute in so what the point here is
+if you already have it in the database
+you might as well just just leave it in
+a database but
+your systems design constraints may not
+allow you to do so immediately so
+another thing is even though trigger
+functions usually are always wrong they
+don't run on replicas they don't run on
+replicas so if you were cheeky and you
+don't want to have trigger function in
+spire maybe you want to circulate the
+audit logs then well your approach Swiss
+consul you said session replication role
+to replica and magically all of the
+subsequent operations you do in that
+specific Postgres session will not
+trigger any kind of trigger functions
+and so it won't it won't cube jobs it's
+not recommended but if you need an
+escape hatch it's available so yeah this
+is how you make a trigger function so
+you could so you create a you create a
+function first in Postgres you'll notice
+a basically its sequel so in this case
+create a function which is going to
+remove objects it returns a trigger and
+I use two dollar signs as a delimiter
+and then I wrap the actual code the body
+of a function within that I said insert
+into the jobs table values from the old
+role because in this case it's a trigger
+that's supposed to be wrong with
+something has been deleted each first
+quest trigger gets new and old roles are
+of course creation only has new deletion
+only has old and updates has please have
+like new and old in this case a deletion
+trigger on cam will only get out a new
+doesn't exist or is empty so you can use
+it so once you have this function in
+place you can then create a trigger on
+the table you tell those squares for
+each row deleted from the documents
+table if if the rope originally held a
+reference to somewhere else then make a
+job so you're able to selectively create
+a job by doing so directly in the
+database you can decide whether the
+procedure is executed for each row or
+just once but for one of tasks you
+probably want to stick with for each row
+to be honest well the second second case
+is charged credit cards whenever
+somebody buy something
+so again this is say it's basically just
+you know a very simple function you
+create the function and then you call it
+you call it an update to purchases so
+the case here is you may have certain
+database tables that have a status
+column and you might tie you made hai
+certain jobs to certain status
+transitions there are many ways to do so
+the first way of course if you're a
+hardcore elixir developer you will write
+a state machine either yourself or using
+existing implementations and then you
+you follow all of your state transitions
+through a state machine and the state
+machine will issue complicated or at
+least complex or at least compound
+transactions where it not only changes
+the is column it also issues a new job
+and this is how you can can do it and
+you can do the equivalent job imp
+imposters correctly without having to
+follow all your changes through the
+state machine therefore the application
+and also not as here for each rows when
+new status is processing so that's how
+you are able to filter but you're not
+only limited to filtering by these
+things you're also able to call you know
+things with side effects here like if
+time of like if if now is like later in
+the 6 p.m. or so you can you can totally
+do that but just try to keep it simple
+don't don't do something that's more
+complicated another thing is that you
+you will not aside the language here is
+just on built-in pio pio sequel but if
+you run your own postcrossing instance
+you can even write in your ruby if you
+want to again it's not recommended that
+you're able to do so
+alright so now with how to make shops in
+place you can now you can now consider
+making an executor so there are many
+ways to cheaper executors male chiefly
+related to how the concurrency model is
+set up so of course you first can decide
+okay I want a single executor only I
+want to sing a priority of jobs all the
+jobs around in a sequencer will receive
+this is easiest to make because that's
+basically how the join station consumer
+is it just pulls new stuff down and it
+executes all the stuff
+but sometimes you may have priorities so
+you may decide that one is single
+executor there were multiple priorities
+and prioritization of a task can be done
+you know dynamically so there is you
+know I would say there is some kind of
+controversy as to how it should be done
+because you always have very weird cases
+where your haikyuu
+is kind of full but your logo is also
+full and your application is executing
+all the high priority jobs for two hours
+and all the low priority jobs have not
+been run for two hours and suddenly they
+became high priority now because they
+haven't been run for two hours and so
+that's what what could happen to your
+executor if you simply you know order by
+priority so another idea here is you can
+probably control them also by the
+maximum tolerable latency ie each high
+task should be run within a minute each
+load has to be run within 20 minutes and
+in that case you will have to run some
+of the lower priority jobs in the same
+place as as a higher ones but at least
+you won't you won't cause the worst case
+latency to spike so well you can also
+multiply executors each having a single
+priority or multiple executors each
+having multiple priorities and it gets
+even more complicated from there so
+another thing you want to think about is
+whether whether you have some kind of
+sharing of the jobs table so at least in
+the reals were there something called
+delayed jobs the delayed jobs gen
+creates a delay jobs table and anything
+anything as a job gets created as a role
+in that table or is it happen in a table
+so that's what that's what is sure
+everything approaches compared to sure
+no sharing approach where each kind of
+task is created in a different table
+well just to prefix it in Postgres you
+can create some kind of table as a
+template table so you create jobs
+template and then you specify I want an
+ID I want to insert it add I want around
+retried add I want somebody something
+else and then you can tell pause whereas
+now I want a jobs table for this type of
+jobs basic structure entirely on that
+particular table
+and you're able to basically do that
+it's like copy and pasting DDL so by
+doing that you don't have to specify it
+same thing over and over again and you
+can still kind of guarantee that the
+underlying columns that you need for
+execution is always there and you can do
+it with inheritance or do it without
+inheritance I I do suggest doing it
+without inheritance by your video with
+inheritance and you quote a new query
+from Java say but you can actually see
+all the child's like all the trial
+tables anyway so the no sharing approach
+probably is more complex but it has
+better isolation it has very con it has
+much lower contention so robustness is
+okay so imagine a case where suddenly
+you have something creating a huge
+amount of jobs if you don't have if you
+don't have a if you don't have isolation
+between different types of jobs then
+your chops table will become extremely
+busy and that is a bad thing because now
+it impacts all the other jobs so I don't
+we probably want to talk about this
+again but Rita is a single rose so so
+it's about the question yeah so in case
+of no sharing well each table can be
+read by a different executor for example
+so really you can scale them you can
+scale them independently if needed and
+if you run your own Postgres and you
+find out this table is particularly hot
+you know some some magic and you move
+the table to a different table space and
+use a faster disk if you can't move all
+up into a faster disk you can do that
+kind of magic and if you already have
+separation by tables and you replace
+that you move one table then only that
+tables now available for a while and the
+rest will be available so it's better
+but if you only have one big table in
+there fails then you're in trouble
+another thing that that's also important
+is that with dedicated tables you're
+able to use database features like
+actual domains and actual types so
+impulse where as you can you can specify
+I have a string which needs to be two
+characters which need to be all
+uppercase you can specify that kind of
+constraint and then associate it with a
+type which gets you a domain and you can
+also use these things if you have
+separated tables if you don't then you
+can't use these things because
+everything will have this serialize it's
+a very big blob of JSON or something
+else so there's no there's no type
+safety
+well so how would you how would you do
+this and the proposed architecture ELISA
+offered for the content of this talk is
+that we'll use multiple gestation
+pipelines one for each executor so the
+thing is responsible for ingestion guess
+one pipeline the thing is responsible
+for uploads guests on our one design has
+responsible for messaging people at
+least sending stuff to Phoenix to to the
+Phoenix transport layer gets an honored
+pipeline and each pipeline will only
+have one single priority which means
+that they poured on stuff from from
+their own tables and they just do stuff
+so in this case you don't have
+complicated reprioritization logic
+duplicate it within each producer
+because that's probably not Hannibal so
+the question is so how do you ensure
+that pipeline skill properly the answer
+is you probably can do it by adding
+another layer of interaction that on the
+other side which is you can add
+something code in Orchestrator again
+this is a proposal so think so maybe
+maybe it's not accurate but this may
+work so the world of the orchestrator is
+to look at how many tasks are remaining
+and what are the deadlines
+characteristics of each type of task and
+as a result which pipeline gets how many
+slots available that they can they can
+journal how much demand so it kind of
+balances total capable demand against
+total addressable demand so in that case
+each fragment will need to be able to
+specify for example this particular
+pattern I'm running in as a document
+upload pipeline currently see 20 jobs
+each job takes one unit of work and for
+each for each unit of delay I may I may
+lose X units of work or so on so each
+pipeline should be able to expose a
+standardized
+piece of information like that which
+allows the orchestrator to make certain
+decisions
+all right well that only happens if if
+you run out of servers because otherwise
+you can always add new servers so now
+let's talk about actually populating the
+exit here and therefore the pipeline's
+well obligatory drain stage announcement
+is that well fulfilling initial demand
+is very easy each consumer starts with
+some kind of demand sighs you either set
+it or it's set automatically for you so
+when a gen stage comes when the dream
+stage consumer is created automatically
+asked the producer or at least whatever
+is upstream for it for this much you may
+have that much you may not but no matter
+what at a certain point in time you're
+going to run out because I hope you may
+have no more tasks for the consumer at
+that moment in this case you will have
+something called unmet demand so the
+amendment needs to be made an issue
+should be fulfilled at a later stage if
+you don't fulfill these are my demands
+then well your consumer will refuse you
+draw more demand so so we need to
+fulfill these demands later and well
+there's a naive way to do it which is
+okay if I have a madman and I don't have
+any more talks and I go to sleep for ten
+seconds and then wake up and grab a
+query for this much for this much work
+that I can grab from the database and if
+I got all of my fulfilled denied
+schedule and I take after 10 seconds
+otherwise I was sleep for longer because
+maybe a system is now a little bit quiet
+I can afford especially for longer and
+not create zero traffic something like
+that but of course in this situation the
+problem will be so what happens to a job
+that was created between between polls
+the answer is they will be processed it
+will be later than necessary so the
+worst case ladies will be well the
+maximum processing time plus a maximum
+melted sugar plus the polling interval I
+think that probably will still be fine
+for your use case but you probably will
+not be fine so it's a case where after a
+long day at work you go home and next
+day you come in at 8 a.m. and you pour
+down your development patient is very
+slow and you find out the reason was
+because the web service has already
+retired the underlying application
+process and has to be warm out again
+that's exactly the same feeling you will
+get so one of these solutions available
+is to tell Postgres to tell you when
+there is additional work you can use it
+by utilizing asynchronous notifications
+or in Postgres commands listen and
+notify according to police documentation
+these are not part of the ISO standard
+but they are not less available to you
+and you can also use it today using post
+cracks so each notification at least
+according to post brass is a tuple of
+topic and payloads so well you may think
+okay I'll put the content of a new jaw
+of a new job directly in the payload and
+possibly also push it to me and I got a
+pop stop service well that probably
+won't be a good idea but our exponent
+later so in this case I make I made a
+new function which is still a trigger so
+in this trigger I actually call Petri
+notify so I not to fight on the topic
+new job and actually did that I tell
+folks quest takes this wrote in a
+database and don't do you know just
+cover a few JSON it use wrote to JSON
+and then cast it again to text because
+when you do wrote to JSON you get you
+get a jury some time in our text type in
+feature notify wants a text type so you
+want to be polite interest across the
+text and if you do this then essentially
+and then you hook it up with the with
+the after insertion trigger because you
+don't you don't want jobs that we're up
+to each it you know to come back to you
+maybe then you can listen to it in your
+elixir application finally elixir code
+so you actually ask the repo what's your
+configuration and then you override a
+pool size by two one because you only
+need one connection and you grab the
+configuration you would take the channel
+name you tap House press start say start
+listener and it start listening to this
+particular channel and then well if
+you're using a drum server you probably
+want to receive do you would handle info
+but but the idea is that post grex will
+send you notifications with five item
+tuples so notification for which page
+what reference what channel what payload
+and then you can you can handle expect
+this payload so your producer can decide
+okay I will waken from my slumber in
+projects or tasks and start doing stuff
+well there are certain careers in this
+and just like all these database related
+the first thing of course is if you have
+have a read post where source code you
+probably want to read it because it's
+very enlightening
+actually tells you certain things that's
+the maintainers have been documented or
+insulted none
+we're not necessary to document for
+example if a fight database is not a
+same database instance and they all just
+notifications there is only a single
+global queue for all notifications so
+there's going to be contention and if
+you have you know a lot of listeners
+listening for notifications the thing is
+each listener backing when started tells
+Postgres I am a listener this is my pit
+but it doesn't say anything else it
+doesn't say anything regarding what
+topics were listened to so anytime
+anything was sent from that asynchronous
+notification infrastructure it is copied
+and sent to all listeners all listening
+back hands and each back and decides ok
+is this my database and discards if not
+and this is a topic I'm interested in
+then discarded about and it finally
+sends it to your application so you may
+not see the impact in your application
+but the impact is definitely there it's
+there's a lot of churn in there if you
+use more than you're sure basically also
+there's an area in which in which you
+probably will write injury but you will
+only run into it if you do so maybe not
+endings which is the maximum size of a
+payload in a post request notification
+is capped by certain internal mechanisms
+like these size of a page that's uh
+that's vented by processes simple least
+recently used car system and you guys to
+tease it out somehow but usually it's
+probably probably constant so in this
+case in this case in order to read this
+query you look at firstly real concern
+over series German series is a function
+that when you call it would generate
+from for one choose 7999 so it would
+generalize them into 7219 our rules and
+each row will have a number and I use
+basically a change in changes rows cause
+them to 7999 A's and then concatenate
+them together so I have a paler which is
+7999 bytes long at least according to
+octet length and then I try to use that
+with PG notify and it works but if I
+were to add one more bite it would tell
+me pelo string is too long so imagine
+this happening your trigger function we
+will probably wouldn't be able to debug
+it so be careful analysis and pillows
+are too large and try to keep the
+payload as small as possible as well
+another thing that post with this is if
+you send us a notification which is same
+topic in the same
+multiple times missing transaction only
+one is sent so that could be an
+optimization factor anyway
+lastly handling errors and time outs so
+this is something that you would have
+thought about in or in an earlier
+section on designing your tiles and
+classifying them so when things go round
+go wrong you'll probably want to have
+some kind of long as to how things were
+how things went wrong in the first place
+so usually what you want is really a
+stack trace like an error report any
+structure is really and so well if
+you're familiar with elixir elixir has
+this task structure and you can use task
+yield to wait for a task for a maximum
+amount of X seconds for example and then
+you know return cut a short if this
+house is still running so what you can
+then do is you combine that with process
+info so you wait for it has to run
+maximum of 30 seconds if it still hasn't
+completed first get a stack trace and
+kill the task
+don't do it in opposite manner because
+it won't work so first gather structure
+is a current actress of that task find
+out what is it waiting on and then kill
+it and you can grab the secretaries and
+put it elsewhere so this can be done by
+using nested tasks the reason is that
+you may you may do this for a consumer
+and the consumer needs to be flowing all
+the time usually and usually
+availability messages so it runs a task
+which creates another tasks task and
+monitors it so it's kind of a kind of a
+nested structure but later I'll have a
+chart shows it and well you can use this
+this kind of utility to grab the camera
+stack trace and into an entry formatted
+for easy reading you may not even matter
+anyway because otherwise it's it's not
+all strings so it will look kind of like
+this where you have the consumer
+appointment producer you have multiple
+runners at once and each runner
+creates a worker task and the work at
+house actually runs code and you can
+decide where to pretty stars
+under-underground a supervisor around or
+elsewhere alright so lastly periodic
+tasks
+in certain cases you happier details
+like you know taking a shower delete all
+the files that have not been looking at
+for 30 days these things usually come
+need to need to have a drive inquiry to
+accompany them like you have to actually
+write a query and execute the query to
+find out how many resources were being
+were to be impacted and they potentially
+also generate a large amount of data
+like if is a daily reporting task they
+however have much looser deadlines yeah
+a few examples for you so when dealing
+with these tasks several considerations
+first if a task runs over its allotted
+amount of time what do you do if you run
+it again do you kill it do you cancel
+the next one so depending on your
+business context you may actually find
+different solutions and you have to
+tweak them another thing is if you're
+scheduled everything to be run at the
+beginning of an hour you will have some
+kind of enduring hairy problem where if
+you look at your system utilization
+metrics the first few minutes of each
+hour you will see heightened usage of
+all resources and then it goes back to
+normal
+so you see Peaks and you can you can
+just count the peaks to come how many
+hours your system has me up so you so I
+tell you what you want to do is to
+either you know shift the workload
+around so still run every hour but
+instead of the first minute we run it
+like between the first and a 10 minute
+or another thing will be still run it
+but vary the amount of time elapsed
+between runs so it depends on what the
+characteristic of internal and periodic
+tasks is you have multiple ways to solve
+this problem of concentrated resource
+utilization so it looks very similar to
+to the other chart because that's how
+you do a periodic task and doesn't in
+this case I use a single gen server but
+you can easily slaughter a train station
+if you really want to okay so now we
+talk about regulating the use of
+expensive resources I'll just give you a
+few examples here like these are
+resources are not easily replenishable
+for example holes resources CPU or
+memory
+and one thing that people may forgot may
+forget is disk if you run all of these
+and your service will decorate and
+sometimes a heightened latency sometimes
+hiding error rate sometimes you have a
+third party service you have the call if
+you go over the menu tick where your
+service or you get a big bill sometimes
+you have expensive compare conversion or
+processing process now you just have to
+have everything for shrewdest so you
+have to kind of regulate access to that
+process lest you get priority inversion
+issues lastly this is something that's
+related which is a verse system actually
+is too fast
+you could end up sending too many things
+your end users and make them unhappy
+because it's too fast so there are many
+approaches which you can take your
+regular usage of resources sometimes you
+know you know how much you're short a
+stick is going to use before running is
+sometimes you don't an example that you
+know beforehand is if you were to
+download a file a good web server will
+tell you how large a file is before it
+send you the rest of the data so you
+could kind of wait out here you have
+that amount of disk space and then you
+reserve it and you start can you
+continue to download or you can probably
+do it with an and ahead request and in a
+get request later you could totally do
+that but of course you'll have to spin
+cycles teasing teasing these consuming
+Celtic the upside is that you don't have
+to just blindly retry a breeze and you
+can actually can guarantee almost
+guarantee that the jobs queuing inter
+system will get wrong eventually and
+also sometimes it's not a fault of your
+task execution system but how you how
+you present the results so maybe if your
+task execution system sends a lot of
+Aleph occations and is very fast now
+what you want to do is you have offering
+area where you buffer all the
+notifications for one day and in sense
+and SNL patched in one day periods which
+is not a priority task but again this
+makes users happier so there are some
+other ways that you can use to regularly
+external processes like you can use
+nitrous if you limit and that's fine and
+sometimes you want to also restart
+certain processes by the number of times
+it has run and that's also fine
+so another thing you might think about
+is well how do you much hold your module
+use of discreteness and Nantes quarry
+resources so this query is a simple part
+you know just count the number of things
+that you can use and you can use the
+connection port this is easy
+how about not discrete bits like CPU
+time memory or disk you can still
+regulate them in the same manner though
+just you have to decide on the unit of
+separation so maybe for disk you use 100
+megabyte increments so you have 4
+gigabytes and you have 40 things so if
+you were to download a file which is 1
+gigabyte then you need the downloader to
+claimed 10 - 10 claimed 10 of that 10 of
+these things and then once you have 10
+you can download
+it's basically a bin packing problem so
+again with poor boy is easy you know
+each country gets a worker that's as
+easy part and the nice thing is you can
+use something called s brokers s broker
+written by mr. Jones - another way of
+regulating resource use in actual has to
+accuse when using the one you seen
+Nicole algorithm another one using a
+timer algorithm it tries to match
+providers and it starts metric producers
+and consumers are you say may find that
+a little bit superior to poor boy in
+certain cases and of course if you have
+unequal size consumers you can always
+have one consumer request multiple based
+resources
+ok now firstly Rd is I'm monitoring so
+the motivation is that you want to know
+which executor is causing delays you
+can't just count the number of tasks
+because some executors are very high
+volume and they are also very efficient
+how many number of tasks is a poor
+metric it doesn't actually offer you
+enough information to scale your
+executors correctly what you really want
+to see is you know size of EQ latency
+and also how much time a task has spent
+waiting in a queue we need to be
+executed these are the important bits so
+you want to you want to measure all
+these bits also there's another
+motivation which is you really do need
+good metrics to enable good also Skelly
+but I'll talk about we'll just go in a
+bit so the seducer approach here is you
+can produce you know have every single
+tax executor report and you'll probably
+use excel meter and each metric can be a
+company with hostname but in this case
+it will probably be processing at host
+IP or something else but anyway the
+hostname of will allow you to separate
+executors on different hosts and your
+aggregated metrics and you push them to
+cloud watch and you push them to other
+monitoring solutions and you have it in
+one place which is nice so you really
+want to watch latency watch the queue
+time and watch your processing time also
+wash your error rates if you want to and
+watch your number of retries because
+there's something retries three times
+constantly then maybe maybe in issue and
+you should have its own frequency
+increased so it doesn't hit the the
+outgoing thing so frequently it's Rupert
+probably matters but really it doesn't
+really matter that much
+because really what matters is latency
+of each task okay now this is the
+important bit scaling sculling task
+systems so in skeletal systems I'll talk
+about three different aspects you only
+elixir nose skilling phosphorus and
+still skill in infrastructure the key
+thing here is that well skilling elixir
+nose is good there are several ways you
+several reasons where you want to scale
+maybe you want to protect against the
+filter original host you want to protect
+it against exhaustion if a certain hosts
+resources by having more hosts you
+probably want to try and find a way to
+ensure that certain customers have a
+certain quality of service and you can't
+really do now if you don't have enough
+resources or probably you don't want to
+write up ups and in real life saying we
+don't want to mutate your holes so this
+time you want to roll the updates but in
+order to do now you actually have to
+have a way to dynamically replace a
+fraction of your cluster with new nodes
+now running new versions of a code when
+you want to so that's a motivation how
+do you do it do three things
+first prepare infrastructure so so
+networking traffic between being
+instances can be sent and received this
+usually means that
+EPMD port has to be open in the port
+range for on distribution has to be open
+and
+and so on then you can stop with your
+cluster and you should be dynamic there
+are many ways to find the peers which
+our lab relator and then you distribute
+the work so well if you want to find
+peers there are many many ways to find
+peers especially if you're working with
+Amazon Web Services there are so many
+ways and you if you're not then you
+probably have access to UDP multicast
+and you can just use that so that's the
+easy part
+the thing here is you really want to
+find a way to distribute work either
+evenly or unevenly but most importantly
+for the one off but ordered execution
+zero tasks or actually for periodic
+tasks in these cases you probably will
+need to find some kind of a natural
+boundary between between customers or
+between accounts in your system once
+you've found that kind of boundary you
+can then use that as a basis pond where
+you separate your separate work groups
+and distribute work so the thing here is
+you can totally abuse swarm to do this
+basically standing on the shoulders of
+giants ensure swarm advertise itself as
+something that distributes processes
+based on ik consistent hashing algorithm
+so each process has named name cos Hodge
+and the Hodge tells you where in the
+brain it lives and then the and each
+node as a life gets a chunk of that ring
+so each node will run these processes
+and so on and so on so the key thing
+here is that a swarm worker itself
+actually doesn't need to do any work the
+only only purpose of your work have been
+on that particular node is to tell other
+things and I know that it is there and
+this is a beauty of it because this
+means that your system can scale from
+one server to many servers without you
+know without significant changes simply
+by adding swarm layer so here's how it
+works you know starts up each node runs
+all pipelines that the pipelines are
+empty and they're not pulling data the
+reason is our producers are all
+configured to pull nothing to pour data
+for no accounts each now joins our own
+cluster
+each node boosts table joins us one
+cluster each node also runs a custom
+process
+called code enforcer so what's the
+enforcer in for sighs a custom process
+now that we wrote so it solves the
+problem where if you bring a cluster
+heart down and book it back up then no
+cluster node will have any memory and
+all because all the disk storage that's
+ephemeral and you're not going to store
+in your friend your database value so
+there is no existing state you have to
+recreate state so the enforcer basically
+select ID front accounts and it grabs a
+list of account IDs and then and it'll
+swarm basically goes through the IDS one
+by one where is your worker for this
+account if it's there in swarms and then
+in streams that is running and if it's
+not a NATO swarm started working for
+this account and it's one will then put
+it in the ring and then it will work up
+a pop up on the correct notes so that's
+essentially how it works so yeah it's a
+polar basically it's a polar wraparound
+and a simple swamp code you use this one
+where is so where is this name if it's
+not defined then register it how do you
+register you first find a smart
+supervisor and then you tell swarm
+register this name against the
+supervisor call the code function
+register with the argument name if it's
+already registered do nothing if it's
+opening okay if the resident crash so
+this one's super visor it's simple one
+for one supervisor it's really very
+simple so you know it has a worker it
+has a register convenience function and
+the worker itself is where the phone is
+so the worker gets started finds a
+target for scope in this case a worker
+may have a scope of accounts so it's a
+worker that represents work for an
+account and it will be created only one
+of a nodes in the cluster so it finds a
+target in this case a producer
+responsible for you know producing
+account related work and then till it a
+month later producer first so a producer
+goes down your worker gets killed and
+the tells producer at this account ID to
+your list so start producing work for
+this particular account and then later
+on the worker join swarm but you
+first and after self joins a row so
+basically it happens more or less
+immediately I'm going to draw circles to
+enjoy so the worker is very simple if
+someone tells a worker now it's your
+time to hand off work to other notes it
+would just you know tell the producer
+I'm out doesn't do anything else and it
+doesn't resolve conflicts at all because
+it doesn't need to because there's no
+there's no really no particular state
+nothing and when the Dyson's dies but if
+it gets a down notification like from
+from the producer crashing if a producer
+were to crash and it would just exit
+violently kill yourself basically and
+that is good enough so each producer has
+they has a map set in maps that is a
+kind of a is set so you can you can
+track the a membership of something in
+I'm upset and then
+well if immersions in there then add it
+so when the producer needs to produce
+work you can induce a count of a map set
+to grab the relevant IDs of accounts and
+then you know grab the work only
+internet for these accounts now second
+bit is scaling Postgres so everybody
+knows that post quest needs were and you
+say good horizontal scaling story the
+maximum concentration ratio of how many
+app servers versus how many database
+servers is really limited and at some
+point in the future you will run into a
+bottleneck well the good news is that
+post quest 10 is out and you know these
+dividends like I can take some customers
+of line take some remain have some
+remain up online I don't need to have
+global altitudes I can a partial or you
+know even just really Agra trees or even
+no cottages at all or I can put this
+customer on the SuperDuper server in
+order to ensure they don't go down ever
+so on these are the bills patients and
+these will come true
+because although there are already
+multiple implementations out there if
+you really can't wait you really can go
+out and grab some of them can enter
+Chris DB has something you can you can
+get a free trial you can do Postgres
+excel you can use PG partment some of
+them use the multi master approach
+something don't but the idea is before
+we want to
+you want to see if you can wait until
+the multi-master approach actually
+matures because work is happening
+impulse purchase foreign dollar rappers
+so well we can pretend also when were
+your scalp roller if you can pretend to
+have a single database only or you know
+it has a bunch of problems we can
+actually have multiple Postgres
+intensity to rapidly access my database
+so the thing here is you can use
+writable views or you know views that
+have rules instead of updates and
+instead of officer and instead of
+inserts to insert content into
+particular shards or you can use an
+aggregate table though the bill from
+many foreign tables or you can use
+partitions there are many ways to solve
+this problem but you know they are kind
+of fiddly and they hiding actual
+complexity from your application you
+probably don't want to do that the good
+news is char management will be added to
+the partition syntax which is adding
+processed and according to the
+presentation in future posts we're
+starting presented in April 2017 and
+update it in March 2018 so I think it's
+coming soon and if you can afford to
+wait it probably is very much worth
+waiting for it yeah I still you know
+mean how you probably have to do
+something like this which is a bit
+uglier but at least if it fails you know
+how how we felt and it's very obvious so
+you may want to add a master database
+but that's for later is just not very
+material on infrastructure cycle again I
+really talk about what metrics are
+important they think here that you need
+to keep in mind is when you scale you
+should scale based on the resource usage
+of the host resources now based on
+latency adding more servers to something
+as already late probably won't make it
+better you have to ensure that you can
+actually scale and make make a positive
+impact based on scaling and I'm saying
+is I probably have to always base it on
+on a person factor whether the host is
+you know saturated also don't take away
+your average regulation like only 100
+API calls to service globally something
+like that you probably still want to
+keep it and if you take it away bad
+things will happen so
+well you normalize it a bit and then you
+tell Amazon what to do and it does it
+for you so in the future well did we did
+a bunch of bad stuff but that was on
+earth while we were creating our product
+so far the product worked that there are
+some things that I think would be useful
+to see in the future one of the things
+that I think will be useful is to find a
+way natively in sworn to define or say -
+in Swan to define how the workers have
+to be packed onto hosts like some hosts
+should be able to claim more of more
+chunks from the virtual ring and some
+may be able to claim fewer chunks
+weren't in front front area maybe this
+is wrong I wish you'd just use the same
+type of host so all the way but having
+that support surface will be good
+because there is support for it in like
+50 percent of swarm and it's not exposed
+so maybe it's coming maybe it's not yeah
+also we're working on some kind of a
+unifying unifying framework really just
+to have a single way of acts of
+accessing all these things from the
+single library without having to copy
+and paste all the time so now what we
+have done was we already created a
+sure module that can be included in the
+producers we haven't done the
+orchestrator because there was no need
+yet but I believe at a certain point in
+the future we will start needing the
+services of of the orchestrator which
+can look at all the queues look at how
+busy there are and and then you know
+separate work amount all all producers
+at least within the scope of a certain
+node so these are the references that I
+found very useful when creating this
+talk and there there are some elixir
+line repository some of my artists I
+have linked sample in here so when the
+slides are relation we can read in and
+thanks again for your time today
+you</div></div><div class="container-fluid bottom-ad"><div id="amzn-assoc-ad-6a809dda-347a-4187-8a86-91faf94575da"></div><script async src="//z-na.amazon-adsystem.com/widgets/onejs?MarketPlace=US&amp;adInstanceId=6a809dda-347a-4187-8a86-91faf94575da"></script></div><div class="text-center">We are a participant in the Amazon Services LLC Associates Program, an affiliate advertising program designed to provide a means for us to earn fees by linking to Amazon.com and affiliated sites.</div><script>(function(w, d){
+    var b = d.getElementsByTagName('body')[0];
+    var s = d.createElement("script"); s.async = true;
+    var v = !("IntersectionObserver" in w) ? "8.6.0" : "10.4.2";
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/vanilla-lazyload/" + v + "/lazyload.min.js";
+    w.lazyLoadOptions = {};
+    b.appendChild(s);
+}(window, document));</script></body></html>
